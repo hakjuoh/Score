@@ -1,4 +1,4 @@
-.mat-paginator {
+.mat-mdc-paginator {
   margin-bottom: 20px;
 }
 
@@ -91,14 +91,14 @@ tr.element-row:not(.expanded-row):active {
   padding-left: 3px;
 }
 
-.grid-element-content > mat-icon.element-edit-icon {
+.grid-element-content > mat-mdc-icon.element-edit-icon {
   visibility: hidden;
   cursor: pointer;
   float: right;
   margin-right: 3px;
 }
 
-.grid-element-content:hover > mat-icon.element-edit-icon {
+.grid-element-content:hover > mat-mdc-icon.element-edit-icon {
   visibility: visible;
   cursor: pointer;
   float: right;

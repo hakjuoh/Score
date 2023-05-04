@@ -43,25 +43,25 @@ tr.element-row:not(.expanded-row):active {
   display: flex;
 }
 
-.mat-card-content p {
+.mat-mdc-card-content p {
   font-family: 'Roboto', 'sans-serif';
 }
 
-.module .mat-icon {
+.module .mat-mdc-icon {
   width: 20px;
   height: 20px;
   font-size: 20px;
   margin-right: 6px;
 }
 
-mat-toolbar > .mat-icon-button {
+mat-mdc-toolbar > .mat-mdc-icon-button {
   width: 40px;
   height: 40px;
   line-height: 40px;
   outline: none;
 }
 
-.mat-icon-button {
+.mat-mdc-icon-button {
   width: 20px;
   height: 20px;
   line-height: 20px;
@@ -142,7 +142,7 @@ mat-toolbar > .mat-icon-button {
   font-size: 12px;
 }
 
-mat-toolbar .mat-icon {
+mat-mdc-toolbar .mat-mdc-icon {
   /*font-size: 27px;*/
   /*width: 27px;*/
   /*height: 27px;*/

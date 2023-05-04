@@ -8,55 +8,55 @@
   float: left;
 }
 
-.mat-tree-node {
+.mat-mdc-tree-node {
   font-size: 13px;
   min-height: 33px;
   font-family: Roboto;
 }
 
-.mat-tree-node .material-icons {
+.mat-mdc-tree-node .material-icons {
   font-size: 20px;
 }
 
-.mat-tree-node .mat-icon-button {
+.mat-mdc-tree-node .mat-mdc-icon-button {
   width: 24px;
   height: 24px;
   line-height: 24px;
   outline: none;
 }
 
-.mat-tree-node div {
+.mat-mdc-tree-node div {
 }
 
-.mat-tree-node span {
+.mat-mdc-tree-node span {
   cursor: pointer;
   padding-right: 10px;
 }
 
-.mat-tree-node .acc, .mat-tree-node .acc-group {
+.mat-mdc-tree-node .acc, .mat-mdc-tree-node .acc-group {
   color: #bd2c00 !important;
   font-weight: bold !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .asccp {
+.mat-mdc-tree-node .asccp {
   color: #4078c0 !important;
   font-weight: bold !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .bccp {
+.mat-mdc-tree-node .bccp {
   color: #006400 !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .bccp-attribute {
+.mat-mdc-tree-node .bccp-attribute {
   color: #666 !important;
   font-style: italic !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .dt_sc {
+.mat-mdc-tree-node .dt_sc {
   color: #bd2c00 !important;
   text-shadow: inherit !important;
 }
@@ -88,7 +88,7 @@
   -webkit-margin-end: 0px;
 }
 
-.cc-node-header span, .mat-tree-node span {
+.cc-node-header span, .mat-mdc-tree-node span {
   display: block;
   white-space: nowrap;
   overflow: hidden;
@@ -100,7 +100,7 @@
   margin: 5px 0;
 }
 
-.comment.mat-icon {
+.comment.mat-mdc-icon {
   width: 16px;
   height: 16px;
   font-size: 16px;
@@ -113,7 +113,7 @@
   padding: 8px;
 }
 
-.cc-node-tree-panel mat-card-content {
+.cc-node-tree-panel mat-mdc-card-content {
   margin-bottom: 0;
 }
 
@@ -147,7 +147,7 @@
 .tree-search-box {
 }
 
-.tree-search-box .mat-form-field-wrapper {
+.tree-search-box .mat-mdc-form-field-wrapper {
   padding: 0 !important;
 }
 
@@ -170,21 +170,21 @@
   margin: 6px 4px;
 }
 
-.tree-search-box button mat-icon {
+.tree-search-box button mat-mdc-icon {
   font-size: 16px;
   margin: 0;
 }
 
-.tree-search-box .mat-form-field {
+.tree-search-box .mat-mdc-form-field {
   font-size: 12px;
 }
 
-.tree-search-box .mat-form-field-wrapper {
+.tree-search-box .mat-mdc-form-field-wrapper {
   width: 16px;
   padding-bottom: 0;
 }
 
-.tree-search-box .mat-icon {
+.tree-search-box .mat-mdc-icon {
   width: 16px;
   height: 16px;
   font-size: 16px;
@@ -219,7 +219,7 @@
   transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
 }
 
-.cdk-drop-list-dragging .mat-tree-node:not(.cdk-drag-placeholder) {
+.cdk-drop-list-dragging .mat-mdc-tree-node:not(.cdk-drag-placeholder) {
   transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
 }
 

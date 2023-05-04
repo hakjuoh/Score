@@ -106,13 +106,17 @@ b {
   text-align: center;
 }
 
-.mat-table {
+.mat-mdc-table {
   width: 100%;
   table-layout: fixed;
 }
 
-.mat-table .mat-column-select {
+.mat-mdc-table .mat-mdc-column-select {
   width: 66px;
+}
+
+.mat-column-select {
+  width: 40px;
 }
 
 .ellipsis {
@@ -147,28 +151,28 @@ div.context-section {
   padding: 0;
 }
 
-div.context-section > .mat-card {
+div.context-section > .mat-mdc-card {
   box-shadow: none;
 }
 
-.mat-card-container {
+.mat-mdc-card-container {
   display: flex;
   flex-direction: column;
 }
 
-.mat-card-container > * {
+.mat-mdc-card-container > * {
   width: 100%;
 }
 
-.mat-card-container .mat-card {
+.mat-mdc-card-container .mat-mdc-card {
   margin-bottom: 24px;
 }
 
-.context-section mat-card-actions .mat-raised-button:first-child {
+.context-section mat-mdc-card-actions .mat-mdc-raised-button:first-child {
   margin: 0 4px;
 }
 
-.context-section .mat-card > .mat-card-actions:last-child {
+.context-section .mat-mdc-card > .mat-mdc-card-actions:last-child {
   padding-bottom: 4px;
 }
 
@@ -176,12 +180,12 @@ table {
   width: 100%;
 }
 
-.mat-form-field {
+.mat-mdc-form-field {
   font-size: 14px;
   width: 100%;
 }
 
-.mat-column-select {
+.mat-mdc-column-select {
   overflow: initial;
 }
 
@@ -195,23 +199,23 @@ table a:hover {
   cursor: pointer;
 }
 
-mat-checkbox > .mat-checkbox-layout {
+mat-mdc-checkbox > .mat-mdc-checkbox-layout {
   vertical-align: super;
 }
 
-.mat-tooltip {
+.mat-mdc-tooltip {
   font-size: 13px;
 }
 
-.mat-input-element:disabled {
+.mat-mdc-input-element:disabled {
   color: rgba(0, 0, 0, 0.54);
 }
 
-.mat-chip {
+.mat-mdc-chip {
   font-size: 11px;
 }
 
-.mat-icon.fa {
+.mat-mdc-icon.fa {
   height: 13px;
   width: 13px;
   color: rgba(0, 0, 0, .87);
@@ -236,7 +240,7 @@ fa-icon {
   color: #495057;
 }
 
-.mat-card-title {
+.mat-mdc-card-title {
   flex: 1 1 auto;
   font-size: 18px !important;
   font-weight: 400;
@@ -256,22 +260,26 @@ fa-icon {
 }
 
 .search-box {
-  margin-bottom: 24px;
+  margin: 0 16px 16px 16px;
 }
 
-.search-box .mat-card-header-text {
+.search-box .mat-mdc-card-header-text {
   margin: 0 8px;
 }
 
-.search-box .mat-card-container {
+.search-box .mat-mdc-card-container {
   margin: 0 8px;
 }
 
-.search-box .mat-card-actions {
+.search-box .mat-mdc-card-actions {
   margin: 0 8px;
 }
 
-div.mat-form-field-wrapper div.mat-form-field-infix mat-icon.datepicker-cancel {
+.mat-mdc-option > span {
+  flex-grow: 1;
+}
+
+div.mat-mdc-form-field-wrapper div.mat-mdc-form-field-infix mat-mdc-icon.datepicker-cancel {
   width: 14px;
   height: 14px;
   font-size: 14px;
@@ -361,15 +369,15 @@ span.release-state.Published {
   align-items: center;
 }
 
-.mat-card-actions.fab-container, .mat-dialog-actions.fab-container {
+.mat-mdc-card-actions.fab-container, .mat-mdc-dialog-actions.fab-container {
   padding: 8px 0 18px 0px;
 }
 
-.fab-container button.mat-mini-fab:not(:last-child) {
+.fab-container button.mat-mdc-mini-fab:not(:last-child) {
   margin-right: 10px;
 }
 
-mat-checkbox.hide-unused > .mat-checkbox-layout {
+mat-mdc-checkbox.hide-unused > .mat-mdc-checkbox-layout {
   margin-bottom: 0 !important;
 }
 
@@ -742,7 +750,7 @@ mat-checkbox.hide-unused > .mat-checkbox-layout {
   background-color: orange !important;
 }
 
-.mat-tree .Deleted {
+.mat-mdc-tree .Deleted {
   text-decoration: line-through;
   text-decoration-color: black;
 }
@@ -765,20 +773,20 @@ mat-checkbox.hide-unused > .mat-checkbox-layout {
   max-width: 100% !important;
 }
 
-.confirm-dialog .mat-dialog-container {
+.confirm-dialog .mat-mdc-dialog-container {
   min-width: 500px !important;
   padding: 18px 24px 18px 24px;
 }
 
-.mat-card-actions button {
+.mat-mdc-card-actions button {
   outline: none;
 }
 
-td.mat-cell {
+td.mat-mdc-cell {
   padding-right: 8px !important;
 }
 
-td.mat-cell:last-child {
+td.mat-mdc-cell:last-child {
   padding-right: 0 !important;
 }
 
@@ -907,7 +915,7 @@ span.context-menu-item.disabled, span.context-menu-item[disabled] {
   text-decoration: line-through !important;
 }
 
-.mat-toolbar-row, .mat-toolbar-single-row {
+.mat-mdc-toolbar-row, .mat-mdc-toolbar-single-row {
   -webkit-box-shadow: inset 0 -1px 0 0 rgba(100, 121, 143, 0.122);
   box-shadow: inset 0 -1px 0 0 rgba(100, 121, 143, 0.122);
 }
@@ -916,7 +924,7 @@ span.context-menu-item.disabled, span.context-menu-item[disabled] {
   flex: 1 1 auto;
 }
 
-.mat-snack-bar-container {
+.mat-mdc-snack-bar-container {
   color: #333;
   background-color: #fff;
   border-color: #333;

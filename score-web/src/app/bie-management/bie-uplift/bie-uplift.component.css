@@ -1,8 +1,8 @@
-:host ::ng-deep .mat-horizontal-stepper-header-container {
+:host ::ng-deep .mat-mdc-horizontal-stepper-header-container {
   display: none;
 }
 
-:host ::ng-deep .mat-horizontal-content-container {
+:host ::ng-deep .mat-mdc-horizontal-content-container {
   padding: 1px !important;
 }
 
@@ -51,88 +51,88 @@ tr.element-row:not(.expanded-row):active {
   font-size: 12px;
 }
 
-.mat-tree-node {
+.mat-mdc-tree-node {
   font-size: 13px;
   min-height: 33px;
   font-family: Roboto;
   align-items: center;
 }
 
-.mat-tree-node .material-icons {
+.mat-mdc-tree-node .material-icons {
   font-size: 20px;
 }
 
-.nav-button.mat-icon-button {
+.nav-button.mat-mdc-icon-button {
   width: 16px;
   height: 16px;
   line-height: 16px;
   outline: none;
 }
 
-.nav-button .mat-icon {
+.nav-button .mat-mdc-icon {
   width: 16px;
   height: 16px;
   line-height: 16px;
   font-size: 16px;
 }
 
-.mat-tree-node .mat-icon-button {
+.mat-mdc-tree-node .mat-mdc-icon-button {
   width: 24px;
   height: 24px;
   line-height: 24px;
   outline: none;
 }
 
-.mat-tree-node div {
+.mat-mdc-tree-node div {
   height: 16px;
 }
 
-.mat-tree-node .abie, .mat-tree-node .asbiep, .mat-tree-node .asbiep-extension {
+.mat-mdc-tree-node .abie, .mat-mdc-tree-node .asbiep, .mat-mdc-tree-node .asbiep-extension {
   color: #4078c0 !important;
   font-weight: bold !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .bbiep {
+.mat-mdc-tree-node .bbiep {
   color: #006400 !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .bbiep-attribute {
+.mat-mdc-tree-node .bbiep-attribute {
   color: #666 !important;
   font-style: italic !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .bbie_sc {
+.mat-mdc-tree-node .bbie_sc {
   color: #bd2c00 !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .acc, .mat-tree-node .acc-group {
+.mat-mdc-tree-node .acc, .mat-mdc-tree-node .acc-group {
   color: #bd2c00 !important;
   font-weight: bold !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .asccp {
+.mat-mdc-tree-node .asccp {
   color: #4078c0 !important;
   font-weight: bold !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .bccp {
+.mat-mdc-tree-node .bccp {
   color: #006400 !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .bccp-attribute {
+.mat-mdc-tree-node .bccp-attribute {
   color: #666 !important;
   font-style: italic !important;
   text-shadow: inherit !important;
 }
 
-.mat-tree-node .dt_sc {
+.mat-mdc-tree-node .dt_sc {
   color: #bd2c00 !important;
   text-shadow: inherit !important;
 }
@@ -143,23 +143,23 @@ tr.element-row:not(.expanded-row):active {
   padding-bottom: 0.5rem;
 }
 
-.tree-search-box .mat-form-field {
+.tree-search-box .mat-mdc-form-field {
   font-size: 12px;
 }
 
-.tree-search-box .mat-form-field-wrapper {
+.tree-search-box .mat-mdc-form-field-wrapper {
   width: 16px;
   padding-bottom: 0;
 }
 
-.tree-search-box .mat-icon {
+.tree-search-box .mat-mdc-icon {
   width: 24px;
   height: 24px;
   font-size: 24px;
   cursor: pointer;
 }
 
-.tree-search-box .mat-icon-button {
+.tree-search-box .mat-mdc-icon-button {
   width: 24px;
   height: 24px;
   line-height: 24px;
@@ -182,7 +182,7 @@ section {
   display: table-cell;
 }
 
-.example-button-row .mat-button-base {
+.example-button-row .mat-mdc-button-base {
   margin: 8px 8px 8px 0;
 }
 

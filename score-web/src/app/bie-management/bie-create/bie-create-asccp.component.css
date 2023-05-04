@@ -43,18 +43,18 @@ tr.element-row:not(.expanded-row):active {
   display: flex;
 }
 
-.mat-card-content p {
+.mat-mdc-card-content p {
   font-family: 'Roboto', 'sans-serif';
 }
 
-.module .mat-icon {
+.module .mat-mdc-icon {
   width: 20px;
   height: 20px;
   font-size: 20px;
   margin-right: 6px;
 }
 
-.mat-icon-button {
+.mat-mdc-icon-button {
   width: 20px;
   height: 20px;
   line-height: 20px;

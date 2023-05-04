@@ -36,23 +36,23 @@ tr.element-row:not(.expanded-row):active {
   color: #767676 !important;
 }
 
-.mat-card-content p {
+.mat-mdc-card-content p {
   font-family: 'Roboto', 'sans-serif';
   margin-bottom: 0.5rem;
 }
 
-.mat-card-content {
+.mat-mdc-card-content {
   margin-bottom: 0;
 }
 
-mat-toolbar > .mat-icon-button {
+mat-mdc-toolbar > .mat-mdc-icon-button {
   width: 40px;
   height: 40px;
   line-height: 40px;
   outline: none;
 }
 
-.mat-icon-button {
+.mat-mdc-icon-button {
   width: 20px;
   height: 20px;
   line-height: 20px;

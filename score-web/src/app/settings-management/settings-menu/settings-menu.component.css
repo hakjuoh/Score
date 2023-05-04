@@ -1,4 +1,4 @@
-.settings-menu .mat-list-item {
+.settings-menu .mat-mdc-list-item {
   height: 48px !important;
 }
 
@@ -18,7 +18,7 @@
   background: rgba(208, 215, 222, 0.32);
 }
 
-.nav-item .mat-icon {
+.nav-item .mat-mdc-icon {
   transform: scale(0.8);
 }
 
@@ -43,11 +43,11 @@
   align-self: center;
 }
 
-.row .mat-slider {
+.row .mat-mdc-slider {
   width: 300px;
 }
 
-.nav-item.active .mat-list-text {
+.nav-item.active .mat-mdc-list-text {
   font-weight: bold;
 }
 
