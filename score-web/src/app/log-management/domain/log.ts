@@ -215,6 +215,7 @@ export class DtScSnapshot {
   definitionSource: string;
   defaultValue: string;
   fixedValue: string;
+  deprecated: boolean;
 
   constructor(obj: any) {
     this.index = 0;
@@ -228,6 +229,7 @@ export class DtScSnapshot {
     this.definitionSource = obj.definitionSource;
     this.defaultValue = obj.defaultValue;
     this.fixedValue = obj.fixedValue;
+    this.deprecated = obj.deprecated;
   }
 
   isEqual(other: DtScSnapshot): boolean {

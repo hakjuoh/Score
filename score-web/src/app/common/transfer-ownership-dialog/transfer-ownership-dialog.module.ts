@@ -4,15 +4,17 @@ import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {MaterialModule} from '../../material.module';
 import {MatDialogModule} from '@angular/material/dialog';
 import {CommonModule} from '@angular/common';
+import {TranslateModule} from "@ngx-translate/core";
 
 @NgModule({
-  imports: [
-    FormsModule,
-    ReactiveFormsModule,
-    MaterialModule,
-    MatDialogModule,
-    CommonModule
-  ],
+    imports: [
+        FormsModule,
+        ReactiveFormsModule,
+        MaterialModule,
+        MatDialogModule,
+        CommonModule,
+        TranslateModule
+    ],
   declarations: [
     TransferOwnershipDialogComponent
   ],

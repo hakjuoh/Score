@@ -23,23 +23,27 @@
         <div class="row mt-3">
           <div class="col-2">
             <mat-form-field>
-              <input matInput required placeholder="Name" [(ngModel)]="tag.name" maxlength="100"/>
+              <mat-label>Name</mat-label>
+              <input matInput required [(ngModel)]="tag.name" maxlength="100"/>
             </mat-form-field>
           </div>
           <div class="col-2">
             <mat-form-field>
-              <input matInput required placeholder="Text Color" [(ngModel)]="tag.textColor" maxlength="10"/>
+              <mat-label>Text Color</mat-label>
+              <input matInput required [(ngModel)]="tag.textColor" maxlength="10"/>
             </mat-form-field>
           </div>
           <div class="col-2">
             <mat-form-field>
-              <input matInput required placeholder="Background Color" [(ngModel)]="tag.backgroundColor"
+              <mat-label>Background Color</mat-label>
+              <input matInput required [(ngModel)]="tag.backgroundColor"
                      maxlength="10"/>
             </mat-form-field>
           </div>
           <div class="col-6">
             <mat-form-field>
-              <input matInput placeholder="Description (Optional)" [(ngModel)]="tag.description"/>
+              <mat-label>Description (Optional)</mat-label>
+              <input matInput [(ngModel)]="tag.description"/>
             </mat-form-field>
           </div>
         </div>
@@ -72,23 +76,27 @@
         <div class="row mt-3">
           <div class="col-2">
             <mat-form-field>
-              <input matInput required placeholder="Name" [(ngModel)]="newTag.name" maxlength="100"/>
+              <mat-label>Name</mat-label>
+              <input matInput required [(ngModel)]="newTag.name" maxlength="100"/>
             </mat-form-field>
           </div>
           <div class="col-2">
             <mat-form-field>
-              <input matInput required placeholder="Text Color" [(ngModel)]="newTag.textColor" maxlength="10"/>
+              <mat-label>Text Color</mat-label>
+              <input matInput required [(ngModel)]="newTag.textColor" maxlength="10"/>
             </mat-form-field>
           </div>
           <div class="col-2">
             <mat-form-field>
-              <input matInput required placeholder="Background Color" [(ngModel)]="newTag.backgroundColor"
+              <mat-label>Background Color</mat-label>
+              <input matInput required [(ngModel)]="newTag.backgroundColor"
                      maxlength="10"/>
             </mat-form-field>
           </div>
           <div class="col-6">
             <mat-form-field>
-              <input matInput placeholder="Description (Optional)" [(ngModel)]="newTag.description"/>
+              <mat-label>Description (Optional)</mat-label>
+              <input matInput [(ngModel)]="newTag.description"/>
             </mat-form-field>
           </div>
         </div>

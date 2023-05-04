@@ -22,26 +22,26 @@
           <div class="row">
             <div class="col-md-2 col-sm-12">
               <mat-form-field>
+                <mat-label>Login ID</mat-label>
                 <input matInput [(ngModel)]="request.filters.loginId"
                        (ngModelChange)="onChange('filters.loginId', request.filters.loginId)"
-                       (keyup.enter)="this.paginator.pageIndex = 0; this.loadAccounts();"
-                       placeholder="Login ID">
+                       (keyup.enter)="this.paginator.pageIndex = 0; this.loadAccounts();">
               </mat-form-field>
             </div>
             <div class="col-md-2 col-sm-12">
               <mat-form-field>
+                <mat-label>Name</mat-label>
                 <input matInput [(ngModel)]="request.filters.name"
                        (ngModelChange)="onChange('filters.name', request.filters.name)"
-                       (keyup.enter)="this.paginator.pageIndex = 0; this.loadAccounts();"
-                       placeholder="Name">
+                       (keyup.enter)="this.paginator.pageIndex = 0; this.loadAccounts();">
               </mat-form-field>
             </div>
             <div class="col-md-2 col-sm-12">
               <mat-form-field>
+                <mat-label>Organization</mat-label>
                 <input matInput [(ngModel)]="request.filters.organization"
                        (ngModelChange)="onChange('filters.organization', request.filters.organization)"
-                       (keyup.enter)="this.paginator.pageIndex = 0; this.loadAccounts();"
-                       placeholder="Organization">
+                       (keyup.enter)="this.paginator.pageIndex = 0; this.loadAccounts();">
               </mat-form-field>
             </div>
             <div class="col-md-2 col-sm-12">

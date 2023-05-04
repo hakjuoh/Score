@@ -257,8 +257,9 @@
                 <div class="row">
                   <div class="col-6">
                     <mat-form-field>
+                      <mat-label>Agency ID List</mat-label>
                       <mat-select data-id="codeList.agencyIdListManifestId" [(ngModel)]="agencyIdList"
-                                  placeholder="Agency ID List" required (ngModelChange)="onAgencyIdListChange()"
+                                  required (ngModelChange)="onAgencyIdListChange()"
                                   [disabled]="access !== 'CanEdit' || hasRevision">
                         <mat-option>
                           <ngx-mat-select-search [formControl]="agencyListFilterCtrl"
@@ -275,8 +276,9 @@
                   </div>
                   <div class="col-6">
                     <mat-form-field>
+                      <mat-label>Agency ID List Value</mat-label>
                       <mat-select data-id="codeList.agencyIdListValueManifestId" [(ngModel)]="codeList.agencyIdListValueManifestId"
-                                  placeholder="Agency ID List Value" required
+                                  required
                                   [disabled]="access !== 'CanEdit' || hasRevision || !agencyIdList">
                         <mat-option>
                           <ngx-mat-select-search [formControl]="agencyListValueFilterCtrl"
@@ -303,7 +305,7 @@
                   <div class="col-6">
                     <mat-form-field *ngIf="access === 'CanEdit' && !hasRevision">
                       <mat-label>Namespace</mat-label>
-                      <mat-select data-id="codeList.namespace" placeholder="Namespace"
+                      <mat-select data-id="codeList.namespace"
                                   [(ngModel)]="codeList.namespaceId"
                                   [required]="true">
                         <mat-option>
@@ -318,7 +320,7 @@
                     </mat-form-field>
                     <mat-form-field *ngIf="access !== 'CanEdit' || hasRevision">
                       <mat-label>Namespace</mat-label>
-                      <mat-select data-id="codeList.namespace" placeholder="Namespace"
+                      <mat-select data-id="codeList.namespace"
                                   [(ngModel)]="codeList.namespaceId"
                                   [required]="true" [disabled]="true">
                         <mat-option *ngFor="let namespace of getSelectableNamespaces(codeList.namespaceId)"

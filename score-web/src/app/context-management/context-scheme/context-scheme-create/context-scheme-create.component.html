@@ -6,7 +6,8 @@
     <mat-card class="mb-2">
       <mat-card-content class="mat-card-container">
         <mat-form-field>
-          <mat-select placeholder="Context Category" required [(ngModel)]="contextScheme.contextCategoryId">
+          <mat-label>Context Category</mat-label>
+          <mat-select required [(ngModel)]="contextScheme.contextCategoryId">
             <mat-option>
               <ngx-mat-select-search [formControl]="ctxCategoriesFilterCtrl"
                                      [placeholderLabel]="'Search...'"

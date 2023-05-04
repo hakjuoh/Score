@@ -27,7 +27,8 @@
 
             <div class="col-md-2 col-sm-12 d-flex">
               <mat-form-field>
-                <input matInput [matDatepicker]="dateStart" placeholder="Created start date"
+                <mat-label>Created start date</mat-label>
+                <input matInput [matDatepicker]="dateStart"
                        [max]="request.createdDate.end" [value]="request.createdDate.start"
                        (dateInput)="onDateEvent('startDate', $event)">
                 <mat-datepicker-toggle matSuffix [for]="dateStart"></mat-datepicker-toggle>
@@ -44,7 +45,8 @@
 
             <div class="col-md-2 col-sm-12 d-flex">
               <mat-form-field>
-                <input matInput [matDatepicker]="dateEnd" placeholder="Created end date"
+                <mat-label>Created end date</mat-label>
+                <input matInput [matDatepicker]="dateEnd"
                        [min]="request.createdDate.start" [value]="request.createdDate.end"
                        (dateInput)="onDateEvent('endDate', $event)">
                 <mat-datepicker-toggle matSuffix [for]="dateEnd"></mat-datepicker-toggle>

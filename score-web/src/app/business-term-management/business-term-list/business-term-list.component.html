@@ -39,7 +39,8 @@
 
             <div class="col-md-2 col-sm-12 d-flex">
               <mat-form-field>
-                <input matInput [matDatepicker]="dateStart" placeholder="Updated start date"
+                <mat-label>Updated start date</mat-label>
+                <input matInput [matDatepicker]="dateStart"
                        [max]="request.updatedDate.end"
                        (dateInput)="onDateEvent('startDate', $event)">
                 <mat-datepicker-toggle matSuffix [for]="dateStart"></mat-datepicker-toggle>
@@ -56,7 +57,8 @@
 
             <div class="col-md-2 col-sm-12 d-flex">
               <mat-form-field>
-                <input matInput [matDatepicker]="dateEnd" placeholder="Updated end date"
+                <mat-label>Updated end date</mat-label>
+                <input matInput [matDatepicker]="dateEnd"
                        [min]="request.updatedDate.start"
                        (dateInput)="onDateEvent('endDate', $event)">
                 <mat-datepicker-toggle matSuffix [for]="dateEnd"></mat-datepicker-toggle>
@@ -76,26 +78,26 @@
             <div class="row">
               <div class="col-md-2 col-sm-12">
                 <mat-form-field>
+                  <mat-label>Term</mat-label>
                   <input matInput [(ngModel)]="request.filters.businessTerm"
                          (ngModelChange)="onChange('filters.businessTerm', request.filters.businessTerm)"
-                         (keyup.enter)="this.paginator.pageIndex = 0; this.loadBusinessTermList();"
-                         placeholder="Term">
+                         (keyup.enter)="this.paginator.pageIndex = 0; this.loadBusinessTermList();">
                 </mat-form-field>
               </div>
               <div class="col-md-2 col-sm-12">
                 <mat-form-field>
+                  <mat-label>External Reference URI</mat-label>
                   <input matInput [(ngModel)]="request.filters.externalReferenceUri"
                          (ngModelChange)="onChange('filters.externalReferenceUri', request.filters.externalReferenceUri)"
-                         (keyup.enter)="this.paginator.pageIndex = 0; this.loadBusinessTermList();"
-                         placeholder="External Reference URI">
+                         (keyup.enter)="this.paginator.pageIndex = 0; this.loadBusinessTermList();">
                 </mat-form-field>
               </div>
               <div class="col-md-2 col-sm-12">
                 <mat-form-field>
+                  <mat-label>External Reference ID</mat-label>
                   <input matInput [(ngModel)]="request.filters.externalReferenceId"
                          (ngModelChange)="onChange('filters.externalReferenceId', request.filters.externalReferenceId)"
-                         (keyup.enter)="this.paginator.pageIndex = 0; this.loadBusinessTermList();"
-                         placeholder="External Reference ID">
+                         (keyup.enter)="this.paginator.pageIndex = 0; this.loadBusinessTermList();">
                 </mat-form-field>
               </div>
             </div>

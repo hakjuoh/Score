@@ -342,14 +342,16 @@
                       <div class="row">
                         <div class="col-md-6 col-sm-12">
                           <mat-form-field>
-                            <input matInput placeholder="Legacy Business Term" maxlength="225"
+                            <mat-label>Legacy Business Term</mat-label>
+                            <input matInput maxlength="225"
                                    [(ngModel)]="asAbieDetail().asbiep.bizTerm"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
                         </div>
                         <div class="col-md-6 col-sm-12">
                           <mat-form-field>
-                            <input matInput placeholder="Remark" maxlength="225"
+                            <mat-label>Remark</mat-label>
+                            <input matInput maxlength="225"
                                    [(ngModel)]="asAbieDetail().asbiep.remark"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
@@ -359,14 +361,16 @@
                       <div class="row">
                         <div class="col-md-6 col-sm-12">
                           <mat-form-field>
-                            <input matInput placeholder="Version" maxlength="45"
+                            <mat-label>Version</mat-label>
+                            <input matInput maxlength="45"
                                    [(ngModel)]="rootNode.version"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
                         </div>
                         <div class="col-md-6 col-sm-12">
                           <mat-form-field>
-                            <input matInput placeholder="Status" maxlength="45"
+                            <mat-label>Status</mat-label>
+                            <input matInput maxlength="45"
                                    [(ngModel)]="rootNode.status"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
@@ -376,8 +380,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Context Definition</mat-label>
                             <textarea matInput rows="6"
-                                      placeholder="Context Definition"
                                       [(ngModel)]="asAbieDetail().asbiep.definition"
                                       [disabled]="!isEditable(selectedNode)">
                             </textarea>
@@ -387,8 +391,9 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Component Definition</mat-label>
                             <textarea matInput rows="6"
-                                      placeholder="Component Definition" [disabled]="true"
+                                      [disabled]="true"
                                       value="{{ asAbieDetail().asccp.definition || ' ' }}">
                             </textarea>
                           </mat-form-field>
@@ -397,8 +402,9 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Type Definition</mat-label>
                             <textarea matInput rows="6"
-                                      placeholder="Type Definition" [disabled]="true"
+                                      [disabled]="true"
                                       value="{{ asAbieDetail().acc.definition || ' ' }}">
                             </textarea>
                           </mat-form-field>
@@ -452,7 +458,8 @@
                       <div class="row">
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="Cardinality Min" required
+                            <mat-label>Cardinality Min</mat-label>
+                            <input matInput required
                                    [formControl]="bieCardinalityMin">
                             <mat-error *ngIf="bieCardinalityMin.hasError('required') || bieCardinalityMin.hasError('whitespace')">
                               Cardinality Min is <strong>required</strong>
@@ -472,7 +479,8 @@
                         </div>
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="Cardinality Max (-1 for unbounded, Standard is {{ asAsbiepDetail().ascc.cardinalityMax | unbounded}})" required
+                            <mat-label>Cardinality Max (-1 for unbounded, Standard is {{ asAsbiepDetail().ascc.cardinalityMax | unbounded}})</mat-label>
+                            <input matInput required
                                    [formControl]="bieCardinalityMax"
                                    [value]="bieCardinalityMax.value | unbounded">
                             <mat-hint *ngIf="bieCardinalityMax.valid && asAsbiepDetail().asbie && asAsbiepDetail().asbie.cardinalityMax === 0 &&
@@ -511,14 +519,16 @@
                             </button>
                           </div>
                           <mat-form-field *ngIf="!isBusinessTermEnabled || isDeveloper">
-                            <input matInput placeholder="Legacy Business Term" maxlength="225"
+                            <mat-label>Legacy Business Term</mat-label>
+                            <input matInput maxlength="225"
                                    [(ngModel)]="asAsbiepDetail().asbiep.bizTerm"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
                         </div>
                         <div class="col-md-6 col-sm-12">
                           <mat-form-field>
-                            <input matInput placeholder="Remark" maxlength="225"
+                            <mat-label>Remark</mat-label>
+                            <input matInput maxlength="225"
                                    [(ngModel)]="asAsbiepDetail().asbiep.remark"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
@@ -528,8 +538,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Context Definition</mat-label>
                             <textarea matInput rows="6"
-                                      placeholder="Context Definition"
                                       [(ngModel)]="asAsbiepDetail().asbie.definition"
                                       [disabled]="!isEditable(selectedNode)">
                             </textarea>
@@ -587,14 +597,16 @@
                         <div class="row">
                           <div class="col-md-6 col-sm-12">
                             <mat-form-field>
-                              <input matInput placeholder="Legacy Business Term" maxlength="225"
+                              <mat-label>Legacy Business Term</mat-label>
+                              <input matInput maxlength="225"
                                      [value]="reusedNodeDetail.asbiep.bizTerm"
                                      [disabled]="true">
                             </mat-form-field>
                           </div>
                           <div class="col-md-6 col-sm-12">
                             <mat-form-field>
-                              <input matInput placeholder="Remark" maxlength="225"
+                              <mat-label>Remark</mat-label>
+                              <input matInput maxlength="225"
                                      [value]="reusedNodeDetail.asbiep.remark"
                                      [disabled]="true">
                             </mat-form-field>
@@ -603,14 +615,16 @@
                         <div class="row">
                           <div class="col-md-6 col-sm-12">
                             <mat-form-field>
-                              <input matInput placeholder="Version" maxlength="225"
+                              <mat-label>Version</mat-label>
+                              <input matInput maxlength="225"
                                      [value]="reusedNode.version"
                                      [disabled]="true">
                             </mat-form-field>
                           </div>
                           <div class="col-md-6 col-sm-12">
                             <mat-form-field>
-                              <input matInput placeholder="Status" maxlength="225"
+                              <mat-label>Status</mat-label>
+                              <input matInput maxlength="225"
                                      [value]="reusedNode.status"
                                      [disabled]="true">
                             </mat-form-field>
@@ -618,18 +632,18 @@
                         </div>
 
                         <mat-form-field>
-                        <textarea matInput rows="6"
-                                  placeholder="Context Definition"
-                                  [value]="reusedNodeDetail.asbiep.definition"
-                                  [disabled]="true"></textarea>
+                          <mat-label>Context Definition</mat-label>
+                          <textarea matInput rows="6"
+                                    [value]="reusedNodeDetail.asbiep.definition"
+                                    [disabled]="true"></textarea>
                         </mat-form-field>
                       </div>
 
                       <div class="row">
                         <div class="col-md-12 col-sm-12">
                           <mat-form-field>
-                            <textarea matInput rows="6"
-                                      placeholder="Association Definition" [disabled]="true"
+                            <mat-label>Association Definition</mat-label>
+                            <textarea matInput rows="6" [disabled]="true"
                                       value="{{ asAsbiepDetail().ascc.definition || ' ' }}">
                             </textarea>
                           </mat-form-field>
@@ -639,8 +653,8 @@
                       <div class="row">
                         <div class="col-md-12 col-sm-12">
                           <mat-form-field>
-                            <textarea matInput rows="6"
-                                      placeholder="Component Definition" [disabled]="true"
+                            <mat-label>Component Definition</mat-label>
+                            <textarea matInput rows="6" [disabled]="true"
                                       value="{{ asAsbiepDetail().asccp.definition || ' ' }}">
                             </textarea>
                           </mat-form-field>
@@ -650,8 +664,8 @@
                       <div class="row">
                         <div class="col-md-12 col-sm-12">
                           <mat-form-field>
-                            <textarea matInput rows="6"
-                                      placeholder="Type Definition" [disabled]="true"
+                            <mat-label>Type Definition</mat-label>
+                            <textarea matInput rows="6" [disabled]="true"
                                       value="{{ asAsbiepDetail().acc.definition || ' ' }}">
                             </textarea>
                           </mat-form-field>
@@ -704,7 +718,8 @@
                       <div class="row">
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="Cardinality Min" required
+                            <mat-label>Cardinality Min</mat-label>
+                            <input matInput required
                                    [formControl]="bieCardinalityMin">
                             <mat-error *ngIf="bieCardinalityMin.hasError('required') || bieCardinalityMin.hasError('whitespace')">
                               Cardinality Min is <strong>required</strong>
@@ -723,7 +738,8 @@
                         </div>
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="Cardinality Max (-1 for unbounded, Standard is {{ asBbiepDetail().bcc.cardinalityMax | unbounded}})" required
+                            <mat-label>Cardinality Max (-1 for unbounded, Standard is {{ asBbiepDetail().bcc.cardinalityMax | unbounded}})</mat-label>
+                            <input matInput required
                                    [formControl]="bieCardinalityMax"
                                    [value]="bieCardinalityMax.value | unbounded">
                             <mat-hint *ngIf="bieCardinalityMax.valid && asBbiepDetail().bbie.cardinalityMax === 0 &&
@@ -762,14 +778,16 @@
                             </button>
                           </div>
                           <mat-form-field *ngIf="!isBusinessTermEnabled || isDeveloper">
-                            <input matInput placeholder="Legacy Business Term" maxlength="225"
+                            <mat-label>Legacy Business Term</mat-label>
+                            <input matInput maxlength="225"
                                    [(ngModel)]="asBbiepDetail().bbiep.bizTerm"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
                         </div>
                         <div class="col-md-6 col-sm-12">
                           <mat-form-field>
-                            <input matInput placeholder="Remark" maxlength="225"
+                            <mat-label>Remark</mat-label>
+                            <input matInput maxlength="225"
                                    [(ngModel)]="asBbiepDetail().bbiep.remark"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
@@ -778,7 +796,8 @@
                       <div class="row">
                         <div class="col-md-12 col-sm-12">
                           <mat-form-field>
-                            <input matInput placeholder="Example"
+                            <mat-label>Example</mat-label>
+                            <input matInput
                                    [(ngModel)]="asBbiepDetail().bbie.example"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
@@ -802,19 +821,22 @@
                                 <mat-label>Value Constraint</mat-label>
                               </mat-form-field>
                               <mat-form-field *ngIf="asBbiepDetail().bbie.fixedOrDefault == 'none'">
-                                <input matInput placeholder="No value constraints"
+                                <mat-label>No value constraints</mat-label>
+                                <input matInput
                                        [disabled]="true">
                               </mat-form-field>
 
                               <mat-form-field *ngIf="asBbiepDetail().bbie.fixedOrDefault == 'fixed'">
-                                <input matInput placeholder="Fixed Value"
+                                <mat-label>Fixed Value</mat-label>
+                                <input matInput
                                        [(ngModel)]="asBbiepDetail().bbie.fixedValue"
                                        [disabled]="!isEditable(selectedNode) ||
                                                    isReflectValue()">
                               </mat-form-field>
 
                               <mat-form-field *ngIf="asBbiepDetail().bbie.fixedOrDefault == 'default'">
-                                <input matInput placeholder="Default Value"
+                                <mat-label>Default Value</mat-label>
+                                <input matInput
                                        [(ngModel)]="asBbiepDetail().bbie.defaultValue"
                                        [disabled]="!isEditable(selectedNode) ||
                                                    !!(isVersionIdNode(selectedNode) && rootNode.version) ||
@@ -827,7 +849,8 @@
                           <mat-card>
                             <mat-card-content>
                               <mat-form-field>
-                                <mat-select placeholder="Value Domain Restriction" required
+                                <mat-label>Value Domain Restriction</mat-label>
+                                <mat-select required
                                             [(ngModel)]="asBbiepDetail().bbie.valueDomainType"
                                             (ngModelChange)="changeValueDomainType(selectedNode)"
                                             [disabled]="!isEditable(selectedNode)">
@@ -838,7 +861,8 @@
                                 </mat-select>
                               </mat-form-field>
                               <mat-form-field *ngIf="asBbiepDetail().bbie.valueDomainType === 'Primitive'">
-                                <mat-select placeholder="Value Domain" required
+                                <mat-label>Value Domain</mat-label>
+                                <mat-select required
                                             [(ngModel)]="asBbiepDetail().bbie.bdtPriRestriId"
                                             (ngModelChange)="changeValueDomainType(selectedNode)"
                                             [disabled]="!isEditable(selectedNode)">
@@ -857,7 +881,8 @@
                               </mat-form-field>
 
                               <mat-form-field *ngIf="asBbiepDetail().bbie.valueDomainType === 'Code'">
-                                <mat-select placeholder="Value Domain" required
+                                <mat-label>Value Domain</mat-label>
+                                <mat-select required
                                             [(ngModel)]="asBbiepDetail().bbie.codeListManifestId"
                                             (ngModelChange)="changeValueDomainType(selectedNode)"
                                             [disabled]="!isEditable(selectedNode)">
@@ -882,7 +907,8 @@
                               </mat-form-field>
 
                               <mat-form-field *ngIf="asBbiepDetail().bbie.valueDomainType === 'Agency'">
-                                <mat-select placeholder="Value Domain" required
+                                <mat-label>Value Domain</mat-label>
+                                <mat-select required
                                             [(ngModel)]="asBbiepDetail().bbie.agencyIdListManifestId"
                                             (ngModelChange)="changeValueDomainType(selectedNode)"
                                             [disabled]="!isEditable(selectedNode)">
@@ -916,7 +942,8 @@
                           <div class="row">
                             <div class="col-3">
                               <mat-form-field>
-                                <input matInput placeholder="Minimum Length"
+                                <mat-label>Minimum Length</mat-label>
+                                <input matInput
                                        [formControl]="bieMinimumLength">
                                 <mat-error
                                   *ngIf="!bieMinimumLength.hasError('min') && bieMinimumLength.hasError('pattern')">
@@ -932,7 +959,8 @@
                             </div>
                             <div class="col-3">
                               <mat-form-field>
-                                <input matInput placeholder="Maximum Length"
+                                <mat-label>Maximum Length</mat-label>
+                                <input matInput
                                        [formControl]="bieMaximumLength">
                                 <mat-error
                                   *ngIf="!bieMaximumLength.hasError('min') && bieMaximumLength.hasError('pattern')">
@@ -948,7 +976,8 @@
                             </div>
                             <div class="col-3">
                               <mat-form-field>
-                                <input matInput placeholder="Pattern"
+                                <mat-label>Pattern</mat-label>
+                                <input matInput
                                        [formControl]="biePattern">
                                 <mat-error *ngIf="biePattern.hasError('pattern')">
                                   {{ biePattern.getError('pattern') }}
@@ -957,7 +986,8 @@
                             </div>
                             <div class="col-3">
                               <mat-form-field>
-                                <input matInput placeholder="Pattern Test"
+                                <mat-label>Pattern Test</mat-label>
+                                <input matInput
                                        [formControl]="biePatternTest" [errorStateMatcher]="biePatternTestErrorStateMatcher">
                                 <mat-error *ngIf="biePatternTest.hasError('pattern')">
                                   The value '{{ biePatternTest.getError('pattern').actualValue }}' does not satisfy the defined pattern '{{ biePattern.value }}'.
@@ -974,8 +1004,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Context Definition</mat-label>
                             <textarea matInput rows="6"
-                                      placeholder="Context Definition"
                                       [(ngModel)]="asBbiepDetail().bbie.definition"
                                       [disabled]="!isEditable(selectedNode)">
                             </textarea>
@@ -986,8 +1016,9 @@
                       <div class="row">
                         <div class="col-lg-12 col-md-12 col-sm-12">
                           <mat-form-field>
+                            <mat-label>Association Definition</mat-label>
                             <textarea matInput rows="6"
-                                      placeholder="Association Definition" [disabled]="true"
+                                      [disabled]="true"
                                       value="{{ asBbiepDetail().bcc.definition || ' ' }}">
                             </textarea>
                           </mat-form-field>
@@ -997,8 +1028,9 @@
                       <div class="row">
                         <div class="col-lg-12 col-md-12 col-sm-12">
                           <mat-form-field>
+                            <mat-label>Component Definition</mat-label>
                             <textarea matInput rows="6"
-                                      placeholder="Component Definition" [disabled]="true"
+                                      [disabled]="true"
                                       value="{{ asBbiepDetail().bccp.definition || ' ' }}">
                             </textarea>
                           </mat-form-field>
@@ -1040,7 +1072,8 @@
                       <div class="row">
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="Cardinality Min" required
+                            <mat-label>Cardinality Min</mat-label>
+                            <input matInput required
                                    [formControl]="bieCardinalityMin">
                             <mat-error *ngIf="bieCardinalityMin.hasError('required') || bieCardinalityMin.hasError('whitespace')">
                               Cardinality Min is <strong>required</strong>
@@ -1060,7 +1093,8 @@
                         </div>
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="Cardinality Max (-1 for unbounded, Standard is {{ asBbieScDetail().bdtSc.cardinalityMax | unbounded}})" required
+                            <mat-label>Cardinality Max (-1 for unbounded, Standard is {{ asBbieScDetail().bdtSc.cardinalityMax | unbounded}})</mat-label>
+                            <input matInput required
                                    [formControl]="bieCardinalityMax"
                                    [value]="bieCardinalityMax.value | unbounded">
                             <mat-hint *ngIf="bieCardinalityMax.valid && asBbieScDetail().bbieSc.cardinalityMax === 0 &&
@@ -1088,14 +1122,16 @@
                       <div class="row">
                         <div class="col-md-6 col-sm-12">
                           <mat-form-field>
-                            <input matInput placeholder="Legacy Business Term" maxlength="225"
+                            <mat-label>Legacy Business Term</mat-label>
+                            <input matInput maxlength="225"
                                    [(ngModel)]="asBbieScDetail().bbieSc.bizTerm"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
                         </div>
                         <div class="col-md-6 col-sm-12">
                           <mat-form-field>
-                            <input matInput placeholder="Remark" maxlength="225"
+                            <mat-label>Remark</mat-label>
+                            <input matInput maxlength="225"
                                    [(ngModel)]="asBbieScDetail().bbieSc.remark"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
@@ -1105,7 +1141,8 @@
                       <div class="row">
                         <div class="col-md-12 col-sm-12">
                           <mat-form-field>
-                            <input matInput placeholder="Example"
+                            <mat-label>Example</mat-label>
+                            <input matInput
                                    [(ngModel)]="asBbieScDetail().bbieSc.example"
                                    [disabled]="!isEditable(selectedNode)">
                           </mat-form-field>
@@ -1130,19 +1167,22 @@
                                 <mat-label>Value Constraint</mat-label>
                               </mat-form-field>
                               <mat-form-field *ngIf="asBbieScDetail().bbieSc.fixedOrDefault == 'none'">
-                                <input matInput placeholder="No value constraints"
+                                <mat-label>No value constraints</mat-label>
+                                <input matInput
                                        [disabled]="true">
                               </mat-form-field>
 
                               <mat-form-field *ngIf="asBbieScDetail().bbieSc.fixedOrDefault == 'fixed'">
-                                <input matInput placeholder="Fixed Value"
+                                <mat-label>Fixed Value</mat-label>
+                                <input matInput
                                        [(ngModel)]="asBbieScDetail().bbieSc.fixedValue"
                                        [disabled]="!isEditable(selectedNode)||
                                                    isReflectValue()">
                               </mat-form-field>
 
                               <mat-form-field *ngIf="asBbieScDetail().bbieSc.fixedOrDefault == 'default'">
-                                <input matInput placeholder="Default Value"
+                                <mat-label>Default Value</mat-label>
+                                <input matInput
                                        [(ngModel)]="asBbieScDetail().bbieSc.defaultValue"
                                        [disabled]="!isEditable(selectedNode)||
                                                    isReflectValue()">
@@ -1154,7 +1194,8 @@
                           <mat-card>
                             <mat-card-content>
                               <mat-form-field>
-                                <mat-select placeholder="Value Domain Restriction" required
+                                <mat-label>Value Domain Restriction</mat-label>
+                                <mat-select required
                                             [(ngModel)]="asBbieScDetail().bbieSc.valueDomainType"
                                             (ngModelChange)="changeValueDomainType(selectedNode)"
                                             [disabled]="!isEditable(selectedNode)">
@@ -1166,7 +1207,8 @@
                               </mat-form-field>
 
                               <mat-form-field *ngIf="asBbieScDetail().bbieSc.valueDomainType === 'Primitive'">
-                                <mat-select placeholder="Value Domain" required
+                                <mat-label>Value Domain</mat-label>
+                                <mat-select required
                                             [(ngModel)]="asBbieScDetail().bbieSc.bdtScPriRestriId"
                                             (ngModelChange)="changeValueDomainType(selectedNode)"
                                             [disabled]="!isEditable(selectedNode)">
@@ -1185,7 +1227,8 @@
                               </mat-form-field>
 
                               <mat-form-field *ngIf="asBbieScDetail().bbieSc.valueDomainType === 'Code'">
-                                <mat-select placeholder="Value Domain" required
+                                <mat-label>Value Domain</mat-label>
+                                <mat-select required
                                             [(ngModel)]="asBbieScDetail().bbieSc.codeListManifestId"
                                             (ngModelChange)="changeValueDomainType(selectedNode)"
                                             [disabled]="!isEditable(selectedNode)">
@@ -1210,7 +1253,8 @@
                               </mat-form-field>
 
                               <mat-form-field *ngIf="asBbieScDetail().bbieSc.valueDomainType === 'Agency'">
-                                <mat-select placeholder="Value Domain" required
+                                <mat-label>Value Domain</mat-label>
+                                <mat-select required
                                             [(ngModel)]="asBbieScDetail().bbieSc.agencyIdListManifestId"
                                             (ngModelChange)="changeValueDomainType(selectedNode)"
                                             [disabled]="!isEditable(selectedNode)">
@@ -1244,7 +1288,8 @@
                           <div class="row">
                             <div class="col-3">
                               <mat-form-field>
-                                <input matInput placeholder="Minimum Length"
+                                <mat-label>Minimum Length</mat-label>
+                                <input matInput
                                        [formControl]="bieMinimumLength">
                                 <mat-error
                                   *ngIf="!bieMinimumLength.hasError('min') && bieMinimumLength.hasError('pattern')">
@@ -1260,7 +1305,8 @@
                             </div>
                             <div class="col-3">
                               <mat-form-field>
-                                <input matInput placeholder="Maximum Length"
+                                <mat-label>Maximum Length</mat-label>
+                                <input matInput
                                        [formControl]="bieMaximumLength">
                                 <mat-error
                                   *ngIf="!bieMaximumLength.hasError('min') && bieMaximumLength.hasError('pattern')">
@@ -1276,7 +1322,8 @@
                             </div>
                             <div class="col-3">
                               <mat-form-field>
-                                <input matInput placeholder="Pattern"
+                                <mat-label>Pattern</mat-label>
+                                <input matInput
                                        [formControl]="biePattern">
                                 <mat-error *ngIf="biePattern.hasError('pattern')">
                                   {{ biePattern.getError('pattern') }}
@@ -1285,7 +1332,8 @@
                             </div>
                             <div class="col-3">
                               <mat-form-field>
-                                <input matInput placeholder="Pattern Test"
+                                <mat-label>Pattern Test</mat-label>
+                                <input matInput
                                        [formControl]="biePatternTest">
                                 <mat-hint *ngIf="!!biePatternTest.value && biePatternTest.valid">
                                   The value '{{ biePatternTest.value }}' matches the defined pattern '{{ biePattern.value }}'.
@@ -1302,8 +1350,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Context Definition</mat-label>
                             <textarea matInput rows="6"
-                                      placeholder="Context Definition"
                                       [(ngModel)]="asBbieScDetail().bbieSc.definition"
                                       [disabled]="!isEditable(selectedNode)">
                             </textarea>
@@ -1314,8 +1362,9 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Component Definition</mat-label>
                             <textarea matInput rows="6"
-                                      placeholder="Component Definition" [disabled]="true"
+                                      [disabled]="true"
                                       value="{{ asBbieScDetail().bdtSc.definition || ' ' }}">
                             </textarea>
                           </mat-form-field>

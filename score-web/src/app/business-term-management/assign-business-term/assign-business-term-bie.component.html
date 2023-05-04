@@ -85,18 +85,18 @@
               <div class="row">
                 <div class="col-md-2 col-sm-12">
                   <mat-form-field>
+                    <mat-label>DEN</mat-label>
                     <input matInput [(ngModel)]="request.filters.den"
                            (ngModelChange)="onChange('filters.den', request.filters.den)"
-                           (keyup.enter)="this.paginator.pageIndex = 0; this.loadBieList();"
-                           placeholder="DEN">
+                           (keyup.enter)="this.paginator.pageIndex = 0; this.loadBieList();">
                   </mat-form-field>
                 </div>
                 <div class="col-md-2 col-sm-12">
                   <mat-form-field>
+                    <mat-label>Top Level BIE</mat-label>
                     <input matInput [(ngModel)]="request.filters.propertyTerm"
                            (ngModelChange)="onChange('filters.propertyTerm', request.filters.propertyTerm)"
-                           (keyup.enter)="this.paginator.pageIndex = 0; this.loadBieList();"
-                           placeholder="Top Level BIE">
+                           (keyup.enter)="this.paginator.pageIndex = 0; this.loadBieList();">
                   </mat-form-field>
                 </div>
                 <div class="col-md-2 col-sm-12">
@@ -111,10 +111,10 @@
                 </div>
                 <div class="col-md-2 col-sm-12">
                   <mat-form-field>
+                    <mat-label>Business Context</mat-label>
                     <input matInput [(ngModel)]="request.filters.businessContext"
                            (ngModelChange)="onChange('filters.businessContext', request.filters.businessContext)"
-                           (keyup.enter)="this.paginator.pageIndex = 0; this.loadBieList();"
-                           placeholder="Business Context">
+                           (keyup.enter)="this.paginator.pageIndex = 0; this.loadBieList();">
                   </mat-form-field>
                 </div>
               </div>
@@ -124,7 +124,8 @@
               <div class="row">
                 <div class="col-md-2 col-sm-12 d-flex">
                   <mat-form-field>
-                    <input matInput [matDatepicker]="dateStart" placeholder="Updated start date"
+                    <mat-label>Updated start date</mat-label>
+                    <input matInput [matDatepicker]="dateStart"
                            [max]="request.updatedDate.end"
                            (dateInput)="onDateEvent('startDate', $event)">
                     <mat-datepicker-toggle matSuffix [for]="dateStart"></mat-datepicker-toggle>
@@ -141,7 +142,8 @@
 
                 <div class="col-md-2 col-sm-12 d-flex">
                   <mat-form-field>
-                    <input matInput [matDatepicker]="dateEnd" placeholder="Updated end date"
+                    <mat-label>Updated end date</mat-label>
+                    <input matInput [matDatepicker]="dateEnd"
                            [min]="request.updatedDate.start"
                            (dateInput)="onDateEvent('endDate', $event)">
                     <mat-datepicker-toggle matSuffix [for]="dateEnd"></mat-datepicker-toggle>

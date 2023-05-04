@@ -487,7 +487,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <input matInput placeholder="{{'ACC_DETAIL.OBJECT' | translate}}" maxlength="100"
+                            <mat-label>{{'ACC_DETAIL.OBJECT' | translate}}</mat-label>
+                            <input matInput maxlength="100"
                                    [required]="true"
                                    [(ngModel)]="asAccDetail().objectClassTerm"
                                    [disabled]="selectedNode.level !== 0 || !isEditable()">
@@ -498,8 +499,8 @@
                       <div class="row">
                         <div class="col-4">
                           <mat-form-field>
-                            <mat-select placeholder="Component Type"
-                                        [(ngModel)]="asAccDetail().oagisComponentType"
+                            <mat-label>Component Type</mat-label>
+                            <mat-select [(ngModel)]="asAccDetail().oagisComponentType"
                                         [disabled]="selectedNode.level !== 0 || !isEditable() || hasRevision() || isExtension()">
                               <mat-option *ngFor="let componentType of componentTypes"
                                           [value]="componentType.value"
@@ -543,8 +544,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field *ngIf="selectedNode.level === 0 && isEditable() && !hasRevision()">
-                            <mat-select placeholder="Namespace"
-                                        [(ngModel)]="asAccDetail().namespaceId"
+                            <mat-label>Namespace</mat-label>
+                            <mat-select [(ngModel)]="asAccDetail().namespaceId"
                                         [required]="true">
                               <mat-option>
                                 <ngx-mat-select-search [formControl]="namespaceListFilterCtrl"
@@ -557,8 +558,8 @@
                             </mat-select>
                           </mat-form-field>
                           <mat-form-field *ngIf="selectedNode.level !== 0 || !isEditable() || hasRevision()">
-                            <mat-select placeholder="Namespace"
-                                        [(ngModel)]="asAccDetail().namespaceId"
+                            <mat-label>Namespace</mat-label>
+                            <mat-select [(ngModel)]="asAccDetail().namespaceId"
                                         [required]="true" [disabled]="true">
                               <mat-option *ngFor="let namespace of getSelectableNamespaces(asAccDetail().namespaceId)"
                                           [value]="namespace.namespaceId">{{ namespace.uri }}</mat-option>
@@ -570,7 +571,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <input matInput placeholder="Definition Source" maxlength="200"
+                            <mat-label>Definition Source</mat-label>
+                            <input matInput maxlength="200"
                                    [(ngModel)]="asAccDetail().definitionSource"
                                    [disabled]="selectedNode.level !== 0 || !isEditable()">
                           </mat-form-field>
@@ -580,8 +582,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Definition</mat-label>
                             <textarea matInput rows="6" cols="30"
-                                      placeholder="Definition"
                                       [(ngModel)]="asAccDetail().definition"
                                       [disabled]="selectedNode.level !== 0 || !isEditable()"></textarea>
                           </mat-form-field>
@@ -662,7 +664,8 @@
                       <div class="row">
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="Cardinality Min" required
+                            <mat-label>Cardinality Min</mat-label>
+                            <input matInput required
                                    [formControl]="ccCardinalityMin">
                             <mat-error *ngIf="ccCardinalityMin.hasError('required') || ccCardinalityMin.hasError('whitespace')">
                               Cardinality Min is <strong>required</strong>
@@ -677,7 +680,8 @@
                         </div>
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="{{ 'ASCC_DETAIL.MAX' | translate }}" required
+                            <mat-label>{{ 'ASCC_DETAIL.MAX' | translate }}</mat-label>
+                            <input matInput required
                                    [formControl]="ccCardinalityMax"
                                    [value]="ccCardinalityMax.value | unbounded">
                             <mat-hint *ngIf="ccCardinalityMax.valid && asAsccpDetail().ascc.cardinalityMax === 0 &&
@@ -716,7 +720,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <input matInput placeholder="Definition Source" maxlength="200"
+                            <mat-label>Definition Source</mat-label>
+                            <input matInput maxlength="200"
                                    [(ngModel)]="asAsccpDetail().ascc.definitionSource"
                                    [disabled]="selectedNode.level !== 1 || !isEditable()">
                           </mat-form-field>
@@ -726,8 +731,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Definition</mat-label>
                             <textarea matInput rows="6" cols="30"
-                                      placeholder="Definition"
                                       [(ngModel)]="asAsccpDetail().ascc.definition"
                                       [disabled]="selectedNode.level !== 1 || !isEditable()"></textarea>
                           </mat-form-field>
@@ -813,7 +818,7 @@
                         <div class="col-12">
                           <mat-form-field>
                             <mat-label>{{ 'ASCCP_DETAIL.PROPERTY_TERM' | translate }}</mat-label>
-                            <input matInput placeholder="{{ 'ASCCP_DETAIL.PROPERTY_TERM' | translate }}" maxlength="60"
+                            <input matInput maxlength="60"
                                    [(ngModel)]="asAsccpDetail().asccp.propertyTerm"
                                    [disabled]="true">
                           </mat-form-field>
@@ -860,8 +865,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <mat-select placeholder="Namespace"
-                                        [(ngModel)]="asAsccpDetail().asccp.namespaceId"
+                            <mat-label>Namespace</mat-label>
+                            <mat-select [(ngModel)]="asAsccpDetail().asccp.namespaceId"
                                         [disabled]="true">
                               <mat-option [value]="0">-</mat-option>
                               <mat-option *ngFor="let namespace of getSelectableNamespaces(asAsccpDetail().asccp.namespaceId)"
@@ -874,7 +879,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <input matInput placeholder="Definition Source" maxlength="200"
+                            <mat-label>Definition Source</mat-label>
+                            <input matInput maxlength="200"
                                    [(ngModel)]="asAsccpDetail().asccp.definitionSource"
                                    [disabled]="true">
                           </mat-form-field>
@@ -884,8 +890,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Definition</mat-label>
                             <textarea matInput rows="6" cols="30"
-                                      placeholder="Definition"
                                       [(ngModel)]="asAsccpDetail().asccp.definition"
                                       [disabled]="true"></textarea>
                           </mat-form-field>
@@ -966,7 +972,8 @@
                       <div class="row">
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="Cardinality Min" required
+                            <mat-label>Cardinality Min</mat-label>
+                            <input matInput required
                                    [formControl]="ccCardinalityMin" />
                             <mat-error *ngIf="ccCardinalityMin.hasError('required') || ccCardinalityMin.hasError('whitespace')">
                               Cardinality Min is <strong>required</strong>
@@ -981,7 +988,8 @@
                         </div>
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="{{ 'BCC_DETAIL.MAX' | translate }}" required
+                            <mat-label>{{ 'BCC_DETAIL.MAX' | translate }}</mat-label>
+                            <input matInput required
                                    [formControl]="ccCardinalityMax"
                                    [value]="ccCardinalityMax.value | unbounded" />
                             <mat-hint *ngIf="ccCardinalityMax.valid && asBccpDetail().bcc.cardinalityMax === 0 &&
@@ -1008,8 +1016,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <mat-select placeholder="Entity Type"
-                                        [(ngModel)]="asBccpDetail().bcc.entityType"
+                            <mat-label>Entity Type</mat-label>
+                            <mat-select [(ngModel)]="asBccpDetail().bcc.entityType"
                                         (ngModelChange)="onChangeEntityType(asBccpDetail())"
                                         [disabled]="selectedNode.level !== 1 || !isEditable() || hasRevisionAssociation() || !asBccpDetail().bdt.hasNoSc">
                               <mat-option *ngFor="let entityType of entityTypes"
@@ -1047,18 +1055,21 @@
                         </div>
                         <div class="col-md-9 col-sm-9">
                           <mat-form-field *ngIf="asBccpDetail().bcc.fixedOrDefault == 'none'">
-                            <input matInput placeholder="No value constraints"
+                            <mat-label>No value constraints</mat-label>
+                            <input matInput
                                    [disabled]="true">
                           </mat-form-field>
 
                           <mat-form-field *ngIf="asBccpDetail().bcc.fixedOrDefault == 'fixed'">
-                            <input matInput placeholder="Fixed Value"
+                            <mat-label>Fixed Value</mat-label>
+                            <input matInput
                                    [(ngModel)]="asBccpDetail().bcc.fixedValue"
                                    [disabled]="selectedNode.level !== 1 || !isEditable()">
                           </mat-form-field>
 
                           <mat-form-field *ngIf="asBccpDetail().bcc.fixedOrDefault == 'default'">
-                            <input matInput placeholder="Default Value"
+                            <mat-label>Default Value</mat-label>
+                            <input matInput
                                    [(ngModel)]="asBccpDetail().bcc.defaultValue"
                                    [disabled]="selectedNode.level !== 1 || !isEditable()">
                           </mat-form-field>
@@ -1068,7 +1079,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <input matInput placeholder="Definition Source" maxlength="200"
+                            <mat-label>Definition Source</mat-label>
+                            <input matInput maxlength="200"
                                    [(ngModel)]="asBccpDetail().bcc.definitionSource"
                                    [disabled]="selectedNode.level !== 1 || !isEditable()">
                           </mat-form-field>
@@ -1078,8 +1090,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Definition</mat-label>
                             <textarea matInput rows="6" cols="30"
-                                      placeholder="Definition"
                                       [(ngModel)]="asBccpDetail().bcc.definition"
                                       [disabled]="selectedNode.level !== 1 || !isEditable()"></textarea>
                           </mat-form-field>
@@ -1164,7 +1176,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <input matInput placeholder="{{ 'BCCP_DETAIL.PROPERTY_TERM' | translate }}" maxlength="60"
+                            <mat-label>{{ 'BCCP_DETAIL.PROPERTY_TERM' | translate }}</mat-label>
+                            <input matInput maxlength="60"
                                    [(ngModel)]="asBccpDetail().bccp.propertyTerm" [disabled]="true">
                           </mat-form-field>
                         </div>
@@ -1212,18 +1225,21 @@
                         </div>
                         <div class="col-md-9 col-sm-9">
                           <mat-form-field *ngIf="asBccpDetail().bccp.fixedOrDefault == 'none'">
-                            <input matInput placeholder="No value constraints"
+                            <mat-label>No value constraints</mat-label>
+                            <input matInput
                                    [disabled]="true">
                           </mat-form-field>
 
                           <mat-form-field *ngIf="asBccpDetail().bccp.fixedOrDefault == 'fixed'">
-                            <input matInput placeholder="Fixed Value"
+                            <mat-label>Fixed Value</mat-label>
+                            <input matInput
                                    [(ngModel)]="asBccpDetail().bccp.fixedValue"
                                    [disabled]="true">
                           </mat-form-field>
 
                           <mat-form-field *ngIf="asBccpDetail().bccp.fixedOrDefault == 'default'">
-                            <input matInput placeholder="Default Value"
+                            <mat-label>Default Value</mat-label>
+                            <input matInput
                                    [(ngModel)]="asBccpDetail().bccp.defaultValue"
                                    [disabled]="true">
                           </mat-form-field>
@@ -1233,8 +1249,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <mat-select placeholder="Namespace"
-                                        [(ngModel)]="asBccpDetail().bccp.namespaceId"
+                            <mat-label>Namespace</mat-label>
+                            <mat-select [(ngModel)]="asBccpDetail().bccp.namespaceId"
                                         [disabled]="true">
                               <mat-option [value]="0">-</mat-option>
                               <mat-option *ngFor="let namespace of getSelectableNamespaces(asBccpDetail().bccp.namespaceId)"
@@ -1247,7 +1263,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <input matInput placeholder="Definition Source" maxlength="200"
+                            <mat-label>Definition Source</mat-label>
+                            <input matInput maxlength="200"
                                    [(ngModel)]="asBccpDetail().bccp.definitionSource" [disabled]="true">
                           </mat-form-field>
                         </div>
@@ -1256,8 +1273,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Definition</mat-label>
                             <textarea matInput rows="6" cols="30"
-                                      placeholder="Definition"
                                       [(ngModel)]="asBccpDetail().bccp.definition"
                                       [disabled]="true"></textarea>
                           </mat-form-field>
@@ -1342,19 +1359,22 @@
                       <div class="row">
                         <div class="col-4">
                           <mat-form-field>
-                            <input matInput placeholder="Data Type Term" maxlength="45"
+                            <mat-label>Data Type Term</mat-label>
+                            <input matInput maxlength="45"
                                    [(ngModel)]="asBccpDetail().bdt.dataTypeTerm" [disabled]="true">
                           </mat-form-field>
                         </div>
                         <div class="col-4">
                           <mat-form-field>
-                            <input matInput placeholder="Representation Term" maxlength="100"
+                            <mat-label>Representation Term</mat-label>
+                            <input matInput maxlength="100"
                                    [(ngModel)]="asBccpDetail().bdt.representationTerm" [disabled]="true">
                           </mat-form-field>
                         </div>
                         <div class="col-4">
                           <mat-form-field>
-                            <input matInput placeholder="Qualifier" maxlength="100"
+                            <mat-label>Qualifier</mat-label>
+                            <input matInput maxlength="100"
                                    [(ngModel)]="asBccpDetail().bdt.qualifier" [disabled]="true">
                           </mat-form-field>
                         </div>
@@ -1363,8 +1383,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <mat-select placeholder="Namespace"
-                                        [(ngModel)]="asBccpDetail().bdt.namespaceId"
+                            <mat-label>Namespace</mat-label>
+                            <mat-select [(ngModel)]="asBccpDetail().bdt.namespaceId"
                                         [disabled]="true">
                               <mat-option [value]="0">-</mat-option>
                               <mat-option *ngFor="let namespace of getSelectableNamespaces(asBccpDetail().bdt.namespaceId)"
@@ -1377,7 +1397,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <input matInput placeholder="Definition Source" maxlength="200"
+                            <mat-label>Definition Source</mat-label>
+                            <input matInput maxlength="200"
                                    [(ngModel)]="asBccpDetail().bdt.definitionSource" [disabled]="true">
                           </mat-form-field>
                         </div>
@@ -1386,8 +1407,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Definition</mat-label>
                             <textarea matInput rows="6" cols="30"
-                                      placeholder="Definition"
                                       [(ngModel)]="asBccpDetail().bdt.definition"
                                       [disabled]="true"></textarea>
                           </mat-form-field>
@@ -1468,14 +1489,16 @@
                       <div class="row">
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="Cardinality Min"
+                            <mat-label>Cardinality Min</mat-label>
+                            <input matInput
                                    [(ngModel)]="asBdtScDetail().cardinalityMin"
                                    [disabled]="true">
                           </mat-form-field>
                         </div>
                         <div class="col-6">
                           <mat-form-field>
-                            <input matInput placeholder="{{ 'BDT_SC_DETAIL.MAX' | translate }}"
+                            <mat-label>{{ 'BDT_SC_DETAIL.MAX' | translate }}</mat-label>
+                            <input matInput
                                    [value]="asBdtScDetail().cardinalityMax | unbounded"
                                    [disabled]="true">
                           </mat-form-field>
@@ -1496,18 +1519,21 @@
                         </div>
                         <div class="col-md-9 col-sm-9">
                           <mat-form-field *ngIf="asBdtScDetail().fixedOrDefault == 'none'">
-                            <input matInput placeholder="No value constraints"
+                            <mat-label>No value constraints</mat-label>
+                            <input matInput
                                    [disabled]="true">
                           </mat-form-field>
 
                           <mat-form-field *ngIf="asBdtScDetail().fixedOrDefault == 'fixed'">
-                            <input matInput placeholder="Fixed Value"
+                            <mat-label>Fixed Value</mat-label>
+                            <input matInput
                                    [(ngModel)]="asBdtScDetail().fixedValue"
                                    [disabled]="true">
                           </mat-form-field>
 
                           <mat-form-field *ngIf="asBdtScDetail().fixedOrDefault == 'default'">
-                            <input matInput placeholder="Default Value"
+                            <mat-label>Default Value</mat-label>
+                            <input matInput
                                    [(ngModel)]="asBdtScDetail().defaultValue"
                                    [disabled]="true">
                           </mat-form-field>
@@ -1517,7 +1543,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
-                            <input matInput placeholder="Definition Source" maxlength="200"
+                            <mat-label>Definition Source</mat-label>
+                            <input matInput maxlength="200"
                                    [(ngModel)]="asBdtScDetail().definitionSource" [disabled]="true">
                           </mat-form-field>
                         </div>
@@ -1526,8 +1553,8 @@
                       <div class="row">
                         <div class="col-12">
                           <mat-form-field>
+                            <mat-label>Definition</mat-label>
                             <textarea matInput rows="6" cols="30"
-                                      placeholder="Definition"
                                       [(ngModel)]="asBdtScDetail().definition"
                                       [disabled]="true"></textarea>
                           </mat-form-field>

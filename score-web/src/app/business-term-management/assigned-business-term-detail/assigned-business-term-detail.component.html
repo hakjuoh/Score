@@ -11,8 +11,9 @@
         </mat-form-field>
 
         <mat-form-field>
-          <input disabled="true" matInput placeholder="External Reference URI" [(ngModel)]="assignedBusinessTerm.externalReferenceUri" maxlength="45"/>
-          <button mat-button matSuffix  mat-icon-button aria-label="Clear" (click)=followTheExternalUri()>
+          <mat-label>External Reference URI</mat-label>
+          <input disabled="true" matInput [(ngModel)]="assignedBusinessTerm.externalReferenceUri" maxlength="45"/>
+          <button mat-button matSuffix mat-icon-button aria-label="Clear" (click)=followTheExternalUri()>
           </button>
         </mat-form-field>
 

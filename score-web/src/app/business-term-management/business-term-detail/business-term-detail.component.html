@@ -11,7 +11,8 @@
         </mat-form-field>
 
         <mat-form-field>
-          <input matInput required placeholder="External Reference URI" [(ngModel)]="businessTerm.externalReferenceUri" maxlength="45"/>
+          <mat-label>External Reference URI</mat-label>
+          <input matInput required [(ngModel)]="businessTerm.externalReferenceUri" maxlength="45"/>
           <button mat-button matSuffix mat-icon-button aria-label="Clear" (click)=followTheExternalUri()>
             <mat-icon>link</mat-icon>
           </button>

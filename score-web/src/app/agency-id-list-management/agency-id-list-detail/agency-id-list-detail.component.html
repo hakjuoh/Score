@@ -285,7 +285,7 @@
                   <div class="col-6">
                     <mat-form-field *ngIf="access === 'CanEdit' && !hasRevision">
                       <mat-label>Namespace</mat-label>
-                      <mat-select data-id="agencyIdList.namespace" placeholder="Namespace"
+                      <mat-select data-id="agencyIdList.namespace"
                                   [(ngModel)]="agencyIdList.namespaceId"
                                   [required]="true">
                         <mat-option>
@@ -300,7 +300,7 @@
                     </mat-form-field>
                     <mat-form-field *ngIf="access !== 'CanEdit' || hasRevision">
                       <mat-label>Namespace</mat-label>
-                      <mat-select data-id="agencyIdList.namespace" placeholder="Namespace"
+                      <mat-select data-id="agencyIdList.namespace"
                                   [(ngModel)]="agencyIdList.namespaceId"
                                   [required]="true" [disabled]="true">
                         <mat-option *ngFor="let namespace of getSelectableNamespaces(agencyIdList.namespaceId)"
