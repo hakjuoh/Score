@@ -228,7 +228,7 @@ def transaction(read_only: bool = False):
                         session.commit()
                         logger.debug(f"Transaction committed for {func.__name__}")
                     except Exception as e:
-                        logger.error(f"Error committing transaction for {func.__name__}: {e}")
+                        logger.error(f"Error committing transaction for {func.__name__}", e)
                         session.rollback()
                         raise
                 
@@ -259,7 +259,7 @@ def transaction(read_only: bool = False):
                         session_context_var.set(None)
                         logger.debug(f"Session closed for {func.__name__}")
                     except Exception as e:
-                        logger.error(f"Error closing session for {func.__name__}: {e}")
+                        logger.error(f"Error closing session for {func.__name__}", e)
         
         return wrapper
     return decorator

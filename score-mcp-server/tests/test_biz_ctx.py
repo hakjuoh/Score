@@ -3,6 +3,7 @@ import json
 import pytest
 from fastmcp import Client
 from fastmcp.client import BearerAuth
+from tests.conftest import create_test_client
 
 
 def extract_content(result):
@@ -409,7 +410,7 @@ class TestDeleteBusinessContextValue:
     @pytest.mark.asyncio
     async def test_delete_business_context_value_success(self, token, created_biz_ctx_value_id):
         """Test successful business context value deletion."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             result = await client.call_tool("delete_business_context_value", {
                 'biz_ctx_value_id': created_biz_ctx_value_id
             })
@@ -417,6 +418,11 @@ class TestDeleteBusinessContextValue:
             assert hasattr(result, 'data')
             assert hasattr(result.data, 'biz_ctx_value_id')
             assert result.data.biz_ctx_value_id == created_biz_ctx_value_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert result.data.biz_ctx_value_id is not None
+            # Message should be None for successful deletion
+            if hasattr(result.data, 'message'):
+                assert result.data.message is None
 
     @pytest.mark.asyncio
     async def test_delete_business_context_value_invalid_id(self, token):
@@ -435,7 +441,7 @@ class TestDeleteBusinessContext:
     async def test_delete_business_context_success(self, token):
         """Test successful business context deletion."""
         # First create a business context to delete
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             create_result = await client.call_tool("create_business_context", {
                 'name': 'Business Context to Delete'
             })
@@ -450,6 +456,11 @@ class TestDeleteBusinessContext:
             assert hasattr(result, 'data')
             assert hasattr(result.data, 'biz_ctx_id')
             assert result.data.biz_ctx_id == biz_ctx_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert result.data.biz_ctx_id is not None
+            # Message should be None for successful deletion
+            if hasattr(result.data, 'message'):
+                assert result.data.message is None
 
     @pytest.mark.asyncio
     async def test_delete_business_context_invalid_id(self, token):
@@ -463,7 +474,7 @@ class TestDeleteBusinessContext:
     @pytest.mark.asyncio
     async def test_delete_business_context_with_values(self, token, created_biz_ctx_id):
         """Test business context deletion with associated values (should cascade delete)."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             result = await client.call_tool("delete_business_context", {
                 'biz_ctx_id': created_biz_ctx_id
             })
@@ -471,11 +482,16 @@ class TestDeleteBusinessContext:
             assert hasattr(result, 'data')
             assert hasattr(result.data, 'biz_ctx_id')
             assert result.data.biz_ctx_id == created_biz_ctx_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert result.data.biz_ctx_id is not None
+            # Message should be None for successful deletion
+            if hasattr(result.data, 'message'):
+                assert result.data.message is None
 
     @pytest.mark.asyncio
     async def test_delete_business_context_with_biz_ctx_assignment_conflict(self, token):
         """Test business context deletion with linked biz_ctx_assignment records (should raise 409 conflict)."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # 1. Create a business context
             biz_ctx_result = await client.call_tool("create_business_context", {
                 'name': 'Conflict Test Business Context'
@@ -512,36 +528,62 @@ class TestDeleteBusinessContext:
                 'ctx_scheme_value_id': scheme_value_result.data.ctx_scheme_value_id
             })
 
-            # 3. Create a business information entity that will create biz_ctx_assignment records
-            # First, we need to find an existing ASCCP manifest ID
-            # For this test, we'll use a known ASCCP manifest ID (this might need adjustment based on your test data)
-            try:
-                bie_result = await client.call_tool("create_top_level_asbiep", {
-                    'asccp_manifest_id': 1,  # This should be a valid ASCCP manifest ID in your test database
-                    'biz_ctx_list': str(biz_ctx_id)
+            # 3. Find an available ASCCP manifest ID to create a business information entity
+            # Get libraries to find a release
+            libraries_result = await client.call_tool("get_libraries", {
+                'offset': 0,
+                'limit': 10
+            })
+            
+            assert libraries_result.data.items, "Test database must have at least one library"
+            
+            # Get releases from the first library
+            releases_result = await client.call_tool("get_releases", {
+                'library_id': libraries_result.data.items[0].library_id,
+                'offset': 0,
+                'limit': 10
+            })
+            
+            assert releases_result.data.items, "Test database must have at least one release"
+            
+            # Get ASCCP components from the first release
+            asccp_result = await client.call_tool("get_core_components", {
+                'release_id': releases_result.data.items[0].release_id,
+                'types': 'ASCCP',
+                'offset': 0,
+                'limit': 10
+            })
+            
+            assert asccp_result.data.items, "Test database must have at least one ASCCP manifest"
+            
+            asccp_manifest_id = asccp_result.data.items[0].manifest_id
+            
+            # 4. Create a business information entity that will create biz_ctx_assignment records
+            bie_result = await client.call_tool("create_top_level_asbiep", {
+                'asccp_manifest_id': asccp_manifest_id,
+                'biz_ctx_list': str(biz_ctx_id)
+            })
+            
+            # 5. Now try to delete the business context - this should fail with 409 conflict
+            with pytest.raises(Exception) as exc_info:
+                await client.call_tool("delete_business_context", {
+                    'biz_ctx_id': biz_ctx_id
                 })
-                
-                # 4. Now try to delete the business context - this should fail with 409 conflict
-                with pytest.raises(Exception) as exc_info:
-                    await client.call_tool("delete_business_context", {
-                        'biz_ctx_id': biz_ctx_id
-                    })
-                
-                # Verify the error message contains conflict information
-                error_message = str(exc_info.value)
-                assert "Conflict" in error_message or "409" in error_message
-                assert "biz_ctx_assignment" in error_message
-                
-            except Exception as e:
-                # If ASCCP manifest ID 1 doesn't exist, we'll create a minimal test scenario
-                # by directly creating the conflict through database manipulation
-                # For now, we'll skip this test if the ASCCP manifest doesn't exist
-                pytest.skip(f"ASCCP manifest ID 1 not found in test database: {e}")
+            
+            # Verify the error message contains conflict information
+            error_message = str(exc_info.value)
+            assert "Conflict" in error_message or "409" in error_message
+            assert "biz_ctx_assignment" in error_message
+            
+            # Cleanup: delete the BIE to allow business context deletion
+            await client.call_tool("delete_top_level_asbiep", {
+                'top_level_asbiep_id': bie_result.data.top_level_asbiep_id
+            })
 
     @pytest.mark.asyncio
     async def test_delete_business_context_success_after_removing_assignments(self, token):
         """Test business context deletion succeeds after removing biz_ctx_assignment records."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # 1. Create a business context
             biz_ctx_result = await client.call_tool("create_business_context", {
                 'name': 'Success After Removal Test Business Context'
@@ -575,67 +617,125 @@ class TestDeleteBusinessContext:
                 'ctx_scheme_value_id': scheme_value_result.data.ctx_scheme_value_id
             })
 
-            # 3. Try to create a business information entity (this might fail if ASCCP manifest doesn't exist)
-            try:
-                bie_result = await client.call_tool("create_top_level_asbiep", {
-                    'asccp_manifest_id': 1,  # This should be a valid ASCCP manifest ID
-                    'biz_ctx_list': str(biz_ctx_id)
+            # 3. Find an available ASCCP manifest ID
+            libraries_result = await client.call_tool("get_libraries", {
+                'offset': 0,
+                'limit': 10
+            })
+            
+            assert libraries_result.data.items, "Test database must have at least one library"
+            
+            releases_result = await client.call_tool("get_releases", {
+                'library_id': libraries_result.data.items[0].library_id,
+                'offset': 0,
+                'limit': 10
+            })
+            
+            assert releases_result.data.items, "Test database must have at least one release"
+            
+            asccp_result = await client.call_tool("get_core_components", {
+                'release_id': releases_result.data.items[0].release_id,
+                'types': 'ASCCP',
+                'offset': 0,
+                'limit': 10
+            })
+            
+            assert asccp_result.data.items, "Test database must have at least one ASCCP manifest"
+            
+            asccp_manifest_id = asccp_result.data.items[0].manifest_id
+            
+            # 4. Create a business information entity that will create biz_ctx_assignment records
+            bie_result = await client.call_tool("create_top_level_asbiep", {
+                'asccp_manifest_id': asccp_manifest_id,
+                'biz_ctx_list': str(biz_ctx_id)
+            })
+            
+            # 5. Now try to delete the business context - this should fail with 409 conflict
+            with pytest.raises(Exception):
+                await client.call_tool("delete_business_context", {
+                    'biz_ctx_id': biz_ctx_id
                 })
-                
-                # 4. Now try to delete the business context - this should fail with 409 conflict
-                with pytest.raises(Exception):
-                    await client.call_tool("delete_business_context", {
-                        'biz_ctx_id': biz_ctx_id
-                    })
-                
-                # 5. In a real scenario, we would need to delete the business information entity first
-                # or update it to use a different business context. For this test, we'll demonstrate
-                # that the business context can be deleted after the conflict is resolved.
-                # Since we don't have a delete_top_level_asbiep tool, we'll skip the cleanup
-                # and just verify that the conflict was properly detected.
-                
-            except Exception as e:
-                # If ASCCP manifest ID 1 doesn't exist, we'll skip this test
-                pytest.skip(f"ASCCP manifest ID 1 not found in test database: {e}")
+            
+            # 6. Delete the business information entity to resolve the conflict
+            await client.call_tool("delete_top_level_asbiep", {
+                'top_level_asbiep_id': bie_result.data.top_level_asbiep_id
+            })
+            
+            # 7. Now the business context should be deletable
+            delete_result = await client.call_tool("delete_business_context", {
+                'biz_ctx_id': biz_ctx_id
+            })
+            assert delete_result.data.biz_ctx_id == biz_ctx_id
+            assert delete_result.data.biz_ctx_id is not None
 
     @pytest.mark.asyncio
     async def test_delete_business_context_conflict_error_message_format(self, token):
         """Test that the 409 conflict error message has the correct format and content."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Create a business context for testing
             biz_ctx_result = await client.call_tool("create_business_context", {
                 'name': 'Conflict Message Test Business Context'
             })
             biz_ctx_id = biz_ctx_result.data.biz_ctx_id
 
-            # Try to create a business information entity to establish the conflict
-            try:
-                bie_result = await client.call_tool("create_top_level_asbiep", {
-                    'asccp_manifest_id': 1,  # This should be a valid ASCCP manifest ID
-                    'biz_ctx_list': str(biz_ctx_id)
+            # Find an available ASCCP manifest ID
+            libraries_result = await client.call_tool("get_libraries", {
+                'offset': 0,
+                'limit': 10
+            })
+            
+            if not libraries_result.data.items:
+                pytest.skip("No libraries found in test database")
+            
+            releases_result = await client.call_tool("get_releases", {
+                'library_id': libraries_result.data.items[0].library_id,
+                'offset': 0,
+                'limit': 10
+            })
+            
+            if not releases_result.data.items:
+                pytest.skip("No releases found in test database")
+            
+            asccp_result = await client.call_tool("get_core_components", {
+                'release_id': releases_result.data.items[0].release_id,
+                'types': 'ASCCP',
+                'offset': 0,
+                'limit': 10
+            })
+            
+            if not asccp_result.data.items:
+                pytest.skip("No ASCCP manifests found in test database")
+            
+            asccp_manifest_id = asccp_result.data.items[0].manifest_id
+            
+            # Create a business information entity to establish the conflict
+            bie_result = await client.call_tool("create_top_level_asbiep", {
+                'asccp_manifest_id': asccp_manifest_id,
+                'biz_ctx_list': str(biz_ctx_id)
+            })
+            
+            # Now try to delete the business context - this should fail with 409 conflict
+            with pytest.raises(Exception) as exc_info:
+                await client.call_tool("delete_business_context", {
+                    'biz_ctx_id': biz_ctx_id
                 })
-                
-                # Now try to delete the business context - this should fail with 409 conflict
-                with pytest.raises(Exception) as exc_info:
-                    await client.call_tool("delete_business_context", {
-                        'biz_ctx_id': biz_ctx_id
-                    })
-                
-                # Verify the error message format and content
-                error_message = str(exc_info.value)
-                
-                # Check that the error message contains key elements
-                assert "Conflict" in error_message or "409" in error_message
-                assert "biz_ctx_assignment" in error_message
-                assert str(biz_ctx_id) in error_message
-                assert "Conflict Message Test Business Context" in error_message
-                
-                # The error should mention that linked assignments need to be deleted first
-                assert "delete" in error_message.lower() or "remove" in error_message.lower()
-                
-            except Exception as e:
-                # If ASCCP manifest ID 1 doesn't exist, we'll skip this test
-                pytest.skip(f"ASCCP manifest ID 1 not found in test database: {e}")
+            
+            # Verify the error message format and content
+            error_message = str(exc_info.value)
+            
+            # Check that the error message contains key elements
+            assert "Conflict" in error_message or "409" in error_message
+            assert "biz_ctx_assignment" in error_message
+            assert str(biz_ctx_id) in error_message
+            assert "Conflict Message Test Business Context" in error_message
+            
+            # The error should mention that linked assignments need to be deleted first
+            assert "delete" in error_message.lower() or "remove" in error_message.lower()
+            
+            # Cleanup: delete the BIE
+            await client.call_tool("delete_top_level_asbiep", {
+                'top_level_asbiep_id': bie_result.data.top_level_asbiep_id
+            })
 
 
 class TestBusinessContextIntegration:
@@ -644,7 +744,7 @@ class TestBusinessContextIntegration:
     @pytest.mark.asyncio
     async def test_full_business_context_workflow(self, token):
         """Test complete business context workflow: create -> add value -> update -> get -> delete."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # 1. Create business context
             create_result = await client.call_tool("create_business_context", {
                 'name': 'Integration Test Business Context'
@@ -715,6 +815,11 @@ class TestBusinessContextIntegration:
                 'biz_ctx_id': biz_ctx_id
             })
             assert delete_result.data.biz_ctx_id == biz_ctx_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert delete_result.data.biz_ctx_id is not None
+            # Message should be None for successful deletion
+            if hasattr(delete_result.data, 'message'):
+                assert delete_result.data.message is None
 
             # 8. Verify business context is deleted
             with pytest.raises(Exception):
@@ -725,7 +830,7 @@ class TestBusinessContextIntegration:
     @pytest.mark.asyncio
     async def test_business_context_value_constraints(self, token, created_ctx_scheme_value_id):
         """Test that business context values properly reference context scheme values."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Create business context
             biz_ctx_result = await client.call_tool("create_business_context", {
                 'name': 'Constraint Test Business Context'
@@ -748,6 +853,8 @@ class TestBusinessContextIntegration:
             assert get_result.data.values[0].ctx_scheme_value.ctx_scheme_value_id == created_ctx_scheme_value_id
 
             # Clean up
-            await client.call_tool("delete_business_context", {
+            delete_result = await client.call_tool("delete_business_context", {
                 'biz_ctx_id': biz_ctx_id
             })
+            # Verify deletion was accepted
+            assert delete_result.data.biz_ctx_id is not None

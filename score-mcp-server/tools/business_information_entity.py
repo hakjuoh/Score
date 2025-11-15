@@ -76,20 +76,22 @@ import logging
 from typing import Annotated
 
 from fastapi import HTTPException
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 from fastmcp.exceptions import ToolError
+from fastmcp.server.elicitation import (
+    AcceptedElicitation,
+    CancelledElicitation,
+    DeclinedElicitation)
 from pydantic import Field
 
+from middleware import get_current_user
 from services import (
     BusinessInformationEntityService,
     CoreComponentService,
     DataTypeService,
     DateRangeParams,
-    PaginationParams,
-)
+    PaginationParams)
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
-from tools.utils import validate_and_create_value_constraint
-from middleware import get_current_user
 from tools.core_component import _get_relationships_for_acc
 from tools.models.biz_ctx import BusinessContextInfo
 from tools.models.business_information_entity import (
@@ -123,7 +125,6 @@ from tools.models.business_information_entity import (
     AsbieRelationshipInfo,
     BbieRelationshipInfo,
     Facet,
-    ValueConstraint,
     PrimitiveRestriction,
     AsbiepRelationshipDetail,
     RoleOfAbieDetail,
@@ -136,8 +137,8 @@ from tools.models.business_information_entity import (
     CreateBbieRelationshipDetail,
     CreateAsbiepRelationshipDetail,
     CreateRoleOfAbieDetail,
-    CreateRelationshipDetail,
-)
+    CreateRelationshipDetail)
+from tools.models.common import LibraryInfo, ReleaseInfo, WhoAndWhen
 from tools.models.core_component import (
     AccInfo,
     AsccInfo,
@@ -147,10 +148,9 @@ from tools.models.core_component import (
     BccpInfo,
     BccRelationshipInfo,
     DtInfo,
-    DtScInfo,
-)
-from tools.models.common import LibraryInfo, ReleaseInfo, WhoAndWhen
+    DtScInfo)
 from tools.utils import parse_date_range, str_to_bool, str_to_int
+from tools.utils import validate_and_create_value_constraint
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -160,10 +160,10 @@ mcp = FastMCP("Score MCP Server - Business Information Entity Tools")
 
 @mcp.tool(
     name="get_top_level_asbiep_list",
-    description="Get a paginated list of Top-Level ASBIEPs (Association Business Information Entity Properties). Integer and boolean parameters accept both their native types and string representations (strings are automatically converted).",
+    description="Get a paginated list of Top-Level ASBIEPs (Association Business Information Entity Properties).",
     output_schema={
         "type": "object",
-        "description": "Response containing paginated list of Top-Level ASBIEPs (Association Business Information Entity Properties). Integer and boolean parameters accept both their native types and string representations (strings are automatically converted to the appropriate type).",
+        "description": "Response containing paginated list of Top-Level ASBIEPs (Association Business Information Entity Properties).",
         "properties": {
             "total_items": {"type": "integer",
                             "description": "Total number of Top-Level ASBIEPs available. Allowed values: non-negative integers (≥0).",
@@ -321,70 +321,57 @@ mcp = FastMCP("Score MCP Server - Business Information Entity Tools")
     }
 )
 async def get_top_level_asbiep_list(
+        library_id: Annotated[int | str | None, Field(
+            default=None,
+            description="Filter by library ID using exact match. Accepts int, str, or None. String values are automatically converted to integers. Must be greater than 0 if provided."
+        )],
+        release_id_list: Annotated[str | None, Field(
+            default=None,
+            description="Filter by release IDs using exact match. Comma-separated list of release IDs. Examples: '123', '123,456', '123,456,789'. If not provided, searches across all releases."
+        )],
+        den: Annotated[str | None, Field(
+            default=None,
+            description="Filter by Data Element Name (DEN) or display name using partial match (case-insensitive). Matches either the DEN field or the display_name field."
+        )],
+        version: Annotated[str | None, Field(
+            default=None,
+            description="Filter by version using partial match (case-insensitive)."
+        )],
+        status: Annotated[str | None, Field(
+            default=None,
+            description="Filter by status using partial match (case-insensitive)."
+        )],
+        state: Annotated[str | None, Field(
+            default=None,
+            description="Filter by state using partial match (case-insensitive)."
+        )],
+        is_deprecated: Annotated[bool | str | None, Field(
+            default=None,
+            description="Filter by deprecation status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
+        )],
+        created_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        last_updated_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        order_by: Annotated[str | None, Field(
+            default=None,
+            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: den, version, status, state, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+den' translates to 'creation_timestamp DESC, den ASC'."
+        )],
         offset: Annotated[int, Field(
-            description="The offset from the beginning of the list. Must be a non-negative number.",
-            examples=[0, 10, 20],
+            default=0,
             ge=0,
-            title="Offset"
-        )] = 0,
+            description="The offset from the beginning of the list. Must be a non-negative number."
+        )],
         limit: Annotated[int, Field(
-            description="The maximum number of items to return. Must be a non-negative number.",
-            examples=[10, 25, 50],
+            default=10,
             ge=1,
             le=100,
-            title="Limit"
-        )] = 10,
-        library_id: Annotated[int | str | None, Field(
-            description="Filter by library ID using exact match. Accepts int, str, or None. String values are automatically converted to integers.",
-            examples=[1, 2, 3, "1", "2", "3"],
-            gt=0,
-            title="Library ID"
-        )] = None,
-        release_id_list: Annotated[str | None, Field(
-            description="Filter by release IDs using exact match. Comma-separated list of release IDs. Examples: '123', '123,456', '123,456,789'. If not provided, searches across all releases.",
-            examples=["123", "123,456", "123,456,789"],
-            title="Release ID List"
-        )] = None,
-        den: Annotated[str | None, Field(
-            description="Filter by Data Element Name (DEN) or display name using partial match (case-insensitive). Matches either the DEN field or the display_name field.",
-            examples=["Purchase Order", "Invoice", "Payment"],
-            title="Data Element Name (DEN) or Display Name"
-        )] = None,
-        version: Annotated[str | None, Field(
-            description="Filter by version using partial match (case-insensitive).",
-            examples=["1.0", "2.1", "3.0"],
-            title="Version"
-        )] = None,
-        status: Annotated[str | None, Field(
-            description="Filter by status using partial match (case-insensitive).",
-            examples=["Production", "Test", "Prototype"],
-            title="Status"
-        )] = None,
-        state: Annotated[str | None, Field(
-            description="Filter by state using partial match (case-insensitive).",
-            examples=["Published", "Editing", "Draft"],
-            title="State"
-        )] = None,
-        is_deprecated: Annotated[bool | str | None, Field(
-            description="Filter by deprecation status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Deprecated"
-        )] = None,
-        created_on: Annotated[str | None, Field(
-            description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-            examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-            title="Created On Date Range"
-        )] = None,
-        last_updated_on: Annotated[str | None, Field(
-            description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-            examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-            title="Last Updated On Date Range"
-        )] = None,
-        order_by: Annotated[str | None, Field(
-            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: den, version, status, state, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+den' translates to 'creation_timestamp DESC, den ASC'.",
-            examples=["-creation_timestamp,+den", "display_name", "-den", "-last_update_timestamp"],
-            title="Order By"
-        )] = None
+            description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+        )]
 ) -> GetTopLevelAsbiepListResponse:
     """
     Get a paginated list of Top-Level ASBIEPs (Association Business Information Entity Properties).
@@ -397,8 +384,6 @@ async def get_top_level_asbiep_list(
     The function follows the relationship chain: top_level_asbiep -> asbiep -> based_asccp_manifest_id -> asccp_manifest_id -> asccp_id
 
     Args:
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
         library_id (int | str | None, optional): Filter by library ID using exact match. Accepts int, str (converted to int), or None. Defaults to None.
         release_id_list (str | None, optional): Filter by release IDs using exact match. Comma-separated list of release IDs. Examples: '123', '123,456', '123,456,789'. If not provided, searches across all releases. Defaults to None.
         den (str | None, optional): Filter by Data Element Name (DEN) or display name using partial match (case-insensitive). Matches either the DEN field or the display_name field. Defaults to None.
@@ -419,6 +404,8 @@ async def get_top_level_asbiep_list(
             Allowed columns: den, version, status, state, creation_timestamp, last_update_timestamp.
             Example: '-creation_timestamp,+den' translates to 'creation_timestamp DESC, den ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
 
     Returns:
         GetBusinessInformationEntitiesResponse: Response object containing:
@@ -456,15 +443,15 @@ async def get_top_level_asbiep_list(
 
     Examples:
         Basic listing (all releases):
-        >>> result = get_top_level_asbiep_list(offset=0, limit=10)
+        >>> result = get_top_level_asbiep_list()
         >>> print(f"Found {result.total_items} Top-Level ASBIEPs")
 
         Filtered by specific releases:
-        >>> result = get_top_level_asbiep_list(release_id_list="123,456", offset=0, limit=10)
+        >>> result = get_top_level_asbiep_list(release_id_list="123,456")
         >>> print(f"Found {result.total_items} Top-Level ASBIEPs")
 
         Filtered by library:
-        >>> result = get_top_level_asbiep_list(library_id=1, offset=0, limit=10)
+        >>> result = get_top_level_asbiep_list(library_id=1)
         >>> print(f"Found {result.total_items} Top-Level ASBIEPs")
 
         Filtered search:
@@ -580,7 +567,7 @@ async def get_top_level_asbiep_list(
                    for top_level_asbiep in page.items]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving BIEs (Business Information Entities): {e}")
+        logger.error(f"HTTP error retrieving BIEs (Business Information Entities)", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -589,17 +576,17 @@ async def get_top_level_asbiep_list(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving BIEs (Business Information Entities): {e}")
+        logger.error(f"Unexpected error retrieving BIEs (Business Information Entities)", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the BIEs (Business Information Entities): {str(e)}. Please contact your system administrator.") from e
 
 
 @mcp.tool(
     name="get_top_level_asbiep",
-    description="Get a top-level ASBIEP (Association Business Information Entity Property) by its ID. The response displays the ASBIEP first, with its relationships (ASBIE/BBIE) shown as children under the role_of_abie section. The relationships array is an ordered sequence that preserves the original order from the ABIE structure. This tool is used for profiling core components - when is_used=True, the component is profiled for practical use (asbie_id/bbie_id will be created), when is_used=False, it shows all available components for profiling. To explore relationships further: (1) If a relationship has asbie_id/bbie_id (is_used=True), use get_asbie_by_asbie_id(asbie_id) or get_bbie_by_bbie_id(bbie_id) to get full details. (2) If a relationship has no asbie_id/bbie_id (is_used=False), use get_asbie_by_based_ascc_manifest_id(top_level_asbiep_id, parent_abie_path, based_ascc_manifest_id) or get_bbie_by_based_bcc_manifest_id(top_level_asbiep_id, parent_abie_path, based_bcc_manifest_id) to explore the component structure before profiling.",
+    description="Get a top-level ASBIEP (Association Business Information Entity Property) by its ID. The response displays the ASBIEP first, with its relationships (ASBIE/BBIE) shown as children under the role_of_abie section. The relationships array is an ordered sequence that preserves the original order from the ABIE structure. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie/create_bbie, traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure. This tool is used for profiling core components - when is_used=True, the component is profiled for practical use (asbie_id/bbie_id will be created), when is_used=False, it shows all available components for profiling. To explore relationships further: (1) If a relationship has asbie_id/bbie_id (is_used=True), use get_asbie_by_asbie_id(asbie_id) or get_bbie_by_bbie_id(bbie_id) to get full details. (2) If a relationship has no asbie_id/bbie_id (is_used=False), use get_asbie_by_based_ascc_manifest_id(top_level_asbiep_id, parent_abie_path, based_ascc_manifest_id) or get_bbie_by_based_bcc_manifest_id(top_level_asbiep_id, parent_abie_path, based_bcc_manifest_id) to explore the component structure before profiling.",
     output_schema={
         "type": "object",
-        "description": "Response containing a top-level ASBIEP (Association Business Information Entity Property) with basic information. The ASBIEP is displayed first, with its relationships (ASBIE/BBIE) shown as children under the role_of_abie section. The relationships array is an ordered sequence that preserves the original order from the ABIE structure. Each relationship has an 'is_used' property indicating whether it's profiled for practical use (is_used=True means asbie_id/bbie_id exists). To explore relationships: (1) If relationship has asbie_id/bbie_id (is_used=True), use get_asbie_by_asbie_id(asbie_id) or get_bbie_by_bbie_id(bbie_id). (2) If relationship has no asbie_id/bbie_id (is_used=False), use get_asbie_by_based_ascc_manifest_id(top_level_asbiep_id, parent_abie_path, based_ascc_manifest_id) or get_bbie_by_based_bcc_manifest_id(top_level_asbiep_id, parent_abie_path, based_bcc_manifest_id) - extract parent_abie_path from relationship.path and manifest_id from relationship.based_ascc/based_bcc.",
+        "description": "Response containing a top-level ASBIEP (Association Business Information Entity Property) with basic information. The ASBIEP is displayed first, with its relationships (ASBIE/BBIE) shown as children under the role_of_abie section. The relationships array is an ordered sequence that preserves the original order from the ABIE structure. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie/create_bbie, traverse the actual BIE structure recursively. Each relationship has an 'is_used' property indicating whether it's profiled for practical use (is_used=True means asbie_id/bbie_id exists). To explore relationships: (1) If relationship has asbie_id/bbie_id (is_used=True), use get_asbie_by_asbie_id(asbie_id) or get_bbie_by_bbie_id(bbie_id). (2) If relationship has no asbie_id/bbie_id (is_used=False), use get_asbie_by_based_ascc_manifest_id(top_level_asbiep_id, parent_abie_path, based_ascc_manifest_id) or get_bbie_by_based_bcc_manifest_id(top_level_asbiep_id, parent_abie_path, based_bcc_manifest_id) - extract parent_abie_path from relationship.path and manifest_id from relationship.based_ascc/based_bcc.",
         "properties": {
             "top_level_asbiep_id": {"type": "integer", "description": "Unique identifier for the top-level ASBIEP",
                                     "example": 12345},
@@ -697,17 +684,11 @@ async def get_top_level_asbiep_list(
                         "required": ["asccp_manifest_id", "asccp_id", "role_of_acc_manifest_id", "guid", "den",
                                      "property_term", "is_deprecated"]
                     },
-                    "path": {"type": ["string", "null"],
-                             "description": "[INTERNAL] Path of the ASBIEP - used internally for update_asbie() and update_bbie() operations",
-                             "example": "/PurchaseOrder"},
-                    "hash_path": {"type": ["string", "null"],
-                                  "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                  "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                     "role_of_abie": {
                         "type": "object",
                         "description": "Role of ABIE information - contains the ABIE details and its relationships as children",
                         "properties": {
-                            "abie_id": {"type": ["integer", "null"], "description": "Unique identifier for the ABIE",
+                            "abie_id": {"type": ["integer", "null"], "description": "Unique identifier for the ABIE. This can be passed to create_asbie() and create_bbie() as the from_abie_id parameter.",
                                         "example": 12348},
                             "guid": {"type": ["string", "null"], "description": "Unique identifier for the ABIE",
                                      "example": "a1b2c3d4e5f6789012345678901234ab"},
@@ -743,7 +724,7 @@ async def get_top_level_asbiep_list(
                                        "example": "Used for procurement"},
                             "relationships": {
                                 "type": "array",
-                                "description": "Ordered sequence of relationships (ASBIE/BBIE) displayed as children under the ABIE. The order is preserved from the original ABIE structure. Each relationship has an 'is_used' property: when is_used=True, the relationship is profiled for practical use (asbie_id/bbie_id exists), when is_used=False, it shows available relationships for profiling. To explore relationships: (1) For ASBIE relationships with asbie_id (is_used=True): use get_asbie_by_asbie_id(asbie_id) to get full details. (2) For ASBIE relationships without asbie_id (is_used=False): use get_asbie_by_based_ascc_manifest_id(top_level_asbiep_id, parent_abie_path, based_ascc_manifest_id) - use the relationship's 'path' for parent_abie_path and 'based_ascc.ascc_manifest_id' for based_ascc_manifest_id. (3) For BBIE relationships with bbie_id (is_used=True): use get_bbie_by_bbie_id(bbie_id) to get full details. (4) For BBIE relationships without bbie_id (is_used=False): use get_bbie_by_based_bcc_manifest_id(top_level_asbiep_id, parent_abie_path, based_bcc_manifest_id) - use the relationship's 'path' for parent_abie_path and 'based_bcc.bcc_manifest_id' for based_bcc_manifest_id. This includes all nested relationships from the hierarchical CC (Core Component) structure, presented as a single flat ordered list for traversal.",
+                                "description": "Ordered sequence of relationships (ASBIE/BBIE) displayed as children under the ABIE. The order is preserved from the original ABIE structure. Each relationship has an 'is_used' property: when is_used=True, the relationship is profiled for practical use (asbie_id/bbie_id exists), when is_used=False, it shows available relationships for profiling. To explore relationships: (1) For ASBIE relationships with asbie_id (is_used=True): use get_asbie_by_asbie_id(asbie_id) to get full details. (2) For ASBIE relationships without asbie_id (is_used=False): use get_asbie_by_based_ascc_manifest_id(top_level_asbiep_id, based_ascc_manifest_id) with 'based_ascc.ascc_manifest_id' for based_ascc_manifest_id. (3) For BBIE relationships with bbie_id (is_used=True): use get_bbie_by_bbie_id(bbie_id) to get full details. (4) For BBIE relationships without bbie_id (is_used=False): use get_bbie_by_based_bcc_manifest_id(top_level_asbiep_id, based_bcc_manifest_id) with 'based_bcc.bcc_manifest_id' for based_bcc_manifest_id. This includes all nested relationships from the hierarchical CC (Core Component) structure, presented as a single flat ordered list for traversal.",
                                 "items": {
                                     "oneOf": [
                                         {
@@ -755,10 +736,6 @@ async def get_top_level_asbiep_list(
                                                                    "example": "ASBIE"},
                                                 "is_used": {"type": "boolean",
                                                             "description": "Whether this component is currently being used (profiled) in the BIE (True means asbie_id exists)"},
-                                                "path": {"type": "string",
-                                                         "description": "Hierarchical path string indicating the position of this component within the BIE structure"},
-                                                "hash_path": {"type": "string",
-                                                              "description": "Hashed version of the path for efficient lookups"},
                                                 "cardinality_min": {"type": "integer",
                                                                     "description": "Minimum cardinality (minimum number of occurrences required, typically 0 or 1)"},
                                                 "cardinality_max": {"type": "integer",
@@ -778,7 +755,7 @@ async def get_top_level_asbiep_list(
                                                     "description": "Information about the ASCC that this ASBIE component is based on",
                                                     "properties": {
                                                         "ascc_manifest_id": {"type": "integer",
-                                                                             "description": "Unique identifier for the ASCC manifest"},
+                                                                             "description": "Unique identifier for the ASCC manifest. This can be passed to create_asbie() as the based_ascc_manifest_id parameter."},
                                                         "ascc_id": {"type": "integer",
                                                                     "description": "Unique identifier for the ASCC"},
                                                         "guid": {"type": "string",
@@ -807,7 +784,7 @@ async def get_top_level_asbiep_list(
                                                 "to_asbiep_id": {"type": ["integer", "null"],
                                                                  "description": "Unique identifier for the target ASBIEP that this ASBIE connects to (if available)"}
                                             },
-                                            "required": ["component_type", "is_used", "path", "hash_path",
+                                            "required": ["component_type", "is_used",
                                                          "cardinality_min", "cardinality_max", "is_nillable", "remark",
                                                          "cardinality_display", "based_ascc"]
                                         },
@@ -820,10 +797,6 @@ async def get_top_level_asbiep_list(
                                                                    "example": "BBIE"},
                                                 "is_used": {"type": "boolean",
                                                             "description": "Whether this component is currently being used (profiled) in the BIE (True means bbie_id exists)"},
-                                                "path": {"type": "string",
-                                                         "description": "Hierarchical path string indicating the position of this component within the BIE structure"},
-                                                "hash_path": {"type": "string",
-                                                              "description": "Hashed version of the path for efficient lookups"},
                                                 "cardinality_min": {"type": "integer",
                                                                     "description": "Minimum cardinality (minimum number of occurrences required, typically 0 or 1)"},
                                                 "cardinality_max": {"type": "integer",
@@ -843,7 +816,7 @@ async def get_top_level_asbiep_list(
                                                     "description": "Information about the BCC that this BBIE component is based on",
                                                     "properties": {
                                                         "bcc_manifest_id": {"type": "integer",
-                                                                            "description": "Unique identifier for the BCC manifest"},
+                                                                            "description": "Unique identifier for the BCC manifest. This can be passed to create_bbie() as the based_bcc_manifest_id parameter."},
                                                         "bcc_id": {"type": "integer",
                                                                    "description": "Unique identifier for the BCC"},
                                                         "guid": {"type": "string",
@@ -914,7 +887,7 @@ async def get_top_level_asbiep_list(
                                                 "to_bbiep_id": {"type": ["integer", "null"],
                                                                 "description": "Unique identifier for the target BBIEP that this BBIE connects to (if available)"}
                                             },
-                                            "required": ["component_type", "is_used", "path", "hash_path",
+                                            "required": ["component_type", "is_used",
                                                          "cardinality_min", "cardinality_max", "is_nillable", "remark",
                                                          "cardinality_display", "based_bcc"]
                                         }
@@ -1136,8 +1109,8 @@ async def get_top_level_asbiep_list(
                 "required": ["who", "when"]
             }
         },
-        "required": ["top_level_asbiep_id", "asbiep", "version", "status", "business_contexts", "state",
-                     "is_deprecated", "deprecated_reason", "deprecated_remark", "owner", "created", "last_updated"]
+        "required": ["top_level_asbiep_id", "asbiep", "business_contexts", "state",
+                     "is_deprecated", "owner", "created", "last_updated"]
     }
 )
 async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepResponse:
@@ -1209,6 +1182,42 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
     - The BIE structure provides a flattened view where all nested relationships from the CC hierarchy
       are presented as a single flat ordered list, preserving the original sequence, making it easier to work with in business contexts.
 
+    Using with Create Tools:
+    This tool provides all the information needed to use create_asbie, create_bbie, and create_bbie_sc tools.
+    IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) can be skipped in BIE expressions.
+    The actual BIE structure may differ from the CC structure because groups are flattened. To find the correct
+    from_abie_id for create_asbie/create_bbie, you must traverse the actual BIE structure recursively using
+    get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure (not the CC structure).
+    
+    **For create_asbie:**
+    - from_abie_id: Use role_of_abie.abie_id from this response, or traverse recursively: if an ASBIE relationship
+      exists (has asbie_id), use get_asbie_by_asbie_id() to get its to_asbiep.role_of_abie.abie_id. If no ASBIE
+      exists yet, the parent ABIE's abie_id from the current level should be used. Groups are automatically skipped
+      in the BIE structure, so the abie_id reflects the actual BIE hierarchy.
+    - based_ascc_manifest_id: Use role_of_abie.relationships[].based_ascc.ascc_manifest_id from any ASBIE relationship
+      in the relationships array. This value can be passed directly to create_asbie() as the based_ascc_manifest_id parameter.
+      Note: The ASCC's from_acc may be a group in the CC structure, but in the BIE structure, the relationship appears
+      directly under the parent ABIE (skipping the group).
+    - Example: Use abie_id and based_ascc.ascc_manifest_id directly from this response:
+      create_asbie(from_abie_id=result.asbiep.role_of_abie.abie_id, based_ascc_manifest_id=result.asbiep.role_of_abie.relationships[0].based_ascc.ascc_manifest_id)
+    
+    **For create_bbie:**
+    - from_abie_id: Use role_of_abie.abie_id from this response, or traverse recursively: if an ASBIE relationship
+      exists (has asbie_id), use get_asbie_by_asbie_id() to get its to_asbiep.role_of_abie.abie_id. If no ASBIE
+      exists yet, the parent ABIE's abie_id from the current level should be used. Groups are automatically skipped
+      in the BIE structure, so the abie_id reflects the actual BIE hierarchy.
+    - based_bcc_manifest_id: Use role_of_abie.relationships[].based_bcc.bcc_manifest_id from any BBIE relationship
+      in the relationships array. This value can be passed directly to create_bbie() as the based_bcc_manifest_id parameter.
+      Note: The BCC's from_acc may be a group in the CC structure, but in the BIE structure, the relationship appears
+      directly under the parent ABIE (skipping the group).
+    - Example: Use abie_id and based_bcc.bcc_manifest_id directly from this response:
+      create_bbie(from_abie_id=result.asbiep.role_of_abie.abie_id, based_bcc_manifest_id=result.asbiep.role_of_abie.relationships[0].based_bcc.bcc_manifest_id)
+    
+    **For create_bbie_sc:**
+    - First use get_bbie_by_bbie_id() or get_bbie_by_based_bcc_manifest_id() to get BBIE details
+    - bbie_id: Use the bbie_id from the BBIE response
+    - based_dt_sc_manifest_id: Use to_bbiep.supplementary_components[].based_dt_sc.dt_sc_manifest_id from the BBIE response
+
     Args:
         top_level_asbiep_id (int): The unique identifier of the top-level ASBIEP (Association Business Information Entity Property).
             Must be a positive integer.
@@ -1222,7 +1231,6 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
             - Each relationship includes:
               * is_used property indicating profiling status
               * asbie_id/bbie_id if profiled (is_used=True), None otherwise
-              * path and hash_path for constructing parent paths
               * based_ascc/based_bcc information with manifest IDs
             - Audit information (created by, last updated by, timestamps)
 
@@ -1291,7 +1299,7 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
 
         return _create_asbiep_result(asbiep, bie_service)
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving ASBIEP (Association Business Information Entity Property): {e}")
+        logger.error(f"HTTP error retrieving ASBIEP (Association Business Information Entity Property)", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -1303,17 +1311,17 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving ASBIEP (Association Business Information Entity Property): {e}")
+        logger.error(f"Unexpected error retrieving ASBIEP (Association Business Information Entity Property)", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the ASBIEP (Association Business Information Entity Property): {str(e)}. Please contact your system administrator.") from e
 
 
 @mcp.tool(
     name="get_asbie_by_asbie_id",
-    description="Get an ASBIE (Association Business Information Entity) by its ASBIE ID. This function fetches the complete ASBIE information from the database when you have the asbie_id.",
+    description="Get an ASBIE (Association Business Information Entity) by its ASBIE ID. This function fetches the complete ASBIE information from the database when you have the asbie_id. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie, traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure.",
     output_schema={
         "type": "object",
-        "description": "Response containing ASBIE (Association Business Information Entity) information with its ASBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (asbie_id will be created); when is_used=False, it shows all available components for profiling.",
+        "description": "Response containing ASBIE (Association Business Information Entity) information with its ASBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (asbie_id will be created); when is_used=False, it shows all available components for profiling. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie, traverse the actual BIE structure recursively.",
         "properties": {
             "asbie_id": {"type": ["integer", "null"],
                          "description": "Unique identifier for the ASBIE (base entity ID, None if not yet created)",
@@ -1384,7 +1392,7 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
                 "type": "object",
                 "description": "ASCC (Association Core Component) information that this ASBIE is based on",
                 "properties": {
-                    "ascc_manifest_id": {"type": "integer", "description": "Unique identifier for the ASCC manifest",
+                    "ascc_manifest_id": {"type": "integer", "description": "Unique identifier for the ASCC manifest. This can be passed to create_asbie() as the based_ascc_manifest_id parameter.",
                                          "example": 12345},
                     "ascc_id": {"type": "integer", "description": "Unique identifier for the ASCC", "example": 6789},
                     "guid": {"type": "string", "description": "Unique identifier within the release",
@@ -1497,17 +1505,11 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
                         "required": ["asccp_manifest_id", "asccp_id", "role_of_acc_manifest_id", "guid", "den",
                                      "property_term", "is_deprecated"]
                     },
-                    "path": {"type": ["string", "null"],
-                             "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                             "example": "/PurchaseOrder/Details"},
-                    "hash_path": {"type": ["string", "null"],
-                                  "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                  "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                     "role_of_abie": {
                         "type": "object",
                         "description": "Role of ABIE information",
                         "properties": {
-                            "abie_id": {"type": ["integer", "null"], "description": "Unique identifier for the ABIE",
+                            "abie_id": {"type": ["integer", "null"], "description": "Unique identifier for the ABIE. This can be passed to create_asbie() and create_bbie() as the from_abie_id parameter.",
                                         "example": 12350},
                             "guid": {"type": ["string", "null"], "description": "Unique identifier for the ABIE",
                                      "example": "a1b2c3d4e5f6789012345678901234ab"},
@@ -1562,12 +1564,6 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
                                                 "is_used": {"type": "boolean",
                                                             "description": "Whether this component is currently being used (profiled) in the BIE (True means asbie_id exists)",
                                                             "example": True},
-                                                "path": {"type": "string",
-                                                         "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                                                         "example": "/PurchaseOrder/Details"},
-                                                "hash_path": {"type": "string",
-                                                              "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                                              "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                                                 "cardinality_min": {"type": "integer",
                                                                     "description": "Minimum cardinality (minimum number of occurrences required, typically 0 or 1)",
                                                                     "example": 0},
@@ -1585,7 +1581,7 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
                                                     "description": "ASCC (Association Core Component) information that this ASBIE component is based on",
                                                     "properties": {
                                                         "ascc_manifest_id": {"type": "integer",
-                                                                             "description": "Unique identifier for the ASCC manifest",
+                                                                             "description": "Unique identifier for the ASCC manifest. This can be passed to create_asbie() as the based_ascc_manifest_id parameter.",
                                                                              "example": 12345},
                                                         "ascc_id": {"type": "integer",
                                                                     "description": "Unique identifier for the ASCC",
@@ -1626,7 +1622,7 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
                                                                  "description": "Unique identifier for the target ASBIEP that this ASBIE connects to (if available)",
                                                                  "example": 12348}
                                             },
-                                            "required": ["component_type", "is_used", "path", "hash_path",
+                                            "required": ["component_type", "is_used",
                                                          "cardinality_min", "cardinality_max", "is_nillable",
                                                          "based_ascc"]
                                         },
@@ -1646,12 +1642,6 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
                                                 "is_used": {"type": "boolean",
                                                             "description": "Whether this component is currently being used (profiled) in the BIE (True means bbie_id exists)",
                                                             "example": True},
-                                                "path": {"type": "string",
-                                                         "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                                                         "example": "/PurchaseOrder/Amount"},
-                                                "hash_path": {"type": "string",
-                                                              "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                                              "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                                                 "cardinality_min": {"type": "integer",
                                                                     "description": "Minimum cardinality (minimum number of occurrences required, typically 0 or 1)",
                                                                     "example": 0},
@@ -1762,7 +1752,7 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
                                                                 "description": "Unique identifier for the target BBIEP that this BBIE connects to (if available)",
                                                                 "example": 12348}
                                             },
-                                            "required": ["component_type", "is_used", "path", "hash_path",
+                                            "required": ["component_type", "is_used",
                                                          "cardinality_min", "cardinality_max", "is_nillable",
                                                          "based_bcc"]
                                         }
@@ -1894,12 +1884,6 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
             "is_used": {"type": "boolean",
                         "description": "Whether this ASBIE is currently being used (profiled) in the BIE",
                         "example": True},
-            "path": {"type": "string",
-                     "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                     "example": "/PurchaseOrder/Details"},
-            "hash_path": {"type": "string",
-                          "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                          "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
             "cardinality_min": {"type": "integer",
                                 "description": "Minimum cardinality (minimum number of occurrences required, typically 0 or 1)",
                                 "example": 0},
@@ -1908,18 +1892,18 @@ async def get_top_level_asbiep(top_level_asbiep_id: int) -> GetTopLevelAsbiepRes
                                 "example": 1},
             "is_nillable": {"type": "boolean", "description": "Whether the ASBIE can have a nil/null value",
                             "example": False},
+            "definition": {"type": ["string", "null"], "description": "Definition to override the ASCC definition. If NULL, it means that the definition should be derived from the based CC",
+                          "example": "A purchase order detail"},
             "remark": {"type": ["string", "null"], "description": "Additional remarks or notes about the ASBIE",
                        "example": "Used for purchase orders"}
         },
-        "required": ["owner_top_level_asbiep", "based_ascc", "to_asbiep", "is_used", "path", "hash_path",
+        "required": ["owner_top_level_asbiep", "based_ascc", "to_asbiep", "is_used",
                      "cardinality_min", "cardinality_max", "is_nillable"]
     }
 )
 async def get_asbie_by_asbie_id(
         asbie_id: Annotated[int, Field(
             description="The unique identifier of the ASBIE.",
-            examples=[12345],
-            title="ASBIE ID",
             gt=0
         )]
 ) -> GetAsbieResponse:
@@ -1933,7 +1917,24 @@ async def get_asbie_by_asbie_id(
     - guid: The ASBIE GUID
     - based_ascc: The ASCC information this ASBIE is based on
     - to_asbiep: The ASBIEP information this ASBIE points to
-    - All other ASBIE properties (is_used, path, hash_path, cardinality, etc.)
+    - All other ASBIE properties (is_used, cardinality, etc.)
+
+    Using with Create Tools:
+    This tool provides all the information needed to use create_asbie.
+    IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions.
+    The actual BIE structure may differ from the CC structure because groups are flattened. To find the correct
+    from_abie_id, you must traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*,
+    and get_bbie_* to find the abie_id in the BIE structure (not the CC structure).
+    - from_abie_id: Use to_asbiep.role_of_abie.abie_id from this response, or traverse recursively: if an ASBIE relationship
+      exists (has asbie_id), use get_asbie_by_asbie_id() to get its to_asbiep.role_of_abie.abie_id. Groups are automatically
+      skipped in the BIE structure, so the abie_id reflects the actual BIE hierarchy. This value can be passed directly to
+      create_asbie() and create_bbie() as the from_abie_id parameter.
+      Note: The ASCC's from_acc may be a group in the CC structure, but in the BIE structure, the relationship appears
+      directly under the parent ABIE (skipping the group).
+    - based_ascc_manifest_id: Use to_asbiep.role_of_abie.relationships[].based_ascc.ascc_manifest_id from any ASBIE
+      relationship in the relationships array. This value can be passed directly to create_asbie() as the based_ascc_manifest_id parameter.
+    - Example: Use abie_id and based_ascc.ascc_manifest_id directly from this response:
+      create_asbie(from_abie_id=result.to_asbiep.role_of_abie.abie_id, based_ascc_manifest_id=result.to_asbiep.role_of_abie.relationships[0].based_ascc.ascc_manifest_id)
 
     Args:
         asbie_id (int): The unique identifier of the ASBIE
@@ -1966,8 +1967,8 @@ async def get_asbie_by_asbie_id(
         if not asbie:
             raise ToolError(f"ASBIE with asbie_id {asbie_id} not found.")
 
-        # Get the top-level ASBIEP ID from the ASBIE
-        top_level_asbiep_id = asbie.owner_top_level_asbiep_id
+        # Get the top-level ASBIEP ID from the ASBIE (this is the ASBIE's owner)
+        asbie_owner_top_level_asbiep_id = asbie.owner_top_level_asbiep_id
 
         # Get ASCC information
         if not asbie.based_ascc_manifest or not asbie.based_ascc_manifest.ascc:
@@ -2003,27 +2004,32 @@ async def get_asbie_by_asbie_id(
         if not asbiep:
             raise ToolError(f"ASBIEP with ID {asbie.to_asbiep_id} not found.")
 
-        # Get the ABIE using the role_of_abie_id
+        # Get the ASBIE's owner top-level ASBIEP info (this is separate from the ASBIEP's owner)
+        asbie_owner_top_level_asbiep = bie_service.get_top_level_asbiep_by_id(asbie_owner_top_level_asbiep_id)
+        if not asbie_owner_top_level_asbiep:
+            raise ToolError(f"Top-level ASBIEP with ID {asbie_owner_top_level_asbiep_id} (ASBIE's owner) not found.")
+        asbie_owner_info = _create_top_level_asbiep_info(asbie_owner_top_level_asbiep)
+
+        # Get the ASBIEP info (this uses the ASBIEP's owner, which may be different from the ASBIE's owner when reused)
         asbiep_info = _get_asbiep_info(asbiep.owner_top_level_asbiep_id,
                                        asbiep.asbiep_id, asccp_manifest.asccp_manifest_id, asbie.path)
 
         return GetAsbieResponse(
             asbie_id=asbie.asbie_id,
-            owner_top_level_asbiep=asbiep_info.owner_top_level_asbiep,
+            owner_top_level_asbiep=asbie_owner_info,
             guid=asbie.guid,
             based_ascc=based_ascc,
             to_asbiep=asbiep_info,
             is_used=asbie.is_used,
-            path=asbie.path,
-            hash_path=asbie.hash_path,
             cardinality_min=asbie.cardinality_min,
             cardinality_max=asbie.cardinality_max,
             is_nillable=asbie.is_nillable,
+            definition=asbie.definition,
             remark=asbie.remark
         )
 
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving ASBIE: {e}")
+        logger.error(f"HTTP error retrieving ASBIE", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -2034,17 +2040,17 @@ async def get_asbie_by_asbie_id(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving ASBIE: {e}")
+        logger.error(f"Unexpected error retrieving ASBIE", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the ASBIE: {str(e)}. Please contact your system administrator.") from e
 
 
 @mcp.tool(
     name="get_asbie_by_based_ascc_manifest_id",
-    description="Get an ASBIE (Association Business Information Entity) by its based ASCC manifest ID. This function returns basic information based on based_ascc_manifest_id and parent_abie_path when you don't have the asbie_id. It can also find an existing ASBIE if one exists with the given based_ascc_manifest_id.",
+    description="Get an ASBIE (Association Business Information Entity) by its based ASCC manifest ID. This function returns basic information based on based_ascc_manifest_id when you don't have the asbie_id. This tool assumes there's no existing ASBIE and returns basic information for creating a new one. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie, traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure.",
     output_schema={
         "type": "object",
-        "description": "Response containing ASBIE (Association Business Information Entity) information with its ASBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (asbie_id will be created); when is_used=False, it shows all available components for profiling.",
+        "description": "Response containing ASBIE (Association Business Information Entity) information with its ASBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (asbie_id will be created); when is_used=False, it shows all available components for profiling. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie, traverse the actual BIE structure recursively.",
         "properties": {
             "asbie_id": {"type": ["integer", "null"],
                          "description": "Unique identifier for the ASBIE (base entity ID, None if not yet created)",
@@ -2115,7 +2121,7 @@ async def get_asbie_by_asbie_id(
                 "type": "object",
                 "description": "ASCC (Association Core Component) information that this ASBIE is based on",
                 "properties": {
-                    "ascc_manifest_id": {"type": "integer", "description": "Unique identifier for the ASCC manifest",
+                    "ascc_manifest_id": {"type": "integer", "description": "Unique identifier for the ASCC manifest. This can be passed to create_asbie() as the based_ascc_manifest_id parameter.",
                                          "example": 12345},
                     "ascc_id": {"type": "integer", "description": "Unique identifier for the ASCC", "example": 6789},
                     "guid": {"type": "string", "description": "Unique identifier within the release",
@@ -2228,17 +2234,11 @@ async def get_asbie_by_asbie_id(
                         "required": ["asccp_manifest_id", "asccp_id", "role_of_acc_manifest_id", "guid", "den",
                                      "property_term", "is_deprecated"]
                     },
-                    "path": {"type": ["string", "null"],
-                             "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                             "example": "/PurchaseOrder/Details"},
-                    "hash_path": {"type": ["string", "null"],
-                                  "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                  "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                     "role_of_abie": {
                         "type": "object",
                         "description": "Role of ABIE information",
                         "properties": {
-                            "abie_id": {"type": ["integer", "null"], "description": "Unique identifier for the ABIE",
+                            "abie_id": {"type": ["integer", "null"], "description": "Unique identifier for the ABIE. This can be passed to create_asbie() and create_bbie() as the from_abie_id parameter.",
                                         "example": 12350},
                             "guid": {"type": ["string", "null"], "description": "Unique identifier for the ABIE",
                                      "example": "a1b2c3d4e5f6789012345678901234ab"},
@@ -2293,12 +2293,6 @@ async def get_asbie_by_asbie_id(
                                                 "is_used": {"type": "boolean",
                                                             "description": "Whether this component is currently being used (profiled) in the BIE (True means asbie_id exists)",
                                                             "example": True},
-                                                "path": {"type": "string",
-                                                         "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                                                         "example": "/PurchaseOrder/Details"},
-                                                "hash_path": {"type": "string",
-                                                              "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                                              "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                                                 "cardinality_min": {"type": "integer",
                                                                     "description": "Minimum cardinality (minimum number of occurrences required, typically 0 or 1)",
                                                                     "example": 0},
@@ -2316,7 +2310,7 @@ async def get_asbie_by_asbie_id(
                                                     "description": "ASCC (Association Core Component) information that this ASBIE component is based on",
                                                     "properties": {
                                                         "ascc_manifest_id": {"type": "integer",
-                                                                             "description": "Unique identifier for the ASCC manifest",
+                                                                             "description": "Unique identifier for the ASCC manifest. This can be passed to create_asbie() as the based_ascc_manifest_id parameter.",
                                                                              "example": 12345},
                                                         "ascc_id": {"type": "integer",
                                                                     "description": "Unique identifier for the ASCC",
@@ -2357,7 +2351,7 @@ async def get_asbie_by_asbie_id(
                                                                  "description": "Unique identifier for the target ASBIEP that this ASBIE connects to (if available)",
                                                                  "example": 12348}
                                             },
-                                            "required": ["component_type", "is_used", "path", "hash_path",
+                                            "required": ["component_type", "is_used",
                                                          "cardinality_min", "cardinality_max", "is_nillable",
                                                          "based_ascc"]
                                         },
@@ -2377,12 +2371,6 @@ async def get_asbie_by_asbie_id(
                                                 "is_used": {"type": "boolean",
                                                             "description": "Whether this component is currently being used (profiled) in the BIE (True means bbie_id exists)",
                                                             "example": True},
-                                                "path": {"type": "string",
-                                                         "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                                                         "example": "/PurchaseOrder/Amount"},
-                                                "hash_path": {"type": "string",
-                                                              "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                                              "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                                                 "cardinality_min": {"type": "integer",
                                                                     "description": "Minimum cardinality (minimum number of occurrences required, typically 0 or 1)",
                                                                     "example": 0},
@@ -2493,7 +2481,7 @@ async def get_asbie_by_asbie_id(
                                                                 "description": "Unique identifier for the target BBIEP that this BBIE connects to (if available)",
                                                                 "example": 12348}
                                             },
-                                            "required": ["component_type", "is_used", "path", "hash_path",
+                                            "required": ["component_type", "is_used",
                                                          "cardinality_min", "cardinality_max", "is_nillable",
                                                          "based_bcc"]
                                         }
@@ -2625,12 +2613,6 @@ async def get_asbie_by_asbie_id(
             "is_used": {"type": "boolean",
                         "description": "Whether this ASBIE is currently being used (profiled) in the BIE",
                         "example": True},
-            "path": {"type": "string",
-                     "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                     "example": "/PurchaseOrder/Details"},
-            "hash_path": {"type": "string",
-                          "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                          "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
             "cardinality_min": {"type": "integer",
                                 "description": "Minimum cardinality (minimum number of occurrences required, typically 0 or 1)",
                                 "example": 0},
@@ -2639,48 +2621,57 @@ async def get_asbie_by_asbie_id(
                                 "example": 1},
             "is_nillable": {"type": "boolean", "description": "Whether the ASBIE can have a nil/null value",
                             "example": False},
+            "definition": {"type": ["string", "null"], "description": "Definition to override the ASCC definition. If NULL, it means that the definition should be derived from the based CC",
+                          "example": "A purchase order detail"},
             "remark": {"type": ["string", "null"], "description": "Additional remarks or notes about the ASBIE",
                        "example": "Used for purchase orders"}
         },
-        "required": ["owner_top_level_asbiep", "based_ascc", "to_asbiep", "is_used", "path", "hash_path",
+        "required": ["owner_top_level_asbiep", "based_ascc", "to_asbiep", "is_used",
                      "cardinality_min", "cardinality_max", "is_nillable"]
     }
 )
 async def get_asbie_by_based_ascc_manifest_id(
         top_level_asbiep_id: Annotated[int, Field(
             description="The top-level ASBIEP (Association Business Information Entity Property) ID.",
-            examples=[123],
-            title="Top-level ASBIEP ID",
             gt=0
-        )],
-        parent_abie_path: Annotated[str, Field(
-            description="The parent path for constructing the ASBIEP path.",
-            examples=["ASCCP-123>ACC-456"],
-            title="Parent Path"
         )],
         based_ascc_manifest_id: Annotated[int, Field(
             description="The ASCC manifest ID that this ASBIE is based on.",
-            examples=[67890],
-            title="Based ASCC Manifest ID",
             gt=0
         )]
 ) -> GetAsbieResponse:
     """
     Get an ASBIE (Association Business Information Entity) by its based ASCC manifest ID.
 
-    This tool returns basic information based on based_ascc_manifest_id and parent_abie_path when you don't have the asbie_id.
-    It will also check if an existing ASBIE exists with the given based_ascc_manifest_id and return it if found.
+    This tool returns basic information based on based_ascc_manifest_id when you don't have the asbie_id.
+    This tool assumes there's no existing ASBIE and returns basic information for creating a new one.
 
     The response includes:
     - asbie_id: The ASBIE ID (null if not yet created)
     - guid: The ASBIE GUID (null if not yet created)
     - based_ascc: The ASCC information this ASBIE is based on
     - to_asbiep: The ASBIEP information this ASBIE points to
-    - All other ASBIE properties (is_used, path, hash_path, cardinality, etc.)
+    - All other ASBIE properties (is_used, cardinality, etc.)
+
+    Using with Create Tools:
+    This tool provides all the information needed to use create_asbie.
+    IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions.
+    The actual BIE structure may differ from the CC structure because groups are flattened. To find the correct
+    from_abie_id, you must traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*,
+    and get_bbie_* to find the abie_id in the BIE structure (not the CC structure).
+    - from_abie_id: Use to_asbiep.role_of_abie.abie_id from this response, or traverse recursively: if an ASBIE relationship
+      exists (has asbie_id), use get_asbie_by_asbie_id() to get its to_asbiep.role_of_abie.abie_id. Groups are automatically
+      skipped in the BIE structure, so the abie_id reflects the actual BIE hierarchy. This value can be passed directly to
+      create_asbie() and create_bbie() as the from_abie_id parameter.
+      Note: The ASCC's from_acc may be a group in the CC structure, but in the BIE structure, the relationship appears
+      directly under the parent ABIE (skipping the group).
+    - based_ascc_manifest_id: Use to_asbiep.role_of_abie.relationships[].based_ascc.ascc_manifest_id from any ASBIE
+      relationship in the relationships array. This value can be passed directly to create_asbie() as the based_ascc_manifest_id parameter.
+    - Example: Use abie_id and based_ascc.ascc_manifest_id directly from this response:
+      create_asbie(from_abie_id=result.to_asbiep.role_of_abie.abie_id, based_ascc_manifest_id=result.to_asbiep.role_of_abie.relationships[0].based_ascc.ascc_manifest_id)
 
     Args:
         top_level_asbiep_id (int): The top-level ASBIEP ID
-        parent_abie_path (str): The parent path for constructing the ASBIEP path
         based_ascc_manifest_id (int): The ASCC manifest ID that this ASBIE is based on
 
     Returns:
@@ -2693,7 +2684,6 @@ async def get_asbie_by_based_ascc_manifest_id(
         Get basic ASBIE info by based ASCC manifest ID:
         >>> result = get_asbie_by_based_ascc_manifest_id(
         ...     top_level_asbiep_id=123,
-        ...     parent_abie_path="ASCCP-123>ACC-456",
         ...     based_ascc_manifest_id=67890
         ... )
         >>> print(f"Top-level ASBIEP ID: {result.owner_top_level_asbiep.top_level_asbiep_id}")
@@ -2705,9 +2695,6 @@ async def get_asbie_by_based_ascc_manifest_id(
     # Validate input parameters
     if based_ascc_manifest_id <= 0:
         raise ToolError("based_ascc_manifest_id must be a positive integer.")
-
-    if not parent_abie_path or not parent_abie_path.strip():
-        raise ToolError("parent_abie_path is required and cannot be empty.")
 
     try:
         bie_service = BusinessInformationEntityService(requester=app_user)
@@ -2737,74 +2724,32 @@ async def get_asbie_by_based_ascc_manifest_id(
             to_asccp_manifest_id=ascc_manifest.to_asccp_manifest_id
         )
 
-        # Construct paths
-        asbie_path = f"{parent_abie_path}>ASCC-{based_ascc_manifest_id}"
-        hash_path = hashlib.sha256(asbie_path.encode()).hexdigest()
-
-        # Try to find existing ASBIE by based_ascc_manifest_id and hash_path
-        asbie = bie_service.get_asbie_by_based_ascc_manifest_id(
-            based_ascc_manifest_id=based_ascc_manifest_id,
-            owner_top_level_asbiep_id=top_level_asbiep_id,
-            hash_path=hash_path
-        )
-
         # Get ASCCP information for to_asbiep
         asccp_manifest = cc_service.get_asccp_by_manifest_id(ascc_manifest.to_asccp_manifest_id)
         if not asccp_manifest:
             raise ToolError(
                 f"ASCC manifest with ID {based_ascc_manifest_id} has no associated ASCCP manifest or ASCCP.")
 
-        if asbie:
-            # Found existing ASBIE - return it with full details
-            if not asbie.to_asbiep_id:
-                raise ToolError(f"ASBIE with asbie_id {asbie.asbie_id} has no associated ASBIEP.")
+        # No existing ASBIE - return basic info (this tool assumes no existing ASBIE)
+        asbiep_info = _get_asbiep_info(top_level_asbiep.top_level_asbiep_id,
+                                       None, asccp_manifest.asccp_manifest_id, None)
 
-            asbiep = bie_service.get_asbiep(asbie.to_asbiep_id)
-            if not asbiep:
-                raise ToolError(f"ASBIEP with ID {asbie.to_asbiep_id} not found.")
-
-            asbiep_info = _get_asbiep_info(asbiep.owner_top_level_asbiep_id,
-                                           asbiep.asbiep_id, asccp_manifest.asccp_manifest_id, asbie.path)
-
-            return GetAsbieResponse(
-                asbie_id=asbie.asbie_id,
-                owner_top_level_asbiep=asbiep_info.owner_top_level_asbiep,
-                guid=asbie.guid,
-                based_ascc=based_ascc,
-                to_asbiep=asbiep_info,
-                is_used=asbie.is_used,
-                path=asbie.path,
-                hash_path=asbie.hash_path,
-                cardinality_min=asbie.cardinality_min,
-                cardinality_max=asbie.cardinality_max,
-                is_nillable=asbie.is_nillable,
-                remark=asbie.remark
-            )
-        else:
-            # No existing ASBIE found - return basic info
-            asbiep_path = f"{asbie_path}>ASCCP-{asccp_manifest.asccp_manifest_id}"
-
-            # Get the ABIE using the role_of_abie_id
-            asbiep_info = _get_asbiep_info(top_level_asbiep.top_level_asbiep_id,
-                                           None, asccp_manifest.asccp_manifest_id, asbie_path)
-
-            return GetAsbieResponse(
-                asbie_id=None,
-                owner_top_level_asbiep=asbiep_info.owner_top_level_asbiep,
-                guid=None,
-                based_ascc=based_ascc,
-                to_asbiep=asbiep_info,
-                is_used=False,  # Default for basic mode
-                path=asbie_path,
-                hash_path=hash_path,
-                cardinality_min=ascc.cardinality_min,
-                cardinality_max=ascc.cardinality_max,
-                is_nillable=False,  # Default for basic mode
-                remark=None
-            )
+        return GetAsbieResponse(
+            asbie_id=None,
+            owner_top_level_asbiep=asbiep_info.owner_top_level_asbiep,
+            guid=None,
+            based_ascc=based_ascc,
+            to_asbiep=asbiep_info,
+            is_used=False,  # Default for basic mode
+            cardinality_min=ascc.cardinality_min,
+            cardinality_max=ascc.cardinality_max,
+            is_nillable=False,  # Default for basic mode
+            definition=None,  # Default for basic mode
+            remark=None
+        )
 
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving ASBIE: {e}")
+        logger.error(f"HTTP error retrieving ASBIE", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -2815,17 +2760,17 @@ async def get_asbie_by_based_ascc_manifest_id(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving ASBIE: {e}")
+        logger.error(f"Unexpected error retrieving ASBIE", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the ASBIE: {str(e)}. Please contact your system administrator.") from e
 
 
 @mcp.tool(
     name="get_bbie_by_bbie_id",
-    description="Get a BBIE (Basic Business Information Entity) by its BBIE ID. This function fetches the complete BBIE information from the database when you have the bbie_id.",
+    description="Get a BBIE (Basic Business Information Entity) by its BBIE ID. This function fetches the complete BBIE information from the database when you have the bbie_id. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_bbie, traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure. This tool provides all information needed for create_bbie_sc: use to_bbiep.supplementary_components[].based_dt_sc.dt_sc_manifest_id for create_bbie_sc's based_dt_sc_manifest_id parameter.",
     output_schema={
         "type": "object",
-        "description": "Response containing BBIE (Basic Business Information Entity) information with its BBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (bbie_id will be created); when is_used=False, it shows all available components for profiling.",
+        "description": "Response containing BBIE (Basic Business Information Entity) information with its BBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (bbie_id will be created); when is_used=False, it shows all available components for profiling. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_bbie, traverse the actual BIE structure recursively.",
         "properties": {
             "bbie_id": {"type": ["integer", "null"],
                         "description": "Unique identifier for the BBIE (base entity ID, None if not yet created)",
@@ -2896,7 +2841,7 @@ async def get_asbie_by_based_ascc_manifest_id(
                 "type": "object",
                 "description": "BCC (Basic Core Component) information that this BBIE is based on",
                 "properties": {
-                    "bcc_manifest_id": {"type": "integer", "description": "Unique identifier for the BCC manifest",
+                    "bcc_manifest_id": {"type": "integer", "description": "Unique identifier for the BCC manifest. This can be passed to create_bbie() as the based_bcc_manifest_id parameter.",
                                         "example": 12345},
                     "bcc_id": {"type": "integer", "description": "Unique identifier for the BCC", "example": 6789},
                     "guid": {"type": "string", "description": "Unique identifier within the release",
@@ -2993,12 +2938,6 @@ async def get_asbie_by_based_ascc_manifest_id(
                         "required": ["bccp_manifest_id", "bccp_id", "guid", "den", "property_term",
                                      "representation_term", "bdt_manifest", "is_deprecated"]
                     },
-                    "path": {"type": "string",
-                             "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                             "example": "/PurchaseOrder/Amount"},
-                    "hash_path": {"type": "string",
-                                  "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                  "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                     "definition": {"type": ["string", "null"], "description": "Definition of the BBIEP",
                                    "example": "A monetary amount"},
                     "remark": {"type": ["string", "null"], "description": "Remarks about the BBIEP",
@@ -3056,12 +2995,6 @@ async def get_asbie_by_based_ascc_manifest_id(
                                     "required": ["dt_sc_manifest_id", "dt_sc_id", "guid", "cardinality_min",
                                                  "is_deprecated"]
                                 },
-                                "path": {"type": "string",
-                                         "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                                         "example": "/PurchaseOrder/Amount/CurrencyCode"},
-                                "hash_path": {"type": "string",
-                                              "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                              "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                                 "definition": {"type": ["string", "null"], "description": "Definition of the BBIE SC",
                                                "example": "Currency code"},
                                 "cardinality_min": {"type": "integer", "description": "Minimum cardinality",
@@ -3178,7 +3111,7 @@ async def get_asbie_by_based_ascc_manifest_id(
                                                  "owner"]
                                 }
                             },
-                            "required": ["based_dt_sc", "path", "hash_path", "cardinality_min", "cardinality_max",
+                            "required": ["based_dt_sc", "cardinality_min", "cardinality_max",
                                          "owner_top_level_asbiep"]
                         }
                     },
@@ -3240,17 +3173,11 @@ async def get_asbie_by_based_ascc_manifest_id(
                         "required": ["top_level_asbiep_id", "library", "release", "state", "is_deprecated", "owner"]
                     }
                 },
-                "required": ["based_bccp", "path", "hash_path", "supplementary_components", "owner_top_level_asbiep"]
+                "required": ["based_bccp", "supplementary_components", "owner_top_level_asbiep"]
             },
             "is_used": {"type": "boolean",
                         "description": "Whether this BBIE is currently being used (profiled) in the BIE",
                         "example": True},
-            "path": {"type": "string",
-                     "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                     "example": "/PurchaseOrder/Amount"},
-            "hash_path": {"type": "string",
-                          "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                          "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
             "cardinality_min": {"type": "integer",
                                 "description": "Minimum cardinality (minimum number of occurrences required, typically 0 or 1)",
                                 "example": 0},
@@ -3259,6 +3186,8 @@ async def get_asbie_by_based_ascc_manifest_id(
                                 "example": 1},
             "is_nillable": {"type": "boolean", "description": "Whether the BBIE can have a nil/null value",
                             "example": False},
+            "definition": {"type": ["string", "null"], "description": "Definition to override the BCC definition. If NULL, it means that the definition should be inherited from the based BCC",
+                          "example": "A monetary amount"},
             "remark": {"type": ["string", "null"], "description": "Additional remarks or notes about the BBIE",
                        "example": "Used for purchase orders"},
             "primitiveRestriction": {
@@ -3306,15 +3235,13 @@ async def get_asbie_by_based_ascc_manifest_id(
                 "required": ["facet_min_length", "facet_max_length", "facet_pattern"]
             }
         },
-        "required": ["owner_top_level_asbiep", "based_bcc", "to_bbiep", "is_used", "path", "hash_path",
+        "required": ["owner_top_level_asbiep", "based_bcc", "to_bbiep", "is_used",
                      "cardinality_min", "cardinality_max", "is_nillable"]
     }
 )
 async def get_bbie_by_bbie_id(
         bbie_id: Annotated[int, Field(
             description="The unique identifier of the BBIE.",
-            examples=[9876],
-            title="BBIE ID",
             gt=0
         )]
 ) -> GetBbieResponse:
@@ -3328,10 +3255,23 @@ async def get_bbie_by_bbie_id(
     - guid: The BBIE GUID
     - based_bcc: The BCC information this BBIE is based on
     - to_bbiep: The BBIEP information this BBIE connects to
-    - All other BBIE properties (is_used, path, hash_path, cardinality, facets, etc.)
+    - All other BBIE properties (is_used, cardinality, facets, etc.)
     - primitiveRestriction: Required field that must not be None. Contains exactly one of xbtManifestId, codeListManifestId, or agencyIdListManifestId (not multiple, not none).
     - valueConstraint: Optional field for default_value or fixed_value constraints
     - supplementary_components in to_bbiep for use with create_bbie_sc() and update_bbie_sc()
+
+    Using with Create Tools:
+    This tool provides all the information needed to use create_bbie and create_bbie_sc.
+    IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions.
+    The actual BIE structure may differ from the CC structure because groups are flattened. When creating BBIEs,
+    traverse the actual BIE structure recursively to find the correct parent ABIE.
+    - For create_bbie: Use based_bcc.bcc_manifest_id from this response. This value can be passed directly to create_bbie()
+      as the based_bcc_manifest_id parameter. The from_abie_id should be obtained by traversing the BIE structure recursively.
+    - For create_bbie_sc:
+      - bbie_id: Use the bbie_id from this response
+      - based_dt_sc_manifest_id: Use to_bbiep.supplementary_components[].based_dt_sc.dt_sc_manifest_id from the supplementary_components array.
+        This value can be passed directly to create_bbie_sc() as the based_dt_sc_manifest_id parameter.
+    - Example for create_bbie_sc: create_bbie_sc(bbie_id=result.bbie_id, based_dt_sc_manifest_id=result.to_bbiep.supplementary_components[0].based_dt_sc.dt_sc_manifest_id)
 
     Args:
         bbie_id (int): The unique identifier of the BBIE
@@ -3428,11 +3368,10 @@ async def get_bbie_by_bbie_id(
         based_bcc=based_bcc,
         to_bbiep=bbiep_info,
         is_used=bbie.is_used,
-        path=bbie.path,
-        hash_path=bbie.hash_path,
         cardinality_min=bbie.cardinality_min,
         cardinality_max=bbie.cardinality_max,
         is_nillable=bbie.is_nillable,
+        definition=bbie.definition,
         remark=bbie.remark,
         primitiveRestriction=primitive_restriction,
         valueConstraint=value_constraint,
@@ -3442,10 +3381,10 @@ async def get_bbie_by_bbie_id(
 
 @mcp.tool(
     name="get_bbie_by_based_bcc_manifest_id",
-    description="Get a BBIE (Basic Business Information Entity) by its based BCC manifest ID. This function returns basic information based on based_bcc_manifest_id and parent_abie_path when you don't have the bbie_id. It can also find an existing BBIE if one exists with the given based_bcc_manifest_id.",
+    description="Get a BBIE (Basic Business Information Entity) by its based BCC manifest ID. This function returns basic information based on based_bcc_manifest_id when you don't have the bbie_id. This tool assumes there's no existing BBIE and returns basic information for creating a new one. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_bbie, traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure. This tool provides all information needed for create_bbie_sc: use to_bbiep.supplementary_components[].based_dt_sc.dt_sc_manifest_id for create_bbie_sc's based_dt_sc_manifest_id parameter.",
     output_schema={
         "type": "object",
-        "description": "Response containing BBIE (Basic Business Information Entity) information with its BBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (bbie_id will be created); when is_used=False, it shows all available components for profiling.",
+        "description": "Response containing BBIE (Basic Business Information Entity) information with its BBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (bbie_id will be created); when is_used=False, it shows all available components for profiling. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_bbie, traverse the actual BIE structure recursively.",
         "properties": {
             "bbie_id": {"type": ["integer", "null"],
                         "description": "Unique identifier for the BBIE (base entity ID, None if not yet created)",
@@ -3516,7 +3455,7 @@ async def get_bbie_by_bbie_id(
                 "type": "object",
                 "description": "BCC (Basic Core Component) information that this BBIE is based on",
                 "properties": {
-                    "bcc_manifest_id": {"type": "integer", "description": "Unique identifier for the BCC manifest",
+                    "bcc_manifest_id": {"type": "integer", "description": "Unique identifier for the BCC manifest. This can be passed to create_bbie() as the based_bcc_manifest_id parameter.",
                                         "example": 12345},
                     "bcc_id": {"type": "integer", "description": "Unique identifier for the BCC", "example": 6789},
                     "guid": {"type": "string", "description": "Unique identifier within the release",
@@ -3613,12 +3552,6 @@ async def get_bbie_by_bbie_id(
                         "required": ["bccp_manifest_id", "bccp_id", "guid", "den", "property_term",
                                      "representation_term", "bdt_manifest", "is_deprecated"]
                     },
-                    "path": {"type": "string",
-                             "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                             "example": "/PurchaseOrder/Amount"},
-                    "hash_path": {"type": "string",
-                                  "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                  "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                     "definition": {"type": ["string", "null"], "description": "Definition of the BBIEP",
                                    "example": "A monetary amount"},
                     "remark": {"type": ["string", "null"], "description": "Remarks about the BBIEP",
@@ -3676,12 +3609,6 @@ async def get_bbie_by_bbie_id(
                                     "required": ["dt_sc_manifest_id", "dt_sc_id", "guid", "cardinality_min",
                                                  "is_deprecated"]
                                 },
-                                "path": {"type": "string",
-                                         "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                                         "example": "/PurchaseOrder/Amount/CurrencyCode"},
-                                "hash_path": {"type": "string",
-                                              "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                                              "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                                 "definition": {"type": ["string", "null"], "description": "Definition of the BBIE SC",
                                                "example": "Currency code"},
                                 "cardinality_min": {"type": "integer", "description": "Minimum cardinality",
@@ -3798,7 +3725,7 @@ async def get_bbie_by_bbie_id(
                                                  "owner"]
                                 }
                             },
-                            "required": ["based_dt_sc", "path", "hash_path", "cardinality_min", "cardinality_max",
+                            "required": ["based_dt_sc", "cardinality_min", "cardinality_max",
                                          "owner_top_level_asbiep"]
                         }
                     },
@@ -3860,17 +3787,11 @@ async def get_bbie_by_bbie_id(
                         "required": ["top_level_asbiep_id", "library", "release", "state", "is_deprecated", "owner"]
                     }
                 },
-                "required": ["based_bccp", "path", "hash_path", "supplementary_components", "owner_top_level_asbiep"]
+                "required": ["based_bccp", "supplementary_components", "owner_top_level_asbiep"]
             },
             "is_used": {"type": "boolean",
                         "description": "Whether this BBIE is currently being used (profiled) in the BIE",
                         "example": True},
-            "path": {"type": "string",
-                     "description": "[INTERNAL] Hierarchical path string - used internally for update_asbie() and update_bbie() operations",
-                     "example": "/PurchaseOrder/Amount"},
-            "hash_path": {"type": "string",
-                          "description": "[INTERNAL] SHA256 hashed value of the path field - used internally for efficient lookups",
-                          "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
             "cardinality_min": {"type": "integer",
                                 "description": "Minimum cardinality (minimum number of occurrences required, typically 0 or 1)",
                                 "example": 0},
@@ -3879,6 +3800,8 @@ async def get_bbie_by_bbie_id(
                                 "example": 1},
             "is_nillable": {"type": "boolean", "description": "Whether the BBIE can have a nil/null value",
                             "example": False},
+            "definition": {"type": ["string", "null"], "description": "Definition to override the BCC definition. If NULL, it means that the definition should be inherited from the based BCC",
+                          "example": "A monetary amount"},
             "remark": {"type": ["string", "null"], "description": "Additional remarks or notes about the BBIE",
                        "example": "Used for purchase orders"},
             "primitiveRestriction": {
@@ -3927,48 +3850,53 @@ async def get_bbie_by_bbie_id(
                 "required": ["facet_min_length", "facet_max_length", "facet_pattern"]
             }
         },
-        "required": ["owner_top_level_asbiep", "based_bcc", "to_bbiep", "is_used", "path", "hash_path",
+        "required": ["owner_top_level_asbiep", "based_bcc", "to_bbiep", "is_used",
                      "cardinality_min", "cardinality_max", "is_nillable", "primitiveRestriction"]
     }
 )
 async def get_bbie_by_based_bcc_manifest_id(
         top_level_asbiep_id: Annotated[int, Field(
             description="The top-level ASBIEP (Association Business Information Entity Property) ID.",
-            examples=[123],
-            title="Top-level ASBIEP ID",
             gt=0
-        )],
-        parent_abie_path: Annotated[str, Field(
-            description="The parent path for constructing the BBIE path.",
-            examples=["ASCCP-123>ACC-456"],
-            title="Parent Path"
         )],
         based_bcc_manifest_id: Annotated[int, Field(
             description="The BCC manifest ID that this BBIE is based on.",
-            examples=[456],
-            title="Based BCC Manifest ID",
             gt=0
         )]
 ) -> GetBbieResponse:
     """
     Get a BBIE (Basic Business Information Entity) by its based BCC manifest ID.
 
-    This tool returns basic information based on based_bcc_manifest_id and parent_abie_path when you don't have the bbie_id.
-    It will also check if an existing BBIE exists with the given based_bcc_manifest_id and return it if found.
+    This tool returns basic information based on based_bcc_manifest_id when you don't have the bbie_id.
+    This tool assumes there's no existing BBIE and returns basic information for creating a new one.
 
     The response includes:
     - bbie_id: The BBIE ID (null if not yet created)
     - guid: The BBIE GUID (null if not yet created)
     - based_bcc: The BCC information this BBIE is based on
     - to_bbiep: The BBIEP information this BBIE connects to
-    - All other BBIE properties (is_used, path, hash_path, cardinality, facets, etc.)
+    - All other BBIE properties (is_used, cardinality, facets, etc.)
     - primitiveRestriction: Required field that must not be None. Contains exactly one of xbtManifestId, codeListManifestId, or agencyIdListManifestId (not multiple, not none). Fetched from DtAwdPri if no BBIE exists yet.
     - valueConstraint: Optional field for default_value or fixed_value constraints (fetched from BCC if no BBIE exists yet)
     - supplementary_components in to_bbiep for use with create_bbie_sc() and update_bbie_sc()
 
+    Using with Create Tools:
+    This tool provides all the information needed to use create_bbie and create_bbie_sc.
+    IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions.
+    The actual BIE structure may differ from the CC structure because groups are flattened. When creating BBIEs,
+    traverse the actual BIE structure recursively to find the correct parent ABIE. Note: The BCC's from_acc may
+    be a group in the CC structure, but in the BIE structure, the relationship appears directly under the parent
+    ABIE (skipping the group).
+    - For create_bbie: Use based_bcc.bcc_manifest_id from this response. This value can be passed directly to create_bbie()
+      as the based_bcc_manifest_id parameter. The from_abie_id should be obtained by traversing the BIE structure recursively.
+    - For create_bbie_sc:
+      - bbie_id: Use the bbie_id from this response (if it exists, otherwise create the BBIE first using create_bbie)
+      - based_dt_sc_manifest_id: Use to_bbiep.supplementary_components[].based_dt_sc.dt_sc_manifest_id from the supplementary_components array.
+        This value can be passed directly to create_bbie_sc() as the based_dt_sc_manifest_id parameter.
+    - Example for create_bbie_sc: create_bbie_sc(bbie_id=result.bbie_id, based_dt_sc_manifest_id=result.to_bbiep.supplementary_components[0].based_dt_sc.dt_sc_manifest_id)
+
     Args:
         top_level_asbiep_id (int): The top-level ASBIEP ID
-        parent_abie_path (str): The parent path for constructing the BBIE path
         based_bcc_manifest_id (int): The BCC manifest ID that this BBIE is based on
 
     Returns:
@@ -3981,7 +3909,6 @@ async def get_bbie_by_based_bcc_manifest_id(
         Get basic BBIE info by based BCC manifest ID:
         >>> result = get_bbie_by_based_bcc_manifest_id(
         ...     top_level_asbiep_id=123,
-        ...     parent_abie_path="ASCCP-123>ACC-456",
         ...     based_bcc_manifest_id=456
         ... )
         >>> print(f"Top-level ASBIEP ID: {result.owner_top_level_asbiep.top_level_asbiep_id}")
@@ -3992,9 +3919,6 @@ async def get_bbie_by_based_bcc_manifest_id(
 
     if based_bcc_manifest_id <= 0:
         raise ToolError("based_bcc_manifest_id must be a positive integer.")
-
-    if not parent_abie_path or not parent_abie_path.strip():
-        raise ToolError("parent_abie_path is required and cannot be empty.")
 
     bie_service = BusinessInformationEntityService(requester=app_user)
     cc_service = CoreComponentService()
@@ -4028,110 +3952,53 @@ async def get_bbie_by_based_bcc_manifest_id(
         to_bccp_manifest_id=bcc_manifest.to_bccp_manifest_id
     )
 
-    # Construct paths
-    bbie_path = f"{parent_abie_path}>BCC-{based_bcc_manifest_id}"
-    hash_path = hashlib.sha256(bbie_path.encode()).hexdigest()
+    # No existing BBIE - return basic info (this tool assumes no existing BBIE)
+    bbiep_info = _get_bbiep_info(top_level_asbiep_id, None, None, bcc_manifest.to_bccp_manifest_id, None)
 
-    # Try to find existing BBIE by based_bcc_manifest_id and hash_path
-    bbie = bie_service.get_bbie_by_based_bcc_manifest_id(
-        based_bcc_manifest_id=based_bcc_manifest_id,
-        owner_top_level_asbiep_id=top_level_asbiep_id,
-        hash_path=hash_path
+    # Create ValueConstraint object with validation
+    value_constraint = validate_and_create_value_constraint(
+        default_value=bcc.default_value,
+        fixed_value=bcc.fixed_value
     )
 
-    if bbie:
-        # Found existing BBIE - return it with full details
-        bbiep_info = _get_bbiep_info(bbie.owner_top_level_asbiep_id, bbie.bbie_id, bbie.to_bbiep_id,
-                                     bcc_manifest.to_bccp_manifest_id, bbie.path)
+    # Try to fetch default primitive restriction from DtAwdPri (is_default=1)
+    primitive_restriction = None
 
-        # Create Facet object if any facet values exist
-        facet = None
-        if bbie.facet_min_length is not None or bbie.facet_max_length is not None or bbie.facet_pattern is not None:
-            facet = Facet(
-                facet_min_length=bbie.facet_min_length,
-                facet_max_length=bbie.facet_max_length,
-                facet_pattern=bbie.facet_pattern
-            )
-        
-        # Create ValueConstraint object with validation
-        value_constraint = validate_and_create_value_constraint(
-            default_value=bbie.default_value,
-            fixed_value=bbie.fixed_value
-        )
-        
+    # Get default primitive restriction from DtAwdPri using BCCP manifest ID
+    try:
+        xbt_manifest_id, code_list_manifest_id, agency_id_list_manifest_id = bie_service.get_dt_awd_pri(
+            bcc_manifest.to_bccp_manifest_id)
         # Create PrimitiveRestriction object with validation
         primitive_restriction = _validate_and_create_primitive_restriction(
-            xbt_manifest_id=bbie.xbt_manifest_id,
-            code_list_manifest_id=bbie.code_list_manifest_id,
-            agency_id_list_manifest_id=bbie.agency_id_list_manifest_id
+            xbt_manifest_id=xbt_manifest_id,
+            code_list_manifest_id=code_list_manifest_id,
+            agency_id_list_manifest_id=agency_id_list_manifest_id
         )
-        
-        return GetBbieResponse(
-            bbie_id=bbie.bbie_id,
-            owner_top_level_asbiep=owner_top_level_info,
-            guid=bbie.guid,
-            based_bcc=based_bcc,
-            to_bbiep=bbiep_info,
-            is_used=bbie.is_used,
-            path=bbie.path,
-            hash_path=bbie.hash_path,
-            cardinality_min=bbie.cardinality_min,
-            cardinality_max=bbie.cardinality_max,
-            is_nillable=bbie.is_nillable,
-            remark=bbie.remark,
-            primitiveRestriction=primitive_restriction,
-            valueConstraint=value_constraint,
-            facet=facet
-        )
-    else:
-        # No existing BBIE found - return basic info
-        bbiep_info = _get_bbiep_info(top_level_asbiep_id, None, None, bcc_manifest.to_bccp_manifest_id, bbie_path)
+    except ValueError as e:
+        # Validation error - log and re-raise
+        logger.error(f"PrimitiveRestriction validation failed for BCC manifest {bcc_manifest.bcc_manifest_id}", e)
+        raise
+    except Exception:
+        # If we can't fetch the default primitive restriction, just leave it as None
+        # This is not a critical error - the BBIE doesn't exist yet anyway
+        pass
 
-        # Create ValueConstraint object with validation
-        value_constraint = validate_and_create_value_constraint(
-            default_value=bcc.default_value,
-            fixed_value=bcc.fixed_value
-        )
-
-        # Try to fetch default primitive restriction from DtAwdPri (is_default=1)
-        primitive_restriction = None
-
-        # Get default primitive restriction from DtAwdPri using BCCP manifest ID
-        try:
-            xbt_manifest_id, code_list_manifest_id, agency_id_list_manifest_id = bie_service.get_dt_awd_pri(
-                bcc_manifest.to_bccp_manifest_id)
-            # Create PrimitiveRestriction object with validation
-            primitive_restriction = _validate_and_create_primitive_restriction(
-                xbt_manifest_id=xbt_manifest_id,
-                code_list_manifest_id=code_list_manifest_id,
-                agency_id_list_manifest_id=agency_id_list_manifest_id
-            )
-        except ValueError as e:
-            # Validation error - log and re-raise
-            logger.error(f"PrimitiveRestriction validation failed for BCC manifest {bcc_manifest.bcc_manifest_id}: {e}")
-            raise
-        except Exception:
-            # If we can't fetch the default primitive restriction, just leave it as None
-            # This is not a critical error - the BBIE doesn't exist yet anyway
-            pass
-
-        return GetBbieResponse(
-            bbie_id=None,
-            owner_top_level_asbiep=owner_top_level_info,
-            guid=None,
-            based_bcc=based_bcc,
-            to_bbiep=bbiep_info,
-            is_used=False,
-            path=bbie_path,
-            hash_path=hash_path,
-            cardinality_min=bcc_manifest.bcc.cardinality_min,
-            cardinality_max=bcc_manifest.bcc.cardinality_max,
-            is_nillable=bcc_manifest.bcc.is_nillable,
-            remark=None,
-            primitiveRestriction=primitive_restriction,  # Default from DtAwdPri if available
-            valueConstraint=value_constraint,  # From BCC if available
-            facet=None  # No BBIE-specific facet
-        )
+    return GetBbieResponse(
+        bbie_id=None,
+        owner_top_level_asbiep=owner_top_level_info,
+        guid=None,
+        based_bcc=based_bcc,
+        to_bbiep=bbiep_info,
+        is_used=False,
+        cardinality_min=bcc.cardinality_min,
+        cardinality_max=bcc.cardinality_max,
+        is_nillable=bcc.is_nillable,
+        definition=None,  # Default for basic mode
+        remark=None,
+        primitiveRestriction=primitive_restriction,  # Default from DtAwdPri if available
+        valueConstraint=value_constraint,  # From BCC if available
+        facet=None  # No BBIE-specific facet
+    )
 
 
 @mcp.tool(
@@ -4154,7 +4021,6 @@ async def get_bbie_by_based_bcc_manifest_id(
                             "asbie": {"type": ["object", "null"], "description": "ASBIE relationship (if this is an ASBIE). Excludes is_nillable and remark fields.", "properties": {
                                 "asbie_id": {"type": "integer"},
                                 "guid": {"type": ["string", "null"]},
-                                "path": {"type": "string"},
                                 "cardinality_min": {"type": "integer"},
                                 "cardinality_max": {"type": "integer"},
                                 "based_ascc": {"type": "object"},
@@ -4163,7 +4029,6 @@ async def get_bbie_by_based_bcc_manifest_id(
                             "bbie": {"type": ["object", "null"], "description": "BBIE relationship (if this is a BBIE). Excludes remark field.", "properties": {
                                 "bbie_id": {"type": "integer"},
                                 "guid": {"type": ["string", "null"]},
-                                "path": {"type": "string"},
                                 "cardinality_min": {"type": "integer"},
                                 "cardinality_max": {"type": "integer"},
                                 "is_nillable": {"type": "boolean"},
@@ -4180,16 +4045,10 @@ async def get_bbie_by_based_bcc_manifest_id(
 async def create_top_level_asbiep(
         asccp_manifest_id: Annotated[int, Field(
             description="The ASCCP (Association Core Component Property) manifest ID to base the Top-Level ASBIEP on.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="ASCCP (Association Core Component Property) Manifest ID"
-        )],
+            gt=0)],
         biz_ctx_list: Annotated[str, Field(
             description="Business context IDs to assign to the Top-Level ASBIEP. Comma-separated list of business context IDs. Examples: '1', '1,2', '1,2,3'. Must contain at least one positive integer.",
-            examples=["1", "1,2", "1,2,3"],
-            min_length=1,
-            title="Business Context List"
-        )]
+            min_length=1)]
 ) -> CreateTopLevelAsbiepResponse:
     """
     Create a new BIE (Business Information Entity) with the specified ASCCP (Association Core Component Property) manifest and business contexts.
@@ -4324,7 +4183,7 @@ async def create_top_level_asbiep(
             asbiep=asbiep_detail
         )
     except HTTPException as e:
-        logger.error(f"HTTP error creating BIE (Business Information Entity): {e}")
+        logger.error(f"HTTP error creating BIE (Business Information Entity)", e)
         if e.status_code == 400:
             # Enhanced 400 error handling with specific guidance
             if "Group types are not allowed" in str(e.detail):
@@ -4369,7 +4228,7 @@ async def create_top_level_asbiep(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error creating BIE (Business Information Entity): {e}")
+        logger.error(f"Unexpected error creating BIE (Business Information Entity)", e)
         raise ToolError(
             f"An unexpected error occurred while creating the BIE (Business Information Entity). Please try again later or contact your system administrator if the problem persists."
         ) from e
@@ -4377,10 +4236,10 @@ async def create_top_level_asbiep(
 
 @mcp.tool(
     name="update_top_level_asbiep",
-    description="Update a Top-Level ASBIEP (Association Business Information Entity Property) with new version, status, or deprecation information. IMPORTANT: The 'version' parameter MUST be provided as a string and the exact string value must be preserved (e.g., '1.0' must NOT be converted to '1' or integer 1). The version format is user-defined and the exact string value must be stored as-is. Boolean parameters accept both their native types and string representations (strings are automatically converted).",
+    description="Update a Top-Level ASBIEP (Association Business Information Entity Property) with new version, status, or deprecation information. IMPORTANT: The 'version' parameter MUST be provided as a string and the exact string value must be preserved (e.g., '1.0' must NOT be converted to '1' or integer 1). The version format is user-defined and the exact string value must be stored as-is.",
     output_schema={
         "type": "object",
-        "description": "Response containing the updated Top-Level ASBIEP information. Boolean parameters accept both their native types and string representations (strings are automatically converted to the appropriate type).",
+        "description": "Response containing the updated Top-Level ASBIEP information.",
         "properties": {
             "top_level_asbiep_id": {"type": "integer",
                                     "description": "ID of the updated Top-Level ASBIEP (Association Business Information Entity Property)"},
@@ -4393,52 +4252,42 @@ async def create_top_level_asbiep(
 )
 async def update_top_level_asbiep(
         top_level_asbiep_id: Annotated[int, Field(
-            description="The top-level ASBIEP (Association Business Information Entity Property) ID of the Top-Level ASBIEP to update.",
-            examples=[123, 456, 789],
             gt=0,
-            title="Top-Level ASBIEP (Association Business Information Entity Property) ID"
+            description="The top-level ASBIEP (Association Business Information Entity Property) ID of the Top-Level ASBIEP to update."
         )],
         version: Annotated[str | None, Field(
-            description="New version number for the Top-Level ASBIEP. MUST be provided as a string and the exact string value must be preserved (e.g., '1.0' must NOT be converted to '1' or integer 1). The version format is user-defined and the exact string value must be stored as-is. If not provided, version will not be updated.",
-            examples=["1.0", "1.1", "2.0", "2.1", "3.0", "v1.0", "2024.01"],
-            title="Version"
-        )] = None,
+            default=None,
+            description="New version number for the Top-Level ASBIEP. MUST be provided as a string and the exact string value must be preserved (e.g., '1.0' must NOT be converted to '1' or integer 1). The version format is user-defined and the exact string value must be stored as-is. If not provided, version will not be updated."
+        )],
         status: Annotated[str | None, Field(
-            description="New status for the Top-Level ASBIEP. If not provided, status will not be updated.",
-            examples=["Prototype", "Test", "Production"],
-            title="Status"
-        )] = None,
+            default=None,
+            description="New status for the Top-Level ASBIEP. If not provided, status will not be updated."
+        )],
         display_name: Annotated[str | None, Field(
-            description="Display name of the ASBIEP. If not provided, display_name will not be updated.",
-            examples=["Item Master", "Product Master", "Inventory Master"],
-            title="Display Name"
-        )] = None,
+            default=None,
+            description="Display name of the ASBIEP. If not provided, display_name will not be updated."
+        )],
         biz_term: Annotated[str | None, Field(
-            description="Business term to indicate what the BIE is called in a particular business context. If not provided, biz_term will not be updated.",
-            examples=["Product Master", "Item Catalog", "Inventory Item"],
-            title="Business Term"
-        )] = None,
+            default=None,
+            description="Business term to indicate what the BIE is called in a particular business context. If not provided, biz_term will not be updated."
+        )],
         remark: Annotated[str | None, Field(
-            description="Context-specific usage remarks about the BIE. If not provided, remark will not be updated.",
-            examples=["Used for manufacturing operations", "Primary item identification system",
-                      "Core product data management"],
-            title="Remark"
-        )] = None,
+            default=None,
+            description="Context-specific usage remarks about the BIE. If not provided, remark will not be updated."
+                      "Core product data management"
+        )],
         is_deprecated: Annotated[bool | str | None, Field(
-            description="New deprecation status for the Top-Level ASBIEP. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, deprecation status will not be updated.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Deprecated"
-        )] = None,
+            default=None,
+            description="New deprecation status for the Top-Level ASBIEP. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, deprecation status will not be updated."
+        )],
         deprecated_reason: Annotated[str | None, Field(
-            description="Reason for deprecation. Required if is_deprecated is set to True. Ignored if is_deprecated is not provided or False.",
-            examples=["Replaced by new version", "No longer used"],
-            title="Deprecated Reason"
-        )] = None,
+            default=None,
+            description="Reason for deprecation. Required if is_deprecated is set to True. Ignored if is_deprecated is not provided or False."
+        )],
         deprecated_remark: Annotated[str | None, Field(
-            description="Additional remarks about the deprecation. Optional even when deprecating.",
-            examples=["Use version 2.0 instead", "Contact admin for migration"],
-            title="Deprecated Remark"
-        )] = None
+            default=None,
+            description="Additional remarks about the deprecation. Optional even when deprecating."
+        )]
 ) -> UpdateTopLevelAsbiepResponse:
     """
     Update a Top-Level ASBIEP (Association Business Information Entity Property) with new version, status, deprecation information, and ASBIEP properties.
@@ -4576,7 +4425,7 @@ async def update_top_level_asbiep(
             updates=updates
         )
     except HTTPException as e:
-        logger.error(f"HTTP error updating BIE (Business Information Entity): {e}")
+        logger.error(f"HTTP error updating BIE (Business Information Entity)", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -4590,7 +4439,7 @@ async def update_top_level_asbiep(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error updating BIE (Business Information Entity): {e}")
+        logger.error(f"Unexpected error updating BIE (Business Information Entity)", e)
         raise ToolError(
             f"An unexpected error occurred while updating the BIE (Business Information Entity). Please try again later or contact your system administrator if the problem persists."
         ) from e
@@ -4613,14 +4462,10 @@ async def update_top_level_asbiep(
 async def update_top_level_asbiep_state(
         top_level_asbiep_id: Annotated[int, Field(
             description="The top-level ASBIEP (Association Business Information Entity Property) ID of the Top-Level ASBIEP to update state.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="Top-Level ASBIEP (Association Business Information Entity Property) ID"
+            gt=0
         )],
         new_state: Annotated[str, Field(
-            description="The new state for the BIE (Business Information Entity). Valid transitions: WIP->QA, QA->WIP, QA->Production",
-            examples=["QA", "WIP", "Production"],
-            title="New State"
+            description="The new state for the BIE (Business Information Entity). Valid transitions: WIP->QA, QA->WIP, QA->Production"
         )]
 ) -> UpdateTopLevelAsbiepResponse:
     """
@@ -4705,7 +4550,7 @@ async def update_top_level_asbiep_state(
             updates=["state"]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error updating BIE (Business Information Entity) state: {e}")
+        logger.error(f"HTTP error updating BIE (Business Information Entity) state", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -4719,7 +4564,7 @@ async def update_top_level_asbiep_state(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error updating BIE (Business Information Entity) state: {e}")
+        logger.error(f"Unexpected error updating BIE (Business Information Entity) state", e)
         raise ToolError(
             f"An unexpected error occurred while updating the BIE (Business Information Entity) state. Please try again later or contact your system administrator if the problem persists."
         ) from e
@@ -4730,20 +4575,20 @@ async def update_top_level_asbiep_state(
     description="Delete a Top-Level ASBIEP (Association Business Information Entity Property) and all related records",
     output_schema={
         "type": "object",
+        "description": "Response containing the deleted top-level ASBIEP ID or cancellation message",
         "properties": {
-            "top_level_asbiep_id": {"type": "integer",
-                                    "description": "ID of the deleted top-level ASBIEP (Association Business Information Entity Property)"}
+            "top_level_asbiep_id": {"type": ["integer", "null"],
+                                    "description": "ID of the deleted top-level ASBIEP (Association Business Information Entity Property) (null if deletion was cancelled)"},
+            "message": {"type": ["string", "null"], "description": "Optional message indicating the status of the deletion operation", "example": "Deletion cancelled by user"}
         },
-        "required": ["top_level_asbiep_id"]
+        "required": []
     }
 )
 async def delete_top_level_asbiep(
         top_level_asbiep_id: Annotated[int, Field(
             description="The top-level ASBIEP (Association Business Information Entity Property) ID of the Top-Level ASBIEP to delete.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="Top-Level ASBIEP (Association Business Information Entity Property) ID"
-        )]
+            gt=0)],
+        ctx: Context
 ) -> DeleteTopLevelAsbiepResponse:
     """
     Delete a Top-Level ASBIEP (Association Business Information Entity Property) and all related records.
@@ -4804,15 +4649,41 @@ async def delete_top_level_asbiep(
     # Create service instance
     bie_service = BusinessInformationEntityService(requester=app_user)
 
-    # Delete BIE (Business Information Entity)
     try:
-        bie_service.delete_top_level_asbiep(top_level_asbiep_id)
-
-        return DeleteTopLevelAsbiepResponse(
-            top_level_asbiep_id=top_level_asbiep_id
+        # Get top-level ASBIEP for confirmation message
+        top_level_asbiep = bie_service.get_top_level_asbiep_by_id(top_level_asbiep_id)
+        if not top_level_asbiep:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Top-level ASBIEP with ID {top_level_asbiep_id} not found"
+            )
+        
+        # Get display name from ASBIEP if available
+        display_name = top_level_asbiep.asbiep.based_asccp_manifest.den if top_level_asbiep.asbiep and top_level_asbiep.asbiep.based_asccp_manifest else f"Top-Level ASBIEP {top_level_asbiep_id}"
+        
+        # Create confirmation message with top-level ASBIEP details
+        confirmation_message = (
+            f"Are you sure you want to discard '{display_name}' Top-Level ASBIEP?\n\n"
+            f"It will be permanently removed along with all related records.\n"
         )
+        
+        elicit_result = await ctx.elicit(
+            message=confirmation_message,
+            response_type=None
+        )
+        
+        # Check if user confirmed the deletion using pattern matching
+        match elicit_result:
+            case AcceptedElicitation():                
+                # Delete BIE (Business Information Entity)
+                bie_service.delete_top_level_asbiep(top_level_asbiep_id)
+                return DeleteTopLevelAsbiepResponse(top_level_asbiep_id=top_level_asbiep_id)
+            case DeclinedElicitation():
+                return DeleteTopLevelAsbiepResponse(top_level_asbiep_id=None, message="Deletion declined by user")
+            case CancelledElicitation():
+                return DeleteTopLevelAsbiepResponse(top_level_asbiep_id=None, message="Deletion cancelled by user")
     except HTTPException as e:
-        logger.error(f"HTTP error deleting BIE (Business Information Entity): {e}")
+        logger.error(f"HTTP error deleting BIE (Business Information Entity)", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -4826,7 +4697,7 @@ async def delete_top_level_asbiep(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error deleting BIE (Business Information Entity): {e}")
+        logger.error(f"Unexpected error deleting BIE (Business Information Entity)", e)
         raise ToolError(
             f"An unexpected error occurred while deleting the BIE (Business Information Entity). Please try again later or contact your system administrator if the problem persists."
         ) from e
@@ -4850,16 +4721,10 @@ async def delete_top_level_asbiep(
 async def transfer_top_level_asbiep_ownership(
         top_level_asbiep_id: Annotated[int, Field(
             description="The top-level ASBIEP (Association Business Information Entity Property) ID of the Top-Level ASBIEP to transfer ownership.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="Top-Level ASBIEP (Association Business Information Entity Property) ID"
-        )],
+            gt=0)],
         new_owner_user_id: Annotated[int, Field(
             description="The user ID of the new owner who will receive ownership of the Top-Level ASBIEP.",
-            examples=[2, 3, 4],
-            gt=0,
-            title="New Owner User ID"
-        )]
+            gt=0)]
 ) -> TransferTopLevelAsbiepOwnershipResponse:
     """
     Transfer ownership of a Top-Level ASBIEP (Association Business Information Entity Property) to another user.
@@ -4926,7 +4791,7 @@ async def transfer_top_level_asbiep_ownership(
             updates=["owner_user_id"]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error transferring ownership: {e}")
+        logger.error(f"HTTP error transferring ownership", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -4940,7 +4805,7 @@ async def transfer_top_level_asbiep_ownership(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error transferring ownership: {e}")
+        logger.error(f"Unexpected error transferring ownership", e)
         raise ToolError(
             f"An unexpected error occurred while transferring ownership. Please try again later or contact your system administrator if the problem persists."
         ) from e
@@ -4963,16 +4828,10 @@ async def transfer_top_level_asbiep_ownership(
 async def assign_biz_ctx_to_top_level_asbiep(
         top_level_asbiep_id: Annotated[int, Field(
             description="The top-level ASBIEP (Association Business Information Entity Property) ID of the BIE (Business Information Entity) to assign the business context to.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="Top-Level ASBIEP (Association Business Information Entity Property) ID"
-        )],
+            gt=0)],
         biz_ctx_id: Annotated[int, Field(
             description="The business context ID to assign to the BIE (Business Information Entity).",
-            examples=[1, 2, 3],
-            gt=0,
-            title="Business Context ID"
-        )]
+            gt=0)]
 ) -> UpdateTopLevelAsbiepResponse:
     """
     Assign a business context to a BIE (Business Information Entity).
@@ -5035,7 +4894,7 @@ async def assign_biz_ctx_to_top_level_asbiep(
             updates=["business_contexts"]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error assigning business context: {e}")
+        logger.error(f"HTTP error assigning business context", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -5049,7 +4908,7 @@ async def assign_biz_ctx_to_top_level_asbiep(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error assigning business context: {e}")
+        logger.error(f"Unexpected error assigning business context", e)
         raise ToolError(
             f"An unexpected error occurred while assigning the business context. Please try again later or contact your system administrator if the problem persists."
         ) from e
@@ -5072,16 +4931,10 @@ async def assign_biz_ctx_to_top_level_asbiep(
 async def unassign_biz_ctx_from_top_level_asbiep(
         top_level_asbiep_id: Annotated[int, Field(
             description="The top-level ASBIEP (Association Business Information Entity Property) ID of the BIE (Business Information Entity) to unassign the business context from.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="Top-Level ASBIEP (Association Business Information Entity Property) ID"
-        )],
+            gt=0)],
         biz_ctx_id: Annotated[int, Field(
             description="The business context ID to unassign from the BIE (Business Information Entity).",
-            examples=[1, 2, 3],
-            gt=0,
-            title="Business Context ID"
-        )]
+            gt=0)]
 ) -> UpdateTopLevelAsbiepResponse:
     """
     Unassign a business context from a BIE (Business Information Entity).
@@ -5143,7 +4996,7 @@ async def unassign_biz_ctx_from_top_level_asbiep(
             updates=["business_contexts"]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error unassigning business context: {e}")
+        logger.error(f"HTTP error unassigning business context", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -5157,7 +5010,7 @@ async def unassign_biz_ctx_from_top_level_asbiep(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error unassigning business context: {e}")
+        logger.error(f"Unexpected error unassigning business context", e)
         raise ToolError(
             f"An unexpected error occurred while unassigning the business context. Please try again later or contact your system administrator if the problem persists."
         ) from e
@@ -5165,10 +5018,10 @@ async def unassign_biz_ctx_from_top_level_asbiep(
 
 @mcp.tool(
     name="create_asbie",
-    description="Enable (use) an ASBIE (Association Business Information Entity) during BIE profiling. Creates a new ASBIE with associated ASBIEP and ABIE records, enabling the component in the BIE. The ASBIE is automatically enabled (is_used=True) and profiled. After creation, this tool automatically processes mandatory relationships (cardinality_min >= 1) recursively, creating or enabling required ASBIE and BBIE components to satisfy cardinality constraints.",
+    description="Enable (use) an ASBIE (Association Business Information Entity) during BIE profiling. Creates a new ASBIE with associated ASBIEP and ABIE records, enabling the component in the BIE. The ASBIE is automatically enabled (is_used=True) and profiled. IMPORTANT: The based_ascc_manifest_id must point to an ASCC that associates with a non-group ACC (component_type must not be 3=SemanticGroup or 4=UserExtensionGroup). Groups are automatically skipped in BIE expressions and cannot be created directly. Always use the exact ascc_manifest_id obtained from get_top_level_asbiep() or get_asbie_by_*() tools, which show only non-group relationships. Either from_abie_id or asbiep_id must be provided. If both are provided, the tool will validate that asbiep.role_of_abie_id == from_abie_id. If only asbiep_id is provided, from_abie_id will be automatically fetched from asbiep.role_of_abie_id. Either based_ascc_manifest_id or property_term must be provided. If property_term is provided, the tool will search through the ABIE's relationships to find a matching ASCCP by property_term. After creation, this tool automatically processes mandatory relationships (cardinality_min >= 1) recursively, creating or enabling required ASBIE and BBIE components to satisfy cardinality constraints.",
     output_schema={
         "type": "object",
-        "description": "Response containing the newly created and enabled ASBIE information. The ASBIE is automatically enabled (is_used=True) for BIE profiling. All mandatory relationships (cardinality_min >= 1) are automatically created or enabled recursively. The 'asbiep' field contains a simplified recursive structure showing all created/enabled ASBIEs and BBIEs (excludes is_nillable, remark).",
+        "description": "Response containing the newly created and enabled ASBIE information. The ASBIE is automatically enabled (is_used=True) for BIE profiling. IMPORTANT: The based_ascc_manifest_id must point to an ASCC that associates with a non-group ACC (component_type must not be 3=SemanticGroup or 4=UserExtensionGroup). Groups are automatically skipped in BIE expressions and cannot be created directly. Always use the exact ascc_manifest_id obtained from get_top_level_asbiep() or get_asbie_by_*() tools. All mandatory relationships (cardinality_min >= 1) are automatically created or enabled recursively. The 'asbiep' field contains a simplified recursive structure showing all created/enabled ASBIEs and BBIEs (excludes is_nillable, remark).",
         "properties": {
             "asbie_id": {"type": "integer", "description": "Unique identifier of the newly created and enabled ASBIE", "example": 12345},
             "asbiep": {"type": ["object", "null"], "description": "Simplified recursive structure containing ASBIEP and all created/enabled relationships. Shows the hierarchical structure of all ASBIEs and BBIEs that were automatically created or enabled during mandatory relationship processing. Excludes is_nillable and remark fields.", "properties": {
@@ -5182,7 +5035,6 @@ async def unassign_biz_ctx_from_top_level_asbiep(
                             "asbie": {"type": ["object", "null"], "description": "ASBIE relationship (if this is an ASBIE). Excludes is_nillable and remark fields.", "properties": {
                                 "asbie_id": {"type": "integer"},
                                 "guid": {"type": ["string", "null"]},
-                                "path": {"type": "string"},
                                 "cardinality_min": {"type": "integer"},
                                 "cardinality_max": {"type": "integer"},
                                 "based_ascc": {"type": "object"},
@@ -5191,7 +5043,6 @@ async def unassign_biz_ctx_from_top_level_asbiep(
                             "bbie": {"type": ["object", "null"], "description": "BBIE relationship (if this is a BBIE). Excludes remark field.", "properties": {
                                 "bbie_id": {"type": "integer"},
                                 "guid": {"type": ["string", "null"]},
-                                "path": {"type": "string"},
                                 "cardinality_min": {"type": "integer"},
                                 "cardinality_max": {"type": "integer"},
                                 "is_nillable": {"type": "boolean"},
@@ -5206,17 +5057,21 @@ async def unassign_biz_ctx_from_top_level_asbiep(
     }
 )
 async def create_asbie(
-        from_abie_id: Annotated[int, Field(
-            description="The ABIE ID that this ASBIE originates from (parent ABIE).",
-            examples=[123, 456, 789],
-            gt=0,
-            title="From ABIE ID"
+        from_abie_id: Annotated[int | str | None, Field(
+            default=None,
+            description="The ABIE ID that this ASBIE originates from (parent ABIE). Either from_abie_id or asbiep_id must be provided. If both are provided, the tool will validate that asbiep.role_of_abie_id == from_abie_id. Accepts int, str, or None. String values are automatically converted to integers."
         )],
-        based_ascc_manifest_id: Annotated[int, Field(
-            description="The ASCC manifest ID that this ASBIE is based on.",
-            examples=[12345, 67890],
-            gt=0,
-            title="Based ASCC Manifest ID"
+        asbiep_id: Annotated[int | str | None, Field(
+            default=None,
+            description="The ASBIEP ID to use for determining the parent ABIE. Either from_abie_id or asbiep_id must be provided. If both are provided, the tool will validate that asbiep.role_of_abie_id == from_abie_id. If only asbiep_id is provided, from_abie_id will be automatically fetched from asbiep.role_of_abie_id. Accepts int, str, or None. String values are automatically converted to integers."
+        )],
+        based_ascc_manifest_id: Annotated[int | str | None, Field(
+            default=None,
+            description="The ASCC manifest ID that this ASBIE is based on. IMPORTANT: This must point to an ASCC that associates with a non-group ACC (component_type must not be 3=SemanticGroup or 4=UserExtensionGroup). Groups are automatically skipped in BIE expressions and cannot be created directly. Always use the exact ascc_manifest_id obtained from get_top_level_asbiep() or get_asbie_by_*() tools, which show only non-group relationships in the BIE structure. Accepts int, str, or None. String values are automatically converted to integers. If not provided, property_term must be provided instead."
+        )],
+        property_term: Annotated[str | None, Field(
+            default=None,
+            description="The property term of the ASCCP to search for in the relationships. If provided and based_ascc_manifest_id is None, this tool will search through the ABIE's relationships to find a matching ASCCP by property_term and extract the based_ascc_manifest_id from it."
         )]
 ) -> CreateAsbieResponse:
     """
@@ -5240,13 +5095,34 @@ async def create_asbie(
     enabled and ready for use in the BIE. Use update_asbie to toggle enable/disable (use/unuse) or 
     modify other properties after creation.
     
+    IMPORTANT - Group Validation:
+    The based_ascc_manifest_id must point to an ASCC that associates with a non-group ACC. 
+    If the ASCC's to_asccp_manifest.role_of_acc_manifest.acc.component_type is 3 (SemanticGroup) or 4 (UserExtensionGroup),
+    this tool will raise a ToolError. Groups are automatically skipped in BIE expressions and cannot be created directly.
+    Always use the exact ascc_manifest_id obtained from get_top_level_asbiep() or get_asbie_by_*() tools,
+    which automatically skip groups and show only non-group relationships in the BIE structure.
+    
     Permission Requirements:
     - The current user must be the owner of the top-level ASBIEP
     - The top-level ASBIEP state must be 'WIP' (Work In Progress)
     
     Args:
-        from_abie_id (int): The ABIE ID that this ASBIE originates from (parent ABIE)
-        based_ascc_manifest_id (int): The ASCC manifest ID that this ASBIE is based on
+        from_abie_id (int | str | None): The ABIE ID that this ASBIE originates from (parent ABIE).
+            Either from_abie_id or asbiep_id must be provided. If both are provided, the tool will
+            validate that asbiep.role_of_abie_id == from_abie_id. Accepts int, str, or None.
+            String values are automatically converted to integers.
+        asbiep_id (int | str | None): The ASBIEP ID to use for determining the parent ABIE.
+            Either from_abie_id or asbiep_id must be provided. If both are provided, the tool will
+            validate that asbiep.role_of_abie_id == from_abie_id. If only asbiep_id is provided,
+            from_abie_id will be automatically fetched from asbiep.role_of_abie_id. Accepts int, str, or None.
+            String values are automatically converted to integers.
+        based_ascc_manifest_id (int | str | None): The ASCC manifest ID that this ASBIE is based on.
+            Must point to an ASCC that associates with a non-group ACC (component_type must not be 3 or 4).
+            Always use the exact ascc_manifest_id obtained from get_top_level_asbiep() or get_asbie_by_*() tools.
+            If not provided, property_term must be provided instead.
+        property_term (str | None): The property term of the ASCCP to search for in the relationships.
+            If provided and based_ascc_manifest_id is None, this tool will search through the ABIE's relationships
+            to find a matching ASCCP by property_term and extract the based_ascc_manifest_id from it.
     
     Returns:
         CreateAsbieResponse: Response object containing:
@@ -5260,31 +5136,185 @@ async def create_asbie(
     
     Raises:
         ToolError: If validation fails, resources are not found, user lacks permission,
-            or database errors occur.
+            or database errors occur. Specifically raises an error if the ASCC points to a group ACC
+            (component_type 3=SemanticGroup or 4=UserExtensionGroup), indicating that the exact
+            ascc_manifest_id from get_top_level_asbiep() or get_asbie_by_*() tools should be used instead.
     
     Examples:
-        Enable an ASBIE during BIE profiling (mandatory relationships are automatically created/enabled):
+        Enable an ASBIE during BIE profiling using based_ascc_manifest_id (mandatory relationships are automatically created/enabled):
         >>> result = create_asbie(from_abie_id=123, based_ascc_manifest_id=456)
+        >>> print(f"Created ASBIE ID: {result.asbie_id}")
+        
+        Enable an ASBIE using property_term to search for the relationship:
+        >>> result = create_asbie(from_abie_id=123, property_term="Details")
+        >>> print(f"Created ASBIE ID: {result.asbie_id}")
+        
+        Enable an ASBIE using asbiep_id to determine the parent ABIE:
+        >>> result = create_asbie(asbiep_id=12346, based_ascc_manifest_id=456)
         >>> print(f"Created ASBIE ID: {result.asbie_id}")
     """
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
+
+    # Convert string parameters to their proper types
+    try:
+        from_abie_id = str_to_int(from_abie_id)
+        asbiep_id = str_to_int(asbiep_id)
+        based_ascc_manifest_id = str_to_int(based_ascc_manifest_id)
+    except ToolError:
+        raise  # Re-raise ToolError as-is
+    except Exception as e:
+        raise ToolError(
+            f"Type conversion error: {str(e)}. Please check your parameter types and try again."
+        ) from e
     
-    # Create service instance
+    # Create service instances
     bie_service = BusinessInformationEntityService(requester=app_user)
+    cc_service = CoreComponentService()
     
     try:
-        # Calculate path from _get_abie_related_components
-        # Get the ABIE to find its path
-        from_abie = bie_service.get_abie(from_abie_id)
-        if not from_abie:
-            raise ToolError(f"ABIE with ID {from_abie_id} not found.")
+        # Validate that either from_abie_id or asbiep_id is provided
+        if from_abie_id is None and asbiep_id is None:
+            raise ToolError(
+                "Either from_abie_id or asbiep_id must be provided. "
+                "If asbiep_id is provided, from_abie_id will be automatically fetched from asbiep.role_of_abie_id."
+            )
         
-        # Get relationships and find the matching ASBIE relationship
-        relationships = _get_abie_related_components(
-            from_abie.owner_top_level_asbiep_id, from_abie_id,
-            from_abie.based_acc_manifest_id, from_abie.path
-        )
+        # If both are provided, validate that they match
+        if from_abie_id is not None and asbiep_id is not None:
+            asbiep = bie_service.get_asbiep(asbiep_id)
+            if not asbiep:
+                raise ToolError(f"ASBIEP with ID {asbiep_id} not found.")
+            if not asbiep.role_of_abie_id:
+                raise ToolError(
+                    f"ASBIEP with ID {asbiep_id} does not have a role_of_abie_id. "
+                    f"Cannot validate against from_abie_id."
+                )
+            if asbiep.role_of_abie_id != from_abie_id:
+                raise ToolError(
+                    f"Mismatch between from_abie_id ({from_abie_id}) and asbiep.role_of_abie_id ({asbiep.role_of_abie_id}). "
+                    f"The ASBIEP's role_of_abie_id must match the provided from_abie_id."
+                )
+        # If only asbiep_id is provided, fetch from_abie_id from it
+        elif asbiep_id is not None:
+            asbiep = bie_service.get_asbiep(asbiep_id)
+            if not asbiep:
+                raise ToolError(f"ASBIEP with ID {asbiep_id} not found.")
+            if not asbiep.role_of_abie_id:
+                raise ToolError(
+                    f"ASBIEP with ID {asbiep_id} does not have a role_of_abie_id. "
+                    f"Cannot determine the parent ABIE."
+                )
+            from_abie_id = asbiep.role_of_abie_id
+        
+        # Validate that either based_ascc_manifest_id or property_term is provided
+        if based_ascc_manifest_id is None and property_term is None:
+            raise ToolError(
+                "Either based_ascc_manifest_id or property_term must be provided. "
+                "If property_term is provided, the tool will search through the ABIE's relationships "
+                "to find a matching ASCCP by property_term."
+            )
+        
+        # Track if we already fetched relationships (for optimization)
+        relationships_fetched = False
+        from_abie = None
+        relationships = None
+        
+        # If property_term is provided and based_ascc_manifest_id is None, search for it in relationships
+        if based_ascc_manifest_id is None and property_term is not None:
+            # Get the ABIE to find its relationships
+            from_abie = bie_service.get_abie(from_abie_id)
+            if not from_abie:
+                raise ToolError(f"ABIE with ID {from_abie_id} not found.")
+            
+            # Get relationships
+            relationships = _get_abie_related_components(
+                from_abie.owner_top_level_asbiep_id, from_abie_id,
+                from_abie.based_acc_manifest_id, from_abie.path
+            )
+            relationships_fetched = True
+            
+            # Search for matching relationship by property_term
+            matched_rel = None
+            for rel in relationships:
+                if isinstance(rel, AsbieRelationshipInfo):
+                    # Get ASCCP manifest to check property_term
+                    try:
+                        asccp_manifest = cc_service.get_asccp_by_manifest_id(rel.based_ascc.to_asccp_manifest_id)
+                        if asccp_manifest and asccp_manifest.asccp.property_term == property_term:
+                            matched_rel = rel
+                            break
+                    except HTTPException:
+                        # Skip if ASCCP not found, continue searching
+                        continue
+            
+            if not matched_rel:
+                raise ToolError(
+                    f"Could not find ASBIE relationship with property_term '{property_term}' in the ABIE relationships. "
+                    f"Please check the property_term or use based_ascc_manifest_id directly."
+                )
+            
+            # Extract based_ascc_manifest_id from the matched relationship
+            based_ascc_manifest_id = matched_rel.based_ascc.ascc_manifest_id
+        
+        # Validate that the ASCC does not point to a group ACC
+        # Get ASCC manifest with full relationships loaded
+        try:
+            ascc_manifest = cc_service.get_ascc_manifest(based_ascc_manifest_id)
+        except HTTPException as e:
+            if e.status_code == 404:
+                raise ToolError(f"ASCC manifest with ID {based_ascc_manifest_id} not found.") from e
+            raise ToolError(f"Error retrieving ASCC manifest: {e.detail}") from e
+        
+        # Get the ASCCP manifest and its role_of_acc_manifest
+        asccp_manifest = ascc_manifest.to_asccp_manifest
+        if not asccp_manifest:
+            raise ToolError(
+                f"The ASCC manifest (ID {based_ascc_manifest_id}) is missing its associated ASCCP manifest. "
+                f"This appears to be a data integrity issue."
+            )
+        
+        # Get role_of_acc_manifest with ACC loaded
+        try:
+            role_of_acc_manifest = cc_service.get_acc_by_manifest_id(asccp_manifest.role_of_acc_manifest_id)
+        except HTTPException as e:
+            if e.status_code == 404:
+                raise ToolError(
+                    f"Could not find the role_of_acc_manifest (ID {asccp_manifest.role_of_acc_manifest_id}) "
+                    f"for ASCCP manifest (ID {asccp_manifest.asccp_manifest_id})."
+                ) from e
+            raise ToolError(f"Error retrieving ACC manifest: {e.detail}") from e
+        
+        if not role_of_acc_manifest or not role_of_acc_manifest.acc:
+            raise ToolError(
+                f"Could not find the ACC for role_of_acc_manifest (ID {asccp_manifest.role_of_acc_manifest_id})."
+            )
+        
+        # Validate that the ACC is not a group type (SemanticGroup or UserExtensionGroup)
+        if role_of_acc_manifest.acc.oagis_component_type in [3, 4]:  # 3 = SEMANTIC_GROUP, 4 = USER_EXTENSION_GROUP
+            group_type_name = "SemanticGroup" if role_of_acc_manifest.acc.oagis_component_type == 3 else "UserExtensionGroup"
+            raise ToolError(
+                f"Cannot create ASBIE from ASCC manifest ID {based_ascc_manifest_id} because it points to a {group_type_name} ACC "
+                f"(component_type={role_of_acc_manifest.acc.oagis_component_type}). "
+                f"Group types (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions "
+                f"and cannot be created directly. "
+                f"Please use the exact ascc_manifest_id obtained from get_top_level_asbiep() or get_asbie_by_*() tools, "
+                f"which automatically skip groups and show only non-group relationships in the BIE structure."
+            )
+        
+        # Calculate path from _get_abie_related_components
+        # Get the ABIE to find its path (if not already fetched during property_term lookup)
+        if not relationships_fetched:
+            from_abie = bie_service.get_abie(from_abie_id)
+            if not from_abie:
+                raise ToolError(f"ABIE with ID {from_abie_id} not found.")
+        
+        # Get relationships and find the matching ASBIE relationship (if not already fetched during property_term lookup)
+        if not relationships_fetched:
+            relationships = _get_abie_related_components(
+                from_abie.owner_top_level_asbiep_id, from_abie_id,
+                from_abie.based_acc_manifest_id, from_abie.path
+            )
         
         # Find the matching ASBIE relationship by ascc_manifest_id
         asbie_path = None
@@ -5296,7 +5326,9 @@ async def create_asbie(
         if not asbie_path:
             raise ToolError(
                 f"Could not find ASBIE relationship for ASCC manifest ID {based_ascc_manifest_id} in the ABIE relationships. "
-                f"This may indicate that the ASCC is not a valid relationship for this ABIE."
+                f"This may indicate that the ASCC is not a valid relationship for this ABIE. "
+                f"Please use the exact ascc_manifest_id obtained from get_top_level_asbiep() or get_asbie_by_*() tools, "
+                f"which show the actual BIE structure with groups automatically skipped."
             )
         
         # Call the service method to create the ASBIE
@@ -5351,7 +5383,7 @@ async def create_asbie(
         )
     
     except HTTPException as e:
-        logger.error(f"HTTP error creating ASBIE: {e}")
+        logger.error(f"HTTP error creating ASBIE", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -5363,9 +5395,242 @@ async def create_asbie(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error creating ASBIE: {e}")
+        logger.error(f"Unexpected error creating ASBIE", e)
         raise ToolError(
             f"An unexpected error occurred while creating the ASBIE: {str(e)}. Please contact your system administrator."
+        ) from e
+
+
+@mcp.tool(
+    name="reuse_top_level_asbiep",
+    description="Reuse an existing Top-Level ASBIEP (Association Business Information Entity Property) for an ASBIE (Association Business Information Entity). This tool sets the ASBIE's to_asbiep_id to point to the ASBIEP from the specified top-level ASBIEP. This works when the owner_top_level_asbiep_id of the ASBIE and the reuse_top_level_asbiep_id are different, and when the ASBIE's based_ascc.to_asccp_manifest_id matches the reuse_top_level_asbiep's asbiep.based_asccp_manifest_id.",
+    output_schema={
+        "type": "object",
+        "description": "Response containing the updated ASBIE information after reusing the top-level ASBIEP",
+        "properties": {
+            "asbie_id": {"type": "integer", "description": "Unique identifier of the ASBIE that was updated", "example": 12345},
+            "updates": {"type": "array", "items": {"type": "string"},
+                        "description": "A list of field names that were updated on the ASBIE itself (e.g., ['to_asbiep_id'])", "example": ["to_asbiep_id"]},
+            "asbiep": {"type": ["object", "null"], "description": "Nested structure showing ASBIEP and all updated relationships with their updates", "properties": {
+                "asbiep_id": {"type": "integer", "description": "Unique identifier of the ASBIEP"},
+                "updates": {"type": "array", "items": {"type": "string"}, "description": "List of fields updated on the ASBIEP (typically empty)"},
+                "role_of_abie": {"type": ["object", "null"], "description": "The ABIE that this ASBIEP points to, with its relationships", "properties": {
+                    "abie_id": {"type": "integer", "description": "Unique identifier of the ABIE"},
+                    "updates": {"type": "array", "items": {"type": "string"}, "description": "List of fields updated on the ABIE (typically empty)"},
+                    "relationships": {"type": "array", "description": "List of relationships (ASBIEs and BBIEs) with their updates", "items": {
+                        "type": "object",
+                        "description": "A relationship that can be either an ASBIE or BBIE",
+                        "properties": {
+                            "asbie": {"type": ["object", "null"], "description": "ASBIE relationship with updates"},
+                            "bbie": {"type": ["object", "null"], "description": "BBIE relationship with updates"}
+                        }
+                    }}
+                }}
+            }}
+        },
+        "required": ["asbie_id", "updates"]
+    }
+)
+async def reuse_top_level_asbiep(
+        asbie_id: Annotated[int, Field(
+            description="The ASBIE ID to update with the reused top-level ASBIEP.",
+            gt=0)],
+        reuse_top_level_asbiep_id: Annotated[int, Field(
+            description="The top-level ASBIEP ID to reuse. The ASBIEP from this top-level ASBIEP will be set as the ASBIE's to_asbiep_id.",
+            gt=0)]
+) -> UpdateAsbieResponse:
+    """
+    Reuse an existing Top-Level ASBIEP (Association Business Information Entity Property) for an ASBIE.
+    
+    This tool allows reusing an existing top-level ASBIEP's ASBIEP for an ASBIE by setting the ASBIE's 
+    to_asbiep_id to point to the ASBIEP from the specified top-level ASBIEP.
+    
+    The operation works when:
+    1. The owner_top_level_asbiep_id of the ASBIE (linked by asbie_id) and reuse_top_level_asbiep_id are different
+    2. The ASBIE's based_ascc.to_asccp_manifest_id equals the reuse_top_level_asbiep's asbiep.based_asccp_manifest_id
+       (In other words: ASBIE's to_asbiep.based_asccp_manifest_id = REUSE_TOP_LEVEL_ASBIEP.ASBIEP.based_asccp_manifest_id)
+    
+    This tool should be used combined with 'create_asbie'. When called, it sets ASBIE.to_asbiep_id = reuse_top_level_asbiep.asbiep_id.
+    
+    Permission Requirements:
+    - The current user must be the owner of the top-level ASBIEP that owns the ASBIE
+    - The top-level ASBIEP state must be 'WIP' (Work In Progress)
+    
+    Args:
+        asbie_id (int): The ASBIE ID to update with the reused top-level ASBIEP
+        reuse_top_level_asbiep_id (int): The top-level ASBIEP ID to reuse
+    
+    Returns:
+        UpdateAsbieResponse: Response object containing:
+            - asbie_id: ID of the updated ASBIE
+            - updates: List of updated fields (e.g., ['to_asbiep_id'])
+            - asbiep: Nested structure showing ASBIEP and all updated relationships (None if not applicable)
+    
+    Raises:
+        ToolError: If validation fails, resources are not found, user lacks permission,
+            the owner_top_level_asbiep_ids are the same, the based_asccp_manifest_ids don't match,
+            or database errors occur.
+    
+    Examples:
+        Reuse a top-level ASBIEP for an ASBIE:
+        >>> result = reuse_top_level_asbiep(asbie_id=123, reuse_top_level_asbiep_id=67890)
+        >>> print(f"Updated ASBIE ID: {result.asbie_id}")
+        >>> print(f"Updates: {result.updates}")
+    """
+    # Validate authentication and database connection
+    app_user, engine = _validate_auth_and_db()
+    
+    # Validate input parameters
+    if asbie_id <= 0:
+        raise ToolError("asbie_id must be a positive integer.")
+    if reuse_top_level_asbiep_id <= 0:
+        raise ToolError("reuse_top_level_asbiep_id must be a positive integer.")
+    
+    # Create service instance
+    bie_service = BusinessInformationEntityService(requester=app_user)
+    
+    try:
+        # Call the service method to reuse the top-level ASBIEP
+        # The service method handles all validation, ownership checks, and database updates
+        asbie_id_result, reuse_asbiep_id, updates = bie_service.reuse_top_level_asbiep(
+            asbie_id=asbie_id,
+            reuse_top_level_asbiep_id=reuse_top_level_asbiep_id
+        )
+        
+        return UpdateAsbieResponse(
+            asbie_id=asbie_id_result,
+            updates=updates,
+            asbiep=None  # No nested structure needed for this operation
+        )
+    
+    except HTTPException as e:
+        logger.error(f"HTTP error reusing top-level ASBIEP", e)
+        if e.status_code == 400:
+            raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
+        elif e.status_code == 403:
+            raise ToolError(f"Access denied: {e.detail}") from e
+        elif e.status_code == 404:
+            raise ToolError(f"Resource not found: {e.detail}") from e
+        elif e.status_code == 500:
+            raise ToolError(f"Database error: {e.detail}. Please try again later or contact your system administrator.") from e
+        else:
+            raise ToolError(f"Unexpected error: {e.detail}") from e
+    except ToolError:
+        raise  # Re-raise ToolError as-is
+    except Exception as e:
+        logger.error(f"Unexpected error reusing top-level ASBIEP", e)
+        raise ToolError(
+            f"An unexpected error occurred while reusing the top-level ASBIEP: {str(e)}. Please contact your system administrator."
+        ) from e
+
+
+@mcp.tool(
+    name="remove_reused_top_level_asbiep",
+    description="Remove a reused top-level ASBIEP by creating a new ASBIEP and ABIE. This tool checks if the ASBIE is using a reused top-level ASBIEP (i.e., asbie.owner_top_level_asbiep_id != asbie.to_asbiep.owner_top_level_asbiep_id). If it is reused, it creates a new ASBIEP and ABIE to revert the to_asbiep_id back to a non-reused state.",
+    output_schema={
+        "type": "object",
+        "description": "Response containing the updated ASBIE information after removing the reused top-level ASBIEP",
+        "properties": {
+            "asbie_id": {"type": "integer", "description": "Unique identifier of the ASBIE that was updated", "example": 12345},
+            "updates": {"type": "array", "items": {"type": "string"},
+                        "description": "A list of field names that were updated on the ASBIE itself (e.g., ['to_asbiep_id'])", "example": ["to_asbiep_id"]},
+            "asbiep": {"type": ["object", "null"], "description": "Nested structure showing ASBIEP and all updated relationships with their updates", "properties": {
+                "asbiep_id": {"type": "integer", "description": "Unique identifier of the ASBIEP"},
+                "updates": {"type": "array", "items": {"type": "string"}, "description": "List of fields updated on the ASBIEP (typically empty)"},
+                "role_of_abie": {"type": ["object", "null"], "description": "The ABIE that this ASBIEP points to, with its relationships", "properties": {
+                    "abie_id": {"type": "integer", "description": "Unique identifier of the ABIE"},
+                    "updates": {"type": "array", "items": {"type": "string"}, "description": "List of fields updated on the ABIE (typically empty)"},
+                    "relationships": {"type": "array", "description": "List of relationships (ASBIEs and BBIEs) with their updates", "items": {
+                        "type": "object",
+                        "description": "A relationship that can be either an ASBIE or BBIE",
+                        "properties": {
+                            "asbie": {"type": ["object", "null"], "description": "ASBIE relationship with updates"},
+                            "bbie": {"type": ["object", "null"], "description": "BBIE relationship with updates"}
+                        }
+                    }}
+                }}
+            }}
+        },
+        "required": ["asbie_id", "updates"]
+    }
+)
+async def remove_reused_top_level_asbiep(
+        asbie_id: Annotated[int, Field(
+            description="The ASBIE ID to remove the reused top-level ASBIEP from.",
+            gt=0)]
+) -> UpdateAsbieResponse:
+    """
+    Remove a reused top-level ASBIEP by creating a new ASBIEP and ABIE.
+    
+    This tool checks if the ASBIE is using a reused top-level ASBIEP (i.e., 
+    asbie.owner_top_level_asbiep_id != asbie.to_asbiep.owner_top_level_asbiep_id).
+    If it is reused, it creates a new ASBIEP and ABIE to revert the to_asbiep_id
+    back to a non-reused state.
+    
+    Permission Requirements:
+    - The current user must be the owner of the top-level ASBIEP that owns the ASBIE
+    - The top-level ASBIEP state must be 'WIP' (Work In Progress)
+    
+    Args:
+        asbie_id (int): The ASBIE ID to remove the reused top-level ASBIEP from
+    
+    Returns:
+        UpdateAsbieResponse: Response object containing:
+            - asbie_id: ID of the updated ASBIE
+            - updates: List of updated fields (e.g., ['to_asbiep_id'])
+            - asbiep: Nested structure showing ASBIEP and all updated relationships (None if not applicable)
+    
+    Raises:
+        ToolError: If validation fails, resources are not found, user lacks permission,
+            the ASBIE is not using a reused top-level ASBIEP, or database errors occur.
+    
+    Examples:
+        Remove a reused top-level ASBIEP from an ASBIE:
+        >>> result = remove_reused_top_level_asbiep(asbie_id=123)
+        >>> print(f"Updated ASBIE ID: {result.asbie_id}")
+        >>> print(f"Updates: {result.updates}")
+    """
+    # Validate authentication and database connection
+    app_user, _ = _validate_auth_and_db()
+    
+    # Validate input parameters
+    if asbie_id <= 0:
+        raise ToolError("asbie_id must be a positive integer.")
+    
+    # Create service instance
+    bie_service = BusinessInformationEntityService(requester=app_user)
+    
+    try:
+        # Call the service method to remove the reused top-level ASBIEP
+        # The service method handles all validation, ownership checks, and database updates
+        asbie_id_result, updates = bie_service.remove_reused_top_level_asbiep(
+            asbie_id=asbie_id
+        )
+        
+        return UpdateAsbieResponse(
+            asbie_id=asbie_id_result,
+            updates=updates,
+            asbiep=None  # No nested structure needed for this operation
+        )
+    
+    except HTTPException as e:
+        logger.error(f"HTTP error removing reused top-level ASBIEP", e)
+        if e.status_code == 400:
+            raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
+        elif e.status_code == 403:
+            raise ToolError(f"Access denied: {e.detail}") from e
+        elif e.status_code == 404:
+            raise ToolError(f"Resource not found: {e.detail}") from e
+        elif e.status_code == 500:
+            raise ToolError(f"Database error: {e.detail}. Please try again later or contact your system administrator.") from e
+        else:
+            raise ToolError(f"Unexpected error: {e.detail}") from e
+    except ToolError:
+        raise  # Re-raise ToolError as-is
+    except Exception as e:
+        logger.error(f"Unexpected error removing reused top-level ASBIEP", e)
+        raise ToolError(
+            f"An unexpected error occurred while removing the reused top-level ASBIEP: {str(e)}. Please contact your system administrator."
         ) from e
 
 
@@ -5393,7 +5658,6 @@ async def create_asbie(
                                 "asbie_id": {"type": "integer"},
                                 "updates": {"type": "array", "items": {"type": "string"}, "description": "List of fields updated on this ASBIE (e.g., ['is_used'])"},
                                 "guid": {"type": ["string", "null"]},
-                                "path": {"type": "string"},
                                 "cardinality_min": {"type": "integer"},
                                 "cardinality_max": {"type": "integer"},
                                 "based_ascc": {"type": "object"},
@@ -5403,7 +5667,6 @@ async def create_asbie(
                                 "bbie_id": {"type": "integer"},
                                 "updates": {"type": "array", "items": {"type": "string"}, "description": "List of fields updated on this BBIE (e.g., ['is_used'])"},
                                 "guid": {"type": ["string", "null"]},
-                                "path": {"type": "string"},
                                 "cardinality_min": {"type": "integer"},
                                 "cardinality_max": {"type": "integer"},
                                 "is_nillable": {"type": "boolean"},
@@ -5419,46 +5682,37 @@ async def create_asbie(
 )
 async def update_asbie(
         asbie_id: Annotated[int, Field(
-            description="The ASBIE ID to update.",
-            examples=[12345, 67890],
             gt=0,
-            title="ASBIE ID"
+            description="The ASBIE ID to update."
         )],
         is_used: Annotated[bool | str | None, Field(
-            description="Toggle enable/disable (use/unuse) this ASBIE during BIE profiling. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. Set to True/1/'true'/'True' to enable/use the ASBIE (profiled and active), or False/0/'false'/'False' to disable/unuse it (not used in the BIE). This is used to toggle the component's usage during profiling. If not provided, is_used will not be updated.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Used (Enable/Disable Toggle)"
-        )] = None,
+            default=None,
+            description="Toggle enable/disable (use/unuse) this ASBIE during BIE profiling. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. Set to True/1/'true'/'True' to enable/use the ASBIE (profiled and active), or False/0/'false'/'False' to disable/unuse it (not used in the BIE). This is used to toggle the component's usage during profiling. If not provided, is_used will not be updated."
+        )],
         is_deprecated: Annotated[bool | str | None, Field(
-            description="Whether the ASBIE is deprecated. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, is_deprecated will not be updated.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Deprecated"
-        )] = None,
+            default=None,
+            description="Whether the ASBIE is deprecated. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, is_deprecated will not be updated."
+        )],
         is_nillable: Annotated[bool | str | None, Field(
-            description="Whether the ASBIE can have a nil/null value. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, is_nillable will not be updated.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Nillable"
-        )] = None,
+            default=None,
+            description="Whether the ASBIE can have a nil/null value. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, is_nillable will not be updated."
+        )],
         definition: Annotated[str | None, Field(
-            description="Definition to override the ASCC definition. If not provided, definition will not be updated.",
-            examples=["Custom definition for this ASBIE"],
-            title="Definition"
-        )] = None,
+            default=None,
+            description="Definition to override the ASCC definition. If not provided, definition will not be updated."
+        )],
         cardinality_min: Annotated[int | str | None, Field(
-            description="Minimum cardinality (minimum number of occurrences required, typically 0 or 1). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_min will not be updated.",
-            examples=[0, 1, "0", "1"],
-            title="Cardinality Min"
-        )] = None,
+            default=None,
+            description="Minimum cardinality (minimum number of occurrences required, typically 0 or 1). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_min will not be updated."
+        )],
         cardinality_max: Annotated[int | str | None, Field(
-            description="Maximum cardinality (maximum number of occurrences allowed, -1 means unbounded). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_max will not be updated.",
-            examples=[1, -1, "1", "-1"],
-            title="Cardinality Max"
-        )] = None,
+            default=None,
+            description="Maximum cardinality (maximum number of occurrences allowed, -1 means unbounded). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_max will not be updated."
+        )],
         remark: Annotated[str | None, Field(
-            description="Additional remarks or notes about the ASBIEP. If not provided, remark will not be updated.",
-            examples=["Used for purchase orders"],
-            title="Remark"
-        )] = None
+            default=None,
+            description="Additional remarks or notes about the ASBIEP. If not provided, remark will not be updated."
+        )]
 ) -> UpdateAsbieResponse:
     """
     Update an existing ASBIE (Association Business Information Entity) during BIE profiling.
@@ -5719,7 +5973,7 @@ async def update_asbie(
         )
     
     except HTTPException as e:
-        logger.error(f"HTTP error updating ASBIE: {e}")
+        logger.error(f"HTTP error updating ASBIE", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -5731,7 +5985,7 @@ async def update_asbie(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error updating ASBIE: {e}")
+        logger.error(f"Unexpected error updating ASBIE", e)
         raise ToolError(
             f"An unexpected error occurred while updating the ASBIE: {str(e)}. Please contact your system administrator."
         ) from e
@@ -5739,7 +5993,7 @@ async def update_asbie(
 
 @mcp.tool(
     name="create_bbie",
-    description="Enable (use) a BBIE (Basic Business Information Entity) during BIE profiling. Creates a new BBIE with associated BBIEP record, enabling the component in the BIE. The BBIE is automatically enabled (is_used=True) and profiled. After creation, this tool automatically processes mandatory BBIE SCs (supplementary components with cardinality_min >= 1), creating or enabling required BBIE_SC components to satisfy cardinality constraints.",
+    description="Enable (use) a BBIE (Basic Business Information Entity) during BIE profiling. Creates a new BBIE with associated BBIEP record, enabling the component in the BIE. The BBIE is automatically enabled (is_used=True) and profiled. Either from_abie_id or asbiep_id must be provided. If both are provided, the tool will validate that asbiep.role_of_abie_id == from_abie_id. If only asbiep_id is provided, from_abie_id will be automatically fetched from asbiep.role_of_abie_id. Either based_bcc_manifest_id or property_term must be provided. If property_term is provided, the tool will search through the ABIE's relationships to find a matching BCCP by property_term. After creation, this tool automatically processes mandatory BBIE SCs (supplementary components with cardinality_min >= 1), creating or enabling required BBIE_SC components to satisfy cardinality constraints.",
     output_schema={
         "type": "object",
         "description": "Response containing the newly created and enabled BBIE information. The BBIE is automatically enabled (is_used=True) for BIE profiling. All mandatory BBIE SCs (supplementary components with cardinality_min >= 1) are automatically created or enabled. The 'bbiep' field contains simplified BBIEP information including all created/enabled supplementary components.",
@@ -5749,16 +6003,12 @@ async def update_asbie(
                 "bbiep_id": {"type": ["integer", "null"], "description": "Unique identifier of the BBIEP", "example": 12346},
                 "guid": {"type": ["string", "null"], "description": "Globally unique identifier of the BBIEP", "example": "a1b2c3d4e5f6789012345678901234ab"},
                 "based_bccp": {"type": "object", "description": "Information about the BCCP that this BBIEP is based on"},
-                "path": {"type": "string", "description": "Hierarchical path string", "example": "/PurchaseOrder/Amount>BCCP-123"},
-                "hash_path": {"type": "string", "description": "Hashed version of the path"},
-                "supplementary_components": {"type": "array", "description": "List of supplementary components. Each component contains 'bbie_sc_id' (if created), 'based_dt_sc.dt_sc_manifest_id', path, hash_path, and cardinality information. Excludes definition, remark, default_value, fixed_value, and facet fields.", "items": {
+                "supplementary_components": {"type": "array", "description": "List of supplementary components. Each component contains 'bbie_sc_id' (if created), 'based_dt_sc.dt_sc_manifest_id', and cardinality information. Excludes definition, remark, default_value, fixed_value, and facet fields.", "items": {
                     "type": "object",
                     "properties": {
                         "bbie_sc_id": {"type": ["integer", "null"], "description": "Unique identifier for the BBIE SC (if created)", "example": 12351},
                         "guid": {"type": ["string", "null"], "description": "Globally unique identifier for the BBIE SC"},
                         "based_dt_sc": {"type": "object", "description": "Data type supplementary component information"},
-                        "path": {"type": "string", "description": "Hierarchical path string"},
-                        "hash_path": {"type": "string", "description": "Hashed version of the path"},
                         "cardinality_min": {"type": "integer", "description": "Minimum cardinality", "example": 0},
                         "cardinality_max": {"type": "integer", "description": "Maximum cardinality", "example": 1}
                     }
@@ -5769,17 +6019,21 @@ async def update_asbie(
     }
 )
 async def create_bbie(
-        from_abie_id: Annotated[int, Field(
-            description="The ABIE ID that this BBIE originates from (parent ABIE).",
-            examples=[123, 456, 789],
-            gt=0,
-            title="From ABIE ID"
+        from_abie_id: Annotated[int | str | None, Field(
+            default=None,
+            description="The ABIE ID that this BBIE originates from (parent ABIE). Either from_abie_id or asbiep_id must be provided. If both are provided, the tool will validate that asbiep.role_of_abie_id == from_abie_id. Accepts int, str, or None. String values are automatically converted to integers."
         )],
-        based_bcc_manifest_id: Annotated[int, Field(
-            description="The BCC manifest ID that this BBIE is based on.",
-            examples=[12345, 67890],
-            gt=0,
-            title="Based BCC Manifest ID"
+        asbiep_id: Annotated[int | str | None, Field(
+            default=None,
+            description="The ASBIEP ID to use for determining the parent ABIE. Either from_abie_id or asbiep_id must be provided. If both are provided, the tool will validate that asbiep.role_of_abie_id == from_abie_id. If only asbiep_id is provided, from_abie_id will be automatically fetched from asbiep.role_of_abie_id. Accepts int, str, or None. String values are automatically converted to integers."
+        )],
+        based_bcc_manifest_id: Annotated[int | str | None, Field(
+            default=None,
+            description="The BCC manifest ID that this BBIE is based on. Accepts int, str, or None. String values are automatically converted to integers. If not provided, property_term must be provided instead."
+        )],
+        property_term: Annotated[str | None, Field(
+            default=None,
+            description="The property term of the BCCP to search for in the relationships. If provided and based_bcc_manifest_id is None, this tool will search through the ABIE's relationships to find a matching BCCP by property_term and extract the based_bcc_manifest_id from it."
         )]
 ) -> CreateBbieResponse:
     """
@@ -5787,7 +6041,6 @@ async def create_bbie(
     
     This tool is used to enable (use) a BBIE component during BIE profiling. It creates a new BBIE 
     with associated BBIEP record and automatically enables it (is_used=True) for use in the BIE.
-    The path and hash_path columns are automatically calculated for all created records.
     
     After creating the BBIE, this tool automatically processes mandatory BBIE SCs (supplementary 
     components with cardinality_min >= 1). For each mandatory BBIE SC, the tool:
@@ -5808,8 +6061,21 @@ async def create_bbie(
     - The top-level ASBIEP state must be 'WIP' (Work In Progress)
     
     Args:
-        from_abie_id (int): The ABIE ID that this BBIE originates from (parent ABIE)
-        based_bcc_manifest_id (int): The BCC manifest ID that this BBIE is based on
+        from_abie_id (int | str | None): The ABIE ID that this BBIE originates from (parent ABIE).
+            Either from_abie_id or asbiep_id must be provided. If both are provided, the tool will
+            validate that asbiep.role_of_abie_id == from_abie_id. Accepts int, str, or None.
+            String values are automatically converted to integers.
+        asbiep_id (int | str | None): The ASBIEP ID to use for determining the parent ABIE.
+            Either from_abie_id or asbiep_id must be provided. If both are provided, the tool will
+            validate that asbiep.role_of_abie_id == from_abie_id. If only asbiep_id is provided,
+            from_abie_id will be automatically fetched from asbiep.role_of_abie_id. Accepts int, str, or None.
+            String values are automatically converted to integers.
+        based_bcc_manifest_id (int | str | None): The BCC manifest ID that this BBIE is based on.
+            Accepts int, str, or None. String values are automatically converted to integers.
+            If not provided, property_term must be provided instead.
+        property_term (str | None): The property term of the BCCP to search for in the relationships.
+            If provided and based_bcc_manifest_id is None, this tool will search through the ABIE's relationships
+            to find a matching BCCP by property_term and extract the based_bcc_manifest_id from it.
     
     Returns:
         CreateBbieResponse: Response object containing:
@@ -5827,28 +6093,137 @@ async def create_bbie(
             or database errors occur.
     
     Examples:
-        Enable a BBIE during BIE profiling (mandatory BBIE SCs are automatically created/enabled):
+        Enable a BBIE during BIE profiling using based_bcc_manifest_id (mandatory BBIE SCs are automatically created/enabled):
         >>> result = create_bbie(from_abie_id=123, based_bcc_manifest_id=456)
+        >>> print(f"Created BBIE ID: {result.bbie_id}")
+        
+        Enable a BBIE using property_term to search for the relationship:
+        >>> result = create_bbie(from_abie_id=123, property_term="Amount")
+        >>> print(f"Created BBIE ID: {result.bbie_id}")
+        
+        Enable a BBIE using asbiep_id to determine the parent ABIE:
+        >>> result = create_bbie(asbiep_id=12346, based_bcc_manifest_id=456)
         >>> print(f"Created BBIE ID: {result.bbie_id}")
     """
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
+
+    # Convert string parameters to their proper types
+    try:
+        from_abie_id = str_to_int(from_abie_id)
+        asbiep_id = str_to_int(asbiep_id)
+        based_bcc_manifest_id = str_to_int(based_bcc_manifest_id)
+    except ToolError:
+        raise  # Re-raise ToolError as-is
+    except Exception as e:
+        raise ToolError(
+            f"Type conversion error: {str(e)}. Please check your parameter types and try again."
+        ) from e
     
     # Create service instance
     bie_service = BusinessInformationEntityService(requester=app_user)
+    cc_service = CoreComponentService()
     
     try:
-        # Calculate path from _get_abie_related_components
-        # Get the ABIE to find its path
-        from_abie = bie_service.get_abie(from_abie_id)
-        if not from_abie:
-            raise ToolError(f"ABIE with ID {from_abie_id} not found.")
+        # Validate that either from_abie_id or asbiep_id is provided
+        if from_abie_id is None and asbiep_id is None:
+            raise ToolError(
+                "Either from_abie_id or asbiep_id must be provided. "
+                "If asbiep_id is provided, from_abie_id will be automatically fetched from asbiep.role_of_abie_id."
+            )
         
-        # Get relationships and find the matching BBIE relationship
-        relationships = _get_abie_related_components(
-            from_abie.owner_top_level_asbiep_id, from_abie_id,
-            from_abie.based_acc_manifest_id, from_abie.path
-        )
+        # If both are provided, validate that they match
+        if from_abie_id is not None and asbiep_id is not None:
+            asbiep = bie_service.get_asbiep(asbiep_id)
+            if not asbiep:
+                raise ToolError(f"ASBIEP with ID {asbiep_id} not found.")
+            if not asbiep.role_of_abie_id:
+                raise ToolError(
+                    f"ASBIEP with ID {asbiep_id} does not have a role_of_abie_id. "
+                    f"Cannot validate against from_abie_id."
+                )
+            if asbiep.role_of_abie_id != from_abie_id:
+                raise ToolError(
+                    f"Mismatch between from_abie_id ({from_abie_id}) and asbiep.role_of_abie_id ({asbiep.role_of_abie_id}). "
+                    f"The ASBIEP's role_of_abie_id must match the provided from_abie_id."
+                )
+        # If only asbiep_id is provided, fetch from_abie_id from it
+        elif asbiep_id is not None:
+            asbiep = bie_service.get_asbiep(asbiep_id)
+            if not asbiep:
+                raise ToolError(f"ASBIEP with ID {asbiep_id} not found.")
+            if not asbiep.role_of_abie_id:
+                raise ToolError(
+                    f"ASBIEP with ID {asbiep_id} does not have a role_of_abie_id. "
+                    f"Cannot determine the parent ABIE."
+                )
+            from_abie_id = asbiep.role_of_abie_id
+        
+        # Validate that either based_bcc_manifest_id or property_term is provided
+        if based_bcc_manifest_id is None and property_term is None:
+            raise ToolError(
+                "Either based_bcc_manifest_id or property_term must be provided. "
+                "If property_term is provided, the tool will search through the ABIE's relationships "
+                "to find a matching BCCP by property_term."
+            )
+        
+        # Track if we already fetched relationships (for optimization)
+        relationships_fetched = False
+        from_abie = None
+        relationships = None
+        
+        # If property_term is provided and based_bcc_manifest_id is None, search for it in relationships
+        if based_bcc_manifest_id is None and property_term is not None:
+            # Get the ABIE to find its relationships
+            from_abie = bie_service.get_abie(from_abie_id)
+            if not from_abie:
+                raise ToolError(f"ABIE with ID {from_abie_id} not found.")
+            
+            # Get relationships
+            relationships = _get_abie_related_components(
+                from_abie.owner_top_level_asbiep_id, from_abie_id,
+                from_abie.based_acc_manifest_id, from_abie.path
+            )
+            relationships_fetched = True
+            
+            # Search for matching relationship by property_term
+            matched_rel = None
+            for rel in relationships:
+                if isinstance(rel, BbieRelationshipInfo):
+                    # Get BCCP manifest to check property_term
+                    try:
+                        bcc_manifest = cc_service.get_bcc_manifest(rel.based_bcc.bcc_manifest_id)
+                        if bcc_manifest and bcc_manifest.to_bccp_manifest:
+                            bccp_manifest = bcc_manifest.to_bccp_manifest
+                            if bccp_manifest.bccp.property_term == property_term:
+                                matched_rel = rel
+                                break
+                    except HTTPException:
+                        # Skip if BCC/BCCP not found, continue searching
+                        continue
+            
+            if not matched_rel:
+                raise ToolError(
+                    f"Could not find BBIE relationship with property_term '{property_term}' in the ABIE relationships. "
+                    f"Please check the property_term or use based_bcc_manifest_id directly."
+                )
+            
+            # Extract based_bcc_manifest_id from the matched relationship
+            based_bcc_manifest_id = matched_rel.based_bcc.bcc_manifest_id
+        
+        # Calculate path from _get_abie_related_components
+        # Get the ABIE to find its path (if not already fetched during property_term lookup)
+        if not relationships_fetched:
+            from_abie = bie_service.get_abie(from_abie_id)
+            if not from_abie:
+                raise ToolError(f"ABIE with ID {from_abie_id} not found.")
+        
+        # Get relationships and find the matching BBIE relationship (if not already fetched during property_term lookup)
+        if not relationships_fetched:
+            relationships = _get_abie_related_components(
+                from_abie.owner_top_level_asbiep_id, from_abie_id,
+                from_abie.based_acc_manifest_id, from_abie.path
+            )
         
         # Find the matching BBIE relationship by bcc_manifest_id
         bbie_path = None
@@ -5860,7 +6235,9 @@ async def create_bbie(
         if not bbie_path:
             raise ToolError(
                 f"Could not find BBIE relationship for BCC manifest ID {based_bcc_manifest_id} in the ABIE relationships. "
-                f"This may indicate that the BCC is not a valid relationship for this ABIE."
+                f"This may indicate that the BCC is not a valid relationship for this ABIE. "
+                f"Please use the exact bcc_manifest_id obtained from get_top_level_asbiep() or get_bbie_by_*() tools, "
+                f"which show the actual BIE structure with groups automatically skipped."
             )
         
         # Call the service method to create the BBIE
@@ -5906,7 +6283,7 @@ async def create_bbie(
         )
     
     except HTTPException as e:
-        logger.error(f"HTTP error creating BBIE: {e}")
+        logger.error(f"HTTP error creating BBIE", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -5918,7 +6295,7 @@ async def create_bbie(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error creating BBIE: {e}")
+        logger.error(f"Unexpected error creating BBIE", e)
         raise ToolError(
             f"An unexpected error occurred while creating the BBIE: {str(e)}. Please contact your system administrator."
         ) from e
@@ -5939,8 +6316,6 @@ async def create_bbie(
                 "updates": {"type": "array", "items": {"type": "string"}, "description": "List of fields updated on the BBIEP (typically empty)"},
                 "guid": {"type": ["string", "null"], "description": "Globally unique identifier of the BBIEP"},
                 "based_bccp": {"type": "object", "description": "Information about the BCCP that this BBIEP is based on"},
-                "path": {"type": "string", "description": "Hierarchical path string"},
-                "hash_path": {"type": "string", "description": "Hashed version of the path"},
                 "supplementary_components": {"type": "array", "description": "List of supplementary components with their updates", "items": {
                     "type": "object",
                     "properties": {
@@ -5948,8 +6323,6 @@ async def create_bbie(
                         "updates": {"type": "array", "items": {"type": "string"}, "description": "List of fields updated on this BBIE SC (e.g., ['is_used'])"},
                         "guid": {"type": ["string", "null"], "description": "Globally unique identifier for the BBIE SC"},
                         "based_dt_sc": {"type": "object", "description": "Data type supplementary component information"},
-                        "path": {"type": "string", "description": "Hierarchical path string"},
-                        "hash_path": {"type": "string", "description": "Hashed version of the path"},
                         "cardinality_min": {"type": "integer", "description": "Minimum cardinality"},
                         "cardinality_max": {"type": "integer", "description": "Maximum cardinality"}
                     }
@@ -5961,76 +6334,61 @@ async def create_bbie(
 )
 async def update_bbie(
         bbie_id: Annotated[int, Field(
-            description="The BBIE ID to update.",
-            examples=[12345, 67890],
             gt=0,
-            title="BBIE ID"
+            description="The BBIE ID to update."
         )],
         is_used: Annotated[bool | str | None, Field(
-            description="Toggle enable/disable (use/unuse) this BBIE during BIE profiling. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. Set to True/1/'true'/'True' to enable/use the BBIE (profiled and active), or False/0/'false'/'False' to disable/unuse it (not used in the BIE). This is used to toggle the component's usage during profiling. If not provided, is_used will not be updated.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Used (Enable/Disable Toggle)"
-        )] = None,
+            default=None,
+            description="Toggle enable/disable (use/unuse) this BBIE during BIE profiling. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. Set to True/1/'true'/'True' to enable/use the BBIE (profiled and active), or False/0/'false'/'False' to disable/unuse it (not used in the BIE). This is used to toggle the component's usage during profiling. If not provided, is_used will not be updated."
+        )],
         is_deprecated: Annotated[bool | str | None, Field(
-            description="Whether the BBIE is deprecated. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, is_deprecated will not be updated.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Deprecated"
-        )] = None,
+            default=None,
+            description="Whether the BBIE is deprecated. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, is_deprecated will not be updated."
+        )],
         is_nillable: Annotated[bool | str | None, Field(
-            description="Whether the BBIE can have a nil/null value. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, is_nillable will not be updated.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Nillable"
-        )] = None,
+            default=None,
+            description="Whether the BBIE can have a nil/null value. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, is_nillable will not be updated."
+        )],
         cardinality_min: Annotated[int | str | None, Field(
-            description="Minimum cardinality (minimum number of occurrences required, typically 0 or 1). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_min will not be updated.",
-            examples=[0, 1, "0", "1"],
-            title="Cardinality Min"
-        )] = None,
+            default=None,
+            description="Minimum cardinality (minimum number of occurrences required, typically 0 or 1). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_min will not be updated."
+        )],
         cardinality_max: Annotated[int | str | None, Field(
-            description="Maximum cardinality (maximum number of occurrences allowed, -1 means unbounded). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_max will not be updated.",
-            examples=[1, -1, "1", "-1"],
-            title="Cardinality Max"
-        )] = None,
+            default=None,
+            description="Maximum cardinality (maximum number of occurrences allowed, -1 means unbounded). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_max will not be updated."
+        )],
         definition: Annotated[str | None, Field(
-            description="Definition to override the BCC definition. If not provided, definition will not be updated.",
-            examples=["Custom definition for this BBIE"],
-            title="Definition"
-        )] = None,
+            default=None,
+            description="Definition to override the BCC definition. If not provided, definition will not be updated."
+        )],
         remark: Annotated[str | None, Field(
-            description="Additional remarks or notes about the BBIEP. If not provided, remark will not be updated.",
-            examples=["Used for purchase orders"],
-            title="Remark"
-        )] = None,
+            default=None,
+            description="Additional remarks or notes about the BBIEP. If not provided, remark will not be updated."
+        )],
         example: Annotated[str | None, Field(
-            description="Example about the BBIE. If not provided, example will not be updated.",
-            examples=["Example for this BBIE"],
-            title="Example"
-        )] = None,
+            default=None,
+            description="Example about the BBIE. If not provided, example will not be updated."
+        )],
         default_value: Annotated[str | None, Field(
-            description="Default value for the BBIE (mutually exclusive with fixed_value). Represents the 'default' attribute in XML. If not provided, default_value will not be updated.",
-            examples=["0", "N/A"],
-            title="Default Value"
-        )] = None,
+            default=None,
+            description="Default value for the BBIE (mutually exclusive with fixed_value). Represents the 'default' attribute in XML. If not provided, default_value will not be updated."
+        )],
         fixed_value: Annotated[str | None, Field(
-            description="Fixed value for the BBIE (mutually exclusive with default_value). Represents the 'fixed' attribute in XML. If not provided, fixed_value will not be updated.",
-            examples=["USD", "EN"],
-            title="Fixed Value"
-        )] = None,
+            default=None,
+            description="Fixed value for the BBIE (mutually exclusive with default_value). Represents the 'fixed' attribute in XML. If not provided, fixed_value will not be updated."
+        )],
         facet_min_length: Annotated[int | str | None, Field(
-            description="Minimum length facet for string types (XML facet restriction). Accepts int, str, or None. String values are automatically converted to integers. If not provided, facet_min_length will not be updated.",
-            examples=[1, 10, "1", "10"],
-            title="Facet Min Length"
-        )] = None,
+            default=None,
+            description="Minimum length facet for string types (XML facet restriction). Accepts int, str, or None. String values are automatically converted to integers. If not provided, facet_min_length will not be updated."
+        )],
         facet_max_length: Annotated[int | str | None, Field(
-            description="Maximum length facet for string types (XML facet restriction). Accepts int, str, or None. String values are automatically converted to integers. If not provided, facet_max_length will not be updated.",
-            examples=[50, 255, "50", "255"],
-            title="Facet Max Length"
-        )] = None,
+            default=None,
+            description="Maximum length facet for string types (XML facet restriction). Accepts int, str, or None. String values are automatically converted to integers. If not provided, facet_max_length will not be updated."
+        )],
         facet_pattern: Annotated[str | None, Field(
-            description="Pattern facet (regular expression) for string types (XML facet restriction). If not provided, facet_pattern will not be updated.",
-            examples=[r"[A-Z]{2}", r"\\d{4}-\\d{2}-\\d{2}"],
-            title="Facet Pattern"
-        )] = None
+            default=None,
+            description="Pattern facet (regular expression) for string types (XML facet restriction). If not provided, facet_pattern will not be updated."
+        )]
 ) -> UpdateBbieResponse:
     """
     Update an existing BBIE (Basic Business Information Entity) during BIE profiling.
@@ -6104,12 +6462,12 @@ async def update_bbie(
             - bbiep: Nested structure showing BBIEP and all supplementary components with their updates:
               - bbiep_id: ID of the BBIEP
               - updates: List of fields updated on the BBIEP (typically empty)
-              - guid, based_bccp, path, hash_path: BBIEP properties
+              - guid, based_bccp: BBIEP properties
               - supplementary_components: List of supplementary components, each with:
                 - bbie_sc_id: ID of the BBIE SC
                 - updates: List of fields updated on this BBIE SC (e.g., ['is_used'])
                 - primitiveRestriction: Required field that must not be None. Contains exactly one of xbtManifestId, codeListManifestId, or agencyIdListManifestId.
-                - Other component properties (guid, based_dt_sc, path, hash_path, cardinality, etc.)
+                - Other component properties (guid, based_dt_sc, cardinality, etc.)
               When is_used is set to True, mandatory supplementary components are automatically processed 
               and their updates are tracked. When is_used is set to False, all supplementary components 
               are automatically disabled and their updates are tracked.
@@ -6277,7 +6635,7 @@ async def update_bbie(
         )
     
     except HTTPException as e:
-        logger.error(f"HTTP error updating BBIE: {e}")
+        logger.error(f"HTTP error updating BBIE", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -6289,7 +6647,7 @@ async def update_bbie(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error updating BBIE: {e}")
+        logger.error(f"Unexpected error updating BBIE", e)
         raise ToolError(
             f"An unexpected error occurred while updating the BBIE: {str(e)}. Please contact your system administrator."
         ) from e
@@ -6297,7 +6655,7 @@ async def update_bbie(
 
 @mcp.tool(
     name="create_bbie_sc",
-    description="Enable (use) a BBIE_SC (Basic Business Information Entity Supplementary Component) during BIE profiling. Creates a new BBIE_SC record, enabling the supplementary component in the BIE. The BBIE_SC is automatically enabled (is_used=True) and profiled. The path and hash_path columns are automatically calculated for all created records. Use get_bbie_by_bbie_id() or get_bbie_by_based_bcc_manifest_id() to retrieve available supplementary components, then use the 'based_dt_sc.dt_sc_manifest_id' from the supplementary_components array as the based_dt_sc_manifest_id parameter.",
+    description="Enable (use) a BBIE_SC (Basic Business Information Entity Supplementary Component) during BIE profiling. Creates a new BBIE_SC record, enabling the supplementary component in the BIE. The BBIE_SC is automatically enabled (is_used=True) and profiled. Use get_bbie_by_bbie_id() or get_bbie_by_based_bcc_manifest_id() to retrieve available supplementary components, then use the 'based_dt_sc.dt_sc_manifest_id' from the supplementary_components array as the based_dt_sc_manifest_id parameter.",
     output_schema={
         "type": "object",
         "description": "Response containing the newly created and enabled BBIE_SC information. The BBIE_SC is automatically enabled (is_used=True) for BIE profiling.",
@@ -6312,23 +6670,16 @@ async def update_bbie(
 async def create_bbie_sc(
         bbie_id: Annotated[int, Field(
             description="The BBIE ID that this BBIE_SC belongs to.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="BBIE ID"
-        )],
+            gt=0)],
         based_dt_sc_manifest_id: Annotated[int, Field(
             description="The DT_SC manifest ID that this BBIE_SC is based on. This can be obtained from get_bbie_by_bbie_id() or get_bbie_by_based_bcc_manifest_id() response: use 'to_bbiep.supplementary_components[].based_dt_sc.dt_sc_manifest_id' from the supplementary_components array.",
-            examples=[12345, 67890],
-            gt=0,
-            title="Based DT_SC Manifest ID"
-        )]
+            gt=0)]
 ) -> CreateBbieScResponse:
     """
     Enable (use) a BBIE_SC (Basic Business Information Entity Supplementary Component) during BIE profiling.
     
     This tool is used to enable (use) a BBIE_SC component during BIE profiling. It creates a new BBIE_SC 
     record and automatically enables it (is_used=True) for use in the BIE.
-    The path and hash_path columns are automatically calculated for all created records.
     
     This is the primary tool for enabling/profiling BBIE_SC components. The created BBIE_SC is automatically 
     enabled and ready for use in the BIE. Use update_bbie_sc to toggle enable/disable (use/unuse) or 
@@ -6402,7 +6753,7 @@ async def create_bbie_sc(
         )
     
     except HTTPException as e:
-        logger.error(f"HTTP error creating BBIE_SC: {e}")
+        logger.error(f"HTTP error creating BBIE_SC", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -6414,7 +6765,7 @@ async def create_bbie_sc(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error creating BBIE_SC: {e}")
+        logger.error(f"Unexpected error creating BBIE_SC", e)
         raise ToolError(
             f"An unexpected error occurred while creating the BBIE_SC: {str(e)}. Please contact your system administrator."
         ) from e
@@ -6422,10 +6773,10 @@ async def create_bbie_sc(
 
 @mcp.tool(
     name="update_bbie_sc",
-    description="Update an existing BBIE_SC (Basic Business Information Entity Supplementary Component) during BIE profiling. Can be used to toggle enable/disable (use/unuse) the BBIE_SC, or modify its properties. Set is_used=True/1/'true'/'True' to enable/use or is_used=False/0/'false'/'False' to disable/unuse during profiling. Integer and boolean parameters accept both their native types and string representations (strings are automatically converted). Use get_bbie_by_bbie_id() or get_bbie_by_based_bcc_manifest_id() to retrieve existing supplementary components, then use the 'bbie_sc_id' from the supplementary_components array as the bbie_sc_id parameter.",
+    description="Update an existing BBIE_SC (Basic Business Information Entity Supplementary Component) during BIE profiling. Can be used to toggle enable/disable (use/unuse) the BBIE_SC, or modify its properties. Set is_used=True/1/'true'/'True' to enable/use or is_used=False/0/'false'/'False' to disable/unuse during profiling. Use get_bbie_by_bbie_id() or get_bbie_by_based_bcc_manifest_id() to retrieve existing supplementary components, then use the 'bbie_sc_id' from the supplementary_components array as the bbie_sc_id parameter.",
     output_schema={
         "type": "object",
-        "description": "Response containing the updated BBIE_SC information. The updates list includes 'is_used' when the BBIE_SC is toggled between enabled/disabled (used/unused) during BIE profiling. Integer and boolean parameters accept both their native types and string representations (strings are automatically converted to the appropriate type).",
+        "description": "Response containing the updated BBIE_SC information. The updates list includes 'is_used' when the BBIE_SC is toggled between enabled/disabled (used/unused) during BIE profiling.",
         "properties": {
             "bbie_sc_id": {"type": "integer", "description": "Unique identifier of the updated BBIE_SC", "example": 12345},
             "updates": {"type": "array", "items": {"type": "string"},
@@ -6436,71 +6787,57 @@ async def create_bbie_sc(
 )
 async def update_bbie_sc(
         bbie_sc_id: Annotated[int, Field(
-            description="The BBIE_SC ID to update. This can be obtained from get_bbie_by_bbie_id() or get_bbie_by_based_bcc_manifest_id() response: use 'to_bbiep.supplementary_components[].bbie_sc_id' from the supplementary_components array (only available if the component already exists, i.e., bbie_sc_id is not null).",
-            examples=[12345, 67890],
             gt=0,
-            title="BBIE_SC ID"
+            description="The BBIE_SC ID to update. This can be obtained from get_bbie_by_bbie_id() or get_bbie_by_based_bcc_manifest_id() response: use 'to_bbiep.supplementary_components[].bbie_sc_id' from the supplementary_components array (only available if the component already exists, i.e., bbie_sc_id is not null)."
         )],
         is_used: Annotated[bool | str | None, Field(
-            description="Toggle enable/disable (use/unuse) this BBIE_SC during BIE profiling. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. Set to True/1/'true'/'True' to enable/use the BBIE_SC (profiled and active), or False/0/'false'/'False' to disable/unuse it (not used in the BIE). This is used to toggle the component's usage during profiling. If not provided, is_used will not be updated.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Used (Enable/Disable Toggle)"
-        )] = None,
+            default=None,
+            description="Toggle enable/disable (use/unuse) this BBIE_SC during BIE profiling. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. Set to True/1/'true'/'True' to enable/use the BBIE_SC (profiled and active), or False/0/'false'/'False' to disable/unuse it (not used in the BIE). This is used to toggle the component's usage during profiling. If not provided, is_used will not be updated."
+        )],
         is_deprecated: Annotated[bool | str | None, Field(
-            description="Whether the BBIE_SC is deprecated. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, is_deprecated will not be updated.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Deprecated"
-        )] = None,
+            default=None,
+            description="Whether the BBIE_SC is deprecated. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False. If not provided, is_deprecated will not be updated."
+        )],
         cardinality_min: Annotated[int | str | None, Field(
-            description="Minimum cardinality (minimum number of occurrences required, typically 0 or 1). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_min will not be updated.",
-            examples=[0, 1, "0", "1"],
-            title="Cardinality Min"
-        )] = None,
+            default=None,
+            description="Minimum cardinality (minimum number of occurrences required, typically 0 or 1). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_min will not be updated."
+        )],
         cardinality_max: Annotated[int | str | None, Field(
-            description="Maximum cardinality (maximum number of occurrences allowed, -1 means unbounded). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_max will not be updated.",
-            examples=[1, -1, "1", "-1"],
-            title="Cardinality Max"
-        )] = None,
+            default=None,
+            description="Maximum cardinality (maximum number of occurrences allowed, -1 means unbounded). Accepts int, str, or None. String values are automatically converted to integers. If not provided, cardinality_max will not be updated."
+        )],
         definition: Annotated[str | None, Field(
-            description="Definition to override the DT_SC definition. If not provided, definition will not be updated.",
-            examples=["Custom definition for this BBIE_SC"],
-            title="Definition"
-        )] = None,
+            default=None,
+            description="Definition to override the DT_SC definition. If not provided, definition will not be updated."
+        )],
         remark: Annotated[str | None, Field(
-            description="Additional remarks or notes about the BBIE_SC. If not provided, remark will not be updated.",
-            examples=["Used for purchase orders"],
-            title="Remark"
-        )] = None,
+            default=None,
+            description="Additional remarks or notes about the BBIE_SC. If not provided, remark will not be updated."
+        )],
         example: Annotated[str | None, Field(
-            description="Example about the BBIE_SC. If not provided, example will not be updated.",
-            examples=["Example for this BBIE_SC"],
-            title="Example"
-        )] = None,
+            default=None,
+            description="Example about the BBIE_SC. If not provided, example will not be updated."
+        )],
         default_value: Annotated[str | None, Field(
-            description="Default value for the BBIE_SC (mutually exclusive with fixed_value). Represents the 'default' attribute in XML. If not provided, default_value will not be updated.",
-            examples=["0", "N/A"],
-            title="Default Value"
-        )] = None,
+            default=None,
+            description="Default value for the BBIE_SC (mutually exclusive with fixed_value). Represents the 'default' attribute in XML. If not provided, default_value will not be updated."
+        )],
         fixed_value: Annotated[str | None, Field(
-            description="Fixed value for the BBIE_SC (mutually exclusive with default_value). Represents the 'fixed' attribute in XML. If not provided, fixed_value will not be updated.",
-            examples=["USD", "EN"],
-            title="Fixed Value"
-        )] = None,
+            default=None,
+            description="Fixed value for the BBIE_SC (mutually exclusive with default_value). Represents the 'fixed' attribute in XML. If not provided, fixed_value will not be updated."
+        )],
         facet_min_length: Annotated[int | str | None, Field(
-            description="Minimum length facet for string types (XML facet restriction). Accepts int, str, or None. String values are automatically converted to integers. If not provided, facet_min_length will not be updated.",
-            examples=[1, 10, "1", "10"],
-            title="Facet Min Length"
-        )] = None,
+            default=None,
+            description="Minimum length facet for string types (XML facet restriction). Accepts int, str, or None. String values are automatically converted to integers. If not provided, facet_min_length will not be updated."
+        )],
         facet_max_length: Annotated[int | str | None, Field(
-            description="Maximum length facet for string types (XML facet restriction). Accepts int, str, or None. String values are automatically converted to integers. If not provided, facet_max_length will not be updated.",
-            examples=[50, 255, "50", "255"],
-            title="Facet Max Length"
-        )] = None,
+            default=None,
+            description="Maximum length facet for string types (XML facet restriction). Accepts int, str, or None. String values are automatically converted to integers. If not provided, facet_max_length will not be updated."
+        )],
         facet_pattern: Annotated[str | None, Field(
-            description="Pattern facet (regular expression) for string types (XML facet restriction). If not provided, facet_pattern will not be updated.",
-            examples=[r"[A-Z]{2}", r"\\d{4}-\\d{2}-\\d{2}"],
-            title="Facet Pattern"
-        )] = None
+            default=None,
+            description="Pattern facet (regular expression) for string types (XML facet restriction). If not provided, facet_pattern will not be updated."
+        )]
 ) -> UpdateBbieScResponse:
     """
     Update an existing BBIE_SC (Basic Business Information Entity Supplementary Component) during BIE profiling.
@@ -6638,7 +6975,7 @@ async def update_bbie_sc(
         )
     
     except HTTPException as e:
-        logger.error(f"HTTP error updating BBIE_SC: {e}")
+        logger.error(f"HTTP error updating BBIE_SC", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 403:
@@ -6650,7 +6987,7 @@ async def update_bbie_sc(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error updating BBIE_SC: {e}")
+        logger.error(f"Unexpected error updating BBIE_SC", e)
         raise ToolError(
             f"An unexpected error occurred while updating the BBIE_SC: {str(e)}. Please contact your system administrator."
         ) from e
@@ -6742,7 +7079,7 @@ def _get_business_contexts_info(top_level_asbiep_id: int, bie_service: BusinessI
                 name=biz_ctx.name
             ))
     except Exception as e:
-        logger.warning(f"Failed to retrieve business contexts for TopLevelAsbiep {top_level_asbiep_id}: {e}")
+        logger.warning(f"Failed to retrieve business contexts for TopLevelAsbiep {top_level_asbiep_id}", e)
         # Continue without business contexts rather than failing completely
 
     return business_contexts_info
@@ -7094,7 +7431,7 @@ def _create_bbie_sc_info_from_dt_sc_manifest(dt_sc_manifest, parent_dt_path: str
             )
         except ValueError as e:
             # Validation error - log and re-raise
-            logger.error(f"PrimitiveRestriction validation failed for DT_SC manifest {dt_sc_manifest.dt_sc_manifest_id}: {e}")
+            logger.error(f"PrimitiveRestriction validation failed for DT_SC manifest {dt_sc_manifest.dt_sc_manifest_id}", e)
             raise
         except Exception:
             # If we can't fetch the default primitive restriction, just leave it as None
@@ -7151,7 +7488,7 @@ def _get_supplementary_components(top_level_asbiep_id: int, bbie_id: int | None,
                 if bbie_sc_info:
                     supplementary_components.append(bbie_sc_info)
     except Exception as e:
-        logger.warning(f"Failed to retrieve supplementary components for DT manifest {bdt_manifest_id}: {e}")
+        logger.warning(f"Failed to retrieve supplementary components for DT manifest {bdt_manifest_id}", e)
         # Continue without supplementary components rather than failing completely
 
     if bbie_id is not None:
@@ -7192,7 +7529,7 @@ def _get_supplementary_components(top_level_asbiep_id: int, bbie_id: int | None,
                             agency_id_list_manifest_id=bbie_sc.agency_id_list_manifest_id
                         )
         except Exception as e:
-            logger.warning(f"Failed to retrieve supplementary components for BBIE {bbie_id}: {e}")
+            logger.warning(f"Failed to retrieve supplementary components for BBIE {bbie_id}", e)
             # Continue without supplementary components rather than failing completely
 
     return supplementary_components
@@ -7439,7 +7776,7 @@ def _build_create_role_of_abie_detail(
                         
                         relationship_details.append(CreateRelationshipDetail(asbie=asbie_detail))
                 except Exception as e:
-                    logger.warning(f"Failed to build ASBIE detail for {rel.asbie_id}: {e}")
+                    logger.warning(f"Failed to build ASBIE detail for {rel.asbie_id}", e)
         
         elif isinstance(rel, BbieRelationshipInfo):
             # Only include if it's mandatory and was created/enabled
@@ -7460,7 +7797,7 @@ def _build_create_role_of_abie_detail(
                         )
                         relationship_details.append(CreateRelationshipDetail(bbie=bbie_detail))
                 except Exception as e:
-                    logger.warning(f"Failed to build BBIE detail for {rel.bbie_id}: {e}")
+                    logger.warning(f"Failed to build BBIE detail for {rel.bbie_id}", e)
     
     return CreateRoleOfAbieDetail(
         abie_id=abie_id,
@@ -7542,7 +7879,7 @@ def _build_role_of_abie_detail(
                         
                         relationship_details.append(RelationshipDetail(asbie=asbie_detail))
                 except Exception as e:
-                    logger.warning(f"Failed to build ASBIE detail for {rel.asbie_id}: {e}")
+                    logger.warning(f"Failed to build ASBIE detail for {rel.asbie_id}", e)
         
         elif isinstance(rel, BbieRelationshipInfo):
             # Only include if it's mandatory and was created/enabled
@@ -7564,7 +7901,7 @@ def _build_role_of_abie_detail(
                         )
                         relationship_details.append(RelationshipDetail(bbie=bbie_detail))
                 except Exception as e:
-                    logger.warning(f"Failed to build BBIE detail for {rel.bbie_id}: {e}")
+                    logger.warning(f"Failed to build BBIE detail for {rel.bbie_id}", e)
     
     return RoleOfAbieDetail(
         abie_id=abie_id,
@@ -7641,7 +7978,7 @@ def _process_mandatory_relationships_recursive(
                                     )
                         except Exception as e:
                             # Log error but continue processing other relationships
-                            logger.warning(f"Failed to set is_used=True for ASBIE {rel.asbie_id}: {e}")
+                            logger.warning(f"Failed to set is_used=True for ASBIE {rel.asbie_id}", e)
                 else:
                     # Doesn't exist - create it
                     try:
@@ -7668,7 +8005,7 @@ def _process_mandatory_relationships_recursive(
                                 )
                     except Exception as e:
                         # Log error but continue processing other relationships
-                        logger.warning(f"Failed to create ASBIE for ASCC manifest ID {rel.based_ascc.ascc_manifest_id}: {e}")
+                        logger.warning(f"Failed to create ASBIE for ASCC manifest ID {rel.based_ascc.ascc_manifest_id}", e)
         
         elif isinstance(rel, BbieRelationshipInfo):
             # Check if this is a mandatory relationship
@@ -7698,7 +8035,7 @@ def _process_mandatory_relationships_recursive(
                             )
                         except Exception as e:
                             # Log error but continue processing other relationships
-                            logger.warning(f"Failed to set is_used=True for BBIE {rel.bbie_id}: {e}")
+                            logger.warning(f"Failed to set is_used=True for BBIE {rel.bbie_id}", e)
                     else:
                         logger.debug(f"BBIE {rel.bbie_id} is already enabled (is_used=True)")
                 else:
@@ -7724,7 +8061,7 @@ def _process_mandatory_relationships_recursive(
                         )
                     except Exception as e:
                         # Log error but continue processing other relationships
-                        logger.warning(f"Failed to create BBIE for BCC manifest ID {rel.based_bcc.bcc_manifest_id}: {e}")
+                        logger.warning(f"Failed to create BBIE for BCC manifest ID {rel.based_bcc.bcc_manifest_id}", e)
             else:
                 logger.debug(f"Skipping optional BBIE relationship: bcc_manifest_id={rel.based_bcc.bcc_manifest_id}, "
                            f"den={rel.based_bcc.den}, cardinality_min={rel.cardinality_min}")
@@ -7795,7 +8132,7 @@ def _process_mandatory_bbie_scs(
         for bbie_sc in bbie_sc_list:
             existing_bbie_scs[bbie_sc.based_dt_sc_manifest_id] = bbie_sc
     except Exception as e:
-        logger.warning(f"Failed to retrieve existing BBIE_SC records for BBIE {bbie_id}: {e}")
+        logger.warning(f"Failed to retrieve existing BBIE_SC records for BBIE {bbie_id}", e)
     
     # Process each mandatory supplementary component (cardinality_min >= 1)
     for sc_info in supplementary_components:
@@ -7816,7 +8153,7 @@ def _process_mandatory_bbie_scs(
                             updated_components[f"bbie_sc_{sc_info.bbie_sc_id}"] = sc_updates
                 except Exception as e:
                     # Log error but continue processing other components
-                    logger.warning(f"Failed to set is_used=True for BBIE_SC {sc_info.bbie_sc_id}: {e}")
+                    logger.warning(f"Failed to set is_used=True for BBIE_SC {sc_info.bbie_sc_id}", e)
             else:
                 # Doesn't exist - create it
                 try:
@@ -7835,7 +8172,7 @@ def _process_mandatory_bbie_scs(
                         updated_components[f"bbie_sc_{new_bbie_sc_id}"] = ["is_used"]  # Newly created, so is_used was set
                 except Exception as e:
                     # Log error but continue processing other components
-                    logger.warning(f"Failed to create BBIE_SC for DT_SC manifest ID {sc_info.based_dt_sc.dt_sc_manifest_id}: {e}")
+                    logger.warning(f"Failed to create BBIE_SC for DT_SC manifest ID {sc_info.based_dt_sc.dt_sc_manifest_id}", e)
 
 
 def _disable_all_relationships_for_asbie(
@@ -7907,7 +8244,7 @@ def _disable_all_relationships_for_asbie(
                         updated_components=updated_components
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to disable ASBIE {rel.asbie_id}: {e}")
+                    logger.warning(f"Failed to disable ASBIE {rel.asbie_id}", e)
         
         elif isinstance(rel, BbieRelationshipInfo):
             # Skip mandatory relationships (cardinality_min >= 1)
@@ -7932,7 +8269,7 @@ def _disable_all_relationships_for_asbie(
                         updated_components=updated_components
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to disable BBIE {rel.bbie_id}: {e}")
+                    logger.warning(f"Failed to disable BBIE {rel.bbie_id}", e)
 
 
 def _disable_all_bbie_scs_for_bbie(
@@ -8011,9 +8348,9 @@ def _disable_all_bbie_scs_for_bbie(
                     if updated_components is not None:
                         updated_components[f"bbie_sc_{bbie_sc.bbie_sc_id}"] = sc_updates
                 except Exception as e:
-                    logger.warning(f"Failed to disable BBIE_SC {bbie_sc.bbie_sc_id}: {e}")
+                    logger.warning(f"Failed to disable BBIE_SC {bbie_sc.bbie_sc_id}", e)
     except Exception as e:
-        logger.warning(f"Failed to retrieve BBIE_SC records for BBIE {bbie_id}: {e}")
+        logger.warning(f"Failed to retrieve BBIE_SC records for BBIE {bbie_id}", e)
 
 
 def _build_update_role_of_abie_detail(
@@ -8098,7 +8435,7 @@ def _build_update_role_of_abie_detail(
                         
                         relationship_details.append(UpdateRelationshipDetail(asbie=asbie_detail))
                 except Exception as e:
-                    logger.warning(f"Failed to build ASBIE detail for {rel.asbie_id}: {e}")
+                    logger.warning(f"Failed to build ASBIE detail for {rel.asbie_id}", e)
         
         elif isinstance(rel, BbieRelationshipInfo):
             if rel.bbie_id is not None:
@@ -8124,7 +8461,7 @@ def _build_update_role_of_abie_detail(
                         )
                         relationship_details.append(UpdateRelationshipDetail(bbie=bbie_detail))
                 except Exception as e:
-                    logger.warning(f"Failed to build BBIE detail for {rel.bbie_id}: {e}")
+                    logger.warning(f"Failed to build BBIE detail for {rel.bbie_id}", e)
     
     return UpdateRoleOfAbieDetail(
         abie_id=abie_id,
@@ -8194,7 +8531,7 @@ def _build_update_bbiep_detail(
         for bbie_sc in bbie_sc_list:
             existing_bbie_scs[bbie_sc.based_dt_sc_manifest_id] = bbie_sc
     except Exception as e:
-        logger.warning(f"Failed to retrieve existing BBIE_SC records for BBIE {bbie_id}: {e}")
+        logger.warning(f"Failed to retrieve existing BBIE_SC records for BBIE {bbie_id}", e)
     
     # Build supplementary components list with updates
     sc_details = []
@@ -8397,7 +8734,7 @@ def _get_abie_related_components(top_level_asbiep_id: int, abie_id: int | None, 
                     )
                 except ValueError as e:
                     # Validation error - log and re-raise
-                    logger.error(f"PrimitiveRestriction validation failed for BCC manifest {cc_assoc.bcc_manifest_id}: {e}")
+                    logger.error(f"PrimitiveRestriction validation failed for BCC manifest {cc_assoc.bcc_manifest_id}", e)
                     raise
                 except Exception:
                     # If we can't fetch the default primitive restriction, just leave it as None
@@ -8567,7 +8904,7 @@ def _sync_version_to_version_identifier_bbie(
                         if bcc_manifest and bcc_manifest.bcc:
                             logger.debug(f"Version Identifier BCC found: bcc_manifest_id={rel.based_bcc.bcc_manifest_id}, bcc_fixed_value={bcc_manifest.bcc.fixed_value}")
                     except Exception as e:
-                        logger.debug(f"Could not get BCC manifest to check fixed_value: {e}")
+                        logger.debug(f"Could not get BCC manifest to check fixed_value", e)
                     break
     
     if not version_identifier_rel:
@@ -8596,7 +8933,7 @@ def _sync_version_to_version_identifier_bbie(
                 if 'fixed_value' not in updates:
                     logger.warning(f"Version Identifier BBIE update did not include 'fixed_value' in updates list. Updates: {updates}")
             except Exception as e:
-                logger.warning(f"Failed to update Version Identifier BBIE (ID: {version_identifier_rel.bbie_id}): {e}")
+                logger.warning(f"Failed to update Version Identifier BBIE (ID: {version_identifier_rel.bbie_id})", e)
                 import traceback
                 logger.debug(traceback.format_exc())
         elif existing_bbie:
@@ -8624,7 +8961,7 @@ def _sync_version_to_version_identifier_bbie(
                 fixed_value=version
             )
         except Exception as e:
-            logger.warning(f"Failed to create Version Identifier BBIE for top_level_asbiep {top_level_asbiep_id}: {e}")
+            logger.warning(f"Failed to create Version Identifier BBIE for top_level_asbiep {top_level_asbiep_id}", e)
             import traceback
             logger.debug(traceback.format_exc())
 

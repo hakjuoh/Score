@@ -22,7 +22,7 @@ services:
       start_period: 30s
 
   score-mcp-server:
-    image: oagi1docker/score-mcp-server:0.1.0
+    image: oagi1docker/score-mcp-server:0.1.1
     container_name: score-mcp-server
     ports:
       - "${PORT:-8000}:${PORT:-8000}"

@@ -77,7 +77,7 @@ Score MCP Server exposes Score's functionality through the Model Context Protoco
 
 1. **Pull the pre-built image:**
    ```bash
-   docker pull oagi1docker/score-mcp-server:0.1.0
+   docker pull oagi1docker/score-mcp-server:0.1.1
    ```
 
 2. **Create a `.env` file** (copy from `.env.example` and update with your settings)
@@ -88,7 +88,7 @@ Score MCP Server exposes Score's functionality through the Model Context Protoco
      --name score-mcp-server \
      -p 8000:8000 \
      --env-file .env \
-     oagi1docker/score-mcp-server:0.1.0
+     oagi1docker/score-mcp-server:0.1.1
    ```
 
    Or use Docker Compose (create `docker-compose.yml`):
@@ -117,7 +117,7 @@ Score MCP Server exposes Score's functionality through the Model Context Protoco
 
 1. **Build the Docker image:**
    ```bash
-   docker build -t oagi1docker/score-mcp-server:0.1.0 -f docker/Dockerfile .
+   docker build -t oagi1docker/score-mcp-server:0.1.1 -f docker/Dockerfile .
    ```
 
 2. **Create a `.env` file** (copy from `.env.example` and update with your settings)
@@ -128,7 +128,7 @@ Score MCP Server exposes Score's functionality through the Model Context Protoco
      --name score-mcp-server \
      -p 8000:8000 \
      --env-file .env \
-     oagi1docker/score-mcp-server:0.1.0
+     oagi1docker/score-mcp-server:0.1.1
    ```
 
 ## Using with MCP Hosts

@@ -549,7 +549,7 @@ class CoreComponentService:
             release_service = ReleaseService()
             dependent_release_ids = release_service.get_dependent_releases(release_id)
         except Exception as e:
-            logger.warning(f"Failed to get dependent releases for {release_id}: {e}")
+            logger.warning(f"Failed to get dependent releases for {release_id}", e)
             # If we can't get dependencies, just use the original release
             dependent_release_ids = []
 

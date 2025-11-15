@@ -268,49 +268,40 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
 )
 async def get_data_types(
     release_id: Annotated[int, Field(
-        description="Filter by release ID using exact match.",
-        examples=[123, 456, 789],
         gt=0,
-        title="Release ID"
+        description="Filter by release ID using exact match."
+    )],
+    den: Annotated[str | None, Field(
+        default=None,
+        description="Filter by Dictionary Entry Name (DEN) using partial match (case-insensitive). DEN format: '((qualifier) ? qualifier + \"_ \" : \"\") + data_type_term + \". Type\"'."
+    )],
+    representation_term: Annotated[str | None, Field(
+        default=None,
+        description="Filter by representation term using partial match (case-insensitive)."
+    )],
+    created_on: Annotated[str | None, Field(
+        default=None,
+        description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+    )],
+    last_updated_on: Annotated[str | None, Field(
+        default=None,
+        description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+    )],
+    order_by: Annotated[str | None, Field(
+        default=None,
+        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: data_type_term, qualifier, representation_term, six_digit_id, definition, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+data_type_term' translates to 'creation_timestamp DESC, data_type_term ASC'."
     )],
     offset: Annotated[int, Field(
-        description="The offset from the beginning of the list. Allowed values: non-negative integers (≥0). Default value: 0.",
-        examples=[0, 10, 20],
+        default=0,
         ge=0,
-        title="Offset"
-    )] = 0,
+        description="The offset from the beginning of the list. Must be a non-negative number."
+    )],
     limit: Annotated[int, Field(
-        description="The maximum number of items to return. Allowed values: integers between 1 and 100 (inclusive). Default value: 10.",
-        examples=[10, 25, 50],
+        default=10,
         ge=1,
         le=100,
-        title="Limit"
-    )] = 10,
-    den: Annotated[str | None, Field(
-        description="Filter by Dictionary Entry Name (DEN) using partial match (case-insensitive). DEN format: '((qualifier) ? qualifier + \"_ \" : \"\") + data_type_term + \". Type\"'.",
-        examples=["Amount. Type", "Text. Type", "Date. Type"],
-        title="Dictionary Entry Name"
-    )] = None,
-    representation_term: Annotated[str | None, Field(
-        description="Filter by representation term using partial match (case-insensitive).",
-        examples=["Amount", "Text", "Date"],
-        title="Representation Term"
-    )] = None,
-    created_on: Annotated[str | None, Field(
-        description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-        examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-        title="Created On Date Range"
-    )] = None,
-    last_updated_on: Annotated[str | None, Field(
-        description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-        examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-        title="Last Updated On Date Range"
-    )] = None,
-    order_by: Annotated[str | None, Field(
-        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: data_type_term, qualifier, representation_term, six_digit_id, definition, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+data_type_term' translates to 'creation_timestamp DESC, data_type_term ASC'.",
-        examples=["-creation_timestamp,+data_type_term", "data_type_term", "-last_update_timestamp"],
-        title="Order By"
-    )] = None
+        description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+    )]
 ) -> GetDataTypesResponse:
     """
     Get a paginated list of data types associated with a specific release.
@@ -323,9 +314,7 @@ async def get_data_types(
     The DEN (Dictionary Entry Name) is computed as: ((qualifier) ? qualifier + "_ " : "") + data_type_term + ". Type"
     
     Args:
-        release_id (int): Filter by release ID using exact match.
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
+        release_id (int): Filter by release ID using exact match (required).
         den (str | None, optional): Filter by Dictionary Entry Name (DEN) using partial match (case-insensitive). 
             DEN format: '((qualifier) ? qualifier + "_ " : "") + data_type_term + ". Type"'. Defaults to None.
         representation_term (str | None, optional): Filter by representation term using partial match (case-insensitive). Defaults to None.
@@ -342,6 +331,8 @@ async def get_data_types(
             Allowed columns: den, data_type_term, qualifier, representation_term, six_digit_id, definition, creation_timestamp, last_update_timestamp.
             Example: '-creation_timestamp,+den' translates to 'creation_timestamp DESC, den ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
         GetDataTypesResponse: Response object containing:
@@ -457,7 +448,7 @@ async def get_data_types(
             items=[_create_data_type_result(manifest, data_type_service) for manifest in page.items]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving data types: {e}")
+        logger.error(f"HTTP error retrieving data types", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -466,7 +457,7 @@ async def get_data_types(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving data types: {e}")
+        logger.error(f"Unexpected error retrieving data types", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the data types: {str(e)}. Please contact your system administrator.") from e
 
@@ -537,7 +528,7 @@ async def get_data_types(
                         "required": ["release_id", "release_num", "state"]
                     }
                 },
-                "required": ["dt_manifest_id", "dt_id", "guid", "den", "data_type_term", "qualifier", "representation_term", "six_digit_id", "definition", "definition_source", "content_component_definition", "namespace", "library", "release"]
+                "required": ["dt_manifest_id", "dt_id", "guid", "den", "library", "release"]
             },
             "supplementary_components": {
                 "type": "array",
@@ -565,7 +556,7 @@ async def get_data_types(
                         },
                         "is_deprecated": {"type": "boolean", "description": "Whether the supplementary component is deprecated", "example": False}
                     },
-                    "required": ["dt_sc_manifest_id", "dt_sc_id", "guid", "object_class_term", "property_term", "representation_term", "definition", "cardinality_min", "cardinality_max", "is_deprecated"]
+                    "required": ["dt_sc_manifest_id", "dt_sc_id", "guid", "cardinality_min", "is_deprecated"]
                 }
             },
             "namespace": {
@@ -657,15 +648,13 @@ async def get_data_types(
                 "required": ["who", "when"]
             }
         },
-        "required": ["dt_manifest_id", "dt_id", "guid", "den", "data_type_term", "representation_term", "is_deprecated", "state", "library", "release", "owner", "created", "last_updated"]
+        "required": ["dt_manifest_id", "dt_id", "guid", "den", "library", "release", "commonly_used", "is_deprecated", "supplementary_components", "owner", "created", "last_updated"]
     }
 )
 async def get_data_type(
     dt_manifest_id: Annotated[int, Field(
-        description="Unique numeric identifier of the data type manifest to retrieve.",
-        examples=[123, 456, 789],
         gt=0,
-        title="Data Type Manifest ID"
+        description="Unique numeric identifier of the data type manifest to retrieve."
     )]
 ) -> GetDataTypeResponse:
     """
@@ -733,7 +722,7 @@ async def get_data_type(
 
         return _create_data_type_result(manifest, service)
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving data type: {e}")
+        logger.error(f"HTTP error retrieving data type", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -745,7 +734,7 @@ async def get_data_type(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving data type: {e}")
+        logger.error(f"Unexpected error retrieving data type", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the data type: {str(e)}. Please contact your system administrator.") from e
 
@@ -769,7 +758,7 @@ def _create_data_type_result(manifest, data_type_service) -> GetDataTypeResponse
     try:
         sc_manifests = data_type_service.get_supplementary_components_by_dt_manifest_id(manifest.dt_manifest_id)
     except Exception as e:
-        logger.warning(f"Failed to retrieve supplementary components for DtManifest {manifest.dt_manifest_id}: {e}")
+        logger.warning(f"Failed to retrieve supplementary components for DtManifest {manifest.dt_manifest_id}", e)
         sc_manifests = []  # Continue without supplementary components rather than failing completely
     
     # Create namespace info if available

@@ -67,8 +67,13 @@ import logging
 from typing import Annotated
 
 from fastapi import HTTPException
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 from fastmcp.exceptions import ToolError
+from fastmcp.server.elicitation import (
+    AcceptedElicitation,
+    CancelledElicitation,
+    DeclinedElicitation,
+)
 from pydantic import Field
 
 from services import BizCtxService, DateRangeParams, PaginationParams
@@ -180,26 +185,33 @@ mcp = FastMCP("Score MCP Server - Business Context Tools")
     }
 )
 async def get_business_contexts(
+        name: Annotated[str | None, Field(
+            default=None,
+            description="Filter by the name of the business context."
+        )],
+        created_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        last_updated_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        order_by: Annotated[str | None, Field(
+            default=None,
+            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, creation_timestamp, last_update_timestamp. Example: '-last_update_timestamp,+name' translates to 'last_update_timestamp DESC, name ASC'."
+        )],
         offset: Annotated[int, Field(
-            description="The offset from the beginning of the list. Must be a non-negative number.",
-            examples=[0, 10, 20],
+            default=0,
             ge=0,
-            title="Offset"
-        )] = 0,
+            description="The offset from the beginning of the list. Must be a non-negative number."
+        )],
         limit: Annotated[int, Field(
-            description="The maximum number of items to return. Must be a non-negative number.",
-            examples=[10, 25, 50],
+            default=10,
             ge=1,
             le=100,
-            title="Limit"
-        )] = 10,
-        name: Annotated[str | None, "Filter by the name of the business context."] = None,
-        created_on: Annotated[
-            str | None, "Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."] = None,
-        last_updated_on: Annotated[
-            str | None, "Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."] = None,
-        order_by: Annotated[
-            str | None, "Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, creation_timestamp, last_update_timestamp. Example: '-last_update_timestamp,+name' translates to 'last_update_timestamp DESC, name ASC'."] = None
+            description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+        )]
 ) -> GetBizCtxsResponse:
     """
     Get a paginated list of business contexts.
@@ -209,8 +221,6 @@ async def get_business_contexts(
     and update metadata, and associated business context values.
     
     Args:
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
         name (str | None, optional): Filter by the business context name. Defaults to None.
         created_on (str | None, optional): Filter by creation date using an inclusive range: '[before~after]'.
             'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD.
@@ -225,6 +235,8 @@ async def get_business_contexts(
             Allowed columns: name, creation_timestamp, last_update_timestamp. 
             Example: '-last_update_timestamp,+name' translates to 'last_update_timestamp DESC, name ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
         GetBizCtxsResponse: Response object containing:
@@ -244,7 +256,7 @@ async def get_business_contexts(
     
     Examples:
         Basic listing:
-        >>> result = await get_business_contexts(offset=0, limit=10)
+        >>> result = await get_business_contexts()
         >>> print(f"Found {result.total_items} business contexts")
         
         Filtered search:
@@ -314,7 +326,7 @@ async def get_business_contexts(
             items=[_create_biz_ctx_result(biz_ctx) for biz_ctx in page.items]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving business contexts: {e}")
+        logger.error(f"HTTP error retrieving business contexts", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -323,7 +335,7 @@ async def get_business_contexts(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving business contexts: {e}")
+        logger.error(f"Unexpected error retrieving business contexts", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the business contexts: {str(e)}. Please contact your system administrator.") from e
 
@@ -403,9 +415,7 @@ async def get_business_contexts(
 async def get_business_context(
         biz_ctx_id: Annotated[int, Field(
             description="Unique numeric identifier of the business context to retrieve.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="Business Context ID"
+            gt=0
         )]
 ) -> GetBizCtxResponse:
     """
@@ -454,7 +464,7 @@ async def get_business_context(
 
         return _create_biz_ctx_result(biz_ctx)
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving business context: {e}")
+        logger.error(f"HTTP error retrieving business context", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -466,7 +476,7 @@ async def get_business_context(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving business context: {e}")
+        logger.error(f"Unexpected error retrieving business context", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the business context: {str(e)}. Please contact your system administrator.") from e
 
@@ -486,10 +496,8 @@ async def get_business_context(
 async def create_business_context(
         name: Annotated[str, Field(
             description="Human-readable name of the business context to create.",
-            examples=["Production Environment", "Test Environment", "Development Environment"],
             min_length=1,
-            max_length=100,
-            title="Business Context Name"
+            max_length=100
         )]
 ) -> CreateBizCtxResponse:
     """
@@ -530,7 +538,7 @@ async def create_business_context(
 
         return CreateBizCtxResponse(biz_ctx_id=biz_ctx.biz_ctx_id)
     except HTTPException as e:
-        logger.error(f"HTTP error creating business context: {e}")
+        logger.error(f"HTTP error creating business context", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -539,7 +547,7 @@ async def create_business_context(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error creating business context: {e}")
+        logger.error(f"Unexpected error creating business context", e)
         raise ToolError(
             f"An unexpected error occurred while creating the business context: {str(e)}. Please contact your system administrator.") from e
 
@@ -557,8 +565,12 @@ async def create_business_context(
     }
 )
 async def create_business_context_value(
-        biz_ctx_id: Annotated[int, "Identifier of the business context to which this value will be added."],
-        ctx_scheme_value_id: Annotated[int, "Identifier of the context scheme value to associate with this business context."]
+        biz_ctx_id: Annotated[int, Field(
+            description="Identifier of the business context to which this value will be added."
+        )],
+        ctx_scheme_value_id: Annotated[int, Field(
+            description="Identifier of the context scheme value to associate with this business context."
+        )]
 ) -> CreateBizCtxValueResponse:
     """
     Create a new value for a specific business context, linking it to a context scheme value.
@@ -606,7 +618,7 @@ async def create_business_context_value(
 
         return CreateBizCtxValueResponse(biz_ctx_value_id=biz_ctx_value.biz_ctx_value_id)
     except HTTPException as e:
-        logger.error(f"HTTP error creating business context value: {e}")
+        logger.error(f"HTTP error creating business context value", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -618,7 +630,7 @@ async def create_business_context_value(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error creating business context value: {e}")
+        logger.error(f"Unexpected error creating business context value", e)
         raise ToolError(
             f"An unexpected error occurred while creating the business context value: {str(e)}. Please contact your system administrator.") from e
 
@@ -637,8 +649,12 @@ async def create_business_context_value(
     }
 )
 async def update_business_context(
-        biz_ctx_id: Annotated[int, "Unique identifier of the business context to update."],
-        name: Annotated[str, "New name to assign to the business context."]
+        biz_ctx_id: Annotated[int, Field(
+            description="Unique identifier of the business context to update."
+        )],
+        name: Annotated[str, Field(
+            description="New name to assign to the business context."
+        )]
 ) -> UpdateBizCtxResponse:
     """
     Update the name of an existing business context.
@@ -688,7 +704,7 @@ async def update_business_context(
 
         return UpdateBizCtxResponse(biz_ctx_id=biz_ctx.biz_ctx_id, updates=updates)
     except HTTPException as e:
-        logger.error(f"HTTP error updating business context: {e}")
+        logger.error(f"HTTP error updating business context", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -700,7 +716,7 @@ async def update_business_context(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error updating business context: {e}")
+        logger.error(f"Unexpected error updating business context", e)
         raise ToolError(
             f"An unexpected error occurred while updating the business context: {str(e)}. Please contact your system administrator.") from e
 
@@ -719,8 +735,12 @@ async def update_business_context(
     }
 )
 async def update_business_context_value(
-        biz_ctx_value_id: Annotated[int, "Unique identifier of the business context value to update."],
-        ctx_scheme_value_id: Annotated[int, "Identifier of the new context scheme value to associate with this business context value."]
+        biz_ctx_value_id: Annotated[int, Field(
+            description="Unique identifier of the business context value to update."
+        )],
+        ctx_scheme_value_id: Annotated[int, Field(
+            description="Identifier of the new context scheme value to associate with this business context value."
+        )]
 ) -> UpdateBizCtxValueResponse:
     """
     Update the linked context scheme value for an existing business context value.
@@ -773,7 +793,7 @@ async def update_business_context_value(
 
         return UpdateBizCtxValueResponse(biz_ctx_value_id=biz_ctx_value.biz_ctx_value_id, updates=updates)
     except HTTPException as e:
-        logger.error(f"HTTP error updating business context value: {e}")
+        logger.error(f"HTTP error updating business context value", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -785,7 +805,7 @@ async def update_business_context_value(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error updating business context value: {e}")
+        logger.error(f"Unexpected error updating business context value", e)
         raise ToolError(
             f"An unexpected error occurred while updating the business context value: {str(e)}. Please contact your system administrator.") from e
 
@@ -795,15 +815,19 @@ async def update_business_context_value(
     description="Delete a business context and all associated business context values",
     output_schema={
         "type": "object",
-        "description": "Response containing the deleted business context ID",
+        "description": "Response containing the deleted business context ID or cancellation message",
         "properties": {
-            "biz_ctx_id": {"type": "integer", "description": "Unique identifier of the deleted business context", "example": 123}
+            "biz_ctx_id": {"type": ["integer", "null"], "description": "Unique identifier of the deleted business context (null if deletion was cancelled)", "example": 123},
+            "message": {"type": ["string", "null"], "description": "Optional message indicating the status of the deletion operation", "example": "Deletion cancelled by user"}
         },
-        "required": ["biz_ctx_id"]
+        "required": []
     }
 )
 async def delete_business_context(
-        biz_ctx_id: Annotated[int, "Unique identifier of the business context to delete."]
+        biz_ctx_id: Annotated[int, Field(
+            description="Unique identifier of the business context to delete."
+        )],
+        ctx: Context
 ) -> DeleteBizCtxResponse:
     """
     Delete a business context and all associated business context values.
@@ -846,14 +870,35 @@ async def delete_business_context(
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
 
-    # Delete business context
     try:
         service = BizCtxService(requester=app_user)
-        service.delete_biz_ctx(biz_ctx_id)
-
-        return DeleteBizCtxResponse(biz_ctx_id=biz_ctx_id)
+        # Get business context for confirmation message
+        biz_ctx = service.get_biz_ctx(biz_ctx_id)
+        
+        # Create confirmation message with business context details
+        confirmation_message = (
+            f"Are you sure you want to discard '{biz_ctx.name}' business context?\n\n"
+            f"It will be permanently removed.\n"
+        )
+        
+        elicit_result = await ctx.elicit(
+            message=confirmation_message,
+            response_type=None
+        )
+        
+        # Check if user confirmed the deletion using pattern matching
+        match elicit_result:
+            case AcceptedElicitation():                
+                # Delete business context
+                service.delete_biz_ctx(biz_ctx_id)
+                return DeleteBizCtxResponse(biz_ctx_id=biz_ctx_id)
+            case DeclinedElicitation():
+                return DeleteBizCtxResponse(biz_ctx_id=None, message="Deletion declined by user")
+            case CancelledElicitation():
+                return DeleteBizCtxResponse(biz_ctx_id=None, message="Deletion cancelled by user")
+        
     except HTTPException as e:
-        logger.error(f"HTTP error deleting business context: {e}")
+        logger.error(f"HTTP error deleting business context", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -867,7 +912,7 @@ async def delete_business_context(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error deleting business context: {e}")
+        logger.error(f"Unexpected error deleting business context", e)
         raise ToolError(
             f"An unexpected error occurred while deleting the business context: {str(e)}. Please contact your system administrator.") from e
 
@@ -877,15 +922,19 @@ async def delete_business_context(
     description="Delete a specific business context value",
     output_schema={
         "type": "object",
-        "description": "Response containing the deleted business context value ID",
+        "description": "Response containing the deleted business context value ID or cancellation message",
         "properties": {
-            "biz_ctx_value_id": {"type": "integer", "description": "Unique identifier of the deleted business context value", "example": 123}
+            "biz_ctx_value_id": {"type": ["integer", "null"], "description": "Unique identifier of the deleted business context value (null if deletion was cancelled)", "example": 123},
+            "message": {"type": ["string", "null"], "description": "Optional message indicating the status of the deletion operation", "example": "Deletion cancelled by user"}
         },
-        "required": ["biz_ctx_value_id"]
+        "required": []
     }
 )
 async def delete_business_context_value(
-        biz_ctx_value_id: Annotated[int, "Unique identifier of the business context value to delete."]
+        biz_ctx_value_id: Annotated[int, Field(
+            description="Unique identifier of the business context value to delete."
+        )],
+        ctx: Context
 ) -> DeleteBizCtxValueResponse:
     """
     Delete a specific business context value.
@@ -921,14 +970,36 @@ async def delete_business_context_value(
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
 
-    # Delete business context value
     try:
         service = BizCtxService(requester=app_user)
-        service.delete_biz_ctx_value(biz_ctx_value_id)
-
-        return DeleteBizCtxValueResponse(biz_ctx_value_id=biz_ctx_value_id)
+        # Get business context and value for confirmation message
+        biz_ctx, biz_ctx_value = service.get_biz_ctx_by_value_id(biz_ctx_value_id)
+        
+        ctx_scheme_value_name = biz_ctx_value.ctx_scheme_value.value if hasattr(biz_ctx_value, 'ctx_scheme_value') and biz_ctx_value.ctx_scheme_value else f"value {biz_ctx_value_id}"
+        
+        # Create confirmation message with business context value details
+        confirmation_message = (
+            f"Are you sure you want to discard '{ctx_scheme_value_name}' from '{biz_ctx.name}' business context?\n\n"
+            f"It will be permanently removed.\n"
+        )
+        
+        elicit_result = await ctx.elicit(
+            message=confirmation_message,
+            response_type=None
+        )
+        
+        # Check if user confirmed the deletion using pattern matching
+        match elicit_result:
+            case AcceptedElicitation():                
+                # Delete business context value
+                service.delete_biz_ctx_value(biz_ctx_value_id)
+                return DeleteBizCtxValueResponse(biz_ctx_value_id=biz_ctx_value_id)
+            case DeclinedElicitation():
+                return DeleteBizCtxValueResponse(biz_ctx_value_id=None, message="Deletion declined by user")
+            case CancelledElicitation():
+                return DeleteBizCtxValueResponse(biz_ctx_value_id=None, message="Deletion cancelled by user")
     except HTTPException as e:
-        logger.error(f"HTTP error deleting business context value: {e}")
+        logger.error(f"HTTP error deleting business context value", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -940,7 +1011,7 @@ async def delete_business_context_value(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error deleting business context value: {e}")
+        logger.error(f"Unexpected error deleting business context value", e)
         raise ToolError(
             f"An unexpected error occurred while deleting the business context value: {str(e)}. Please contact your system administrator.") from e
 

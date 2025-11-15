@@ -3,6 +3,7 @@ import json
 import pytest
 from fastmcp import Client
 from fastmcp.client import BearerAuth
+from tests.conftest import create_test_client
 
 
 def extract_content(result):
@@ -481,7 +482,7 @@ class TestDeleteCtxScheme:
     async def test_delete_context_scheme_success(self, token, created_ctx_category_id):
         """Test successful context scheme deletion."""
         # First create a scheme to delete
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             create_result = await client.call_tool("create_context_scheme", {
                 'ctx_category_id': created_ctx_category_id,
                 'scheme_id': 'TO_BE_DELETED',
@@ -500,6 +501,11 @@ class TestDeleteCtxScheme:
             assert hasattr(result, 'data')
             assert hasattr(result.data, 'ctx_scheme_id')
             assert result.data.ctx_scheme_id == ctx_scheme_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert result.data.ctx_scheme_id is not None
+            # Message should be None for successful deletion
+            if hasattr(result.data, 'message'):
+                assert result.data.message is None
 
     @pytest.mark.asyncio
     async def test_delete_context_scheme_error_not_found(self, token):
@@ -538,7 +544,7 @@ class TestDeleteCtxSchemeValue:
     async def test_delete_context_scheme_value_success(self, token, created_ctx_scheme_id):
         """Test successful context scheme value deletion."""
         # First create a scheme value to delete
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             create_result = await client.call_tool("create_context_scheme_value", {
                 'ctx_scheme_id': created_ctx_scheme_id,
                 'value': 'TO_BE_DELETED_VALUE',
@@ -555,6 +561,11 @@ class TestDeleteCtxSchemeValue:
             assert hasattr(result, 'data')
             assert hasattr(result.data, 'ctx_scheme_value_id')
             assert result.data.ctx_scheme_value_id == ctx_scheme_value_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert result.data.ctx_scheme_value_id is not None
+            # Message should be None for successful deletion
+            if hasattr(result.data, 'message'):
+                assert result.data.message is None
 
     @pytest.mark.asyncio
     async def test_delete_context_scheme_value_error_not_found(self, token):
@@ -844,7 +855,7 @@ class TestCtxSchemeIntegration:
     @pytest.mark.asyncio
     async def test_full_crud_cycle(self, token, created_ctx_category_id):
         """Test complete CRUD cycle: create, read, update, delete."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Create
             create_result = await client.call_tool("create_context_scheme", {
                 'ctx_category_id': created_ctx_category_id,
@@ -878,6 +889,11 @@ class TestCtxSchemeIntegration:
                 'ctx_scheme_id': ctx_scheme_id
             })
             assert delete_result.data.ctx_scheme_id == ctx_scheme_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert delete_result.data.ctx_scheme_id is not None
+            # Message should be None for successful deletion
+            if hasattr(delete_result.data, 'message'):
+                assert delete_result.data.message is None
 
             # Verify deletion - should raise ToolError
             with pytest.raises(Exception):  # Expect ToolError to be raised
@@ -892,7 +908,7 @@ class TestCtxSchemeValueIntegration:
     @pytest.mark.asyncio
     async def test_full_crud_cycle(self, token, created_ctx_scheme_id):
         """Test complete CRUD cycle: create, read, update, delete."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Create
             create_result = await client.call_tool("create_context_scheme_value", {
                 'ctx_scheme_id': created_ctx_scheme_id,
@@ -917,6 +933,11 @@ class TestCtxSchemeValueIntegration:
                 'ctx_scheme_value_id': ctx_scheme_value_id
             })
             assert delete_result.data.ctx_scheme_value_id == ctx_scheme_value_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert delete_result.data.ctx_scheme_value_id is not None
+            # Message should be None for successful deletion
+            if hasattr(delete_result.data, 'message'):
+                assert delete_result.data.message is None
 
 
 class TestCtxSchemeReferentialIntegrity:
@@ -926,7 +947,7 @@ class TestCtxSchemeReferentialIntegrity:
     async def test_delete_category_with_linked_schemes(self, token, created_ctx_category_id, created_ctx_scheme_id):
         """Test that deleting a context category with linked schemes fails."""
         with pytest.raises(Exception):  # Expect ToolError to be raised
-            async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+            async with create_test_client(token) as client:
                 await client.call_tool("delete_context_category", {
                     'ctx_category_id': created_ctx_category_id
                 })
@@ -934,15 +955,19 @@ class TestCtxSchemeReferentialIntegrity:
     @pytest.mark.asyncio
     async def test_delete_category_after_deleting_schemes(self, token, created_ctx_category_id, created_ctx_scheme_id):
         """Test that deleting a context category succeeds after deleting linked schemes."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # First delete the linked scheme
             delete_scheme_result = await client.call_tool("delete_context_scheme", {
                 'ctx_scheme_id': created_ctx_scheme_id
             })
             assert delete_scheme_result.data.ctx_scheme_id == created_ctx_scheme_id
+            # Verify deletion was accepted
+            assert delete_scheme_result.data.ctx_scheme_id is not None
 
             # Now delete the category should succeed
             delete_category_result = await client.call_tool("delete_context_category", {
                 'ctx_category_id': created_ctx_category_id
             })
             assert delete_category_result.data.ctx_category_id == created_ctx_category_id
+            # Verify deletion was accepted
+            assert delete_category_result.data.ctx_category_id is not None

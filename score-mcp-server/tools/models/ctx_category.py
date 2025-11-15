@@ -27,7 +27,8 @@ class UpdateCtxCategoryResponse(BaseModel):
 
 class DeleteCtxCategoryResponse(BaseModel):
     """Response for delete_ctx_category tool."""
-    ctx_category_id: int  # Unique identifier of the deleted context category
+    ctx_category_id: int | None = None  # Unique identifier of the deleted context category (None if deletion was cancelled)
+    message: str | None = None  # Optional message indicating the status of the deletion operation
 
 
 class GetCtxCategoriesResponse(BaseModel):

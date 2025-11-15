@@ -192,10 +192,8 @@ mcp = FastMCP("Score MCP Server - XBT Tools")
 )
 async def get_xbt(
     xbt_manifest_id: Annotated[int, Field(
-        description="Unique numeric identifier of the XBT manifest to retrieve.",
-        examples=[123, 456, 789],
         gt=0,
-        title="XBT Manifest ID"
+        description="Unique numeric identifier of the XBT manifest to retrieve."
     )]
 ) -> GetXbtResponse:
     """
@@ -359,7 +357,7 @@ async def get_xbt(
     except ToolError:
         raise
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving XBT: {e}")
+        logger.error(f"HTTP error retrieving XBT", e)
         if e.status_code == 404:
             raise ToolError(
                 f"The XBT manifest with ID {xbt_manifest_id} was not found. Please check the ID and try again.") from e
@@ -369,7 +367,7 @@ async def get_xbt(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving XBT: {e}")
+        logger.error(f"Unexpected error retrieving XBT", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the XBT: {str(e)}. Please contact your system administrator.") from e
 

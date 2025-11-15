@@ -198,7 +198,7 @@ mcp = FastMCP("Score MCP Server - Agency ID List Tools")
                             "required": ["who", "when"]
                         }
                     },
-                    "required": ["agency_id_list_manifest_id", "agency_id_list_id", "guid", "name", "list_id", "version_id", "library", "release", "owner", "created", "last_updated"]
+                    "required": ["agency_id_list_manifest_id", "agency_id_list_id", "guid", "name", "list_id", "version_id", "is_deprecated", "library", "release", "owner", "created", "last_updated"]
                 }
             }
         },
@@ -208,53 +208,43 @@ mcp = FastMCP("Score MCP Server - Agency ID List Tools")
 async def get_agency_id_lists(
     release_id: Annotated[int, Field(
         description="Filter by release ID using exact match.",
-        examples=[123, 456, 789],
-        gt=0,
-        title="Release ID"
+        gt=0
+    )],
+    name: Annotated[str | None, Field(
+        default=None,
+        description="Filter by agency ID list name using partial match (case-insensitive)."
+    )],
+    list_id: Annotated[str | None, Field(
+        default=None,
+        description="Filter by list ID using partial match (case-insensitive)."
+    )],
+    version_id: Annotated[str | None, Field(
+        default=None,
+        description="Filter by version ID using partial match (case-insensitive)."
+    )],
+    created_on: Annotated[str | None, Field(
+        default=None,
+        description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+    )],
+    last_updated_on: Annotated[str | None, Field(
+        default=None,
+        description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+    )],
+    order_by: Annotated[str | None, Field(
+        default=None,
+        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, list_id, version_id, definition, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'."
     )],
     offset: Annotated[int, Field(
-        description="The offset from the beginning of the list. Must be a non-negative number.",
-        examples=[0, 10, 20],
+        default=0,
         ge=0,
-        title="Offset"
-    )] = 0,
+        description="The offset from the beginning of the list. Must be a non-negative number."
+    )],
     limit: Annotated[int, Field(
-        description="The maximum number of items to return. Must be a non-negative number.",
-        examples=[10, 25, 50],
+        default=10,
         ge=1,
         le=100,
-        title="Limit"
-    )] = 10,
-    name: Annotated[str | None, Field(
-        description="Filter by agency ID list name using partial match (case-insensitive).",
-        examples=["ISO 3166", "UN/LOCODE", "Country Codes"],
-        title="Agency ID List Name"
-    )] = None,
-    list_id: Annotated[str | None, Field(
-        description="Filter by list ID using partial match (case-insensitive).",
-        examples=["ISO3166-1", "UNLOCODE", "Country"],
-        title="List ID"
-    )] = None,
-    version_id: Annotated[str | None, Field(
-        description="Filter by version ID using partial match (case-insensitive).",
-        examples=["1.0", "2.1", "3.0"],
-        title="Version ID"
-    )] = None,
-    created_on: Annotated[str | None, Field(
-        description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-        examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-        title="Created On Date Range"
-    )] = None,
-    last_updated_on: Annotated[str | None, Field(
-        description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-        examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-        title="Last Updated On Date Range"
-    )] = None,
-    order_by: Annotated[str | None, Field(
-        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, list_id, version_id, definition, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'.",
-        examples=["-creation_timestamp,+name", "name", "-last_update_timestamp"],
-        title="Order By"
-    )] = None
+        description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+    )]
 ) -> GetAgencyIdListsResponse:
     """
     Get a paginated list of agency ID lists associated with a specific release.
@@ -265,9 +255,7 @@ async def get_agency_id_lists(
     filter is required to ensure you get agency ID lists from the correct release context.
     
     Args:
-        release_id (int): Filter by release ID using exact match.
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
+        release_id (int): Filter by release ID using exact match (required).
         name (str | None, optional): Filter by agency ID list name using partial match (case-insensitive). Defaults to None.
         list_id (str | None, optional): Filter by list ID using partial match (case-insensitive). Defaults to None.
         version_id (str | None, optional): Filter by version ID using partial match (case-insensitive). Defaults to None.
@@ -284,6 +272,8 @@ async def get_agency_id_lists(
             Allowed columns: name, list_id, version_id, definition, creation_timestamp, last_update_timestamp.
             Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
         GetAgencyIdListsResponse: Response object containing:
@@ -419,7 +409,7 @@ async def get_agency_id_lists(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error while retrieving agency ID lists: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error while retrieving agency ID lists: {str(e)}", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the agency ID lists: {str(e)}. Please contact your system administrator.") from e
 
@@ -556,10 +546,8 @@ async def get_agency_id_lists(
 )
 async def get_agency_id_list(
     agency_id_list_manifest_id: Annotated[int, Field(
-        description="Unique numeric identifier of the agency ID list manifest to retrieve.",
-        examples=[123, 456, 789],
         gt=0,
-        title="Agency ID List Manifest ID"
+        description="Unique numeric identifier of the agency ID list manifest to retrieve."
     )]
 ) -> GetAgencyIdListResponse:
     """
@@ -643,7 +631,7 @@ async def get_agency_id_list(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error while retrieving agency ID list: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error while retrieving agency ID list: {str(e)}", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the agency ID list: {str(e)}. Please contact your system administrator.") from e
 
@@ -668,7 +656,7 @@ def _create_agency_id_list_result(manifest, agency_id_list_service) -> GetAgency
         value_manifests = agency_id_list_service.get_agency_id_list_value_manifests_by_manifest_id(manifest.agency_id_list_manifest_id)
         logger.debug(f"Found {len(value_manifests)} value manifests")
     except Exception as e:
-        logger.warning(f"Could not retrieve value manifests for manifest {manifest.agency_id_list_manifest_id}: {str(e)}")
+        logger.warning(f"Could not retrieve value manifests for manifest {manifest.agency_id_list_manifest_id}", e)
         value_manifests = []  # Continue without value manifests rather than failing completely
     
     # Create namespace info if available

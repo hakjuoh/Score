@@ -93,7 +93,7 @@ if cors_enabled:
     stateless_http = True
     logger.info("CORS is enabled, setting stateless_http=True (required)")
 else:
-    stateless_http = parse_bool_env("STATELESS_HTTP", True)
+    stateless_http = parse_bool_env("STATELESS_HTTP", False)
     logger.info(f"stateless_http={stateless_http} (from STATELESS_HTTP env var)")
 
 mcp = FastMCP("Score MCP Server", auth=auth, 
@@ -153,9 +153,9 @@ def auto_mount_tools():
                 logger.debug(f"Module {module_name} does not have 'mcp' attribute")
                 
         except ImportError as e:
-            logger.warning(f"Failed to import tool module {module_name}: {e}")
+            logger.warning(f"Failed to import tool module {module_name}", e)
         except Exception as e:
-            logger.error(f"Error processing tool module {module_name}: {e}")
+            logger.error(f"Error processing tool module {module_name}", e)
     
     logger.info(f"Auto-mounted {mounted_count} tool module(s)")
 

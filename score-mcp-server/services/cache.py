@@ -292,7 +292,7 @@ class RedisCache(CacheInterface):
             self._client.ping()
             logger.info(f"Initialized RedisCache type={redis_type}, url={redis_url}, default_ttl={default_ttl}")
         except Exception as e:
-            logger.error(f"Failed to connect to Redis ({redis_type}): {e}")
+            logger.error(f"Failed to connect to Redis ({redis_type})", e)
             raise RuntimeError(f"Failed to initialize Redis cache: {e}")
     
     def _create_redis_client(self, redis, Sentinel, RedisCluster, redis_type: str, 
@@ -441,7 +441,7 @@ class RedisCache(CacheInterface):
         try:
             return pickle.dumps(value)
         except Exception as e:
-            logger.error(f"Failed to serialize value: {e}")
+            logger.error(f"Failed to serialize value", e)
             raise
     
     def _deserialize(self, data: bytes) -> Any:
@@ -449,7 +449,7 @@ class RedisCache(CacheInterface):
         try:
             return pickle.loads(data)
         except Exception as e:
-            logger.error(f"Failed to deserialize value: {e}")
+            logger.error(f"Failed to deserialize value", e)
             raise
     
     def get(self, key: str) -> Optional[Any]:
@@ -460,7 +460,7 @@ class RedisCache(CacheInterface):
                 return None
             return self._deserialize(data)
         except Exception as e:
-            logger.error(f"Error getting key {key} from Redis: {e}")
+            logger.error(f"Error getting key {key} from Redis", e)
             return None
     
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
@@ -474,7 +474,7 @@ class RedisCache(CacheInterface):
             else:
                 self._client.set(key, serialized)
         except Exception as e:
-            logger.error(f"Error setting key {key} in Redis: {e}")
+            logger.error(f"Error setting key {key} in Redis", e)
             # Don't raise - cache failures shouldn't break the application
     
     def delete(self, key: str) -> None:
@@ -482,21 +482,21 @@ class RedisCache(CacheInterface):
         try:
             self._client.delete(key)
         except Exception as e:
-            logger.error(f"Error deleting key {key} from Redis: {e}")
+            logger.error(f"Error deleting key {key} from Redis", e)
     
     def clear(self) -> None:
         """Clear all entries from cache."""
         try:
             self._client.flushdb()
         except Exception as e:
-            logger.error(f"Error clearing Redis cache: {e}")
+            logger.error(f"Error clearing Redis cache", e)
     
     def exists(self, key: str) -> bool:
         """Check if a key exists in cache."""
         try:
             return bool(self._client.exists(key))
         except Exception as e:
-            logger.error(f"Error checking existence of key {key} in Redis: {e}")
+            logger.error(f"Error checking existence of key {key} in Redis", e)
             return False
     
     def evict_by_prefix(self, prefix: str) -> int:
@@ -521,7 +521,7 @@ class RedisCache(CacheInterface):
                         break
                 return deleted_count
         except Exception as e:
-            logger.error(f"Error evicting keys with prefix {prefix} from Redis: {e}")
+            logger.error(f"Error evicting keys with prefix {prefix} from Redis", e)
             return 0
 
 
@@ -617,7 +617,7 @@ def evict_cache(key_prefix: str, *args, **kwargs) -> None:
             cache_instance.delete(specific_key)
             logger.debug(f"Evicted specific cache entry: {specific_key}")
     except Exception as e:
-        logger.warning(f"Failed to evict cache entries for prefix '{key_prefix}': {e}")
+        logger.warning(f"Failed to evict cache entries for prefix '{key_prefix}'", e)
 
 
 def _generate_cache_key(func_name: str, args: tuple, kwargs: dict) -> str:
@@ -702,7 +702,7 @@ def cache(
                     logger.debug(f"Cache hit for {full_key}")
                     return cached_value
             except Exception as e:
-                logger.warning(f"Cache get failed for {full_key}: {e}. Proceeding without cache.")
+                logger.warning(f"Cache get failed for {full_key}. Proceeding without cache.", e)
             
             # Cache miss - execute function
             logger.debug(f"Cache miss for {full_key}")
@@ -713,7 +713,7 @@ def cache(
             try:
                 cache_instance.set(full_key, result, ttl=ttl)
             except Exception as e:
-                logger.warning(f"Cache set failed for {full_key}: {e}. Result returned without caching.")
+                logger.warning(f"Cache set failed for {full_key}. Result returned without caching.", e)
             
             return result
         

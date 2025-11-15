@@ -51,8 +51,13 @@ import logging
 from typing import Annotated
 
 from fastapi import HTTPException
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 from fastmcp.exceptions import ToolError
+from fastmcp.server.elicitation import (
+    AcceptedElicitation,
+    CancelledElicitation,
+    DeclinedElicitation,
+)
 from pydantic import Field
 
 from services import CtxCategoryService, DateRangeParams, PaginationParams
@@ -140,27 +145,37 @@ mcp = FastMCP("Score MCP Server - Context Category Tools")
     }
 )
 async def get_context_categories(
+        name: Annotated[str | None, Field(
+            default=None,
+            description="Filter categories by name."
+        )],
+        description: Annotated[str | None, Field(
+            default=None,
+            description="Filter categories by description."
+        )],
+        created_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        last_updated_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        order_by: Annotated[str | None, Field(
+            default=None,
+            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, description, creation_timestamp, last_update_timestamp. Example: '-last_update_timestamp,+name,description' translates to 'last_update_timestamp DESC, name ASC, description ASC'."
+        )],
         offset: Annotated[int, Field(
-            description="The offset from the beginning of the list. Must be a non-negative number.",
-            examples=[0, 10, 20],
+            default=0,
             ge=0,
-            title="Offset"
-        )] = 0,
+            description="The offset from the beginning of the list. Must be a non-negative number."
+        )],
         limit: Annotated[int, Field(
-            description="The maximum number of items to return. Must be a non-negative number.",
-            examples=[10, 25, 50],
+            default=10,
             ge=1,
             le=100,
-            title="Limit"
-        )] = 10,
-        name: Annotated[str | None, "Filter categories by name."] = None,
-        description: Annotated[str | None, "Filter categories by description."] = None,
-        created_on: Annotated[
-            str | None, "Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."] = None,
-        last_updated_on: Annotated[
-            str | None, "Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."] = None,
-        order_by: Annotated[
-            str | None, "Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, description, creation_timestamp, last_update_timestamp. Example: '-last_update_timestamp,+name,description' translates to 'last_update_timestamp DESC, name ASC, description ASC'."] = None
+            description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+        )]
 ) -> GetCtxCategoriesResponse:
     """
     Get a paginated list of context categories.
@@ -170,8 +185,6 @@ async def get_context_categories(
     and update metadata.
     
     Args:
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
         name (str | None, optional): Filter categories by name. Defaults to None.
         description (str | None, optional): Filter categories by description. Defaults to None.
         created_on (str | None, optional): Filter by creation date using an inclusive range: '[before~after]'.
@@ -187,6 +200,8 @@ async def get_context_categories(
             Allowed columns: name, description, creation_timestamp, last_update_timestamp.
             Example: '-last_update_timestamp,+name,description' translates to 'last_update_timestamp DESC, name ASC, description ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
         GetCtxCategoriesResponse: Response object containing:
@@ -206,7 +221,7 @@ async def get_context_categories(
     
     Examples:
         Basic listing:
-        >>> result = await get_context_categories(offset=0, limit=10)
+        >>> result = await get_context_categories()
         >>> print(f"Found {result.total_items} categories")
         
         Filtered search:
@@ -274,7 +289,7 @@ async def get_context_categories(
             items=[_create_ctx_category_result(ctx_category) for ctx_category in page.items]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving context categories: {e}")
+        logger.error(f"HTTP error retrieving context categories", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -283,7 +298,7 @@ async def get_context_categories(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving context categories: {e}")
+        logger.error(f"Unexpected error retrieving context categories", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the context categories: {str(e)}. Please contact your system administrator.") from e
 
@@ -343,10 +358,8 @@ async def get_context_categories(
 )
 async def get_context_category(
         ctx_category_id: Annotated[int, Field(
-            description="The unique identifier of the context category to fetch.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="Context Category ID"
+            description="Unique numeric identifier of the context category to retrieve.",
+            gt=0
         )]
 ) -> GetCtxCategoryResponse:
     """
@@ -393,7 +406,7 @@ async def get_context_category(
 
         return _create_ctx_category_result(ctx_category)
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving context category: {e}")
+        logger.error(f"HTTP error retrieving context category", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -405,7 +418,7 @@ async def get_context_category(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving context category: {e}")
+        logger.error(f"Unexpected error retrieving context category", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the context category: {str(e)}. Please contact your system administrator.") from e
 
@@ -424,17 +437,14 @@ async def get_context_category(
 )
 async def create_context_category(
         name: Annotated[str, Field(
-            description="The human-readable name of the new context category.",
-            examples=["Geographic", "Temporal", "Industry"],
+            description="Human-readable name of the context category to create.",
             min_length=1,
-            max_length=100,
-            title="Context Category Name"
+            max_length=100
         )],
         description: Annotated[str | None, Field(
-            description="A detailed description or purpose of the new context category.",
-            examples=["Geographic context for location-based data", "Temporal context for time-based data", "Industry context for business-specific data"],
-            title="Description"
-        )] = None
+            default=None,
+            description="A detailed description or purpose of the new context category."
+        )]
 ) -> CreateCtxCategoryResponse:
     """
     Create a new context category with a name and optional description.
@@ -477,7 +487,7 @@ async def create_context_category(
 
         return CreateCtxCategoryResponse(ctx_category_id=ctx_category.ctx_category_id)
     except HTTPException as e:
-        logger.error(f"HTTP error creating context category: {e}")
+        logger.error(f"HTTP error creating context category", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -486,7 +496,7 @@ async def create_context_category(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error creating context category: {e}")
+        logger.error(f"Unexpected error creating context category", e)
         raise ToolError(
             f"An unexpected error occurred while creating the context category: {str(e)}. Please contact your system administrator.") from e
 
@@ -505,9 +515,17 @@ async def create_context_category(
     }
 )
 async def update_context_category(
-        ctx_category_id: Annotated[int, "Unique identifier of the context category to update."],
-        name: Annotated[str | None, "The new name for the context category."] = None,
-        description: Annotated[str | None, "The new description or purpose for the context category."] = None
+        ctx_category_id: Annotated[int, Field(
+            description="Unique identifier of the context category to update."
+        )],
+        name: Annotated[str | None, Field(
+            default=None,
+            description="The new name for the context category."
+        )],
+        description: Annotated[str | None, Field(
+            default=None,
+            description="The new description or purpose for the context category."
+        )]
 ) -> UpdateCtxCategoryResponse:
     """
     Update an existing context category's name or description.
@@ -570,7 +588,7 @@ async def update_context_category(
 
         return UpdateCtxCategoryResponse(ctx_category_id=ctx_category.ctx_category_id, updates=updates)
     except HTTPException as e:
-        logger.error(f"HTTP error updating context category: {e}")
+        logger.error(f"HTTP error updating context category", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -582,7 +600,7 @@ async def update_context_category(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error updating context category: {e}")
+        logger.error(f"Unexpected error updating context category", e)
         raise ToolError(
             f"An unexpected error occurred while updating the context category: {str(e)}. Please contact your system administrator.") from e
 
@@ -592,15 +610,19 @@ async def update_context_category(
     description="Delete an existing context category by ID",
     output_schema={
         "type": "object",
-        "description": "Response containing the deleted context category ID",
+        "description": "Response containing the deleted context category ID or cancellation message",
         "properties": {
-            "ctx_category_id": {"type": "integer", "description": "Unique identifier of the deleted context category", "example": 123}
+            "ctx_category_id": {"type": ["integer", "null"], "description": "Unique identifier of the deleted context category (null if deletion was cancelled)", "example": 123},
+            "message": {"type": ["string", "null"], "description": "Optional message indicating the status of the deletion operation", "example": "Deletion cancelled by user"}
         },
-        "required": ["ctx_category_id"]
+        "required": []
     }
 )
 async def delete_context_category(
-        ctx_category_id: Annotated[int, "Unique identifier of the context category to delete."]
+        ctx_category_id: Annotated[int, Field(
+            description="Unique identifier of the context category to delete."
+        )],
+        ctx: Context
 ) -> DeleteCtxCategoryResponse:
     """
     Delete an existing context category by ID.
@@ -641,14 +663,34 @@ async def delete_context_category(
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
 
-    # Delete context category
     try:
         service = CtxCategoryService(requester=app_user)
-        service.delete_ctx_category(ctx_category_id)
-
-        return DeleteCtxCategoryResponse(ctx_category_id=ctx_category_id)
+        # Get context category for confirmation message
+        ctx_category = service.get_ctx_category(ctx_category_id)
+        
+        # Create confirmation message with context category details
+        confirmation_message = (
+            f"Are you sure you want to discard '{ctx_category.name}' context category?\n\n"
+            f"It will be permanently removed.\n"
+        )
+        
+        elicit_result = await ctx.elicit(
+            message=confirmation_message,
+            response_type=None
+        )
+        
+        # Check if user confirmed the deletion using pattern matching
+        match elicit_result:
+            case AcceptedElicitation():                
+                # Delete context category
+                service.delete_ctx_category(ctx_category_id)
+                return DeleteCtxCategoryResponse(ctx_category_id=ctx_category_id)
+            case DeclinedElicitation():
+                return DeleteCtxCategoryResponse(ctx_category_id=None, message="Deletion declined by user")
+            case CancelledElicitation():
+                return DeleteCtxCategoryResponse(ctx_category_id=None, message="Deletion cancelled by user")
     except HTTPException as e:
-        logger.error(f"HTTP error deleting context category: {e}")
+        logger.error(f"HTTP error deleting context category", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -662,7 +704,7 @@ async def delete_context_category(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error deleting context category: {e}")
+        logger.error(f"Unexpected error deleting context category", e)
         raise ToolError(
             f"An unexpected error occurred while deleting the context category: {str(e)}. Please contact your system administrator.") from e
 

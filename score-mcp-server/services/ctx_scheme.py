@@ -450,6 +450,45 @@ class CtxSchemeService:
 
         return ctx_scheme
 
+    @cache(key_prefix="ctx_scheme.get_ctx_scheme_by_value_id")
+    @transaction(read_only=True)
+    def get_ctx_scheme_by_value_id(self, ctx_scheme_value_id: int) -> tuple[CtxScheme, CtxSchemeValue]:
+        """
+        Get a context scheme and its value by context scheme value ID.
+        
+        Args:
+            ctx_scheme_value_id: ID of the context scheme value
+            
+        Returns:
+            tuple[CtxScheme, CtxSchemeValue]: The context scheme and the value
+        """
+        # Validate input parameters
+        if not ctx_scheme_value_id or ctx_scheme_value_id <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Context scheme value ID must be a positive integer"
+            )
+
+        # Find the context scheme value with its relationships
+        ctx_scheme_value = db_exec(
+            select(CtxSchemeValue)
+            .where(CtxSchemeValue.ctx_scheme_value_id == ctx_scheme_value_id)
+            .options(
+                selectinload(CtxSchemeValue.owner_ctx_scheme).selectinload(CtxScheme.ctx_scheme_values),
+                selectinload(CtxSchemeValue.owner_ctx_scheme).selectinload(CtxScheme.creator),
+                selectinload(CtxSchemeValue.owner_ctx_scheme).selectinload(CtxScheme.last_updater),
+                selectinload(CtxSchemeValue.owner_ctx_scheme).selectinload(CtxScheme.ctx_category)
+            )
+        ).first()
+
+        if not ctx_scheme_value:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Context scheme value with ID {ctx_scheme_value_id} not found"
+            )
+
+        return ctx_scheme_value.owner_ctx_scheme, ctx_scheme_value
+
     @cache(key_prefix="ctx_scheme.get_ctx_schemes")
     @transaction(read_only=True)
     def get_ctx_schemes(self, scheme_id: str = None, scheme_name: str = None, description: str = None,
@@ -764,6 +803,9 @@ class CtxSchemeService:
         ctx_scheme_id = ctx_scheme_value.owner_ctx_scheme_id if hasattr(ctx_scheme_value, 'owner_ctx_scheme_id') else None
         if ctx_scheme_id:
             evict_cache("ctx_scheme.get_ctx_scheme", ctx_scheme_id=ctx_scheme_id)  # Evict specific get query
+        
+        # Evict cache for the new get_ctx_scheme_by_value_id method
+        evict_cache("ctx_scheme.get_ctx_scheme_by_value_id", ctx_scheme_value_id=ctx_scheme_value_id)
 
         return ctx_scheme_value, original_values
 
@@ -819,5 +861,8 @@ class CtxSchemeService:
         # Evict cache entries for the parent scheme (value changes affect scheme queries)
         if ctx_scheme_id:
             evict_cache("ctx_scheme.get_ctx_scheme", ctx_scheme_id=ctx_scheme_id)  # Evict specific get query
+        
+        # Evict cache for the new get_ctx_scheme_by_value_id method
+        evict_cache("ctx_scheme.get_ctx_scheme_by_value_id", ctx_scheme_value_id=ctx_scheme_value_id)
 
         return True

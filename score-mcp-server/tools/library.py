@@ -117,10 +117,8 @@ mcp = FastMCP("Score MCP Server - Library Tools")
 )
 async def get_library(
         library_id: Annotated[int, Field(
-            description="Unique numeric identifier of the library to retrieve.",
-            examples=[123, 456, 789],
             gt=0,
-            title="Library ID"
+            description="Unique numeric identifier of the library to retrieve."
         )]
 ) -> GetLibraryResponse:
     """
@@ -178,7 +176,7 @@ async def get_library(
 
         return _create_library_result(library)
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving library: {e}")
+        logger.error(f"HTTP error retrieving library", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -190,17 +188,17 @@ async def get_library(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving library: {e}")
+        logger.error(f"Unexpected error retrieving library", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the library: {str(e)}. Please contact your system administrator.") from e
 
 
 @mcp.tool(
     name="get_libraries",
-    description="Get a paginated list of libraries. Boolean parameters accept both their native types and string representations (strings are automatically converted).",
+    description="Get a paginated list of libraries.",
     output_schema={
         "type": "object",
-        "description": "Response containing paginated list of libraries. Boolean parameters accept both their native types and string representations (strings are automatically converted to the appropriate type).",
+        "description": "Response containing paginated list of libraries.",
         "properties": {
             "total_items": {"type": "integer", "description": "Total number of libraries available. Allowed values: non-negative integers (≥0).", "example": 5},
             "offset": {"type": "integer", "description": "Offset of the first item in this page. Allowed values: non-negative integers (≥0). Default value: 0.", "example": 0},
@@ -268,69 +266,57 @@ async def get_library(
     }
 )
 async def get_libraries(
+        name: Annotated[str | None, Field(
+            default=None,
+            description="Filter by library name using partial match (case-insensitive)."
+        )],
+        type: Annotated[str | None, Field(
+            default=None,
+            description="Filter by library type using partial match (case-insensitive)."
+        )],
+        organization: Annotated[str | None, Field(
+            default=None,
+            description="Filter by organization using partial match (case-insensitive)."
+        )],
+        domain: Annotated[str | None, Field(
+            default=None,
+            description="Filter by domain using partial match (case-insensitive)."
+        )],
+        state: Annotated[str | None, Field(
+            default=None,
+            description="Filter by state using partial match (case-insensitive)."
+        )],
+        description: Annotated[str | None, Field(
+            default=None,
+            description="Filter by description using partial match (case-insensitive)."
+        )],
+        is_default: Annotated[bool | str | None, Field(
+            default=None,
+            description="Filter by default library flag using exact match. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
+        )],
+        created_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        last_updated_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        order_by: Annotated[str | None, Field(
+            default=None,
+            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, type, organization, domain, state, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'."
+        )],
         offset: Annotated[int, Field(
-            description="The offset from the beginning of the list. Allowed values: non-negative integers (≥0). Default value: 0.",
-            examples=[0, 10, 20],
+            default=0,
             ge=0,
-            title="Offset"
-        )] = 0,
+            description="The offset from the beginning of the list. Must be a non-negative number."
+        )],
         limit: Annotated[int, Field(
-            description="The maximum number of items to return. Allowed values: integers between 1 and 100 (inclusive). Default value: 10.",
-            examples=[10, 25, 50],
+            default=10,
             ge=1,
             le=100,
-            title="Limit"
-        )] = 10,
-        name: Annotated[str | None, Field(
-            description="Filter by library name using partial match (case-insensitive).",
-            examples=["OAGIS", "UBL", "ISO"],
-            title="Library Name"
-        )] = None,
-        type: Annotated[str | None, Field(
-            description="Filter by library type using partial match (case-insensitive).",
-            examples=["Standard", "Custom", "Extension"],
-            title="Library Type"
-        )] = None,
-        organization: Annotated[str | None, Field(
-            description="Filter by organization using partial match (case-insensitive).",
-            examples=["OAGI", "OASIS", "ISO"],
-            title="Organization"
-        )] = None,
-        domain: Annotated[str | None, Field(
-            description="Filter by domain using partial match (case-insensitive).",
-            examples=["Finance", "Healthcare", "Manufacturing"],
-            title="Domain"
-        )] = None,
-        state: Annotated[str | None, Field(
-            description="Filter by state using partial match (case-insensitive).",
-            examples=["Published", "Draft", "Deprecated"],
-            title="State"
-        )] = None,
-        description: Annotated[str | None, Field(
-            description="Filter by description using partial match (case-insensitive).",
-            examples=["Business", "Technical", "Standard"],
-            title="Description"
-        )] = None,
-        is_default: Annotated[bool | str | None, Field(
-            description="Filter by default library flag using exact match. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Default"
-        )] = None,
-        created_on: Annotated[str | None, Field(
-            description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-            examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-            title="Created On Date Range"
-        )] = None,
-        last_updated_on: Annotated[str | None, Field(
-            description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-            examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-            title="Last Updated On Date Range"
-        )] = None,
-        order_by: Annotated[str | None, Field(
-            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, type, organization, domain, state, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'.",
-            examples=["-creation_timestamp,+name", "name", "-last_update_timestamp"],
-            title="Order By"
-        )] = None
+            description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+        )]
 ) -> GetLibrariesResponse:
     """
     Get a paginated list of libraries.
@@ -340,8 +326,6 @@ async def get_libraries(
     and update metadata, and library-specific attributes.
     
     Args:
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
         name (str | None, optional): Filter by library name using partial match (case-insensitive). Defaults to None.
         type (str | None, optional): Filter by library type using partial match (case-insensitive). Defaults to None.
         organization (str | None, optional): Filter by organization using partial match (case-insensitive). Defaults to None.
@@ -362,6 +346,8 @@ async def get_libraries(
             Allowed columns: name, type, organization, domain, state, description, is_default, creation_timestamp, last_update_timestamp.
             Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
         GetLibrariesResponse: Response object containing:
@@ -381,7 +367,7 @@ async def get_libraries(
     
     Examples:
         Basic listing:
-        >>> result = get_libraries(offset=0, limit=10)
+        >>> result = get_libraries()
         >>> print(f"Found {result.total_items} libraries")
         
         Filtered search:
@@ -398,7 +384,7 @@ async def get_libraries(
         
         Custom ordering:
         >>> result = get_libraries(
-        ...     sort_list="-creation_timestamp,+name"
+        ...     order_by="-creation_timestamp,+name"
         ... )
     """
     # Validate authentication and database connection
@@ -477,7 +463,7 @@ async def get_libraries(
             items=[_create_library_result(library) for library in page.items]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving libraries: {e}")
+        logger.error(f"HTTP error retrieving libraries", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -486,7 +472,7 @@ async def get_libraries(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving libraries: {e}")
+        logger.error(f"Unexpected error retrieving libraries", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the libraries: {str(e)}. Please contact your system administrator.") from e
 

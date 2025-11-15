@@ -761,7 +761,7 @@ class BusinessInformationEntityService:
                             db_delete(support_doc)
                     except Exception as e:
                         # If deletion fails (e.g., table structure changed), log and continue
-                        logger.warning(f"Failed to delete asbiep_support_doc records for asbiep {asbiep.asbiep_id}: {e}")
+                        logger.warning(f"Failed to delete asbiep_support_doc records for asbiep {asbiep.asbiep_id}", e)
 
                 # Then delete the asbiep
                 db_delete(asbiep)
@@ -1619,7 +1619,7 @@ class BusinessInformationEntityService:
                 selectinload(Asbie.based_ascc_manifest).selectinload(AsccManifest.ascc),
                 selectinload(Asbie.based_ascc_manifest).selectinload(
                     AsccManifest.to_asccp_manifest).selectinload(AsccpManifest.asccp),
-                selectinload(Asbie.to_asbiep),
+                selectinload(Asbie.to_asbiep).selectinload(Asbiep.owner_top_level_asbiep),
                 selectinload(Asbie.owner_top_level_asbiep)
             )
             .where(Asbie.asbie_id == asbie_id)
@@ -1770,12 +1770,17 @@ class BusinessInformationEntityService:
         
         return existing_asbie
 
-    def _validate_ownership_and_state_for_asbie_update(
+    def _validate_top_level_asbiep_ownership_and_state(
             self,
             owner_top_level_asbiep_id: int
     ) -> "TopLevelAsbiep":
         """
-        Validate ownership and state for ASBIE update operation.
+        Validate ownership and state for a top-level ASBIEP.
+        
+        This method validates that:
+        - The top-level ASBIEP exists
+        - The current user is the owner or an admin
+        - The top-level ASBIEP is in 'WIP' state
         
         Args:
             owner_top_level_asbiep_id: The top-level ASBIEP ID
@@ -1801,12 +1806,12 @@ class BusinessInformationEntityService:
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
         
-        # Check if user is the owner
-        if top_level_asbiep.owner_user_id != self.requester.app_user_id:
+        # Check if user is the owner or an admin
+        if top_level_asbiep.owner_user_id != self.requester.app_user_id and not self.requester.is_admin:
             raise HTTPException(
                 status_code=403,
                 detail=f"You don't have permission to update this business information entity. "
-                       f"Only the owner (user ID: {top_level_asbiep.owner_user_id}) can make changes. "
+                       f"Only the owner (user ID: {top_level_asbiep.owner_user_id}) or an admin can make changes. "
                        f"Please contact the owner to update it, or ask them to transfer ownership to you using the transfer_top_level_asbiep_ownership tool."
             )
         
@@ -1814,8 +1819,8 @@ class BusinessInformationEntityService:
         if top_level_asbiep.state != "WIP":
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot update the ASBIE because the business information entity is in '{top_level_asbiep.state}' state. "
-                       f"Updates are only allowed when the state is 'WIP' (Work In Progress). "
+                detail=f"Cannot perform this operation because the business information entity is in '{top_level_asbiep.state}' state. "
+                       f"Operations are only allowed when the state is 'WIP' (Work In Progress). "
                        f"Please use the update_top_level_asbiep_state tool to change the state to 'WIP' first, then try again."
             )
         
@@ -1829,6 +1834,13 @@ class BusinessInformationEntityService:
         """
         Validate that the ASCC manifest is a valid relationship for the ABIE.
         
+        This function checks:
+        1. Direct relationships from the ABIE's ACC
+        2. Inherited relationships through the ACC hierarchy (based_acc_manifest_id)
+        3. Flattened relationships from group ACCs (component_type 3 or 4) - groups are automatically
+           skipped in BIE expressions, so relationships within groups are flattened and appear directly
+           under the parent ABIE
+        
         Args:
             from_abie: The ABIE to check relationships for
             based_ascc_manifest_id: The ASCC manifest ID to validate
@@ -1836,46 +1848,148 @@ class BusinessInformationEntityService:
         Raises:
             HTTPException: If the ASCC is not a valid relationship
         """
-        # First check direct relationship
-        ascc_relationship_query = (
-            select(AsccManifest)
-            .where(AsccManifest.from_acc_manifest_id == from_abie.based_acc_manifest_id)
-            .where(AsccManifest.ascc_manifest_id == based_ascc_manifest_id)
-        )
-        ascc_relationship = db_exec(ascc_relationship_query).first()
+        cc_service = CoreComponentService()
         
-        # If not found directly, check inherited relationships by traversing ACC hierarchy
-        if not ascc_relationship:
-            acc_manifest_id = from_abie.based_acc_manifest_id
-            checked_manifests = set()
+        # Build ACC manifest queue (including based ACC hierarchy)
+        acc_manifest_queue = []
+        acc_manifest_id = from_abie.based_acc_manifest_id
+        while acc_manifest_id:
+            acc_manifest = cc_service.get_acc_by_manifest_id(acc_manifest_id)
+            acc_manifest_queue.append(acc_manifest)
+            if acc_manifest.based_acc_manifest_id:
+                acc_manifest_id = acc_manifest.based_acc_manifest_id
+            else:
+                break
+        
+        # Check each ACC in the queue (direct and inherited)
+        for acc_manifest in acc_manifest_queue:
+            # First check direct relationship
+            ascc_relationship_query = (
+                select(AsccManifest)
+                .where(AsccManifest.from_acc_manifest_id == acc_manifest.acc_manifest_id)
+                .where(AsccManifest.ascc_manifest_id == based_ascc_manifest_id)
+            )
+            ascc_relationship = db_exec(ascc_relationship_query).first()
             
-            # Traverse the ACC hierarchy to find valid ASCC relationships
-            while acc_manifest_id and acc_manifest_id not in checked_manifests:
-                checked_manifests.add(acc_manifest_id)
-                ascc_check_query = (
-                    select(AsccManifest)
-                    .where(AsccManifest.from_acc_manifest_id == acc_manifest_id)
-                    .where(AsccManifest.ascc_manifest_id == based_ascc_manifest_id)
-                )
-                ascc_relationship = db_exec(ascc_check_query).first()
-                if ascc_relationship:
-                    break
-                
-                # Get the based_acc_manifest_id for inheritance traversal
-                acc_manifest = db_get(AccManifest, acc_manifest_id)
-                if acc_manifest and acc_manifest.based_acc_manifest_id:
-                    acc_manifest_id = acc_manifest.based_acc_manifest_id
-                else:
-                    break
+            if ascc_relationship:
+                # Found the relationship - validation passed
+                return
             
-            if not ascc_relationship:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"The ASCC manifest (ID {based_ascc_manifest_id}) is not a valid relationship for this ABIE (ID {from_abie.abie_id}). "
-                           f"The ASCC must be available as a relationship from the ABIE's ACC. "
-                           f"Please use get_abie or get_top_level_asbiep to view the available relationships, "
-                           f"and choose a based_ascc_manifest_id that appears in the relationships list."
-                )
+            # If not found directly, check if any ASCC points to a group and flatten it
+            # Get all ASCC relationships for this ACC
+            from tools.core_component import _get_relationships_for_acc
+            from tools.models.core_component import AsccRelationshipInfo
+            associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
+            
+            for cc_assoc in associations:
+                if isinstance(cc_assoc, AsccRelationshipInfo):
+                    # This is an ASCC relationship
+                    if cc_assoc.ascc_manifest_id == based_ascc_manifest_id:
+                        # Found the relationship - validation passed
+                        return
+                    
+                    # Check if this ASCC points to a group ACC
+                    try:
+                        if cc_assoc.to_asccp and cc_assoc.to_asccp.role_of_acc_manifest_id:
+                            role_of_acc_manifest = cc_service.get_acc_by_manifest_id(
+                                cc_assoc.to_asccp.role_of_acc_manifest_id
+                            )
+                            # If it's a group, recursively check relationships within the group
+                            if role_of_acc_manifest.acc.oagis_component_type in [3, 4]:
+                                # Recursively validate within the group
+                                if self._check_ascc_in_group(
+                                    role_of_acc_manifest.acc_manifest_id,
+                                    based_ascc_manifest_id,
+                                    cc_service
+                                ):
+                                    return
+                    except HTTPException:
+                        # Skip if ACC not found, continue checking
+                        continue
+        
+        # Not found in any relationship (direct, inherited, or flattened from groups)
+        raise HTTPException(
+            status_code=400,
+            detail=f"The ASCC manifest (ID {based_ascc_manifest_id}) is not a valid relationship for this ABIE (ID {from_abie.abie_id}). "
+                   f"The ASCC must be available as a relationship from the ABIE's ACC (including inherited and flattened group relationships). "
+                   f"Please use get_abie or get_top_level_asbiep to view the available relationships, "
+                   f"and choose a based_ascc_manifest_id that appears in the relationships list."
+        )
+    
+    def _check_ascc_in_group(
+            self,
+            group_acc_manifest_id: int,
+            target_ascc_manifest_id: int,
+            cc_service: "CoreComponentService"
+    ) -> bool:
+        """
+        Recursively check if the target ASCC manifest exists within a group ACC's relationships.
+        
+        This handles the flattening of groups (component_type 3 or 4) in BIE expressions.
+        
+        Args:
+            group_acc_manifest_id: The group ACC manifest ID to check within
+            target_ascc_manifest_id: The ASCC manifest ID to find
+            cc_service: CoreComponentService instance
+            
+        Returns:
+            bool: True if the ASCC is found within the group, False otherwise
+        """
+        from tools.core_component import _get_relationships_for_acc
+        
+        # Build ACC manifest queue for the group (including based ACC hierarchy)
+        acc_manifest_queue = []
+        acc_manifest_id = group_acc_manifest_id
+        while acc_manifest_id:
+            acc_manifest = cc_service.get_acc_by_manifest_id(acc_manifest_id)
+            acc_manifest_queue.append(acc_manifest)
+            if acc_manifest.based_acc_manifest_id:
+                acc_manifest_id = acc_manifest.based_acc_manifest_id
+            else:
+                break
+        
+        # Check each ACC in the queue
+        for acc_manifest in acc_manifest_queue:
+            # Check direct ASCC relationships
+            ascc_relationship_query = (
+                select(AsccManifest)
+                .where(AsccManifest.from_acc_manifest_id == acc_manifest.acc_manifest_id)
+                .where(AsccManifest.ascc_manifest_id == target_ascc_manifest_id)
+            )
+            ascc_relationship = db_exec(ascc_relationship_query).first()
+            
+            if ascc_relationship:
+                return True
+            
+            # Get all relationships and check for nested groups
+            from tools.models.core_component import AsccRelationshipInfo
+            associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
+            
+            for cc_assoc in associations:
+                if isinstance(cc_assoc, AsccRelationshipInfo):
+                    # Check if this is the target ASCC
+                    if cc_assoc.ascc_manifest_id == target_ascc_manifest_id:
+                        return True
+                    
+                    # Check if this ASCC points to another group and recursively check
+                    try:
+                        if cc_assoc.to_asccp and cc_assoc.to_asccp.role_of_acc_manifest_id:
+                            role_of_acc_manifest = cc_service.get_acc_by_manifest_id(
+                                cc_assoc.to_asccp.role_of_acc_manifest_id
+                            )
+                            # If it's a group, recursively check within that group
+                            if role_of_acc_manifest.acc.oagis_component_type in [3, 4]:
+                                if self._check_ascc_in_group(
+                                    role_of_acc_manifest.acc_manifest_id,
+                                    target_ascc_manifest_id,
+                                    cc_service
+                                ):
+                                    return True
+                    except HTTPException:
+                        # Skip if not found, continue checking
+                        continue
+        
+        return False
 
     def _get_ascc_manifest_for_asbie(
             self,
@@ -2085,6 +2199,7 @@ class BusinessInformationEntityService:
             existing_asbie: "Asbie",
             final_cardinality_min: int,
             final_cardinality_max: int,
+            owner_top_level_asbiep_id: int,
             is_used: bool | None = None,
             is_deprecated: bool | None = None,
             definition: str | None = None,
@@ -2100,6 +2215,7 @@ class BusinessInformationEntityService:
             existing_asbie: The existing ASBIE to update
             final_cardinality_min: Validated minimum cardinality
             final_cardinality_max: Validated maximum cardinality
+            owner_top_level_asbiep_id: The owner top-level ASBIEP ID of the ASBIE (used to check if ASBIEP is reused)
             is_used: Whether the ASBIE is used. If None, will not be updated.
             is_deprecated: Whether the ASBIE is deprecated. If None, will not be updated.
             definition: Definition for the ASBIE
@@ -2150,6 +2266,14 @@ class BusinessInformationEntityService:
                 asbiep_query = select(Asbiep).where(Asbiep.asbiep_id == existing_asbie.to_asbiep_id)
                 asbiep = db_exec(asbiep_query).first()
                 if asbiep:
+                    # Check if ASBIEP is from a reused top-level ASBIEP
+                    # If ASBIE.owner_top_level_asbiep_id != ASBIEP.owner_top_level_asbiep_id, it's reused
+                    if owner_top_level_asbiep_id != asbiep.owner_top_level_asbiep_id:
+                        # Validate ownership and state for the ASBIEP's owner top-level ASBIEP
+                        self._validate_top_level_asbiep_ownership_and_state(
+                            asbiep.owner_top_level_asbiep_id
+                        )
+                    
                     asbiep.remark = remark
                     asbiep.last_updated_by = self.requester.app_user_id
                     asbiep.last_update_timestamp = datetime.now(timezone.utc)
@@ -2194,7 +2318,7 @@ class BusinessInformationEntityService:
         )
         
         # 2) Validate ownership and state
-        self._validate_ownership_and_state_for_asbie_update(
+        self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
         
@@ -2225,6 +2349,7 @@ class BusinessInformationEntityService:
                 existing_asbie=existing_asbie,
                 final_cardinality_min=final_cardinality_min,
                 final_cardinality_max=final_cardinality_max,
+                owner_top_level_asbiep_id=owner_top_level_asbiep_id,
                 is_used=True
             )
             
@@ -2330,7 +2455,7 @@ class BusinessInformationEntityService:
         )
         
         # 5) Validate ownership and state
-        self._validate_ownership_and_state_for_asbie_update(
+        self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
         
@@ -2349,6 +2474,7 @@ class BusinessInformationEntityService:
             existing_asbie=existing_asbie,
             final_cardinality_min=final_cardinality_min,
             final_cardinality_max=final_cardinality_max,
+            owner_top_level_asbiep_id=owner_top_level_asbiep_id,
             is_used=is_used,
             is_deprecated=is_deprecated,
             definition=definition,
@@ -2366,6 +2492,400 @@ class BusinessInformationEntityService:
         evict_cache("business_information_entity.get_abie", abie_id=from_abie_id)  # Evict parent ABIE
         
         return (existing_asbie.asbie_id, updates)
+
+    @transaction(read_only=False)
+    def reuse_top_level_asbiep(
+            self,
+            asbie_id: int,
+            reuse_top_level_asbiep_id: int
+    ) -> tuple[int, int, list[str]]:
+        """
+        Reuse an existing Top-Level ASBIEP's ASBIEP for an ASBIE.
+        
+        This method sets the ASBIE's to_asbiep_id to point to the ASBIEP from the specified 
+        top-level ASBIEP. The operation works when:
+        1. The owner_top_level_asbiep_id of the ASBIE and reuse_top_level_asbiep_id are different
+        2. The ASBIE's based_ascc.to_asccp_manifest_id equals the reuse_top_level_asbiep's 
+           asbiep.based_asccp_manifest_id
+        
+        Permission Requirements:
+        - The current user must be the owner of the top-level ASBIEP that owns the ASBIE
+        - The top-level ASBIEP state must be 'WIP' (Work In Progress)
+        
+        Args:
+            asbie_id: The ASBIE ID to update with the reused top-level ASBIEP
+            reuse_top_level_asbiep_id: The top-level ASBIEP ID to reuse
+        
+        Returns:
+            tuple: (asbie_id, reuse_asbiep_id, list of updated fields)
+            
+        Raises:
+            HTTPException: If validation fails, resources are not found, user lacks permission,
+                the owner_top_level_asbiep_ids are the same, the based_asccp_manifest_ids don't match,
+                or database errors occur.
+        """
+        # Get the ASBIE by ID
+        asbie = db_get(Asbie, asbie_id)
+        if not asbie:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Could not find the ASBIE with ID {asbie_id}. "
+                       f"Please check that the ID is correct. "
+                       f"You can use get_asbie or get_top_level_asbiep tools to view available ASBIEs."
+            )
+        
+        # Get the owner top-level ASBIEP ID from the ASBIE
+        owner_top_level_asbiep_id = asbie.owner_top_level_asbiep_id
+        
+        # Validate that owner_top_level_asbiep_id and reuse_top_level_asbiep_id are different
+        if owner_top_level_asbiep_id == reuse_top_level_asbiep_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot reuse top-level ASBIEP {reuse_top_level_asbiep_id} because it is the same as the ASBIE's owner top-level ASBIEP. "
+                       f"The top-level ASBIEP to reuse must be different from the one that owns the ASBIE. "
+                       f"Please choose a different top-level ASBIEP to reuse."
+            )
+        
+        # Get the reuse top-level ASBIEP
+        reuse_top_level_asbiep = db_get(TopLevelAsbiep, reuse_top_level_asbiep_id)
+        if not reuse_top_level_asbiep:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Could not find the top-level ASBIEP with ID {reuse_top_level_asbiep_id} to reuse. "
+                       f"Please check that the ID is correct. "
+                       f"You can use get_top_level_asbiep_list to view available top-level ASBIEPs."
+            )
+        
+        # Get the ASBIEP from the reuse top-level ASBIEP
+        if not reuse_top_level_asbiep.asbiep_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The top-level ASBIEP (ID {reuse_top_level_asbiep_id}) does not have an associated ASBIEP. "
+                       f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
+            )
+        
+        reuse_asbiep = db_get(Asbiep, reuse_top_level_asbiep.asbiep_id)
+        if not reuse_asbiep:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Could not find the ASBIEP with ID {reuse_top_level_asbiep.asbiep_id} from the top-level ASBIEP. "
+                       f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
+            )
+        
+        # Verify that the ASBIEP actually belongs to the reuse top-level ASBIEP
+        if reuse_asbiep.owner_top_level_asbiep_id != reuse_top_level_asbiep_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The ASBIEP (ID {reuse_asbiep.asbiep_id}) does not belong to the top-level ASBIEP (ID {reuse_top_level_asbiep_id}). "
+                       f"The ASBIEP's owner is {reuse_asbiep.owner_top_level_asbiep_id}, but expected {reuse_top_level_asbiep_id}. "
+                       f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
+            )
+        
+        # Get the based_asccp_manifest_id from the reuse ASBIEP
+        reuse_asccp_manifest_id = reuse_asbiep.based_asccp_manifest_id
+        
+        # Get the ASCC information from the ASBIE to get to_asccp_manifest_id
+        ascc_manifest = db_get(AsccManifest, asbie.based_ascc_manifest_id)
+        if not ascc_manifest:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Could not find the ASCC manifest with ID {asbie.based_ascc_manifest_id} for the ASBIE. "
+                       f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
+            )
+        
+        asbie_to_asccp_manifest_id = ascc_manifest.to_asccp_manifest_id
+        
+        # Validate that ASBIE's based_ascc.to_asccp_manifest_id equals reuse_top_level_asbiep's asbiep.based_asccp_manifest_id
+        if asbie_to_asccp_manifest_id != reuse_asccp_manifest_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot reuse top-level ASBIEP {reuse_top_level_asbiep_id} because the ASCCP manifest IDs do not match. "
+                       f"The ASBIE is based on ASCCP manifest ID {asbie_to_asccp_manifest_id}, but the top-level ASBIEP to reuse "
+                       f"is based on ASCCP manifest ID {reuse_asccp_manifest_id}. "
+                       f"To reuse a top-level ASBIEP, both must be based on the same ASCCP. "
+                       f"Please choose a different top-level ASBIEP that is based on the same ASCCP as the ASBIE."
+            )
+        
+        # Validate ownership and state for the owner top-level ASBIEP
+        self._validate_top_level_asbiep_ownership_and_state(
+            owner_top_level_asbiep_id
+        )
+        
+        # Get the original ASBIEP ID before updating
+        original_asbiep_id = asbie.to_asbiep_id
+        
+        # Update the ASBIE's to_asbiep_id FIRST (before deleting the original ASBIEP)
+        # This removes the foreign key reference so we can safely delete the original ASBIEP
+        asbie.to_asbiep_id = reuse_asbiep.asbiep_id
+        asbie.last_updated_by = self.requester.app_user_id
+        asbie.last_update_timestamp = datetime.now(timezone.utc)
+        db_add(asbie)
+        db_flush()  # Ensure the update is persisted before deleting the original ASBIEP
+        
+        # Now delete the original ASBIEP and all its associated records if it exists
+        # The ASBIE no longer references it, so it's safe to delete
+        if original_asbiep_id:
+            self._delete_asbiep_and_associated_records(
+                asbiep_id=original_asbiep_id,
+                owner_top_level_asbiep_id=owner_top_level_asbiep_id
+            )
+        
+        # Evict cache entries
+        evict_cache("business_information_entity.get_asbie_by_asbie_id", asbie_id=asbie_id)
+        evict_cache("business_information_entity.get_asbie_by_based_ascc_manifest_id")
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=owner_top_level_asbiep_id)
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=reuse_top_level_asbiep_id)
+        evict_cache("business_information_entity.get_asbiep", asbiep_id=reuse_asbiep.asbiep_id)
+        if asbie.from_abie_id:
+            evict_cache("business_information_entity.get_abie", abie_id=asbie.from_abie_id)
+        
+        return (asbie_id, reuse_asbiep.asbiep_id, ["to_asbiep_id"])
+
+    @transaction(read_only=False)
+    def remove_reused_top_level_asbiep(
+            self,
+            asbie_id: int
+    ) -> tuple[int, list[str]]:
+        """
+        Remove a reused top-level ASBIEP by creating a new ASBIEP and ABIE.
+        
+        This method checks if the ASBIE is using a reused top-level ASBIEP (i.e., 
+        asbie.owner_top_level_asbiep_id != asbie.to_asbiep.owner_top_level_asbiep_id).
+        If it is reused, it creates a new ASBIEP and ABIE to revert the to_asbiep_id
+        back to a non-reused state.
+        
+        Permission Requirements:
+        - The current user must be the owner of the top-level ASBIEP that owns the ASBIE
+        - The top-level ASBIEP state must be 'WIP' (Work In Progress)
+        
+        Args:
+            asbie_id: The ASBIE ID to remove the reused top-level ASBIEP from
+        
+        Returns:
+            tuple: (asbie_id, list of updated fields)
+            
+        Raises:
+            HTTPException: If validation fails, resources are not found, user lacks permission,
+                the ASBIE is not using a reused top-level ASBIEP, or database errors occur.
+        """
+        # Get the ASBIE by ID
+        asbie = db_get(Asbie, asbie_id)
+        if not asbie:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Could not find the ASBIE with ID {asbie_id}. "
+                       f"Please check that the ID is correct. "
+                       f"You can use get_asbie or get_top_level_asbiep tools to view available ASBIEs."
+            )
+        
+        # Get the owner top-level ASBIEP ID from the ASBIE
+        owner_top_level_asbiep_id = asbie.owner_top_level_asbiep_id
+        
+        # Validate ownership and state for the owner top-level ASBIEP
+        self._validate_top_level_asbiep_ownership_and_state(
+            owner_top_level_asbiep_id
+        )
+        
+        # Check if ASBIE has a to_asbiep_id
+        if not asbie.to_asbiep_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The ASBIE (ID {asbie_id}) does not have an associated ASBIEP. "
+                       f"Cannot remove a reused top-level ASBIEP because there is no ASBIEP to remove. "
+                       f"This ASBIE may not have been fully created yet."
+            )
+        
+        # Get the current ASBIEP
+        current_asbiep = db_get(Asbiep, asbie.to_asbiep_id)
+        if not current_asbiep:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Could not find the ASBIEP with ID {asbie.to_asbiep_id} associated with the ASBIE. "
+                       f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
+            )
+        
+        # Check if it's reused (owner_top_level_asbiep_id != to_asbiep.owner_top_level_asbiep_id)
+        if owner_top_level_asbiep_id == current_asbiep.owner_top_level_asbiep_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The ASBIE (ID {asbie_id}) is not using a reused top-level ASBIEP. "
+                       f"The ASBIE's owner top-level ASBIEP (ID {owner_top_level_asbiep_id}) is the same as "
+                       f"the ASBIEP's owner top-level ASBIEP (ID {current_asbiep.owner_top_level_asbiep_id}). "
+                       f"This operation can only be performed on ASBIEs that are using a reused top-level ASBIEP "
+                       f"(where the ASBIE and its ASBIEP belong to different top-level ASBIEPs)."
+            )
+        
+        # Get ASCC/ASCCP/ACC manifests
+        ascc_manifest, asccp_manifest, role_of_acc_manifest = self._get_ascc_manifest_for_asbie(
+            asbie.based_ascc_manifest_id
+        )
+        
+        # Get the ASBIE's path
+        asbie_path = asbie.path
+        if not asbie_path:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The ASBIE (ID {asbie_id}) does not have a path. "
+                       f"Cannot create new ASBIEP and ABIE without a path. "
+                       f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
+            )
+        
+        # Construct ASBIEP path from ASBIE path
+        asbiep_path = f"{asbie_path}>ASCCP-{asccp_manifest.asccp_manifest_id}"
+        
+        # Create ABIE first
+        role_of_abie = self._create_abie(
+            acc_manifest_id=role_of_acc_manifest.acc_manifest_id,
+            top_level_asbiep_id=owner_top_level_asbiep_id,
+            parent_asbiep_path=asbiep_path
+        )
+        
+        # Create ASBIEP
+        new_asbiep = self._create_asbiep(
+            asccp_manifest_id=asccp_manifest.asccp_manifest_id,
+            abie_id=role_of_abie.abie_id,
+            top_level_asbiep_id=owner_top_level_asbiep_id,
+            parent_asbie_path=asbie_path
+        )
+        
+        # Update the ASBIE's to_asbiep_id
+        asbie.to_asbiep_id = new_asbiep.asbiep_id
+        asbie.last_updated_by = self.requester.app_user_id
+        asbie.last_update_timestamp = datetime.now(timezone.utc)
+        db_add(asbie)
+        
+        # Evict cache entries
+        evict_cache("business_information_entity.get_asbie_by_asbie_id", asbie_id=asbie_id)
+        evict_cache("business_information_entity.get_asbie_by_based_ascc_manifest_id")
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=owner_top_level_asbiep_id)
+        if asbie.from_abie_id:
+            evict_cache("business_information_entity.get_abie", abie_id=asbie.from_abie_id)
+        
+        return (asbie_id, ["to_asbiep_id"])
+
+    def _delete_asbiep_and_associated_records(self, asbiep_id: int, owner_top_level_asbiep_id: int, exclude_asbie_id: int | None = None):
+        """
+        Delete an ASBIEP and all its associated records recursively.
+        
+        This method deletes:
+        1. All ASBIEs that reference this ASBIEP (to_asbiep_id == asbiep_id),
+           except the one specified by exclude_asbie_id (if provided)
+        2. All ASBIEs that are children of the ABIE (from_abie_id == role_of_abie_id),
+           and recursively delete their to_asbiep and all associated records
+           (because asbie.to_asbiep.role_of_abie could have underlying ASBIEs too)
+        3. All BBIEs that are children of the ABIE (from_abie_id == role_of_abie_id) and their BBIE_SCs
+        4. ASBIEP support docs
+        5. The ASBIEP itself (must be deleted before the ABIE to avoid foreign key constraint)
+        6. The ABIE itself (role_of_abie_id) - deleted after ASBIEP to avoid foreign key constraint
+        
+        Args:
+            asbiep_id: The ASBIEP ID to delete
+            owner_top_level_asbiep_id: The owner top-level ASBIEP ID (for filtering related records)
+            exclude_asbie_id: Optional ASBIE ID to exclude from deletion (used when updating an ASBIE)
+        """
+        # Get the ASBIEP
+        asbiep = db_get(Asbiep, asbiep_id)
+        if not asbiep:
+            return  # Already deleted or doesn't exist
+        
+        role_of_abie_id = asbiep.role_of_abie_id
+        
+        # Step 1: Delete all ASBIEs that reference this ASBIEP (to_asbiep_id == asbiep_id)
+        # These ASBIEs directly reference the ASBIEP we're deleting.
+        # Exclude the ASBIE specified by exclude_asbie_id if provided (used when updating an ASBIE)
+        conditions = [
+            Asbie.to_asbiep_id == asbiep_id,
+            Asbie.owner_top_level_asbiep_id == owner_top_level_asbiep_id
+        ]
+        if exclude_asbie_id is not None:
+            conditions.append(Asbie.asbie_id != exclude_asbie_id)
+        
+        asbies_referencing_asbiep = db_exec(
+            select(Asbie).where(*conditions)
+        ).all()
+        
+        for asbie in asbies_referencing_asbiep:
+            # Delete the ASBIE itself
+            db_delete(asbie)
+        
+        # Step 2: Delete all ASBIEs that are children of the ABIE (from_abie_id == role_of_abie_id)
+        # For each of these ASBIEs, we need to recursively delete their to_asbiep and all associated records
+        # because that ASBIEP's role_of_abie could have underlying ASBIEs too.
+        if role_of_abie_id:
+            asbies_from_abie = db_exec(
+                select(Asbie).where(
+                    Asbie.from_abie_id == role_of_abie_id,
+                    Asbie.owner_top_level_asbiep_id == owner_top_level_asbiep_id
+                )
+            ).all()
+            
+            for asbie in asbies_from_abie:
+                # Recursively delete the to_asbiep of this ASBIE if it exists
+                # This handles the case where asbie.to_asbiep.role_of_abie has underlying ASBIEs
+                if asbie.to_asbiep_id:
+                    self._delete_asbiep_and_associated_records(
+                        asbie.to_asbiep_id,
+                        owner_top_level_asbiep_id
+                    )
+                # Delete the ASBIE itself
+                db_delete(asbie)
+        
+        # Step 3: Delete all BBIEs that are children of the ABIE (from_abie_id == role_of_abie_id)
+        if role_of_abie_id:
+            bbies = db_exec(
+                select(Bbie).where(
+                    Bbie.from_abie_id == role_of_abie_id,
+                    Bbie.owner_top_level_asbiep_id == owner_top_level_asbiep_id
+                )
+            ).all()
+            
+            bbie_ids = [bbie.bbie_id for bbie in bbies]
+            
+            # Step 3a: Delete all BBIE_SCs for these BBIEs
+            if bbie_ids:
+                bbie_scs = db_exec(
+                    select(BbieSc).where(
+                        BbieSc.bbie_id.in_(bbie_ids),
+                        BbieSc.owner_top_level_asbiep_id == owner_top_level_asbiep_id
+                    )
+                ).all()
+                for bbie_sc in bbie_scs:
+                    db_delete(bbie_sc)
+            
+            # Step 3b: Delete all BBIEs
+            for bbie in bbies:
+                db_delete(bbie)
+        
+        # Step 4: Delete ASBIEP support docs (before deleting the ASBIEP)
+        if self._table_exists("asbiep_support_doc"):
+            try:
+                support_docs = db_exec(
+                    select(AsbiepSupportDoc).where(
+                        AsbiepSupportDoc.asbiep_id == asbiep_id
+                    )
+                ).all()
+                for support_doc in support_docs:
+                    db_delete(support_doc)
+            except Exception as e:
+                # If deletion fails (e.g., table structure changed), log and continue
+                logger.warning(f"Failed to delete asbiep_support_doc records for asbiep {asbiep_id}", e)
+        
+        # Step 5: Delete the ASBIEP itself (before deleting the ABIE to avoid foreign key constraint)
+        # This removes the foreign key reference from ASBIEP to ABIE
+        db_delete(asbiep)
+        
+        # Step 6: Delete the ABIE itself (after deleting the ASBIEP that references it)
+        if role_of_abie_id:
+            abie = db_get(Abie, role_of_abie_id)
+            if abie and abie.owner_top_level_asbiep_id == owner_top_level_asbiep_id:
+                db_delete(abie)
+        
+        # Evict cache entries for deleted records
+        evict_cache("business_information_entity.get_asbiep", asbiep_id=asbiep_id)
+        if role_of_abie_id:
+            evict_cache("business_information_entity.get_abie", abie_id=role_of_abie_id)
+        evict_cache("business_information_entity.get_asbie_by_based_ascc_manifest_id")
+        evict_cache("business_information_entity.get_bbie_by_based_bcc_manifest_id")
 
     def _create_bbiep(
             self,
@@ -2433,6 +2953,13 @@ class BusinessInformationEntityService:
         """
         Validate that the BCC manifest is a valid relationship for the ABIE.
         
+        This function checks:
+        1. Direct relationships from the ABIE's ACC
+        2. Inherited relationships through the ACC hierarchy (based_acc_manifest_id)
+        3. Flattened relationships from group ACCs (component_type 3 or 4) - groups are automatically
+           skipped in BIE expressions, so relationships within groups are flattened and appear directly
+           under the parent ABIE
+        
         Args:
             from_abie: The ABIE to check relationships for
             based_bcc_manifest_id: The BCC manifest ID to validate
@@ -2440,46 +2967,149 @@ class BusinessInformationEntityService:
         Raises:
             HTTPException: If the BCC is not a valid relationship
         """
-        # First check direct relationship
-        bcc_relationship_query = (
-            select(BccManifest)
-            .where(BccManifest.from_acc_manifest_id == from_abie.based_acc_manifest_id)
-            .where(BccManifest.bcc_manifest_id == based_bcc_manifest_id)
-        )
-        bcc_relationship = db_exec(bcc_relationship_query).first()
+        cc_service = CoreComponentService()
         
-        # If not found directly, check inherited relationships by traversing ACC hierarchy
-        if not bcc_relationship:
-            acc_manifest_id = from_abie.based_acc_manifest_id
-            checked_manifests = set()
+        # Build ACC manifest queue (including based ACC hierarchy)
+        acc_manifest_queue = []
+        acc_manifest_id = from_abie.based_acc_manifest_id
+        while acc_manifest_id:
+            acc_manifest = cc_service.get_acc_by_manifest_id(acc_manifest_id)
+            acc_manifest_queue.append(acc_manifest)
+            if acc_manifest.based_acc_manifest_id:
+                acc_manifest_id = acc_manifest.based_acc_manifest_id
+            else:
+                break
+        
+        # Check each ACC in the queue (direct and inherited)
+        for acc_manifest in acc_manifest_queue:
+            # First check direct relationship
+            bcc_relationship_query = (
+                select(BccManifest)
+                .where(BccManifest.from_acc_manifest_id == acc_manifest.acc_manifest_id)
+                .where(BccManifest.bcc_manifest_id == based_bcc_manifest_id)
+            )
+            bcc_relationship = db_exec(bcc_relationship_query).first()
             
-            # Traverse the ACC hierarchy to find valid BCC relationships
-            while acc_manifest_id and acc_manifest_id not in checked_manifests:
-                checked_manifests.add(acc_manifest_id)
-                bcc_check_query = (
-                    select(BccManifest)
-                    .where(BccManifest.from_acc_manifest_id == acc_manifest_id)
-                    .where(BccManifest.bcc_manifest_id == based_bcc_manifest_id)
-                )
-                bcc_relationship = db_exec(bcc_check_query).first()
-                if bcc_relationship:
-                    break
+            if bcc_relationship:
+                # Found the relationship - validation passed
+                return
+            
+            # If not found directly, check if any ASCC points to a group and flatten it
+            # Get all relationships for this ACC
+            from tools.core_component import _get_relationships_for_acc
+            from tools.models.core_component import AsccRelationshipInfo, BccRelationshipInfo
+            associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
+            
+            for cc_assoc in associations:
+                # Check if this is the target BCC
+                if isinstance(cc_assoc, BccRelationshipInfo) and cc_assoc.bcc_manifest_id == based_bcc_manifest_id:
+                    # Found the relationship - validation passed
+                    return
                 
-                # Get the based_acc_manifest_id for inheritance traversal
-                acc_manifest = db_get(AccManifest, acc_manifest_id)
-                if acc_manifest and acc_manifest.based_acc_manifest_id:
-                    acc_manifest_id = acc_manifest.based_acc_manifest_id
-                else:
-                    break
+                # Check if this ASCC points to a group ACC and recursively check within the group
+                if isinstance(cc_assoc, AsccRelationshipInfo):
+                    try:
+                        if cc_assoc.to_asccp and cc_assoc.to_asccp.role_of_acc_manifest_id:
+                            role_of_acc_manifest = cc_service.get_acc_by_manifest_id(
+                                cc_assoc.to_asccp.role_of_acc_manifest_id
+                            )
+                            # If it's a group, recursively check relationships within the group
+                            if role_of_acc_manifest.acc.oagis_component_type in [3, 4]:
+                                # Recursively validate within the group
+                                if self._check_bcc_in_group(
+                                    role_of_acc_manifest.acc_manifest_id,
+                                    based_bcc_manifest_id,
+                                    cc_service
+                                ):
+                                    return
+                    except HTTPException:
+                        # Skip if ACC not found, continue checking
+                        continue
+        
+        # Not found in any relationship (direct, inherited, or flattened from groups)
+        raise HTTPException(
+            status_code=400,
+            detail=f"The BCC manifest (ID {based_bcc_manifest_id}) is not a valid relationship for this ABIE (ID {from_abie.abie_id}). "
+                   f"The BCC must be available as a relationship from the ABIE's ACC (including inherited and flattened group relationships). "
+                   f"Please use get_abie or get_top_level_asbiep to view the available relationships, "
+                   f"and choose a based_bcc_manifest_id that appears in the relationships list."
+        )
+    
+    def _check_bcc_in_group(
+            self,
+            group_acc_manifest_id: int,
+            target_bcc_manifest_id: int,
+            cc_service: "CoreComponentService"
+    ) -> bool:
+        """
+        Recursively check if the target BCC manifest exists within a group ACC's relationships.
+        
+        This handles the flattening of groups (component_type 3 or 4) in BIE expressions.
+        
+        Args:
+            group_acc_manifest_id: The group ACC manifest ID to check within
+            target_bcc_manifest_id: The BCC manifest ID to find
+            cc_service: CoreComponentService instance
             
-            if not bcc_relationship:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"The BCC manifest (ID {based_bcc_manifest_id}) is not a valid relationship for this ABIE (ID {from_abie.abie_id}). "
-                           f"The BCC must be available as a relationship from the ABIE's ACC. "
-                           f"Please use get_abie or get_top_level_asbiep to view the available relationships, "
-                           f"and choose a based_bcc_manifest_id that appears in the relationships list."
-                )
+        Returns:
+            bool: True if the BCC is found within the group, False otherwise
+        """
+        from tools.core_component import _get_relationships_for_acc
+        from tools.models.core_component import AsccRelationshipInfo
+        
+        # Build ACC manifest queue for the group (including based ACC hierarchy)
+        acc_manifest_queue = []
+        acc_manifest_id = group_acc_manifest_id
+        while acc_manifest_id:
+            acc_manifest = cc_service.get_acc_by_manifest_id(acc_manifest_id)
+            acc_manifest_queue.append(acc_manifest)
+            if acc_manifest.based_acc_manifest_id:
+                acc_manifest_id = acc_manifest.based_acc_manifest_id
+            else:
+                break
+        
+        # Check each ACC in the queue
+        for acc_manifest in acc_manifest_queue:
+            # Check direct BCC relationships
+            bcc_relationship_query = (
+                select(BccManifest)
+                .where(BccManifest.from_acc_manifest_id == acc_manifest.acc_manifest_id)
+                .where(BccManifest.bcc_manifest_id == target_bcc_manifest_id)
+            )
+            bcc_relationship = db_exec(bcc_relationship_query).first()
+            
+            if bcc_relationship:
+                return True
+            
+            # Get all relationships and check for nested groups
+            from tools.models.core_component import BccRelationshipInfo
+            associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
+            
+            for cc_assoc in associations:
+                # Check if this is the target BCC
+                if isinstance(cc_assoc, BccRelationshipInfo) and cc_assoc.bcc_manifest_id == target_bcc_manifest_id:
+                    return True
+                
+                # Check if this ASCC points to another group and recursively check
+                if isinstance(cc_assoc, AsccRelationshipInfo):
+                    try:
+                        if cc_assoc.to_asccp and cc_assoc.to_asccp.role_of_acc_manifest_id:
+                            role_of_acc_manifest = cc_service.get_acc_by_manifest_id(
+                                cc_assoc.to_asccp.role_of_acc_manifest_id
+                            )
+                            # If it's a group, recursively check within that group
+                            if role_of_acc_manifest.acc.oagis_component_type in [3, 4]:
+                                if self._check_bcc_in_group(
+                                    role_of_acc_manifest.acc_manifest_id,
+                                    target_bcc_manifest_id,
+                                    cc_service
+                                ):
+                                    return True
+                    except HTTPException:
+                        # Skip if not found, continue checking
+                        continue
+        
+        return False
 
     def _get_bcc_manifest_for_bbie(
             self,
@@ -3196,7 +3826,7 @@ class BusinessInformationEntityService:
         )
         
         # 2) Validate ownership and state (reuse ASBIE method)
-        self._validate_ownership_and_state_for_asbie_update(
+        self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
         
@@ -3354,7 +3984,7 @@ class BusinessInformationEntityService:
         )
         
         # 5) Validate ownership and state (reuse ASBIE method)
-        self._validate_ownership_and_state_for_asbie_update(
+        self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
         
@@ -3536,7 +4166,7 @@ class BusinessInformationEntityService:
         owner_top_level_asbiep_id = bbie.owner_top_level_asbiep_id
         
         # 2) Validate ownership and state
-        self._validate_ownership_and_state_for_asbie_update(
+        self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
         
@@ -3715,7 +4345,7 @@ class BusinessInformationEntityService:
         owner_top_level_asbiep_id = existing_bbie_sc.owner_top_level_asbiep_id
         
         # 2) Validate ownership and state
-        self._validate_ownership_and_state_for_asbie_update(
+        self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
         

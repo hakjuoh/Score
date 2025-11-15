@@ -2,6 +2,7 @@ import asyncio
 import pytest
 from fastmcp import Client
 from fastmcp.client import BearerAuth
+from tests.conftest import create_test_client
 
 
 class TestGetXbt:
@@ -84,7 +85,7 @@ class TestGetXbt:
     def xbt_manifest_id_from_bbie(self, token, item_master_asccp_manifest_id, sample_business_context_id, release_10_12_id):
         """Create a BBIE and return its xbt_manifest_id from primitiveRestriction."""
         async def _get_xbt_manifest_id():
-            async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+            async with create_test_client(token) as client:
                 # Create a top-level ASBIEP
                 create_result = await client.call_tool("create_top_level_asbiep", {
                     'asccp_manifest_id': item_master_asccp_manifest_id,
@@ -164,6 +165,7 @@ class TestGetXbt:
                     
                     # If xbtManifestId is not set, try to get default from get_bbie_by_based_bcc_manifest_id
                     bbie_info_result = await client.call_tool("get_bbie_by_based_bcc_manifest_id", {
+                        'top_level_asbiep_id': top_level_asbiep_id,
                         'based_bcc_manifest_id': based_bcc_manifest_id
                     })
                     
@@ -189,7 +191,7 @@ class TestGetXbt:
     def xbt_manifest_id_from_bbie_sc(self, token, item_master_asccp_manifest_id, sample_business_context_id):
         """Create a BBIE_SC and return its xbt_manifest_id from primitiveRestriction."""
         async def _get_xbt_manifest_id():
-            async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+            async with create_test_client(token) as client:
                 # Create a top-level ASBIEP
                 create_result = await client.call_tool("create_top_level_asbiep", {
                     'asccp_manifest_id': item_master_asccp_manifest_id,

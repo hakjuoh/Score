@@ -29,7 +29,8 @@ class UpdateBizCtxValueResponse(BaseModel):
 
 class DeleteBizCtxValueResponse(BaseModel):
     """Response for delete_business_context_value tool."""
-    biz_ctx_value_id: int  # Unique identifier of the deleted business context value
+    biz_ctx_value_id: int | None = None  # Unique identifier of the deleted business context value (None if deletion was cancelled)
+    message: str | None = None  # Optional message indicating the status of the deletion operation
 
 
 class UpdateBizCtxResponse(BaseModel):
@@ -40,7 +41,8 @@ class UpdateBizCtxResponse(BaseModel):
 
 class DeleteBizCtxResponse(BaseModel):
     """Response for delete_business_context tool."""
-    biz_ctx_id: int  # Unique identifier of the deleted business context
+    biz_ctx_id: int | None = None  # Unique identifier of the deleted business context (None if deletion was cancelled)
+    message: str | None = None  # Optional message indicating the status of the deletion operation
 
 
 class CtxSchemeValueInfo(BaseModel):

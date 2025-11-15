@@ -413,6 +413,9 @@ class BizCtxService:
         if ctx_id:
             evict_cache("biz_ctx.get_biz_ctxs")  # Evict all list queries
             evict_cache("biz_ctx.get_biz_ctx", biz_ctx_id=ctx_id)  # Evict specific get query
+        
+        # Evict cache for the new get_biz_ctx_by_value_id method
+        evict_cache("biz_ctx.get_biz_ctx_by_value_id", biz_ctx_value_id=biz_ctx_value_id)
 
         return biz_ctx_value, original_values
 
@@ -509,6 +512,9 @@ class BizCtxService:
         if ctx_id:
             evict_cache("biz_ctx.get_biz_ctxs")  # Evict all list queries
             evict_cache("biz_ctx.get_biz_ctx", biz_ctx_id=ctx_id)  # Evict specific get query
+        
+        # Evict cache for the new get_biz_ctx_by_value_id method
+        evict_cache("biz_ctx.get_biz_ctx_by_value_id", biz_ctx_value_id=biz_ctx_value_id)
 
         return True
 
@@ -549,6 +555,45 @@ class BizCtxService:
             )
 
         return biz_ctx
+
+    @cache(key_prefix="biz_ctx.get_biz_ctx_by_value_id")
+    @transaction(read_only=True)
+    def get_biz_ctx_by_value_id(self, biz_ctx_value_id: int) -> tuple[BizCtx, BizCtxValue]:
+        """
+        Get a business context and its value by business context value ID.
+        
+        Args:
+            biz_ctx_value_id: ID of the business context value
+            
+        Returns:
+            tuple[BizCtx, BizCtxValue]: The business context and the value
+        """
+        # Validate input parameters
+        if not biz_ctx_value_id or biz_ctx_value_id <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Business context value ID must be a positive integer"
+            )
+
+        # Find the business context value with its relationships
+        biz_ctx_value = db_exec(
+            select(BizCtxValue)
+            .where(BizCtxValue.biz_ctx_value_id == biz_ctx_value_id)
+            .options(
+                selectinload(BizCtxValue.biz_ctx).selectinload(BizCtx.biz_ctx_values).selectinload(BizCtxValue.ctx_scheme_value),
+                selectinload(BizCtxValue.biz_ctx).selectinload(BizCtx.creator),
+                selectinload(BizCtxValue.biz_ctx).selectinload(BizCtx.last_updater),
+                selectinload(BizCtxValue.ctx_scheme_value)
+            )
+        ).first()
+
+        if not biz_ctx_value:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Business context value with ID {biz_ctx_value_id} not found"
+            )
+
+        return biz_ctx_value.biz_ctx, biz_ctx_value
 
     @cache(key_prefix="biz_ctx.get_biz_ctxs")
     @transaction(read_only=True)

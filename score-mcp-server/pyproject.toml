@@ -1,7 +1,7 @@
 [project]
 name = "score-mcp-server"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.1.1"
+description = "A Model Context Protocol (MCP) server that provides programmatic access to Score (connectCenter) - a platform for managing business information standards, Core Components, Business Information Entities (BIEs), and related metadata"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

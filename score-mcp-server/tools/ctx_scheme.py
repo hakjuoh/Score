@@ -64,8 +64,13 @@ import logging
 from typing import Annotated
 
 from fastapi import HTTPException
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 from fastmcp.exceptions import ToolError
+from fastmcp.server.elicitation import (
+    AcceptedElicitation,
+    CancelledElicitation,
+    DeclinedElicitation,
+)
 from pydantic import Field
 
 from services import CtxSchemeService, DateRangeParams, PaginationParams
@@ -184,31 +189,53 @@ mcp = FastMCP("Score MCP Server - Context Scheme Tools")
     }
 )
 async def get_context_schemes(
+        scheme_id: Annotated[str | None, Field(
+            default=None,
+            description="Filter by the unique scheme identifier."
+        )],
+        scheme_name: Annotated[str | None, Field(
+            default=None,
+            description="Filter by the human-readable name of the scheme."
+        )],
+        scheme_agency_id: Annotated[str | None, Field(
+            default=None,
+            description="Filter by the agency identifier responsible for the scheme."
+        )],
+        scheme_version_id: Annotated[str | None, Field(
+            default=None,
+            description="Filter by the version identifier of the scheme."
+        )],
+        ctx_category_name: Annotated[str | None, Field(
+            default=None,
+            description="Filter by the name of the associated context category."
+        )],
+        description: Annotated[str | None, Field(
+            default=None,
+            description="Filter by text contained in the scheme description."
+        )],
+        created_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        last_updated_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        order_by: Annotated[str | None, Field(
+            default=None,
+            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: scheme_id, scheme_name, description, scheme_agency_id, scheme_version_id, creation_timestamp, last_update_timestamp. Example: '-last_update_timestamp,+scheme_id,description' translates to 'last_update_timestamp DESC, scheme_id ASC, description ASC'."
+        )],
         offset: Annotated[int, Field(
-            description="The offset from the beginning of the list. Must be a non-negative number.",
-            examples=[0, 10, 20],
+            default=0,
             ge=0,
-            title="Offset"
-        )] = 0,
+            description="The offset from the beginning of the list. Must be a non-negative number."
+        )],
         limit: Annotated[int, Field(
-            description="The maximum number of items to return. Must be a non-negative number.",
-            examples=[10, 25, 50],
+            default=10,
             ge=1,
             le=100,
-            title="Limit"
-        )] = 10,
-        scheme_id: Annotated[str | None, "Filter by the unique scheme identifier."] = None,
-        scheme_name: Annotated[str | None, "Filter by the human-readable name of the scheme."] = None,
-        scheme_agency_id: Annotated[str | None, "Filter by the agency identifier responsible for the scheme."] = None,
-        scheme_version_id: Annotated[str | None, "Filter by the version identifier of the scheme."] = None,
-        ctx_category_name: Annotated[str | None, "Filter by the name of the associated context category."] = None,
-        description: Annotated[str | None, "Filter by text contained in the scheme description."] = None,
-        created_on: Annotated[
-            str | None, "Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."] = None,
-        last_updated_on: Annotated[
-            str | None, "Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."] = None,
-        order_by: Annotated[
-            str | None, "Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: scheme_id, scheme_name, description, scheme_agency_id, scheme_version_id, creation_timestamp, last_update_timestamp. Example: '-last_update_timestamp,+scheme_id,description' translates to 'last_update_timestamp DESC, scheme_id ASC, description ASC'."] = None
+            description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+        )]
 ) -> GetCtxSchemesResponse:
     """
     Get a paginated list of context schemes.
@@ -218,8 +245,6 @@ async def get_context_schemes(
     and update metadata, associated context categories, and scheme values.
     
     Args:
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
         scheme_id (str | None, optional): Filter by the unique scheme identifier. Defaults to None.
         scheme_name (str | None, optional): Filter by the human-readable name of the scheme. Defaults to None.
         scheme_agency_id (str | None, optional): Filter by the agency identifier responsible for the scheme. Defaults to None.
@@ -239,6 +264,8 @@ async def get_context_schemes(
             Allowed columns: scheme_id, scheme_name, description, scheme_agency_id, scheme_version_id, creation_timestamp, last_update_timestamp.
             Example: '-last_update_timestamp,+scheme_id,description' translates to 'last_update_timestamp DESC, scheme_id ASC, description ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
         GetCtxSchemesResponse: Response object containing:
@@ -258,7 +285,7 @@ async def get_context_schemes(
     
     Examples:
         Basic listing:
-        >>> result = await get_context_schemes(offset=0, limit=10)
+        >>> result = await get_context_schemes()
         >>> print(f"Found {result.total_items} schemes")
         
         Filtered search:
@@ -330,7 +357,7 @@ async def get_context_schemes(
             items=[_create_ctx_scheme_result(ctx_scheme) for ctx_scheme in page.items]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving context schemes: {e}")
+        logger.error(f"HTTP error retrieving context schemes", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -339,7 +366,7 @@ async def get_context_schemes(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving context schemes: {e}")
+        logger.error(f"Unexpected error retrieving context schemes", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the context schemes: {str(e)}. Please contact your system administrator.") from e
 
@@ -420,15 +447,13 @@ async def get_context_schemes(
                 "required": ["who", "when"]
             }
         },
-        "required": ["ctx_scheme_id", "guid", "scheme_id", "scheme_agency_id", "scheme_version_id", "values", "created", "last_updated"]
+        "required": ["ctx_scheme_id", "guid", "scheme_id", "scheme_agency_id", "scheme_version_id", "ctx_category", "values", "created", "last_updated"]
     }
 )
 async def get_context_scheme(
         ctx_scheme_id: Annotated[int, Field(
-            description="The unique identifier of the context scheme to fetch.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="Context Scheme ID"
+            description="Unique numeric identifier of the context scheme to retrieve.",
+            gt=0
         )]
 ) -> GetCtxSchemeResponse:
     """
@@ -450,7 +475,7 @@ async def get_context_scheme(
             - description: Description of the context scheme
             - scheme_agency_id: Identification of the agency maintaining the scheme
             - scheme_version_id: Version number of the context scheme
-            - ctx_category: List of associated context categories
+            - ctx_category: Associated context category (if any)
             - values: List of associated context scheme values
             - created: Information about the creation of the context scheme
             - last_updated: Information about the most recent update to the context scheme
@@ -467,11 +492,12 @@ async def get_context_scheme(
         >>> result = await get_context_scheme(ctx_scheme_id=123)
         >>> print(f"Scheme: {result.scheme_name}")
         >>> print(f"Created by: {result.created.who.username}")
-        >>> print(f"Categories: {len(result.ctx_category)}")
+        >>> if result.ctx_category:
+        ...     print(f"Category: {result.ctx_category.name}")
         >>> print(f"Values: {len(result.values)}")
         Scheme: Business Context Scheme
         Created by: john_doe
-        Categories: 1
+        Category: Industry Classification
         Values: 3
     """
     # Validate authentication and database connection
@@ -484,7 +510,7 @@ async def get_context_scheme(
 
         return _create_ctx_scheme_result(ctx_scheme)
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving context scheme: {e}")
+        logger.error(f"HTTP error retrieving context scheme", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -496,7 +522,7 @@ async def get_context_scheme(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving context scheme: {e}")
+        logger.error(f"Unexpected error retrieving context scheme", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the context scheme: {str(e)}. Please contact your system administrator.") from e
 
@@ -516,28 +542,28 @@ async def get_context_scheme(
 async def create_context_scheme(
         ctx_category_id: Annotated[int, Field(
             description="Identifier of the context category this scheme belongs to.",
-            examples=[123, 456, 789],
-            gt=0,
-            title="Context Category ID"
+            gt=0
         )],
         scheme_id: Annotated[str, Field(
             description="Identifier string for the new context scheme.",
-            examples=["Country", "Currency", "Language"],
             min_length=1,
-            max_length=100,
-            title="Scheme ID"
+            max_length=100
         )],
-        scheme_agency_id: Annotated[
-            str, "Identifier string representing the issuing agency or organization responsible for the scheme."],
-        scheme_version_id: Annotated[str, "Version identifier string to specify the version of the context scheme."],
+        scheme_agency_id: Annotated[str, Field(
+            description="Identifier string representing the issuing agency or organization responsible for the scheme."
+        )],
+        scheme_version_id: Annotated[str, Field(
+            description="Version identifier string to specify the version of the context scheme."
+        )],
         scheme_name: Annotated[str, Field(
             description="Human-readable display name for the new context scheme.",
-            examples=["Country Code", "Currency Code", "Language Code"],
             min_length=1,
-            max_length=255,
-            title="Scheme Name"
+            max_length=255
         )],
-        description: Annotated[str | None, "Optional text describing the purpose or usage of the scheme."] = None
+        description: Annotated[str | None, Field(
+            default=None,
+            description="Optional text describing the purpose or usage of the scheme."
+        )]
 ) -> CreateCtxSchemeResponse:
     """
     Create a new context scheme entry.
@@ -590,7 +616,7 @@ async def create_context_scheme(
 
         return CreateCtxSchemeResponse(ctx_scheme_id=ctx_scheme.ctx_scheme_id)
     except HTTPException as e:
-        logger.error(f"HTTP error creating context scheme: {e}")
+        logger.error(f"HTTP error creating context scheme", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -599,7 +625,7 @@ async def create_context_scheme(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error creating context scheme: {e}")
+        logger.error(f"Unexpected error creating context scheme", e)
         raise ToolError(
             f"An unexpected error occurred while creating the context scheme: {str(e)}. Please contact your system administrator.") from e
 
@@ -617,10 +643,16 @@ async def create_context_scheme(
     }
 )
 async def create_context_scheme_value(
-        ctx_scheme_id: Annotated[int, "Identifier of the context scheme to which this value belongs."],
-        value: Annotated[str, "The actual value string to be added to the context scheme."],
-        meaning: Annotated[
-            str | None, "Optional descriptive meaning or human-readable explanation of the value."] = None
+        ctx_scheme_id: Annotated[int, Field(
+            description="Identifier of the context scheme to which this value belongs."
+        )],
+        value: Annotated[str, Field(
+            description="The actual value string to be added to the context scheme."
+        )],
+        meaning: Annotated[str | None, Field(
+            default=None,
+            description="Optional descriptive meaning or human-readable explanation of the value."
+        )]
 ) -> CreateCtxSchemeValueResponse:
     """
     Create a new value entry under an existing context scheme.
@@ -666,7 +698,7 @@ async def create_context_scheme_value(
 
         return CreateCtxSchemeValueResponse(ctx_scheme_value_id=ctx_scheme_value.ctx_scheme_value_id)
     except HTTPException as e:
-        logger.error(f"HTTP error creating context scheme value: {e}")
+        logger.error(f"HTTP error creating context scheme value", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -678,7 +710,7 @@ async def create_context_scheme_value(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error creating context scheme value: {e}")
+        logger.error(f"Unexpected error creating context scheme value", e)
         raise ToolError(
             f"An unexpected error occurred while creating the context scheme value: {str(e)}. Please contact your system administrator.") from e
 
@@ -697,10 +729,17 @@ async def create_context_scheme_value(
     }
 )
 async def update_context_scheme_value(
-        ctx_scheme_value_id: Annotated[int, "Unique identifier of the context scheme value to update."],
-        value: Annotated[str | None, "Optional updated value string for this context scheme entry."] = None,
-        meaning: Annotated[
-            str | None, "Optional updated human-readable meaning or description associated with the value."] = None
+        ctx_scheme_value_id: Annotated[int, Field(
+            description="Unique identifier of the context scheme value to update."
+        )],
+        value: Annotated[str | None, Field(
+            default=None,
+            description="Optional updated value string for this context scheme entry."
+        )],
+        meaning: Annotated[str | None, Field(
+            default=None,
+            description="Optional updated human-readable meaning or description associated with the value."
+        )]
 ) -> UpdateCtxSchemeValueResponse:
     """
     Update properties of an existing context scheme value entry.
@@ -756,7 +795,7 @@ async def update_context_scheme_value(
 
         return UpdateCtxSchemeValueResponse(ctx_scheme_value_id=ctx_scheme_value.ctx_scheme_value_id, updates=updates)
     except HTTPException as e:
-        logger.error(f"HTTP error updating context scheme value: {e}")
+        logger.error(f"HTTP error updating context scheme value", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -768,7 +807,7 @@ async def update_context_scheme_value(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error updating context scheme value: {e}")
+        logger.error(f"Unexpected error updating context scheme value", e)
         raise ToolError(
             f"An unexpected error occurred while updating the context scheme value: {str(e)}. Please contact your system administrator.") from e
 
@@ -778,15 +817,19 @@ async def update_context_scheme_value(
     description="Delete a specific context scheme value",
     output_schema={
         "type": "object",
-        "description": "Response containing the deleted context scheme value ID",
+        "description": "Response containing the deleted context scheme value ID or cancellation message",
         "properties": {
-            "ctx_scheme_value_id": {"type": "integer", "description": "Unique identifier of the deleted context scheme value", "example": 123}
+            "ctx_scheme_value_id": {"type": ["integer", "null"], "description": "Unique identifier of the deleted context scheme value (null if deletion was cancelled)", "example": 123},
+            "message": {"type": ["string", "null"], "description": "Optional message indicating the status of the deletion operation", "example": "Deletion cancelled by user"}
         },
-        "required": ["ctx_scheme_value_id"]
+        "required": []
     }
 )
 async def delete_context_scheme_value(
-        ctx_scheme_value_id: Annotated[int, "Unique identifier of the context scheme value to delete."]
+        ctx_scheme_value_id: Annotated[int, Field(
+            description="Unique identifier of the context scheme value to delete."
+        )],
+        ctx: Context
 ) -> DeleteCtxSchemeValueResponse:
     """
     Delete a specific context scheme value.
@@ -823,14 +866,37 @@ async def delete_context_scheme_value(
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
 
-    # Delete context scheme value
     try:
         service = CtxSchemeService(requester=app_user)
-        service.delete_ctx_scheme_value(ctx_scheme_value_id)
-
-        return DeleteCtxSchemeValueResponse(ctx_scheme_value_id=ctx_scheme_value_id)
+        # Get context scheme and value for confirmation message
+        ctx_scheme, ctx_scheme_value = service.get_ctx_scheme_by_value_id(ctx_scheme_value_id)
+        
+        value_name = ctx_scheme_value.value if hasattr(ctx_scheme_value, 'value') else f"value {ctx_scheme_value_id}"
+        scheme_name = ctx_scheme.scheme_name or ctx_scheme.scheme_id
+        
+        # Create confirmation message with context scheme value details
+        confirmation_message = (
+            f"Are you sure you want to discard '{value_name}' from '{scheme_name}' context scheme?\n\n"
+            f"It will be permanently removed.\n"
+        )
+        
+        elicit_result = await ctx.elicit(
+            message=confirmation_message,
+            response_type=None
+        )
+        
+        # Check if user confirmed the deletion using pattern matching
+        match elicit_result:
+            case AcceptedElicitation():                
+                # Delete context scheme value
+                service.delete_ctx_scheme_value(ctx_scheme_value_id)
+                return DeleteCtxSchemeValueResponse(ctx_scheme_value_id=ctx_scheme_value_id)
+            case DeclinedElicitation():
+                return DeleteCtxSchemeValueResponse(ctx_scheme_value_id=None, message="Deletion declined by user")
+            case CancelledElicitation():
+                return DeleteCtxSchemeValueResponse(ctx_scheme_value_id=None, message="Deletion cancelled by user")
     except HTTPException as e:
-        logger.error(f"HTTP error deleting context scheme value: {e}")
+        logger.error(f"HTTP error deleting context scheme value", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -844,7 +910,7 @@ async def delete_context_scheme_value(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error deleting context scheme value: {e}")
+        logger.error(f"Unexpected error deleting context scheme value", e)
         raise ToolError(
             f"An unexpected error occurred while deleting the context scheme value: {str(e)}. Please contact your system administrator.") from e
 
@@ -863,18 +929,33 @@ async def delete_context_scheme_value(
     }
 )
 async def update_context_scheme(
-        ctx_scheme_id: Annotated[int, "Unique identifier of the context scheme to update."],
-        ctx_category_id: Annotated[
-            int | None, "Optional updated identifier of the context category this scheme belongs to."] = None,
-        scheme_id: Annotated[str | None, "Optional updated unique identifier string for the context scheme."] = None,
-        scheme_name: Annotated[
-            str | None, "Optional updated human-readable display name for the context scheme."] = None,
-        scheme_agency_id: Annotated[
-            str | None, "Optional updated identifier string for the issuing agency or organization."] = None,
-        scheme_version_id: Annotated[
-            str | None, "Optional updated version identifier string for the context scheme."] = None,
-        description: Annotated[
-            str | None, "Optional updated text describing the purpose or usage of the scheme."] = None
+        ctx_scheme_id: Annotated[int, Field(
+            description="Unique identifier of the context scheme to update."
+        )],
+        ctx_category_id: Annotated[int | None, Field(
+            default=None,
+            description="Optional updated identifier of the context category this scheme belongs to."
+        )],
+        scheme_id: Annotated[str | None, Field(
+            default=None,
+            description="Optional updated unique identifier string for the context scheme."
+        )],
+        scheme_name: Annotated[str | None, Field(
+            default=None,
+            description="Optional updated human-readable display name for the context scheme."
+        )],
+        scheme_agency_id: Annotated[str | None, Field(
+            default=None,
+            description="Optional updated identifier string for the issuing agency or organization."
+        )],
+        scheme_version_id: Annotated[str | None, Field(
+            default=None,
+            description="Optional updated version identifier string for the context scheme."
+        )],
+        description: Annotated[str | None, Field(
+            default=None,
+            description="Optional updated text describing the purpose or usage of the scheme."
+        )]
 ) -> UpdateCtxSchemeResponse:
     """
     Update properties of an existing context scheme.
@@ -943,7 +1024,7 @@ async def update_context_scheme(
 
         return UpdateCtxSchemeResponse(ctx_scheme_id=ctx_scheme.ctx_scheme_id, updates=updates)
     except HTTPException as e:
-        logger.error(f"HTTP error updating context scheme: {e}")
+        logger.error(f"HTTP error updating context scheme", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -955,7 +1036,7 @@ async def update_context_scheme(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error updating context scheme: {e}")
+        logger.error(f"Unexpected error updating context scheme", e)
         raise ToolError(
             f"An unexpected error occurred while updating the context scheme: {str(e)}. Please contact your system administrator.") from e
 
@@ -965,15 +1046,19 @@ async def update_context_scheme(
     description="Delete a context scheme and all associated context scheme values",
     output_schema={
         "type": "object",
-        "description": "Response containing the deleted context scheme ID",
+        "description": "Response containing the deleted context scheme ID or cancellation message",
         "properties": {
-            "ctx_scheme_id": {"type": "integer", "description": "Unique identifier of the deleted context scheme", "example": 123}
+            "ctx_scheme_id": {"type": ["integer", "null"], "description": "Unique identifier of the deleted context scheme (null if deletion was cancelled)", "example": 123},
+            "message": {"type": ["string", "null"], "description": "Optional message indicating the status of the deletion operation", "example": "Deletion cancelled by user"}
         },
-        "required": ["ctx_scheme_id"]
+        "required": []
     }
 )
 async def delete_context_scheme(
-        ctx_scheme_id: Annotated[int, "Unique identifier of the context scheme to delete."]
+        ctx_scheme_id: Annotated[int, Field(
+            description="Unique identifier of the context scheme to delete."
+        )],
+        ctx: Context
 ) -> DeleteCtxSchemeResponse:
     """
     Delete a context scheme and all associated context scheme values.
@@ -1011,14 +1096,36 @@ async def delete_context_scheme(
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
 
-    # Delete context scheme
     try:
         service = CtxSchemeService(requester=app_user)
-        service.delete_ctx_scheme(ctx_scheme_id)
-
-        return DeleteCtxSchemeResponse(ctx_scheme_id=ctx_scheme_id)
+        # Get context scheme for confirmation message
+        ctx_scheme = service.get_ctx_scheme(ctx_scheme_id)
+        
+        scheme_name = ctx_scheme.scheme_name or ctx_scheme.scheme_id
+        
+        # Create confirmation message with context scheme details
+        confirmation_message = (
+            f"Are you sure you want to discard '{scheme_name}' context scheme?\n\n"
+            f"It will be permanently removed along with all associated context scheme values.\n"
+        )
+        
+        elicit_result = await ctx.elicit(
+            message=confirmation_message,
+            response_type=None
+        )
+        
+        # Check if user confirmed the deletion using pattern matching
+        match elicit_result:
+            case AcceptedElicitation():                
+                # Delete context scheme
+                service.delete_ctx_scheme(ctx_scheme_id)
+                return DeleteCtxSchemeResponse(ctx_scheme_id=ctx_scheme_id)
+            case DeclinedElicitation():
+                return DeleteCtxSchemeResponse(ctx_scheme_id=None, message="Deletion declined by user")
+            case CancelledElicitation():
+                return DeleteCtxSchemeResponse(ctx_scheme_id=None, message="Deletion cancelled by user")
     except HTTPException as e:
-        logger.error(f"HTTP error deleting context scheme: {e}")
+        logger.error(f"HTTP error deleting context scheme", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -1030,7 +1137,7 @@ async def delete_context_scheme(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error deleting context scheme: {e}")
+        logger.error(f"Unexpected error deleting context scheme", e)
         raise ToolError(
             f"An unexpected error occurred while deleting the context scheme: {str(e)}. Please contact your system administrator.") from e
 

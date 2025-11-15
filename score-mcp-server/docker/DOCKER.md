@@ -5,7 +5,7 @@ This project includes Docker support with supervisord and uvicorn.
 ## Building the Docker Image
 
 ```bash
-docker build -f docker/Dockerfile -t oagi1docker/score-mcp-server:0.1.0 .
+docker build -f docker/Dockerfile -t oagi1docker/score-mcp-server:0.1.1 .
 ```
 
 ## Running the Container
@@ -63,7 +63,7 @@ WORKERS=4
 ```bash
 docker run -p 8000:8000 \
   -v $(pwd)/.env:/app/.env:ro \
-  oagi1docker/score-mcp-server:0.1.0
+  oagi1docker/score-mcp-server:0.1.1
 ```
 
 **Note:** The application automatically loads all properties from `/app/.env` when the container starts. You don't need to specify individual environment variables when using a `.env` file.
@@ -77,7 +77,7 @@ docker run -p 9000:9000 \
   -v $(pwd)/.env:/app/.env:ro \
   -e PORT=9000 \
   -e WORKERS=8 \
-  oagi1docker/score-mcp-server:0.1.0
+  oagi1docker/score-mcp-server:0.1.1
 ```
 
 In this example, `PORT` and `WORKERS` from environment variables will override the values in `.env`, while other settings will be loaded from the `.env` file.

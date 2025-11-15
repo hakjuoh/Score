@@ -109,7 +109,7 @@ mcp = FastMCP("Score MCP Server - Tag Tools")
                             "required": ["who", "when"]
                         }
                     },
-                    "required": ["tag_id", "name", "description", "color", "text_color", "created", "last_updated"]
+                    "required": ["tag_id", "name", "created", "last_updated"]
                 }
             }
         },
@@ -117,44 +117,37 @@ mcp = FastMCP("Score MCP Server - Tag Tools")
     }
 )
 async def get_tags(
+    name: Annotated[str | None, Field(
+        default=None,
+        description="Filter by tag name using partial match (case-insensitive)."
+    )],
+    description: Annotated[str | None, Field(
+        default=None,
+        description="Filter by tag description using partial match (case-insensitive)."
+    )],
+    created_on: Annotated[str | None, Field(
+        default=None,
+        description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+    )],
+    last_updated_on: Annotated[str | None, Field(
+        default=None,
+        description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+    )],
+    order_by: Annotated[str | None, Field(
+        default=None,
+        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, description, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'."
+    )],
     offset: Annotated[int, Field(
-        description="The offset from the beginning of the list. Allowed values: non-negative integers (≥0). Default value: 0.",
-        examples=[0, 10, 20],
+        default=0,
         ge=0,
-        title="Offset"
-    )] = 0,
+        description="The offset from the beginning of the list. Must be a non-negative number."
+    )],
     limit: Annotated[int, Field(
-        description="The maximum number of items to return. Allowed values: integers between 1 and 100 (inclusive). Default value: 10.",
-        examples=[10, 25, 50],
+        default=10,
         ge=1,
         le=100,
-        title="Limit"
-    )] = 10,
-    name: Annotated[str | None, Field(
-        description="Filter by tag name using partial match (case-insensitive).",
-        examples=["BOD", "Noun", "Verb", "Core", "Extension"],
-        title="Tag Name"
-    )] = None,
-    description: Annotated[str | None, Field(
-        description="Filter by tag description using partial match (case-insensitive).",
-        examples=["Business Object Document", "Core Component", "Extension Component"],
-        title="Description"
-    )] = None,
-    created_on: Annotated[str | None, Field(
-        description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-        examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-        title="Created On Date Range"
-    )] = None,
-    last_updated_on: Annotated[str | None, Field(
-        description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-        examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-        title="Last Updated On Date Range"
-    )] = None,
-    order_by: Annotated[str | None, Field(
-        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, description, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'.",
-        examples=["-creation_timestamp,+name", "name", "-last_update_timestamp"],
-        title="Order By"
-    )] = None
+        description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+    )]
 ) -> GetTagsResponse:
     """
     Get a paginated list of tags used to categorize and organize core components.
@@ -171,8 +164,6 @@ async def get_tags(
     as filter values in other tools like get_core_components.
     
     Args:
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
         name (str | None, optional): Filter by tag name using partial match (case-insensitive). Defaults to None.
         description (str | None, optional): Filter by tag description using partial match (case-insensitive). Defaults to None.
         created_on (str | None, optional): Filter by creation date using an inclusive range: '[before~after]'.
@@ -188,6 +179,8 @@ async def get_tags(
             Allowed columns: name, description, creation_timestamp, last_update_timestamp.
             Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
         GetTagsResponse: Response object containing:
@@ -294,7 +287,7 @@ async def get_tags(
             items=tag_items
         )
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving tags: {e}")
+        logger.error(f"HTTP error retrieving tags", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -303,7 +296,7 @@ async def get_tags(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving tags: {e}")
+        logger.error(f"Unexpected error retrieving tags", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the tags: {str(e)}. Please contact your system administrator.") from e
 

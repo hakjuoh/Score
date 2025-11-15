@@ -51,10 +51,10 @@ mcp = FastMCP("Score MCP Server - App User Tools")
 
 @mcp.tool(
     name="get_users",
-    description="Get a paginated list of users. Boolean parameters accept both their native types and string representations (strings are automatically converted).",
+    description="Get a paginated list of users.",
     output_schema={
         "type": "object",
-        "description": "Response containing paginated list of users. Boolean parameters accept both their native types and string representations (strings are automatically converted to the appropriate type).",
+        "description": "Response containing paginated list of users.",
         "properties": {
             "total_items": {"type": "integer", "description": "Total number of users available. Allowed values: non-negative integers (≥0).", "example": 25},
             "offset": {"type": "integer", "description": "Offset of the first item in this page. Allowed values: non-negative integers (≥0). Default value: 0.", "example": 0},
@@ -73,7 +73,7 @@ mcp = FastMCP("Score MCP Server - App User Tools")
                         "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]},
                         "is_enabled": {"type": "boolean", "description": "Whether the user account is enabled", "example": True}
                     },
-                    "required": ["user_id", "login_id", "username", "organization", "email", "roles", "is_enabled"]
+                    "required": ["user_id", "login_id", "username", "roles", "is_enabled"]
                 }
             }
         },
@@ -81,59 +81,49 @@ mcp = FastMCP("Score MCP Server - App User Tools")
     }
 )
 async def get_users(
+    login_id: Annotated[str | None, Field(
+        default=None,
+        description="Filter by login ID using partial match (case-insensitive)."
+    )],
+    username: Annotated[str | None, Field(
+        default=None,
+        description="Filter by username (display name) using partial match (case-insensitive)."
+    )],
+    organization: Annotated[str | None, Field(
+        default=None,
+        description="Filter by organization using partial match (case-insensitive)."
+    )],
+    email: Annotated[str | None, Field(
+        default=None,
+        description="Filter by email address using partial match (case-insensitive)."
+    )],
+    is_admin: Annotated[bool | str | None, Field(
+        default=None,
+        description="Filter by admin status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
+    )],
+    is_developer: Annotated[bool | str | None, Field(
+        default=None,
+        description="Filter by developer status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
+    )],
+    is_enabled: Annotated[bool | str | None, Field(
+        default=None,
+        description="Filter by enabled status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
+    )],
+    order_by: Annotated[str | None, Field(
+        default=None,
+        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: login_id, username, organization, email, is_admin, is_developer, is_enabled. Example: '-login_id,+username' translates to 'login_id DESC, username ASC'."
+    )],
     offset: Annotated[int, Field(
-        description="The offset from the beginning of the list. Must be a non-negative number.",
-        examples=[0, 10, 20],
+        default=0,
         ge=0,
-        title="Offset"
-    )] = 0,
+        description="The offset from the beginning of the list. Must be a non-negative number."
+    )],
     limit: Annotated[int, Field(
-        description="The maximum number of items to return. Must be a non-negative number.",
-        examples=[10, 25, 50],
+        default=10,
         ge=1,
         le=100,
-        title="Limit"
-    )] = 10,
-    login_id: Annotated[str | None, Field(
-        description="Filter by login ID using partial match (case-insensitive).",
-        examples=["admin", "developer", "user"],
-        title="Login ID"
-    )] = None,
-    username: Annotated[str | None, Field(
-        description="Filter by username (display name) using partial match (case-insensitive).",
-        examples=["Administrator", "Developer", "User"],
-        title="Username"
-    )] = None,
-    organization: Annotated[str | None, Field(
-        description="Filter by organization using partial match (case-insensitive).",
-        examples=["ACME Corp", "Tech Solutions", "Global Inc"],
-        title="Organization"
-    )] = None,
-    email: Annotated[str | None, Field(
-        description="Filter by email address using partial match (case-insensitive).",
-        examples=["admin@example.com", "dev@company.com", "user@org.org"],
-        title="Email"
-    )] = None,
-    is_admin: Annotated[bool | str | None, Field(
-        description="Filter by admin status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False.",
-        examples=[True, False, "1", "0", "true", "false", "True", "False"],
-        title="Is Admin"
-    )] = None,
-    is_developer: Annotated[bool | str | None, Field(
-        description="Filter by developer status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False.",
-        examples=[True, False, "1", "0", "true", "false", "True", "False"],
-        title="Is Developer"
-    )] = None,
-    is_enabled: Annotated[bool | str | None, Field(
-        description="Filter by enabled status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False.",
-        examples=[True, False, "1", "0", "true", "false", "True", "False"],
-        title="Is Enabled"
-    )] = None,
-    order_by: Annotated[str | None, Field(
-        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: login_id, username, organization, email, is_admin, is_developer, is_enabled, email_verified. Example: '-login_id,+username' translates to 'login_id DESC, username ASC'.",
-        examples=["-login_id,+username", "username", "-email", "-is_admin"],
-        title="Order By"
-    )] = None
+        description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+    )]
 ) -> GetUsersResponse:
     """
     Get a paginated list of users registered in connectCenter.
@@ -144,8 +134,6 @@ async def get_users(
     It supports pagination, filtering, and sorting. Only authenticated users can access this endpoint.
     
     Args:
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
         login_id (str | None, optional): Filter by login ID using partial match (case-insensitive). Defaults to None.
         username (str | None, optional): Filter by username (display name) using partial match (case-insensitive). Defaults to None.
         organization (str | None, optional): Filter by organization using partial match (case-insensitive). Defaults to None.
@@ -158,6 +146,8 @@ async def get_users(
             Allowed columns: login_id, username, organization, email, is_admin, is_developer, is_enabled.
             Example: '-login_id,+username' translates to 'login_id DESC, username ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
         GetUsersResponse: Response object containing:
@@ -184,7 +174,7 @@ async def get_users(
     
     Examples:
         Basic listing:
-        >>> result = get_users(offset=0, limit=10)
+        >>> result = get_users()
         >>> print(f"Found {result.total_items} users")
         
         Filtered by role:
@@ -226,7 +216,7 @@ async def get_users(
     except ToolError:
         raise  # Re-raise ToolError as-is
     except Exception as e:
-        logger.error(f"Type conversion error: {e}")
+        logger.error(f"Type conversion error", e)
         raise ToolError(
             f"Type conversion error: {str(e)}. Please check your parameter types and try again."
         ) from e
@@ -291,7 +281,7 @@ async def get_users(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error while retrieving users: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error while retrieving users: {str(e)}", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the users: {str(e)}. Please contact your system administrator.") from e
 
@@ -345,11 +335,10 @@ async def who_am_i() -> GetUserResponse:
         >>> print(f"Logged in as: {result.username} ({result.login_id})")
         >>> print(f"Roles: {', '.join(result.roles)}")
         >>> print(f"Organization: {result.organization}")
-        >>> print(f"Email verified: {result.email_verified}")
         
-        Check if user is admin:
+        Check if user has admin role:
         >>> result = who_am_i()
-        >>> if result.is_admin:
+        >>> if "Admin" in result.roles:
         ...     print("User has admin privileges")
         >>> else:
         ...     print("User does not have admin privileges")
@@ -374,7 +363,7 @@ async def who_am_i() -> GetUserResponse:
         logger.info(f"Retrieved user information for {app_user.login_id}")
         return result
     except Exception as e:
-        logger.error(f"Failed to retrieve current user information: {str(e)}", exc_info=True)
+        logger.error(f"Failed to retrieve current user information: {str(e)}", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving your user information: {str(e)}. Please contact your system administrator.") from e
 

@@ -195,7 +195,7 @@ mcp = FastMCP("Score MCP Server - Code List Tools")
                             "required": ["who", "when"]
                         }
                     },
-                    "required": ["code_list_manifest_id", "code_list_id", "guid", "name", "list_id", "version_id", "library", "release", "owner", "created", "last_updated"]
+                    "required": ["code_list_manifest_id", "code_list_id", "guid", "name", "list_id", "version_id", "is_deprecated", "library", "release", "owner", "created", "last_updated"]
                 }
             }
         },
@@ -203,29 +203,45 @@ mcp = FastMCP("Score MCP Server - Code List Tools")
     }
 )
 async def get_code_lists(
-    release_id: Annotated[int, "Filter by release ID using exact match."],
+    release_id: Annotated[int, Field(
+        description="Filter by release ID using exact match.",
+        gt=0
+    )],
+    name: Annotated[str | None, Field(
+        default=None,
+        description="Filter by code list name using partial match (case-insensitive)."
+    )],
+    list_id: Annotated[str | None, Field(
+        default=None,
+        description="Filter by list ID using partial match (case-insensitive)."
+    )],
+    version_id: Annotated[str | None, Field(
+        default=None,
+        description="Filter by version ID using partial match (case-insensitive)."
+    )],
+    created_on: Annotated[str | None, Field(
+        default=None,
+        description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+    )],
+    last_updated_on: Annotated[str | None, Field(
+        default=None,
+        description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+    )],
+    order_by: Annotated[str | None, Field(
+        default=None,
+        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, list_id, version_id, definition, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'."
+    )],
     offset: Annotated[int, Field(
-        description="The offset from the beginning of the list. Must be a non-negative number.",
-        examples=[0, 10, 20],
+        default=0,
         ge=0,
-        title="Offset"
-    )] = 0,
+        description="The offset from the beginning of the list. Must be a non-negative number."
+    )],
     limit: Annotated[int, Field(
-        description="The maximum number of items to return. Must be a non-negative number.",
-        examples=[10, 25, 50],
+        default=10,
         ge=1,
         le=100,
-        title="Limit"
-    )] = 10,
-    name: Annotated[str | None, "Filter by code list name using partial match (case-insensitive)."] = None,
-    list_id: Annotated[str | None, "Filter by list ID using partial match (case-insensitive)."] = None,
-    version_id: Annotated[str | None, "Filter by version ID using partial match (case-insensitive)."] = None,
-    created_on: Annotated[
-        str | None, "Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."] = None,
-    last_updated_on: Annotated[
-        str | None, "Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."] = None,
-    order_by: Annotated[
-        str | None, "Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: name, list_id, version_id, definition, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'."] = None
+        description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+    )]
 ) -> GetCodeListsResponse:
     """
     Get a paginated list of code lists associated with a specific release.
@@ -236,9 +252,7 @@ async def get_code_lists(
     filter is required to ensure you get code lists from the correct release context.
     
     Args:
-        release_id (int): Filter by release ID using exact match.
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
+        release_id (int): Filter by release ID using exact match (required).
         name (str | None, optional): Filter by code list name using partial match (case-insensitive). Defaults to None.
         list_id (str | None, optional): Filter by list ID using partial match (case-insensitive). Defaults to None.
         version_id (str | None, optional): Filter by version ID using partial match (case-insensitive). Defaults to None.
@@ -255,6 +269,8 @@ async def get_code_lists(
             Allowed columns: name, list_id, version_id, definition, creation_timestamp, last_update_timestamp.
             Example: '-creation_timestamp,+name' translates to 'creation_timestamp DESC, name ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
         GetCodeListsResponse: Response object containing:
@@ -370,7 +386,7 @@ async def get_code_lists(
             items=[_create_code_list_result(manifest, code_list_service) for manifest in page.items]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving code lists: {e}")
+        logger.error(f"HTTP error retrieving code lists", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -379,7 +395,7 @@ async def get_code_lists(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving code lists: {e}")
+        logger.error(f"Unexpected error retrieving code lists", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the code lists: {str(e)}. Please contact your system administrator.") from e
 
@@ -515,10 +531,8 @@ async def get_code_lists(
 )
 async def get_code_list(
     code_list_manifest_id: Annotated[int, Field(
-        description="Unique numeric identifier of the code list manifest to retrieve.",
-        examples=[123, 456, 789],
         gt=0,
-        title="Code List Manifest ID"
+        description="Unique numeric identifier of the code list manifest to retrieve."
     )]
 ) -> GetCodeListResponse:
     """
@@ -584,7 +598,7 @@ async def get_code_list(
 
         return _create_code_list_result(manifest, service)
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving code list: {e}")
+        logger.error(f"HTTP error retrieving code list", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -596,7 +610,7 @@ async def get_code_list(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving code list: {e}")
+        logger.error(f"Unexpected error retrieving code list", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the code list: {str(e)}. Please contact your system administrator.") from e
 
@@ -620,7 +634,7 @@ def _create_code_list_result(manifest, code_list_service) -> GetCodeListResponse
     try:
         value_manifests = code_list_service.get_code_list_value_manifests_by_manifest_id(manifest.code_list_manifest_id)
     except Exception as e:
-        logger.warning(f"Failed to retrieve value manifests for CodeListManifest {manifest.code_list_manifest_id}: {e}")
+        logger.warning(f"Failed to retrieve value manifests for CodeListManifest {manifest.code_list_manifest_id}", e)
         value_manifests = []  # Continue without value manifests rather than failing completely
     
     # Create namespace info if available

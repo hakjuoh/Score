@@ -3,6 +3,7 @@ import json
 import pytest
 from fastmcp import Client
 from fastmcp.client import BearerAuth
+from tests.conftest import create_test_client
 
 
 def extract_content(result):
@@ -245,7 +246,7 @@ class TestDeleteCtxCategory:
     async def test_delete_context_category_success(self, token):
         """Test successful context category deletion."""
         # First create a category to delete
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             create_result = await client.call_tool("create_context_category", {
                 'name': 'to_be_deleted',
                 'description': 'will be deleted'
@@ -261,6 +262,11 @@ class TestDeleteCtxCategory:
             assert hasattr(result, 'data')
             assert hasattr(result.data, 'ctx_category_id')
             assert result.data.ctx_category_id == ctx_category_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert result.data.ctx_category_id is not None
+            # Message should be None for successful deletion
+            if hasattr(result.data, 'message'):
+                assert result.data.message is None
 
     @pytest.mark.asyncio
     async def test_delete_context_category_error_not_found(self, token):
@@ -533,7 +539,7 @@ class TestCtxCategoryIntegration:
     @pytest.mark.asyncio
     async def test_full_crud_cycle(self, token):
         """Test complete CRUD cycle: create, read, update, delete."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Create
             create_result = await client.call_tool("create_context_category", {
                 'name': 'integration_test',
@@ -563,6 +569,11 @@ class TestCtxCategoryIntegration:
                 'ctx_category_id': ctx_category_id
             })
             assert delete_result.data.ctx_category_id == ctx_category_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert delete_result.data.ctx_category_id is not None
+            # Message should be None for successful deletion
+            if hasattr(delete_result.data, 'message'):
+                assert delete_result.data.message is None
 
             # Verify deletion - should raise ToolError
             with pytest.raises(Exception):  # Expect ToolError to be raised

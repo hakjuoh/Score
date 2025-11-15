@@ -7,6 +7,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
+from fastmcp import Client
+from fastmcp.client import BearerAuth
+from fastmcp.client.elicitation import ElicitResult
 
 # Load .env file from working directory or parent directory
 # This ensures DATABASE_* environment variables are available for tests
@@ -404,6 +407,40 @@ def invalid_token():
     expired authentication tokens.
     """
     return "invalid.token.here"
+
+
+async def auto_accept_elicitation_handler(message: str, response_type: type, params, context):
+    """Elicitation handler that automatically accepts all deletion confirmations.
+    
+    This handler is used in tests to automatically accept deletion confirmations
+    without requiring user interaction. For deletion operations with response_type=None,
+    it returns an explicit acceptance.
+    
+    Args:
+        message: The confirmation message from the server
+        response_type: The expected response type (None for deletion confirmations)
+        params: Additional parameters
+        context: Context information
+        
+    Returns:
+        ElicitResult: Explicitly accepts the elicitation
+    """
+    # For deletion operations, we automatically accept
+    # If response_type is None (deletion confirmations), return accept without content
+    if response_type is None:
+        return ElicitResult(action="accept")
+    # For other elicitations with a response type, return accept with appropriate content
+    # This is a fallback for any future elicitations that might have response types
+    return ElicitResult(action="accept", content="yes")
+
+
+def create_test_client(token):
+    """Create a FastMCP Client configured for testing with auto-accept elicitation."""
+    return Client(
+        "http://localhost:8000/mcp",
+        auth=BearerAuth(token=token),
+        elicitation_handler=auto_accept_elicitation_handler
+    )
 
 
 @pytest.fixture

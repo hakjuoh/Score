@@ -2,6 +2,7 @@ import asyncio
 import pytest
 from fastmcp import Client
 from fastmcp.client import BearerAuth
+from tests.conftest import create_test_client
 
 
 class TestBusinessInformationEntity:
@@ -61,6 +62,27 @@ class TestBusinessInformationEntity:
                     if component.component_type == 'ASCCP' and 'Item Master' in component.den:
                         return component.manifest_id
                 assert False, f"Item Master ASCCP not found. Found ASCCPs: {[comp.den for comp in result.data.items[:10]]}"
+        return asyncio.run(_get_asccp_id())
+    
+    @pytest.fixture
+    def get_item_master_asccp_manifest_id(self, token, release_10_12_id):
+        """Find and return the 'Get Item Master' ASCCP manifest ID."""
+        async def _get_asccp_id():
+            assert release_10_12_id is not None, "Release 10.12 must exist in connectSpec"
+            async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+                result = await client.call_tool("get_core_components", {
+                    'release_id': release_10_12_id,
+                    'types': 'ASCCP',
+                    'den': 'Get Item Master',
+                    'offset': 0,
+                    'limit': 100
+                })
+                assert result.data.items and len(result.data.items) > 0, "Get Item Master ASCCP must exist in release 10.12"
+                for component in result.data.items:
+                    if component.component_type == 'ASCCP' and component.den and 'Get Item Master' in component.den:
+                        if component.den.startswith('Get Item Master'):
+                            return component.manifest_id
+                assert False, f"Get Item Master ASCCP not found. Found ASCCPs: {[comp.den for comp in result.data.items[:10]]}"
         return asyncio.run(_get_asccp_id())
     
     @pytest.fixture
@@ -364,7 +386,6 @@ class TestBusinessInformationEntity:
                 for rel in relationships:
                     assert 'is_used' in rel, f"Relationship missing 'is_used' field: {rel}"
                     assert isinstance(rel['is_used'], bool)
-                    assert 'path' in rel, f"Relationship missing 'path' field: {rel}"
                     
                     if rel['is_used']:
                         # If is_used=True, should have asbie_id or bbie_id
@@ -445,13 +466,11 @@ class TestBusinessInformationEntity:
                 
                 if len(ascc_relationships) > 0:
                     first_ascc_rel = ascc_relationships[0]
-                    parent_abie_path = first_ascc_rel['path']
                     based_ascc_manifest_id = first_ascc_rel['based_ascc']['ascc_manifest_id']
                     
                     # Get ASBIE by based ASCC manifest ID
                     asbie_result = await client.call_tool("get_asbie_by_based_ascc_manifest_id", {
                         'top_level_asbiep_id': top_level_asbiep_id,
-                        'parent_abie_path': parent_abie_path,
                         'based_ascc_manifest_id': based_ascc_manifest_id
                     })
                     
@@ -503,13 +522,11 @@ class TestBusinessInformationEntity:
                 
                 if len(bcc_relationships) > 0:
                     first_bcc_rel = bcc_relationships[0]
-                    parent_abie_path = first_bcc_rel['path']
                     based_bcc_manifest_id = first_bcc_rel['based_bcc']['bcc_manifest_id']
                     
                     # Get BBIE by based BCC manifest ID
                     bbie_result = await client.call_tool("get_bbie_by_based_bcc_manifest_id", {
                         'top_level_asbiep_id': top_level_asbiep_id,
-                        'parent_abie_path': parent_abie_path,
                         'based_bcc_manifest_id': based_bcc_manifest_id
                     })
                     
@@ -941,7 +958,7 @@ class TestBusinessInformationEntity:
     @pytest.mark.asyncio
     async def test_delete_top_level_asbiep(self, token, item_master_asccp_manifest_id):
         """Test deleting a Top-Level ASBIEP and all related records."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Get a business context
             biz_ctx_result = await client.call_tool("get_business_contexts", {
                 'offset': 0,
@@ -975,6 +992,11 @@ class TestBusinessInformationEntity:
             assert hasattr(delete_result, 'data')
             assert hasattr(delete_result.data, 'top_level_asbiep_id')
             assert delete_result.data.top_level_asbiep_id == top_level_asbiep_id
+            # Verify deletion was accepted (not declined/cancelled)
+            assert delete_result.data.top_level_asbiep_id is not None
+            # Message should be None for successful deletion
+            if hasattr(delete_result.data, 'message'):
+                assert delete_result.data.message is None
             
             # Verify it's deleted (should raise an error or return None)
             try:
@@ -1192,7 +1214,6 @@ class TestBusinessInformationEntity:
                 # Verify relationships have proper structure (relationships are returned as dictionaries)
                 for rel in role_of_abie.relationships:
                     assert 'is_used' in rel, f"Relationship missing 'is_used' field: {rel}"
-                    assert 'path' in rel, f"Relationship missing 'path' field: {rel}"
                     assert isinstance(rel['is_used'], bool)
                     
                     if rel['is_used']:
@@ -1492,13 +1513,8 @@ class TestBusinessInformationEntity:
                 
                 assert ascc_count + bcc_count > 0, f"Should have at least one ASCC or BCC relationship, got {len(relationships)} relationships"
                 
-                # Verify relationship paths
+                # Verify cardinality information
                 for rel in relationships:
-                    assert 'path' in rel, f"Relationship missing 'path' field: {rel}"
-                    assert rel['path'] is not None
-                    assert len(rel['path']) > 0
-                    
-                    # Verify cardinality information
                     if 'cardinality_min' in rel:
                         assert rel['cardinality_min'] >= 0
                     if 'cardinality_max' in rel:

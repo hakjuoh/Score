@@ -379,10 +379,8 @@ mcp = FastMCP("Score MCP Server - Core Component Tools")
 )
 async def get_acc(
     acc_manifest_id: Annotated[int, Field(
-        description="Unique numeric identifier of the ACC manifest to retrieve.",
-        examples=[123, 456, 789],
         gt=0,
-        title="ACC Manifest ID"
+        description="Unique numeric identifier of the ACC manifest to retrieve."
     )]
 ) -> GetAccResponse:
     """
@@ -463,7 +461,7 @@ async def get_acc(
         logger.info(f"ACC response: {acc_resp}")
         return acc_resp
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving ACC: {e}")
+        logger.error(f"HTTP error retrieving ACC", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -475,7 +473,7 @@ async def get_acc(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving ACC: {e}")
+        logger.error(f"Unexpected error retrieving ACC", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the ACC: {str(e)}. Please contact your system administrator.") from e
 
@@ -923,10 +921,8 @@ def _create_acc_result(acc, manifest, engine=None) -> GetAccResponse:
 )
 async def get_asccp(
     asccp_manifest_id: Annotated[int, Field(
-        description="Unique numeric identifier of the ASCCP manifest to retrieve.",
-        examples=[123, 456, 789],
         gt=0,
-        title="ASCCP Manifest ID"
+        description="Unique numeric identifier of the ASCCP manifest to retrieve."
     )]
 ) -> GetAsccpResponse:
     """
@@ -988,7 +984,7 @@ async def get_asccp(
 
         return _create_asccp_result(manifest.asccp, manifest)
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving ASCCP: {e}")
+        logger.error(f"HTTP error retrieving ASCCP", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -1000,7 +996,7 @@ async def get_asccp(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving ASCCP: {e}")
+        logger.error(f"Unexpected error retrieving ASCCP", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the ASCCP: {str(e)}. Please contact your system administrator.") from e
 
@@ -1286,10 +1282,8 @@ def _create_asccp_result(asccp, manifest) -> GetAsccpResponse:
 )
 async def get_bccp(
     bccp_manifest_id: Annotated[int, Field(
-        description="Unique numeric identifier of the BCCP manifest to retrieve.",
-        examples=[123, 456, 789],
         gt=0,
-        title="BCCP Manifest ID"
+        description="Unique numeric identifier of the BCCP manifest to retrieve."
     )]
 ) -> GetBccpResponse:
     """
@@ -1353,7 +1347,7 @@ async def get_bccp(
 
         return _create_bccp_result(manifest.bccp, manifest)
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving BCCP: {e}")
+        logger.error(f"HTTP error retrieving BCCP", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -1365,7 +1359,7 @@ async def get_bccp(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving BCCP: {e}")
+        logger.error(f"Unexpected error retrieving BCCP", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the BCCP: {str(e)}. Please contact your system administrator.") from e
 
@@ -1617,63 +1611,51 @@ def _create_bccp_result(bccp, manifest) -> GetBccpResponse:
 async def get_core_components(
     release_id: Annotated[int, Field(
         description="Filter by release ID using exact match. Use 'get_releases' to find a valid release ID.",
-        examples=[123, 456, 789],
-        gt=0,
-        title="Release ID"
+        gt=0
     )],
     types: Annotated[str | None, Field(
-        description="Filter by core component types. Comma-separated list of allowed values: 'ACC' (Aggregation Core Component), 'ASCCP' (Association Core Component Property), 'BCCP' (Basic Core Component Property). Examples: 'ASCCP', 'ACC,BCCP', 'ASCCP,ACC,BCCP'. Defaults to 'ASCCP' if not specified.",
-        examples=["ASCCP", "ACC,BCCP", "ASCCP,ACC,BCCP", ""],
-        title="Component Types"
-    )] = None,
+        default=None,
+        description="Filter by core component types. Comma-separated list of allowed values: 'ACC' (Aggregation Core Component), 'ASCCP' (Association Core Component Property), 'BCCP' (Basic Core Component Property). Examples: 'ASCCP', 'ACC,BCCP', 'ASCCP,ACC,BCCP'. Defaults to 'ASCCP' if not specified."
+    )],
+    den: Annotated[str | None, Field(
+        default=None,
+        description="Filter by Dictionary Entry Name (DEN) using partial match (case-insensitive)."
+    )],
+    tag: Annotated[str | None, Field(
+        default=None,
+        description="Filter by tag name using partial match (case-insensitive)."
+    )],
+    created_on: Annotated[str | None, Field(
+        default=None,
+        description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+    )],
+    last_updated_on: Annotated[str | None, Field(
+        default=None,
+        description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+    )],
+    order_by: Annotated[str | None, Field(
+        default=None,
+        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: den, name, definition, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+den' translates to 'creation_timestamp DESC, den ASC'."
+    )],
     offset: Annotated[int, Field(
-        description="The offset from the beginning of the list. Must be a non-negative number.",
-        examples=[0, 10, 20],
+        default=0,
         ge=0,
-        title="Offset"
-    )] = 0,
+        description="The offset from the beginning of the list. Must be a non-negative number."
+    )],
     limit: Annotated[int, Field(
-        description="The maximum number of items to return. Must be a non-negative number.",
-        examples=[10, 25, 50],
+        default=10,
         ge=1,
         le=100,
-        title="Limit"
-    )] = 10,
-    den: Annotated[str | None, Field(
-        description="Filter by Dictionary Entry Name (DEN) using partial match (case-insensitive).",
-        examples=["Amount", "Person", "Address"],
-        title="Dictionary Entry Name"
-    )] = None,
-    tag: Annotated[str | None, Field(
-        description="Filter by tag name using partial match (case-insensitive).",
-        examples=["BOD", "Noun", "Verb"],
-        title="Tag Name"
-    )] = None,
-    created_on: Annotated[str | None, Field(
-        description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-        examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-        title="Created On Date Range"
-    )] = None,
-    last_updated_on: Annotated[str | None, Field(
-        description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-        examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-        title="Last Updated On Date Range"
-    )] = None,
-    order_by: Annotated[str | None, Field(
-        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: den, name, definition, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+den' translates to 'creation_timestamp DESC, den ASC'.",
-        examples=["-creation_timestamp,+den", "name", "-last_update_timestamp"],
-        title="Order By"
-    )] = None
+        description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+    )]
 ) -> GetCoreComponentsResponse:
     """
     Get a paginated list of core components (ACC, ASCCP, BCCP) with unified response format.
     
     Args:
-        release_id (int): Filter by release ID using exact match.
+        release_id (int): Filter by release ID using exact match (required).
         types (str | None, optional): Filter by core component types. Comma-separated list of allowed values: 'ACC', 'ASCCP', 'BCCP'. 
             Examples: 'ASCCP', 'ACC,BCCP', 'ASCCP,ACC,BCCP'. Defaults to 'ASCCP' if not specified.
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
         den (str | None, optional): Filter by Dictionary Entry Name (DEN) using partial match (case-insensitive). Defaults to None.
         tag (str | None, optional): Filter by tag name using partial match (case-insensitive). 
             To discover available tag names, use the get_tags() tool first. Defaults to None.
@@ -1690,6 +1672,8 @@ async def get_core_components(
             Allowed columns: den, name, definition, creation_timestamp, last_update_timestamp.
             Example: '-creation_timestamp,+den' translates to 'creation_timestamp DESC, den ASC'.
             Defaults to None.
+        offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
+        limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
         GetCoreComponentsResponse: Response object containing:
@@ -1852,7 +1836,7 @@ async def get_core_components(
             items=core_components
         )
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving core components: {e}")
+        logger.error(f"HTTP error retrieving core components", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -1861,7 +1845,7 @@ async def get_core_components(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving core components: {e}")
+        logger.error(f"Unexpected error retrieving core components", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the core components: {str(e)}. Please contact your system administrator.") from e
 

@@ -96,7 +96,8 @@ class CreateTopLevelAsbiepResponse(BaseModel):
 
 class DeleteTopLevelAsbiepResponse(BaseModel):
     """Response for delete_top_level_asbiep tool."""
-    top_level_asbiep_id: int  # Unique identifier of the deleted top-level ASBIEP
+    top_level_asbiep_id: int | None = None  # Unique identifier of the deleted top-level ASBIEP (None if deletion was cancelled)
+    message: str | None = None  # Optional message indicating the status of the deletion operation
 
 
 class TransferTopLevelAsbiepOwnershipResponse(BaseModel):
@@ -330,11 +331,10 @@ class GetAsbieResponse(BaseModel):
     based_ascc: AsccInfo  # Information about the ASCC that this ASBIE is based on
     to_asbiep: AsbiepInfo  # Information about the target ASBIEP that this ASBIE connects to
     is_used: bool  # Whether this ASBIE is currently being used (profiled) in the BIE
-    path: str  # Hierarchical path string indicating the position of this ASBIE within the BIE structure
-    hash_path: str  # Hashed version of the path for efficient lookups
     cardinality_min: int  # Minimum cardinality (minimum number of occurrences required, typically 0 or 1)
     cardinality_max: int  # Maximum cardinality (maximum number of occurrences allowed, -1 means unbounded)
     is_nillable: bool  # Whether the ASBIE can have a nil/null value
+    definition: str | None  # Definition to override the ASCC definition. If NULL, it means that the definition should be derived from the based CC
     remark: str | None  # Additional remarks or notes about the ASBIE
 
     @computed_field
@@ -402,8 +402,6 @@ class GetBbieResponse(BaseModel):
     based_bcc: BccInfo  # Information about the BCC that this BBIE is based on
     to_bbiep: BbiepInfo  # Information about the target BBIEP that this BBIE connects to
     is_used: bool  # Whether this BBIE is currently being used (profiled) in the BIE
-    path: str  # Hierarchical path string indicating the position of this BBIE within the BIE structure
-    hash_path: str  # Hashed version of the path for efficient lookups
     cardinality_min: int  # Minimum cardinality (minimum number of occurrences required, typically 0 or 1)
     cardinality_max: int  # Maximum cardinality (maximum number of occurrences allowed, -1 means unbounded)
     is_nillable: bool  # Whether the BBIE can have a nil/null value

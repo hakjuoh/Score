@@ -67,10 +67,10 @@ def _validate_auth_and_db() -> tuple[AppUser, Engine]:
         return app_user, engine
     except Exception as e:
         if isinstance(e, ToolError):
-            logger.debug(f"Validation error: {e}")
+            logger.debug(f"Validation error", e)
             raise e
         else:
-            logger.error(f"Unexpected error during validation: {str(e)}", exc_info=True)
+            logger.error(f"Unexpected error during validation: {str(e)}", e)
             raise ToolError(
                 f"An unexpected error occurred during authentication or database validation: {str(e)}. Please contact your system administrator if the issue persists.") from e
 

@@ -61,10 +61,10 @@ mcp = FastMCP("Score MCP Server - Namespace Tools")
 
 @mcp.tool(
     name="get_namespaces",
-    description="Get a paginated list of namespaces. Namespaces are globally unique identifiers that work across systems, standards, and organizations. Boolean parameters accept both their native types and string representations (strings are automatically converted).",
+    description="Get a paginated list of namespaces. Namespaces are globally unique identifiers that work across systems, standards, and organizations.",
     output_schema={
         "type": "object",
-        "description": "Response containing paginated list of namespaces. Namespaces are globally unique identifiers that work across systems, standards, and organizations. Boolean parameters accept both their native types and string representations (strings are automatically converted to the appropriate type).",
+        "description": "Response containing paginated list of namespaces. Namespaces are globally unique identifiers that work across systems, standards, and organizations.",
         "properties": {
             "total_items": {"type": "integer", "description": "Total number of namespaces available. Allowed values: non-negative integers (≥0).", "example": 10},
             "offset": {"type": "integer", "description": "Offset of the first item in this page. Allowed values: non-negative integers (≥0). Default value: 0.", "example": 0},
@@ -148,54 +148,44 @@ mcp = FastMCP("Score MCP Server - Namespace Tools")
 )
 async def get_namespaces(
         library_id: Annotated[int, Field(
-            description="Filter by library ID using exact match.",
-            examples=[123, 456, 789],
             gt=0,
-            title="Library ID"
+            description="Filter by library ID using exact match."
+        )],
+        uri: Annotated[str | None, Field(
+            default=None,
+            description="Filter by URI using partial match (case-insensitive)."
+        )],
+        prefix: Annotated[str | None, Field(
+            default=None,
+            description="Filter by prefix using partial match (case-insensitive)."
+        )],
+        is_std_nmsp: Annotated[bool | str | None, Field(
+            default=None,
+            description="Filter by standard namespace flag. Standard namespaces are reserved for standard use (e.g., OAGIS namespace) and end users cannot use them for their end user Core Components. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
+        )],
+        created_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        last_updated_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        order_by: Annotated[str | None, Field(
+            default=None,
+            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: uri, prefix, is_std_nmsp, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+uri' translates to 'creation_timestamp DESC, uri ASC'."
         )],
         offset: Annotated[int, Field(
-            description="The offset from the beginning of the list. Allowed values: non-negative integers (≥0). Default value: 0.",
-            examples=[0, 10, 20],
+            default=0,
             ge=0,
-            title="Offset"
-        )] = 0,
+            description="The offset from the beginning of the list. Must be a non-negative number."
+        )],
         limit: Annotated[int, Field(
-            description="The maximum number of items to return. Allowed values: integers between 1 and 100 (inclusive). Default value: 10.",
-            examples=[10, 25, 50],
+            default=10,
             ge=1,
             le=100,
-            title="Limit"
-        )] = 10,
-        uri: Annotated[str | None, Field(
-            description="Filter by URI using partial match (case-insensitive).",
-            examples=["http://www.openapplications.org/oagis", "urn:oasis:names:specification", "http://www.w3.org"],
-            title="URI"
-        )] = None,
-        prefix: Annotated[str | None, Field(
-            description="Filter by prefix using partial match (case-insensitive).",
-            examples=["oagis", "ubl", "iso"],
-            title="Prefix"
-        )] = None,
-        is_std_nmsp: Annotated[bool | str | None, Field(
-            description="Filter by standard namespace flag. Standard namespaces are reserved for standard use (e.g., OAGIS namespace) and end users cannot use them for their end user Core Components. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False.",
-            examples=[True, False, "1", "0", "true", "false", "True", "False"],
-            title="Is Standard Namespace"
-        )] = None,
-        created_on: Annotated[str | None, Field(
-            description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-            examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-            title="Created On Date Range"
-        )] = None,
-        last_updated_on: Annotated[str | None, Field(
-            description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'.",
-            examples=["[2025-01-01~2025-02-01]", "[~2025-02-01]", "[2025-01-01~]"],
-            title="Last Updated On Date Range"
-        )] = None,
-        order_by: Annotated[str | None, Field(
-            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: uri, prefix, is_std_nmsp, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+uri' translates to 'creation_timestamp DESC, uri ASC'.",
-            examples=["-creation_timestamp,+uri", "uri", "-last_update_timestamp"],
-            title="Order By"
-        )] = None
+            description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+        )]
 ) -> GetNamespacesResponse:
     """
     Get a paginated list of namespaces.
@@ -210,9 +200,7 @@ async def get_namespaces(
     and namespace-specific attributes.
     
     Args:
-        library_id (int): Filter by library ID using exact match.
-        offset (int | None, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
-        limit (int | None, optional): The maximum number of items to return. Must be a non-negative number. Defaults to 10.
+        library_id (int): Filter by library ID using exact match (required).
         uri (str | None, optional): Filter by URI using partial match (case-insensitive). Defaults to None.
         prefix (str | None, optional): Filter by prefix using partial match (case-insensitive). Defaults to None.
         is_std_nmsp (bool | str | None, optional): Filter by standard namespace flag. Standard namespaces are reserved for standard use (e.g., OAGIS namespace) and end users cannot use them for their end user Core Components. Accepts bool, str ('True'/'true'/'1' for True, 'False'/'false'/'0' for False), or None. Defaults to None.
@@ -343,7 +331,7 @@ async def get_namespaces(
             items=[_create_namespace_result(namespace) for namespace in page.items]
         )
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving namespaces: {e}")
+        logger.error(f"HTTP error retrieving namespaces", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 500:
@@ -352,7 +340,7 @@ async def get_namespaces(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving namespaces: {e}")
+        logger.error(f"Unexpected error retrieving namespaces", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the namespaces: {str(e)}. Please contact your system administrator.") from e
 
@@ -374,10 +362,10 @@ async def get_namespaces(
                 },
                 "required": ["library_id", "name"]
             },
-                        "uri": {"type": "string", "description": "Namespace URI (Uniform Resource Identifier) - globally unique identifier that works across systems, standards, and organizations", "example": "http://www.openapplications.org/oagis/10"},
-                        "prefix": {"type": ["string", "null"], "description": "Namespace prefix - short identifier used to reference the namespace URI", "example": "oagis"},
-                        "description": {"type": ["string", "null"], "description": "Description of the namespace and its purpose", "example": "OAGIS namespace for business documents"},
-            "is_std_nmsp": {"type": "boolean", "description": "Whether this is a standard namespace", "example": True},
+            "uri": {"type": "string", "description": "Namespace URI (Uniform Resource Identifier) - globally unique identifier that works across systems, standards, and organizations", "example": "http://www.openapplications.org/oagis/10"},
+            "prefix": {"type": ["string", "null"], "description": "Namespace prefix - short identifier used to reference the namespace URI", "example": "oagis"},
+            "description": {"type": ["string", "null"], "description": "Description of the namespace and its purpose", "example": "OAGIS namespace for business documents"},
+            "is_std_nmsp": {"type": "boolean", "description": "Whether this namespace is reserved for standard use (e.g., OAGIS namespace). If true, end users cannot use this namespace for their end user Core Components", "example": True},
             "owner": {
                 "type": "object",
                 "description": "User information about the owner of the namespace",
@@ -433,10 +421,8 @@ async def get_namespaces(
 )
 async def get_namespace(
         namespace_id: Annotated[int, Field(
-            description="Unique numeric identifier of the namespace to retrieve.",
-            examples=[123, 456, 789],
             gt=0,
-            title="Namespace ID"
+            description="Unique numeric identifier of the namespace to retrieve."
         )]
 ) -> GetNamespaceResponse:
     """
@@ -496,7 +482,7 @@ async def get_namespace(
 
         return _create_namespace_result(namespace)
     except HTTPException as e:
-        logger.error(f"HTTP error retrieving namespace: {e}")
+        logger.error(f"HTTP error retrieving namespace", e)
         if e.status_code == 400:
             raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
         elif e.status_code == 404:
@@ -508,7 +494,7 @@ async def get_namespace(
         else:
             raise ToolError(f"Unexpected error: {e.detail}") from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving namespace: {e}")
+        logger.error(f"Unexpected error retrieving namespace", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the namespace: {str(e)}. Please contact your system administrator.") from e
 

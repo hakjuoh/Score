@@ -22,7 +22,8 @@ class UpdateCtxSchemeValueResponse(BaseModel):
 
 class DeleteCtxSchemeValueResponse(BaseModel):
     """Response for delete_context_scheme_value tool."""
-    ctx_scheme_value_id: int  # Unique identifier of the deleted context scheme value
+    ctx_scheme_value_id: int | None = None  # Unique identifier of the deleted context scheme value (None if deletion was cancelled)
+    message: str | None = None  # Optional message indicating the status of the deletion operation
 
 
 class UpdateCtxSchemeResponse(BaseModel):
@@ -33,7 +34,8 @@ class UpdateCtxSchemeResponse(BaseModel):
 
 class DeleteCtxSchemeResponse(BaseModel):
     """Response for delete_ctx_scheme tool."""
-    ctx_scheme_id: int  # Unique identifier of the deleted context scheme
+    ctx_scheme_id: int | None = None  # Unique identifier of the deleted context scheme (None if deletion was cancelled)
+    message: str | None = None  # Optional message indicating the status of the deletion operation
 
 
 class CtxCategoryInfo(BaseModel):
