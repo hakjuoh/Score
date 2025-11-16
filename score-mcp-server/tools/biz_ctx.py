@@ -94,7 +94,7 @@ from tools.models.common import WhoAndWhen
 from tools.utils import parse_date_range
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.biz_ctx")
 
 mcp = FastMCP("Score MCP Server - Business Context Tools")
 

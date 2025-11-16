@@ -53,7 +53,7 @@ from tools.models.xbt import GetXbtResponse, SubtypeOfXbtInfo
 from tools.models.common import LibraryInfo, LogInfo, ReleaseInfo, WhoAndWhen
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.xbt")
 
 mcp = FastMCP("Score MCP Server - XBT Tools")
 

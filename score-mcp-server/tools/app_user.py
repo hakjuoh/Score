@@ -44,7 +44,7 @@ from tools.utils import str_to_bool
 from tools.models.app_user import GetUserResponse, GetUsersResponse
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.app_user")
 
 mcp = FastMCP("Score MCP Server - App User Tools")
 

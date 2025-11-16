@@ -43,7 +43,7 @@ if log_level_str not in log_level_map:
     print(f"Warning: Invalid LOG_LEVEL '{log_level_str}', using INFO. Valid values: DEBUG, INFO, WARNING, ERROR, CRITICAL")
 
 logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.app")
 
 # Log that .env file was loaded (now that logging is configured)
 if env_path.exists():

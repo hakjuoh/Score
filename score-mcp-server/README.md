@@ -227,6 +227,17 @@ All configuration is done through environment variables. Copy `.env.example` to 
   - Required for Docker/containerized deployments
   - If CORS is enabled, this is automatically set to `true`
 
+#### SQLAlchemy Logging Configuration (Optional)
+
+- `SQLALCHEMY_LOG` - Enable SQLAlchemy query logging (default: `false`)
+  - Set to `true`, `1`, `yes`, or `on` to enable SQL query logging
+  - When enabled, logs all SQL statements executed by SQLAlchemy
+  - Useful for debugging database queries and performance analysis
+- `SQLALCHEMY_LOG_LEVEL` - Log level for SQLAlchemy loggers (default: follows `LOG_LEVEL`)
+  - Valid values: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+  - If not provided, uses the same value as `LOG_LEVEL`
+  - Controls the verbosity of SQLAlchemy logs (SQL statements, connection pool events, etc.)
+
 #### CORS Configuration (Optional)
 
 - `CORS_ENABLED` - Enable CORS (Cross-Origin Resource Sharing) middleware (default: `false`)

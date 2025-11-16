@@ -19,7 +19,7 @@ from services.models import AppUser, AppOAuth2User
 # since middleware imports from services.models
 from middleware import AppUserContextMiddleware, get_current_user
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.auth")
 
 
 class AuthProviderParams(BaseSettings):
@@ -136,7 +136,6 @@ def merge_params(base_params: object | None, prefix: str) -> object | None:
 def create_auth_provider():
     """Create authentication provider based on environment variables."""
     auth_provider = os.getenv("AUTH_PROVIDER")
-    logger = logging.getLogger(__name__)
 
     logger.info("create_auth_provider: AUTH_PROVIDER=%s", auth_provider)
     

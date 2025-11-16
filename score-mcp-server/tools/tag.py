@@ -44,7 +44,7 @@ from tools.models.tag import GetTagsResponse, TagInfo
 from tools.utils import parse_date_range
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.tag")
 
 mcp = FastMCP("Score MCP Server - Tag Tools")
 

@@ -45,6 +45,25 @@ class TestReuseTopLevelAsbiep:
         return asyncio.run(_get_release_id())
     
     @pytest.fixture
+    def release_10_11_id(self, token, connectspec_library_id):
+        """Find and return the release ID for connectSpec 10.11."""
+        async def _get_release_id():
+            assert connectspec_library_id is not None, "connectSpec library must exist"
+            async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+                result = await client.call_tool("get_releases", {
+                    'library_id': connectspec_library_id,
+                    'release_num': '10.11',
+                    'offset': 0,
+                    'limit': 10
+                })
+                assert result.data.items and len(result.data.items) > 0, "Release 10.11 must exist in connectSpec"
+                for release in result.data.items:
+                    if release.release_num == '10.11':
+                        return release.release_id
+                assert False, f"Release 10.11 not found. Found releases: {[r.release_num for r in result.data.items]}"
+        return asyncio.run(_get_release_id())
+    
+    @pytest.fixture
     def item_master_asccp_manifest_id(self, token, release_10_12_id):
         """Find and return the Item Master ASCCP manifest ID."""
         async def _get_asccp_id():
@@ -83,6 +102,26 @@ class TestReuseTopLevelAsbiep:
                         if component.den.startswith('Get Item Master'):
                             return component.manifest_id
                 assert False, f"Get Item Master ASCCP not found. Found ASCCPs: {[comp.den for comp in result.data.items[:10]]}"
+        return asyncio.run(_get_asccp_id())
+    
+    @pytest.fixture
+    def customer_item_identification_asccp_manifest_id(self, token, release_10_11_id):
+        """Find and return the Customer Item Identification ASCCP manifest ID in release 10.11."""
+        async def _get_asccp_id():
+            assert release_10_11_id is not None, "Release 10.11 must exist in connectSpec"
+            async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+                result = await client.call_tool("get_core_components", {
+                    'release_id': release_10_11_id,
+                    'types': 'ASCCP',
+                    'den': 'Customer Item Identification',
+                    'offset': 0,
+                    'limit': 100
+                })
+                assert result.data.items and len(result.data.items) > 0, "Customer Item Identification ASCCP must exist in release 10.11"
+                for component in result.data.items:
+                    if component.component_type == 'ASCCP' and 'Customer Item Identification' in component.den:
+                        return component.manifest_id
+                assert False, f"Customer Item Identification ASCCP not found. Found ASCCPs: {[comp.den for comp in result.data.items[:10]]}"
         return asyncio.run(_get_asccp_id())
     
     @pytest.fixture
@@ -326,4 +365,189 @@ class TestReuseTopLevelAsbiep:
                     })
                 except Exception as e:
                     print(f"Warning: Failed to cleanup Item Master BIE {item_master_bie_id}: {e}")
+    
+    @pytest.mark.asyncio
+    async def test_reuse_top_level_asbiep_fails_different_release(
+        self, token, item_master_asccp_manifest_id, customer_item_identification_asccp_manifest_id, 
+        sample_business_context_id, release_10_11_id, release_10_12_id
+    ):
+        """Test that reusing a top-level ASBIEP fails when the BIEs are in different releases.
+        
+        This test:
+        1. Creates 'Item Master' BIE in connectSpec 10.12
+        2. Creates 'Customer Item Identification' BIE in connectSpec 10.11
+        3. Finds 'Customer Item Identification' ASBIE in 'Item Master' BIE
+        4. Tries to reuse 'Customer Item Identification' BIE to the ASBIE in 'Item Master'
+        5. Expects the operation to fail with a 400 error about different releases
+        """
+        async with create_test_client(token) as client:
+            # Step 1: Create 'Item Master' BIE in release 10.12
+            item_master_bie_result = await client.call_tool("create_top_level_asbiep", {
+                'asccp_manifest_id': item_master_asccp_manifest_id,
+                'biz_ctx_list': str(sample_business_context_id)
+            })
+            item_master_bie_id = item_master_bie_result.data.top_level_asbiep_id
+            assert item_master_bie_id > 0, "Item Master BIE should be created"
+            
+            # Step 2: Create 'Customer Item Identification' BIE in release 10.11
+            customer_item_identification_bie_result = await client.call_tool("create_top_level_asbiep", {
+                'asccp_manifest_id': customer_item_identification_asccp_manifest_id,
+                'biz_ctx_list': str(sample_business_context_id)
+            })
+            customer_item_identification_bie_id = customer_item_identification_bie_result.data.top_level_asbiep_id
+            assert customer_item_identification_bie_id > 0, "Customer Item Identification BIE should be created"
+            
+            try:
+                # Step 3: Get 'Item Master' BIE to find 'Customer Item Identification' ASBIE
+                item_master_result = await client.call_tool("get_top_level_asbiep", {
+                    'top_level_asbiep_id': item_master_bie_id
+                })
+                
+                relationships = item_master_result.data.asbiep.role_of_abie.relationships
+                customer_item_identification_rel = self._find_relationship_by_den(relationships, "Customer Item Identification")
+                
+                # If 'Customer Item Identification' ASBIE doesn't exist, we need to create it
+                if customer_item_identification_rel is None:
+                    # Get the ASCCP manifest ID for Customer Item Identification in release 10.12
+                    # We need to find it in the same release as Item Master
+                    result = await client.call_tool("get_core_components", {
+                        'release_id': release_10_12_id,
+                        'types': 'ASCCP',
+                        'den': 'Customer Item Identification',
+                        'offset': 0,
+                        'limit': 100
+                    })
+                    assert result.data.items and len(result.data.items) > 0, "Customer Item Identification ASCCP must exist in release 10.12"
+                    
+                    customer_item_identification_asccp_manifest_id_10_12 = None
+                    for component in result.data.items:
+                        if component.component_type == 'ASCCP' and 'Customer Item Identification' in component.den:
+                            customer_item_identification_asccp_manifest_id_10_12 = component.manifest_id
+                            break
+                    
+                    assert customer_item_identification_asccp_manifest_id_10_12 is not None, "Customer Item Identification ASCCP not found in release 10.12"
+                    
+                    # Find the ASCC manifest ID from the relationships
+                    # We need to find an ASCC that points to Customer Item Identification ASCCP
+                    ascc_manifest_id = None
+                    for rel in relationships:
+                        if hasattr(rel, 'component_type') and rel.component_type == 'ASBIE':
+                            if hasattr(rel, 'based_ascc') and rel.based_ascc:
+                                based_ascc = rel.based_ascc
+                                if hasattr(based_ascc, 'to_asccp_manifest_id'):
+                                    if based_ascc.to_asccp_manifest_id == customer_item_identification_asccp_manifest_id_10_12:
+                                        # This ASCC points to Customer Item Identification, but we need the ASCC manifest ID
+                                        if hasattr(based_ascc, 'ascc_manifest_id'):
+                                            ascc_manifest_id = based_ascc.ascc_manifest_id
+                                            break
+                    
+                    # If we can't find it in relationships, we need to search for it differently
+                    # Let's try to create the ASBIE using property_term
+                    from_abie_id = item_master_result.data.asbiep.role_of_abie.abie_id
+                    if ascc_manifest_id is None:
+                        # Create the ASBIE using property_term
+                        create_asbie_result = await client.call_tool("create_asbie", {
+                            'from_abie_id': from_abie_id,
+                            'property_term': 'Customer Item Identification'
+                        })
+                        customer_item_identification_asbie_id = create_asbie_result.data.asbie_id
+                    else:
+                        # Create the ASBIE using based_ascc_manifest_id
+                        create_asbie_result = await client.call_tool("create_asbie", {
+                            'from_abie_id': from_abie_id,
+                            'based_ascc_manifest_id': ascc_manifest_id
+                        })
+                        customer_item_identification_asbie_id = create_asbie_result.data.asbie_id
+                else:
+                    # Get Customer Item Identification ASBIE ID
+                    customer_item_identification_asbie_id = None
+                    if isinstance(customer_item_identification_rel, dict):
+                        # Relationship is a dictionary
+                        customer_item_identification_asbie_id = customer_item_identification_rel.get('asbie_id')
+                        # If asbie_id is None, the relationship exists but hasn't been created yet
+                        # We need to create it
+                        if customer_item_identification_asbie_id is None:
+                            # Extract the ASCC manifest ID from the relationship
+                            based_ascc = customer_item_identification_rel.get('based_ascc')
+                            from_abie_id = item_master_result.data.asbiep.role_of_abie.abie_id
+                            if based_ascc and isinstance(based_ascc, dict):
+                                ascc_manifest_id = based_ascc.get('ascc_manifest_id')
+                                if ascc_manifest_id:
+                                    create_asbie_result = await client.call_tool("create_asbie", {
+                                        'from_abie_id': from_abie_id,
+                                        'based_ascc_manifest_id': ascc_manifest_id
+                                    })
+                                    customer_item_identification_asbie_id = create_asbie_result.data.asbie_id
+                            else:
+                                # Try using property_term as fallback
+                                create_asbie_result = await client.call_tool("create_asbie", {
+                                    'from_abie_id': from_abie_id,
+                                    'property_term': 'Customer Item Identification'
+                                })
+                                customer_item_identification_asbie_id = create_asbie_result.data.asbie_id
+                    elif hasattr(customer_item_identification_rel, 'asbie_id'):
+                        customer_item_identification_asbie_id = customer_item_identification_rel.asbie_id
+                        # If asbie_id is None, create it
+                        if customer_item_identification_asbie_id is None:
+                            from_abie_id = item_master_result.data.asbiep.role_of_abie.abie_id
+                            if hasattr(customer_item_identification_rel, 'based_ascc') and customer_item_identification_rel.based_ascc:
+                                based_ascc = customer_item_identification_rel.based_ascc
+                                ascc_manifest_id = None
+                                if hasattr(based_ascc, 'ascc_manifest_id'):
+                                    ascc_manifest_id = based_ascc.ascc_manifest_id
+                                elif isinstance(based_ascc, dict):
+                                    ascc_manifest_id = based_ascc.get('ascc_manifest_id')
+                                
+                                if ascc_manifest_id:
+                                    create_asbie_result = await client.call_tool("create_asbie", {
+                                        'from_abie_id': from_abie_id,
+                                        'based_ascc_manifest_id': ascc_manifest_id
+                                    })
+                                    customer_item_identification_asbie_id = create_asbie_result.data.asbie_id
+                            else:
+                                # Try using property_term as fallback
+                                create_asbie_result = await client.call_tool("create_asbie", {
+                                    'from_abie_id': from_abie_id,
+                                    'property_term': 'Customer Item Identification'
+                                })
+                                customer_item_identification_asbie_id = create_asbie_result.data.asbie_id
+                    elif hasattr(customer_item_identification_rel, 'asbie') and customer_item_identification_rel.asbie:
+                        if hasattr(customer_item_identification_rel.asbie, 'asbie_id'):
+                            customer_item_identification_asbie_id = customer_item_identification_rel.asbie.asbie_id
+                
+                assert customer_item_identification_asbie_id is not None, "Customer Item Identification ASBIE should exist or be created"
+                
+                # Step 4: Try to reuse 'Customer Item Identification' BIE (from release 10.11) 
+                # to the ASBIE in 'Item Master' BIE (from release 10.12)
+                # This should fail because they are in different releases
+                with pytest.raises(Exception) as exc_info:
+                    await client.call_tool("reuse_top_level_asbiep", {
+                        'asbie_id': customer_item_identification_asbie_id,
+                        'reuse_top_level_asbiep_id': customer_item_identification_bie_id
+                    })
+                
+                # Verify the error message mentions different releases
+                error_message = str(exc_info.value)
+                assert "different release" in error_message.lower(), \
+                    f"Error message should mention 'different release'. Got: {error_message}"
+                # The error message should mention at least one of the release IDs (either the release_num or release_id)
+                assert ("10.11" in error_message or "10.12" in error_message or 
+                        str(release_10_11_id) in error_message or str(release_10_12_id) in error_message), \
+                    f"Error message should mention the release IDs (10.11, 10.12, or their IDs). Got: {error_message}"
+                
+            finally:
+                # Cleanup: Delete both BIEs
+                try:
+                    await client.call_tool("delete_top_level_asbiep", {
+                        'top_level_asbiep_id': item_master_bie_id
+                    })
+                except Exception as e:
+                    print(f"Warning: Failed to cleanup Item Master BIE {item_master_bie_id}: {e}")
+                
+                try:
+                    await client.call_tool("delete_top_level_asbiep", {
+                        'top_level_asbiep_id': customer_item_identification_bie_id
+                    })
+                except Exception as e:
+                    print(f"Warning: Failed to cleanup Customer Item Identification BIE {customer_item_identification_bie_id}: {e}")
 

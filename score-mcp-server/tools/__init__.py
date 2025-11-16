@@ -10,7 +10,7 @@ from services import Sort
 from tools.models.common import PaginationResponse, UserInfo, WhoAndWhen
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.tools")
 
 
 

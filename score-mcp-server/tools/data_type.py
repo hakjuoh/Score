@@ -59,7 +59,7 @@ from tools.models.common import LibraryInfo, LogInfo, NamespaceInfo, ReleaseInfo
 from tools.utils import parse_date_range, validate_and_create_value_constraint
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.data_type")
 
 mcp = FastMCP("Score MCP Server - Data Type Tools")
 

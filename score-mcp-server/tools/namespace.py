@@ -54,7 +54,7 @@ from tools.models.common import LibraryInfo, WhoAndWhen
 from tools.utils import parse_date_range, str_to_bool
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.namespace")
 
 mcp = FastMCP("Score MCP Server - Namespace Tools")
 

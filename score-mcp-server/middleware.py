@@ -9,6 +9,7 @@ This module provides all middleware components including:
 """
 
 import contextvars
+import json
 import logging
 import os
 import time
@@ -26,7 +27,7 @@ from services.models import AppUser
 logger = logging.getLogger(__name__)
 
 # Create a dedicated logger for request/response logging
-request_logger = logging.getLogger("request_response")
+request_logger = logging.getLogger("score.mcp.http")
 
 # Create a contextvar to store the database engine
 engine_context_var = contextvars.ContextVar("engine_context", default=None)
@@ -71,13 +72,14 @@ class RequestResponseLoggingMiddleware:
         # Capture request body if available and not too large
         request_body = None
         body_size = 0
+        body_chunks = []
         
         # Store original receive function before we potentially wrap it
         original_receive = receive
         
         async def receive_with_logging():
             """Wrapper to capture request body while passing through to the app."""
-            nonlocal request_body, body_size
+            nonlocal request_body, body_size, body_chunks
             # Use original_receive to avoid recursion
             message = await original_receive()
             if message["type"] == "http.request":
@@ -86,6 +88,8 @@ class RequestResponseLoggingMiddleware:
                 
                 if body:
                     body_size += len(body)
+                    # Store chunks for later reconstruction
+                    body_chunks.append(body)
                     # Only log if total size is within limit
                     if body_size <= self.max_body_size:
                         if request_body is None:
@@ -104,8 +108,8 @@ class RequestResponseLoggingMiddleware:
                     
             return message
         
-        # For POST/PUT/PATCH, use the logging wrapper
-        if method in ("POST", "PUT", "PATCH"):
+        # For POST/PUT/PATCH/DELETE, use the logging wrapper to capture body
+        if method in ("POST", "PUT", "PATCH", "DELETE"):
             receive = receive_with_logging
         
         # Create request object for query params and headers
@@ -114,15 +118,22 @@ class RequestResponseLoggingMiddleware:
         # Extract session ID from headers for debugging
         session_id = request.headers.get("mcp-session-id", "not provided")
         
-        # Log request
-        log_msg = f"Request: {method} {path} from {client_ip}"
-        if request.query_params:
-            log_msg += f" query_params={dict(request.query_params)}"
-        if session_id != "not provided":
-            log_msg += f" session_id={session_id}"
-        else:
-            log_msg += " (no session ID)"
-        request_logger.info(log_msg)
+        # For methods with body, try to read the first chunk to get params for logging
+        # We'll log the request after we have the body or after a short delay
+        log_request_immediately = method not in ("POST", "PUT", "PATCH", "DELETE")
+        
+        if log_request_immediately:
+            # Build log message with request parameters
+            log_msg = f"Request: {method} {path} from {client_ip}"
+            
+            # Add query parameters if present
+            if request.query_params:
+                log_msg += f" query_params={dict(request.query_params)}"
+            
+            if session_id != "not provided":
+                log_msg += f" session_id={session_id}"
+            
+            request_logger.info(log_msg)
         
         # Track response status and headers
         status_code = None
@@ -163,16 +174,48 @@ class RequestResponseLoggingMiddleware:
             # Calculate processing time
             processing_time = time.time() - start_time
             
-            # Log request body if captured
-            if request_body is not None:
-                if body_size > self.max_body_size:
-                    request_logger.debug(
-                        f"Request body too large to log ({body_size} bytes, max: {self.max_body_size})"
-                    )
-                elif request_body:
-                    request_logger.debug(f"Request body: {request_body}")
-                else:
-                    request_logger.debug("Request body: (empty)")
+            # For methods with body, log the complete request with params now that we have the body
+            if not log_request_immediately:
+                # Build complete log message with request parameters
+                log_msg = f"Request: {method} {path} from {client_ip}"
+                
+                # Add query parameters if present
+                if request.query_params:
+                    log_msg += f" query_params={dict(request.query_params)}"
+                
+                if session_id != "not provided":
+                    log_msg += f" session_id={session_id}"
+                
+                # Add request body/parameters if captured
+                if request_body is not None:
+                    if body_size > self.max_body_size:
+                        log_msg += f" params=<body too large: {body_size} bytes>"
+                    elif request_body:
+                        # Try to parse as JSON for better readability
+                        try:
+                            parsed_body = json.loads(request_body)
+                            log_msg += f" params={parsed_body}"
+                        except (json.JSONDecodeError, ValueError):
+                            # If not JSON, log as-is (truncate if too long)
+                            if len(request_body) > 500:
+                                log_msg += f" params=<truncated: {len(request_body)} chars>"
+                            else:
+                                log_msg += f" params={request_body}"
+                
+                request_logger.info(log_msg)
+            else:
+                # For methods without body, log request body separately if it exists (unlikely but possible)
+                if request_body is not None and request_body:
+                    if body_size > self.max_body_size:
+                        request_logger.info(
+                            f"Request body too large to log ({body_size} bytes, max: {self.max_body_size})"
+                        )
+                    else:
+                        try:
+                            parsed_body = json.loads(request_body)
+                            request_logger.info(f"Request params: {parsed_body}")
+                        except (json.JSONDecodeError, ValueError):
+                            request_logger.info(f"Request params: {request_body}")
             
             # Log response
             log_message = (
@@ -184,8 +227,18 @@ class RequestResponseLoggingMiddleware:
             if response_session_id:
                 log_message += f" session_id={response_session_id}"
             
+            # Include response body/object in the log message
             if response_body:
-                request_logger.debug(f"Response body: {response_body}")
+                # Try to parse as JSON for better readability
+                try:
+                    parsed_response = json.loads(response_body)
+                    log_message += f" response={parsed_response}"
+                except (json.JSONDecodeError, ValueError):
+                    # If not JSON or too large, include a summary
+                    if isinstance(response_body, str) and len(response_body) > 500:
+                        log_message += f" response=<truncated: {len(response_body)} chars>"
+                    else:
+                        log_message += f" response={response_body}"
             
             if status_code and status_code >= 500:
                 request_logger.error(log_message)
@@ -220,7 +273,7 @@ class AppUserContextMiddleware(FastMCPMiddleware):
 
     def __init__(self, engine):
         self.engine = engine
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger("score.mcp.auth")
 
     async def on_request(self, context: MiddlewareContext, call_next):
         """Look up app_user from OAuth2 token's 'sub' claim and inject into context."""
@@ -228,7 +281,29 @@ class AppUserContextMiddleware(FastMCPMiddleware):
         from services.app_user import AppUserService
         
         token: Optional[AccessToken] = get_access_token()
-        self.logger.debug(f"Token: {token}")
+        # Log token safely, hiding sensitive values
+        if token:
+            # Create a safe representation of the token, masking sensitive fields
+            token_safe = {}
+            # Mask token value if present
+            if hasattr(token, 'token') and token.token:
+                token_safe['token'] = '**********'
+            elif hasattr(token, 'access_token') and token.access_token:
+                token_safe['access_token'] = '**********'
+            # Include non-sensitive fields
+            if hasattr(token, 'claims'):
+                token_safe['claims'] = token.claims
+            if hasattr(token, 'expires_at'):
+                token_safe['expires_at'] = token.expires_at
+            if hasattr(token, 'expires_in'):
+                token_safe['expires_in'] = token.expires_in
+            if hasattr(token, 'scopes'):
+                token_safe['scopes'] = token.scopes
+            if hasattr(token, 'token_type'):
+                token_safe['token_type'] = token.token_type
+            self.logger.debug(f"Token: {token_safe}")
+        else:
+            self.logger.debug("Token: None")
         app_user = None
 
         # Try OAuth2 token authentication first

@@ -153,7 +153,7 @@ from tools.utils import parse_date_range, str_to_bool, str_to_int
 from tools.utils import validate_and_create_value_constraint
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.business_information_entity")
 
 mcp = FastMCP("Score MCP Server - Business Information Entity Tools")
 
@@ -4466,7 +4466,8 @@ async def update_top_level_asbiep_state(
         )],
         new_state: Annotated[str, Field(
             description="The new state for the BIE (Business Information Entity). Valid transitions: WIP->QA, QA->WIP, QA->Production"
-        )]
+        )],
+        ctx: Context
 ) -> UpdateTopLevelAsbiepResponse:
     """
     Update the state of a BIE (Business Information Entity) following the state transition rules.
@@ -4538,7 +4539,42 @@ async def update_top_level_asbiep_state(
     if new_state not in valid_states:
         raise ToolError(f"Invalid state '{new_state}'. Valid states are: {', '.join(valid_states)}")
 
-    # Update BIE state
+    # Get top-level ASBIEP to check current state
+    top_level_asbiep = bie_service.get_top_level_asbiep_by_id(top_level_asbiep_id)
+    if not top_level_asbiep:
+        raise ToolError(
+            f"Top-level ASBIEP with ID {top_level_asbiep_id} not found. Please verify the ID and try again."
+        )
+    
+    current_state = top_level_asbiep.state
+    
+    # Only use elicitation when transitioning from QA to Production (final state, cannot be reverted)
+    if current_state == 'QA' and new_state == 'Production':
+        # Get display name from ASBIEP if available
+        display_name = top_level_asbiep.asbiep.based_asccp_manifest.den if top_level_asbiep.asbiep and top_level_asbiep.asbiep.based_asccp_manifest else f"Top-Level ASBIEP {top_level_asbiep_id}"
+        
+        # Create confirmation message for QA->Production transition
+        confirmation_message = (
+            f"Are you sure you want to move '{display_name}' Top-Level ASBIEP to the 'Production' state?\n\n"
+            f"This action is permanent. Once in Production, the state cannot be changed."
+        )
+        
+        elicit_result = await ctx.elicit(
+            message=confirmation_message,
+            response_type=None
+        )
+        
+        # Check if user confirmed the state update using pattern matching
+        match elicit_result:
+            case AcceptedElicitation():
+                # Proceed with state update below
+                pass
+            case DeclinedElicitation():
+                raise ToolError("State update declined by user.")
+            case CancelledElicitation():
+                raise ToolError("State update cancelled by user.")
+    
+    # Update BIE state (for all transitions, or after elicitation confirmation for QA->Production)
     try:
         previous_state, new_state_result = bie_service.update_top_level_asbiep_state(
             top_level_asbiep_id=top_level_asbiep_id,
@@ -4724,7 +4760,8 @@ async def transfer_top_level_asbiep_ownership(
             gt=0)],
         new_owner_user_id: Annotated[int, Field(
             description="The user ID of the new owner who will receive ownership of the Top-Level ASBIEP.",
-            gt=0)]
+            gt=0)],
+        ctx: Context
 ) -> TransferTopLevelAsbiepOwnershipResponse:
     """
     Transfer ownership of a Top-Level ASBIEP (Association Business Information Entity Property) to another user.
@@ -4779,36 +4816,68 @@ async def transfer_top_level_asbiep_ownership(
     # Create service instance
     bie_service = BusinessInformationEntityService(requester=app_user)
 
-    # Transfer ownership
-    try:
-        previous_owner, new_owner = bie_service.transfer_ownership(
-            top_level_asbiep_id=top_level_asbiep_id,
-            new_owner_user_id=new_owner_user_id
-        )
-
-        return TransferTopLevelAsbiepOwnershipResponse(
-            top_level_asbiep_id=top_level_asbiep_id,
-            updates=["owner_user_id"]
-        )
-    except HTTPException as e:
-        logger.error(f"HTTP error transferring ownership", e)
-        if e.status_code == 400:
-            raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
-        elif e.status_code == 403:
-            raise ToolError(f"Access denied: {e.detail}") from e
-        elif e.status_code == 404:
-            raise ToolError(
-                f"Resource not found: {e.detail}. Please verify the top-level ASBIEP (Association Business Information Entity Property) ID and new owner user ID.") from e
-        elif e.status_code == 500:
-            raise ToolError(
-                f"Database error: {e.detail}. Please try again later or contact your system administrator.") from e
-        else:
-            raise ToolError(f"Unexpected error: {e.detail}") from e
-    except Exception as e:
-        logger.error(f"Unexpected error transferring ownership", e)
+    # Get top-level ASBIEP for confirmation message
+    top_level_asbiep = bie_service.get_top_level_asbiep_by_id(top_level_asbiep_id)
+    if not top_level_asbiep:
         raise ToolError(
-            f"An unexpected error occurred while transferring ownership. Please try again later or contact your system administrator if the problem persists."
-        ) from e
+            f"Top-level ASBIEP with ID {top_level_asbiep_id} not found. Please verify the ID and try again."
+        )
+    
+    # Get display name from ASBIEP if available
+    display_name = top_level_asbiep.asbiep.based_asccp_manifest.den if top_level_asbiep.asbiep and top_level_asbiep.asbiep.based_asccp_manifest else f"Top-Level ASBIEP {top_level_asbiep_id}"
+    
+    # Get current owner information
+    current_owner = top_level_asbiep.owner_user
+    current_owner_name = current_owner.name if current_owner and current_owner.name else f"User ID {top_level_asbiep.owner_user_id}"
+    new_owner_name = new_owner.name if new_owner and new_owner.name else f"User ID {new_owner_user_id}"
+    
+    # Create confirmation message with ownership transfer details
+    confirmation_message = (
+        f"Are you sure you want to transfer ownership of '{display_name}' Top-Level ASBIEP to '{new_owner_name}'?"
+    )
+    
+    elicit_result = await ctx.elicit(
+        message=confirmation_message,
+        response_type=None
+    )
+    
+    # Check if user confirmed the ownership transfer using pattern matching
+    match elicit_result:
+        case AcceptedElicitation():
+            # Transfer ownership
+            try:
+                previous_owner, new_owner = bie_service.transfer_ownership(
+                    top_level_asbiep_id=top_level_asbiep_id,
+                    new_owner_user_id=new_owner_user_id
+                )
+
+                return TransferTopLevelAsbiepOwnershipResponse(
+                    top_level_asbiep_id=top_level_asbiep_id,
+                    updates=["owner_user_id"]
+                )
+            except HTTPException as e:
+                logger.error(f"HTTP error transferring ownership", e)
+                if e.status_code == 400:
+                    raise ToolError(f"Validation error: {e.detail}. Please check your input and try again.") from e
+                elif e.status_code == 403:
+                    raise ToolError(f"Access denied: {e.detail}") from e
+                elif e.status_code == 404:
+                    raise ToolError(
+                        f"Resource not found: {e.detail}. Please verify the top-level ASBIEP (Association Business Information Entity Property) ID and new owner user ID.") from e
+                elif e.status_code == 500:
+                    raise ToolError(
+                        f"Database error: {e.detail}. Please try again later or contact your system administrator.") from e
+                else:
+                    raise ToolError(f"Unexpected error: {e.detail}") from e
+            except Exception as e:
+                logger.error(f"Unexpected error transferring ownership", e)
+                raise ToolError(
+                    f"An unexpected error occurred while transferring ownership. Please try again later or contact your system administrator if the problem persists."
+                ) from e
+        case DeclinedElicitation():
+            raise ToolError("Ownership transfer declined by user.")
+        case CancelledElicitation():
+            raise ToolError("Ownership transfer cancelled by user.")
 
 
 @mcp.tool(
@@ -5403,7 +5472,7 @@ async def create_asbie(
 
 @mcp.tool(
     name="reuse_top_level_asbiep",
-    description="Reuse an existing Top-Level ASBIEP (Association Business Information Entity Property) for an ASBIE (Association Business Information Entity). This tool sets the ASBIE's to_asbiep_id to point to the ASBIEP from the specified top-level ASBIEP. This works when the owner_top_level_asbiep_id of the ASBIE and the reuse_top_level_asbiep_id are different, and when the ASBIE's based_ascc.to_asccp_manifest_id matches the reuse_top_level_asbiep's asbiep.based_asccp_manifest_id.",
+    description="Reuse an existing Top-Level ASBIEP (Association Business Information Entity Property) for an ASBIE (Association Business Information Entity). This tool sets the ASBIE's to_asbiep_id to point to the ASBIEP from the specified top-level ASBIEP. This works when: (1) the owner_top_level_asbiep_id of the ASBIE and the reuse_top_level_asbiep_id are different, (2) the ASBIE's based_ascc.to_asccp_manifest_id matches the reuse_top_level_asbiep's asbiep.based_asccp_manifest_id, and (3) both top-level ASBIEPs are in the same release (owner_top_level_asbiep.release.release_id must equal reuse_top_level_asbiep.release.release_id).",
     output_schema={
         "type": "object",
         "description": "Response containing the updated ASBIE information after reusing the top-level ASBIEP",
@@ -5449,6 +5518,8 @@ async def reuse_top_level_asbiep(
     1. The owner_top_level_asbiep_id of the ASBIE (linked by asbie_id) and reuse_top_level_asbiep_id are different
     2. The ASBIE's based_ascc.to_asccp_manifest_id equals the reuse_top_level_asbiep's asbiep.based_asccp_manifest_id
        (In other words: ASBIE's to_asbiep.based_asccp_manifest_id = REUSE_TOP_LEVEL_ASBIEP.ASBIEP.based_asccp_manifest_id)
+    3. Both top-level ASBIEPs are in the same release
+       (asbie.owner_top_level_asbiep.release.release_id must equal reuse_top_level_asbiep.release.release_id)
     
     This tool should be used combined with 'create_asbie'. When called, it sets ASBIE.to_asbiep_id = reuse_top_level_asbiep.asbiep_id.
     
@@ -5469,7 +5540,7 @@ async def reuse_top_level_asbiep(
     Raises:
         ToolError: If validation fails, resources are not found, user lacks permission,
             the owner_top_level_asbiep_ids are the same, the based_asccp_manifest_ids don't match,
-            or database errors occur.
+            the release_ids don't match, or database errors occur.
     
     Examples:
         Reuse a top-level ASBIEP for an ASBIE:

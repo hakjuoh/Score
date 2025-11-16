@@ -2507,6 +2507,8 @@ class BusinessInformationEntityService:
         1. The owner_top_level_asbiep_id of the ASBIE and reuse_top_level_asbiep_id are different
         2. The ASBIE's based_ascc.to_asccp_manifest_id equals the reuse_top_level_asbiep's 
            asbiep.based_asccp_manifest_id
+        3. The owner_top_level_asbiep.release.release_id equals reuse_top_level_asbiep.release.release_id
+           (both top-level ASBIEPs must be in the same release)
         
         Permission Requirements:
         - The current user must be the owner of the top-level ASBIEP that owns the ASBIE
@@ -2522,7 +2524,7 @@ class BusinessInformationEntityService:
         Raises:
             HTTPException: If validation fails, resources are not found, user lacks permission,
                 the owner_top_level_asbiep_ids are the same, the based_asccp_manifest_ids don't match,
-                or database errors occur.
+                the release_ids don't match, or database errors occur.
         """
         # Get the ASBIE by ID
         asbie = db_get(Asbie, asbie_id)
@@ -2546,14 +2548,45 @@ class BusinessInformationEntityService:
                        f"Please choose a different top-level ASBIEP to reuse."
             )
         
-        # Get the reuse top-level ASBIEP
-        reuse_top_level_asbiep = db_get(TopLevelAsbiep, reuse_top_level_asbiep_id)
+        # Get the reuse top-level ASBIEP with release relationship loaded
+        reuse_top_level_asbiep_query = (
+            select(TopLevelAsbiep)
+            .options(selectinload(TopLevelAsbiep.release))
+            .where(TopLevelAsbiep.top_level_asbiep_id == reuse_top_level_asbiep_id)
+        )
+        reuse_top_level_asbiep = db_exec(reuse_top_level_asbiep_query).first()
         if not reuse_top_level_asbiep:
             raise HTTPException(
                 status_code=404,
                 detail=f"Could not find the top-level ASBIEP with ID {reuse_top_level_asbiep_id} to reuse. "
                        f"Please check that the ID is correct. "
                        f"You can use get_top_level_asbiep_list to view available top-level ASBIEPs."
+            )
+        
+        # Get the owner top-level ASBIEP with release relationship loaded for release_id validation
+        owner_top_level_asbiep_query = (
+            select(TopLevelAsbiep)
+            .options(selectinload(TopLevelAsbiep.release))
+            .where(TopLevelAsbiep.top_level_asbiep_id == owner_top_level_asbiep_id)
+        )
+        owner_top_level_asbiep = db_exec(owner_top_level_asbiep_query).first()
+        if not owner_top_level_asbiep:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Could not find the owner top-level ASBIEP with ID {owner_top_level_asbiep_id}. "
+                       f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
+            )
+        
+        # Validate that both top-level ASBIEPs are in the same release
+        if owner_top_level_asbiep.release.release_id != reuse_top_level_asbiep.release.release_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot reuse top-level ASBIEP {reuse_top_level_asbiep_id} because it is in a different release. "
+                       f"The ASBIE's owner top-level ASBIEP (ID {owner_top_level_asbiep_id}) is in release "
+                       f"{owner_top_level_asbiep.release.release_id}, but the top-level ASBIEP to reuse is in release "
+                       f"{reuse_top_level_asbiep.release.release_id}. "
+                       f"Both top-level ASBIEPs must be in the same release to reuse. "
+                       f"Please choose a different top-level ASBIEP that is in the same release as the ASBIE's owner."
             )
         
         # Get the ASBIEP from the reuse top-level ASBIEP

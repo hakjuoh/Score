@@ -57,7 +57,7 @@ from tools.models.common import LibraryInfo, LogInfo, NamespaceInfo, ReleaseInfo
 from tools.utils import parse_date_range
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.mcp.agency_id_list")
 
 mcp = FastMCP("Score MCP Server - Agency ID List Tools")
 

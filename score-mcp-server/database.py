@@ -74,7 +74,56 @@ def create_engine() -> tuple[Engine, str]:
             f"Expected format: scheme://username:password@hostname:port/database"
         ) from e
 
-    return sqlalchemy.create_engine(DATABASE_URL, echo=True), DATABASE_URL
+    # Configure SQLAlchemy logging based on environment variable
+    sqlalchemy_log = os.getenv("SQLALCHEMY_LOG", "").lower() in ("true", "1", "yes", "on")
+    enable_sqlalchemy_logging = sqlalchemy_log
+    
+    if enable_sqlalchemy_logging:
+        # Get the log level for SQLAlchemy (defaults to LOG_LEVEL if not specified)
+        # First, get LOG_LEVEL to use as default
+        log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+        log_level_map = {
+            "DEBUG": logging.DEBUG,
+            "INFO": logging.INFO,
+            "WARNING": logging.WARNING,
+            "ERROR": logging.ERROR,
+            "CRITICAL": logging.CRITICAL,
+        }
+        default_log_level = log_level_map.get(log_level_str, logging.INFO)
+        
+        # Get SQLALCHEMY_LOG_LEVEL, defaulting to LOG_LEVEL if not provided
+        sqlalchemy_log_level_str = os.getenv("SQLALCHEMY_LOG_LEVEL", log_level_str).upper()
+        sqlalchemy_log_level_map = {
+            "DEBUG": logging.DEBUG,
+            "INFO": logging.INFO,
+            "WARNING": logging.WARNING,
+            "ERROR": logging.ERROR,
+            "CRITICAL": logging.CRITICAL,
+        }
+        sqlalchemy_log_level = sqlalchemy_log_level_map.get(sqlalchemy_log_level_str, default_log_level)
+        
+        # Configure SQLAlchemy loggers
+        # sqlalchemy.engine logs SQL statements and connection events
+        logging.getLogger("sqlalchemy.engine").setLevel(sqlalchemy_log_level)
+        logging.getLogger("sqlalchemy.engine").propagate = True
+        
+        # sqlalchemy.pool logs connection pool events
+        logging.getLogger("sqlalchemy.pool").setLevel(sqlalchemy_log_level)
+        logging.getLogger("sqlalchemy.pool").propagate = True
+        
+        # sqlalchemy.dialects logs dialect-specific events
+        logging.getLogger("sqlalchemy.dialects").setLevel(sqlalchemy_log_level)
+        logging.getLogger("sqlalchemy.dialects").propagate = True
+        
+        logger.info(f"SQLAlchemy logging enabled at level: {sqlalchemy_log_level_str} ({sqlalchemy_log_level})")
+    else:
+        # Disable SQLAlchemy logging by setting to a high level
+        logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+        logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+        logging.getLogger("sqlalchemy.dialects").setLevel(logging.WARNING)
+        logger.debug("SQLAlchemy logging disabled (set SQLALCHEMY_LOG=true in .env to enable)")
+
+    return sqlalchemy.create_engine(DATABASE_URL, echo=enable_sqlalchemy_logging), DATABASE_URL
 
 
 def create_database_lifespan(engine: Engine, database_url: str):
