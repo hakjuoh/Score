@@ -77,20 +77,20 @@ from fastmcp.server.elicitation import (
 from pydantic import Field
 
 from services import BizCtxService, DateRangeParams, PaginationParams
+from services.models.biz_ctx import BizCtxValueInfo
+from services.models.common import WhoAndWhen
+from services.models.ctx_scheme import CtxSchemeValueInfo
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
 from tools.models.biz_ctx import (
-    BizCtxValueInfo,
     CreateBizCtxResponse,
     CreateBizCtxValueResponse,
-    CtxSchemeValueInfo,
     DeleteBizCtxResponse,
     DeleteBizCtxValueResponse,
     GetBizCtxResponse,
-    GetBizCtxsResponse,
+    GetBizCtxPaginationResponse,
     UpdateBizCtxResponse,
     UpdateBizCtxValueResponse,
 )
-from tools.models.common import WhoAndWhen
 from tools.utils import parse_date_range
 
 # Configure logging
@@ -212,7 +212,7 @@ async def get_business_contexts(
             le=100,
             description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
         )]
-) -> GetBizCtxsResponse:
+) -> GetBizCtxPaginationResponse:
     """
     Get a paginated list of business contexts.
     
@@ -239,7 +239,7 @@ async def get_business_contexts(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetBizCtxsResponse: Response object containing:
+        GetBizCtxPaginationResponse: Response object containing:
             - total_items: Total number of business contexts available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -319,7 +319,7 @@ async def get_business_contexts(
             pagination, sort_list
         )
 
-        return GetBizCtxsResponse(
+        return GetBizCtxPaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,
@@ -1045,7 +1045,9 @@ def _create_biz_ctx_result(biz_ctx) -> GetBizCtxResponse:
                 biz_ctx_value_id=biz_ctx_value.biz_ctx_value_id,
                 ctx_scheme_value=CtxSchemeValueInfo(
                     ctx_scheme_value_id=biz_ctx_value.ctx_scheme_value.ctx_scheme_value_id,
-                    value=biz_ctx_value.ctx_scheme_value.value)
+                    guid=biz_ctx_value.ctx_scheme_value.guid,
+                    value=biz_ctx_value.ctx_scheme_value.value,
+                    meaning=biz_ctx_value.ctx_scheme_value.meaning)
             ))
 
     

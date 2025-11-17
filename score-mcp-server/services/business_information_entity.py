@@ -13,21 +13,21 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-
-from sqlmodel import select, func, or_, text
 from sqlalchemy.orm import selectinload
+from sqlmodel import select, func, or_, text
 
-from services.models import AppUser, TopLevelAsbiep, Asbiep, BizCtxAssignment, Abie, BizCtx, Release, AsccpManifest, Asccp, \
+from databases.models import AppUser, TopLevelAsbiep, Asbiep, BizCtxAssignment, Abie, BizCtx, Release, AsccpManifest, \
+    Asccp, \
     AccManifest, Asbie, AsccManifest, Bbie, BccManifest, BccpManifest, Bbiep, DtManifest, DtScManifest, BbieSc, \
     AsbiepSupportDoc, DtAwdPri, DtScAwdPri
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
-from services.transaction import transaction, db_add, db_get, db_delete, db_refresh, db_flush, db_exec
-from services.utils import generate_guid
+from databases.utils import generate_guid
 from services.cache import cache, evict_cache
+from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.transaction import transaction, db_add, db_get, db_delete, db_flush, db_exec
 from .core_component import CoreComponentService
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.business_information_entity")
 
 
 class BusinessInformationEntityService:
@@ -1878,7 +1878,7 @@ class BusinessInformationEntityService:
             # If not found directly, check if any ASCC points to a group and flatten it
             # Get all ASCC relationships for this ACC
             from tools.core_component import _get_relationships_for_acc
-            from tools.models.core_component import AsccRelationshipInfo
+            from services.models.core_component import AsccRelationshipInfo
             associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
             
             for cc_assoc in associations:
@@ -1962,7 +1962,7 @@ class BusinessInformationEntityService:
                 return True
             
             # Get all relationships and check for nested groups
-            from tools.models.core_component import AsccRelationshipInfo
+            from services.models.core_component import AsccRelationshipInfo
             associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
             
             for cc_assoc in associations:
@@ -3030,7 +3030,7 @@ class BusinessInformationEntityService:
             # If not found directly, check if any ASCC points to a group and flatten it
             # Get all relationships for this ACC
             from tools.core_component import _get_relationships_for_acc
-            from tools.models.core_component import AsccRelationshipInfo, BccRelationshipInfo
+            from services.models.core_component import AsccRelationshipInfo, BccRelationshipInfo
             associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
             
             for cc_assoc in associations:
@@ -3088,7 +3088,7 @@ class BusinessInformationEntityService:
             bool: True if the BCC is found within the group, False otherwise
         """
         from tools.core_component import _get_relationships_for_acc
-        from tools.models.core_component import AsccRelationshipInfo
+        from services.models.core_component import AsccRelationshipInfo
         
         # Build ACC manifest queue for the group (including based ACC hierarchy)
         acc_manifest_queue = []
@@ -3115,7 +3115,7 @@ class BusinessInformationEntityService:
                 return True
             
             # Get all relationships and check for nested groups
-            from tools.models.core_component import BccRelationshipInfo
+            from services.models.core_component import BccRelationshipInfo
             associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
             
             for cc_assoc in associations:

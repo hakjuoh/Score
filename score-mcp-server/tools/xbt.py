@@ -47,10 +47,14 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
+from services.models.common import WhoAndWhen
+from services.models.library import LibraryInfo
+from services.models.log import LogInfo
+from services.models.release import ReleaseInfo
+from services.models.xbt import SubtypeOfXbtInfo
 from services.xbt import XbtService
 from tools import _validate_auth_and_db, _create_user_info
-from tools.models.xbt import GetXbtResponse, SubtypeOfXbtInfo
-from tools.models.common import LibraryInfo, LogInfo, ReleaseInfo, WhoAndWhen
+from tools.models.xbt import GetXbtResponse
 
 # Configure logging
 logger = logging.getLogger("score.mcp.xbt")

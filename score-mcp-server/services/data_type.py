@@ -10,18 +10,17 @@ sorting, and date range filtering, including dependency-aware release queries.
 import logging
 
 from fastapi import HTTPException
-
-from sqlmodel import select, func
 from sqlalchemy.orm import selectinload
+from sqlmodel import select, func
 
-from services.models import Dt, DtManifest, DtScManifest, Release
-from .release import ReleaseService
+from databases.models import Dt, DtManifest, DtScManifest, Release
+from services.cache import cache
 from services.models.common import Sort, PaginationParams, DateRangeParams, Page
 from services.transaction import transaction, db_exec
-from services.cache import cache
+from .release import ReleaseService
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.data_type")
 
 
 class DataTypeService:

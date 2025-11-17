@@ -8,16 +8,16 @@ tag information with support for filtering, pagination, and sorting.
 
 import logging
 
-from sqlmodel import select, func, and_
 from sqlalchemy.orm import selectinload
+from sqlmodel import select, func, and_
 
-from services.models import Tag
+from databases.models import Tag
+from services.cache import cache
 from services.models.common import Sort, PaginationParams, DateRangeParams, Page
 from services.transaction import transaction, db_exec
-from services.cache import cache
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.tag")
 
 
 class TagService:

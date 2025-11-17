@@ -1,3 +1,7 @@
+"""
+Utility functions for database models.
+"""
+
 import re
 
 
@@ -28,7 +32,7 @@ def validate_guid(guid: str) -> bool:
 def generate_guid() -> str:
     """
     Generate a valid 32-character hexadecimal GUID (lowercase).
-    
+
     Returns:
         str: A valid GUID string
     """

@@ -11,18 +11,17 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-
-from sqlmodel import select, func
 from sqlalchemy.orm import selectinload
+from sqlmodel import select, func
 
-from services.models import AppUser, CtxCategory, CtxScheme
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
-from services.transaction import transaction, db_add, db_get, db_delete, db_refresh, db_flush, db_exec
-from services.utils import generate_guid
+from databases.models import AppUser, CtxCategory, CtxScheme
+from databases.utils import generate_guid
 from services.cache import cache, evict_cache
+from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.transaction import transaction, db_add, db_get, db_delete, db_flush, db_exec
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.ctx_category")
 
 
 class CtxCategoryService:

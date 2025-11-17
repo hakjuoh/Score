@@ -12,17 +12,18 @@ to support interoperability across different systems and standards.
 """
 
 import logging
-from sqlmodel import select
-from sqlalchemy.orm import selectinload
-from fastapi import HTTPException
 
-from services.transaction import db_exec, transaction
+from fastapi import HTTPException
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
+
+from databases.models.data_type import XbtManifest, Xbt
+from databases.models.release import Release
 from services.cache import cache
-from services.models.data_type import XbtManifest, Xbt
-from services.models.release import Release
+from services.transaction import db_exec, transaction
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.xbt")
 
 
 class XbtService:

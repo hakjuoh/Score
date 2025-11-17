@@ -74,20 +74,20 @@ from fastmcp.server.elicitation import (
 from pydantic import Field
 
 from services import CtxSchemeService, DateRangeParams, PaginationParams
+from services.models.common import WhoAndWhen
+from services.models.ctx_category import CtxCategoryInfo
+from services.models.ctx_scheme import CtxSchemeValueInfo
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
 from tools.models.ctx_scheme import (
-    CtxCategoryInfo,
-    CtxSchemeValueInfo,
     CreateCtxSchemeResponse,
     CreateCtxSchemeValueResponse,
     DeleteCtxSchemeResponse,
     DeleteCtxSchemeValueResponse,
+    GetCtxSchemePaginationResponse,
     GetCtxSchemeResponse,
-    GetCtxSchemesResponse,
     UpdateCtxSchemeResponse,
     UpdateCtxSchemeValueResponse,
 )
-from tools.models.common import WhoAndWhen
 from tools.utils import parse_date_range
 
 # Configure logging
@@ -236,7 +236,7 @@ async def get_context_schemes(
             le=100,
             description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
         )]
-) -> GetCtxSchemesResponse:
+) -> GetCtxSchemePaginationResponse:
     """
     Get a paginated list of context schemes.
     
@@ -268,7 +268,7 @@ async def get_context_schemes(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetCtxSchemesResponse: Response object containing:
+        GetCtxSchemePaginationResponse: Response object containing:
             - total_items: Total number of context schemes available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -350,7 +350,7 @@ async def get_context_schemes(
             pagination, sort_list, ctx_category_name
         )
 
-        return GetCtxSchemesResponse(
+        return GetCtxSchemePaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,

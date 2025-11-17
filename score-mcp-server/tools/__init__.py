@@ -4,10 +4,10 @@ from fastmcp.exceptions import ToolError
 # SQLModel's create_engine returns sqlalchemy.engine.Engine - import for type hints
 from sqlalchemy.engine import Engine
 
+from databases.models import AppUser
 from middleware import get_current_user, get_engine
-from services.models import AppUser
 from services import Sort
-from tools.models.common import PaginationResponse, UserInfo, WhoAndWhen
+from services.models.common import UserInfo
 
 # Configure logging
 logger = logging.getLogger("score.mcp.tools")

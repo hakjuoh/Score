@@ -1,18 +1,15 @@
 """Models for Code List tools."""
+from __future__ import annotations
+
 from pydantic import BaseModel
 
-from tools.models.common import LibraryInfo, LogInfo, NamespaceInfo, ReleaseInfo, UserInfo, WhoAndWhen
-
-
-class CodeListValueInfo(BaseModel):
-    """Code list value information object."""
-    code_list_value_manifest_id: int  # Unique identifier for the code list value manifest (release-specific version)
-    code_list_value_id: int  # Unique identifier for the code list value (base entity ID)
-    guid: str  # Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)
-    value: str  # The actual code value string (e.g., "US", "EUR", "ACTIVE")
-    meaning: str | None  # Human-readable meaning or description of what this code value represents
-    definition: str | None  # Detailed definition or explanation of the code list value
-    is_deprecated: bool  # Whether this code list value is deprecated and should not be used
+from services.models.code_list import CodeListValueInfo
+from tools.models.common import PaginationResponse
+from services.models.common import UserInfo, WhoAndWhen
+from services.models.library import LibraryInfo
+from services.models.log import LogInfo
+from services.models.namespace import NamespaceInfo
+from services.models.release import ReleaseInfo
 
 
 class GetCodeListResponse(BaseModel):
@@ -40,10 +37,7 @@ class GetCodeListResponse(BaseModel):
     last_updated: WhoAndWhen  # Information about who last updated the code list and when
 
 
-class GetCodeListsResponse(BaseModel):
+class GetCodeListPaginationResponse(PaginationResponse[GetCodeListResponse]):
     """Response for get_code_lists tool."""
-    total_items: int  # Total number of code lists available
-    offset: int  # Offset of the first item in this page
-    limit: int  # Number of items returned in this page
-    items: list[GetCodeListResponse]  # List of code lists on this page
+    pass
 

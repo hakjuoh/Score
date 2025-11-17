@@ -3,6 +3,7 @@ import json
 import pytest
 from fastmcp import Client
 from fastmcp.client import BearerAuth
+from tests.conftest import create_test_client
 
 
 @pytest.fixture
@@ -18,7 +19,7 @@ def created_biz_ctx_id(token):
     """Create a business context for testing and return its ID."""
 
     async def _create_biz_ctx():
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             result = await client.call_tool("create_business_context", {
                 'name': 'Test Business Context'
             })
@@ -38,7 +39,7 @@ def valid_asccp_manifest_id(token, created_release_id):
     """Get a valid ASCCP manifest ID for testing."""
     
     async def _get_asccp_manifest_id():
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Get ASCCP manifests from the release
             result = await client.call_tool("get_core_components", {
                 'release_id': created_release_id,
@@ -72,7 +73,7 @@ class TestTransferBieOwnership:
     @pytest.mark.asyncio
     async def test_transfer_top_level_asbiep_ownership_success(self, token, created_biz_ctx_id, valid_asccp_manifest_id, temp_end_user_for_transfer):
         """Test successful ownership transfer."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Create a business information entity
             create_result = await client.call_tool("create_top_level_asbiep", {
                 'asccp_manifest_id': valid_asccp_manifest_id,  # Use dynamically found ASCCP manifest ID
@@ -102,7 +103,7 @@ class TestTransferBieOwnership:
     @pytest.mark.asyncio
     async def test_transfer_top_level_asbiep_ownership_invalid_bie_id(self, token):
         """Test transfer ownership with invalid BIE ID."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Try to transfer ownership of non-existent BIE
             with pytest.raises(Exception) as exc_info:
                 await client.call_tool("transfer_top_level_asbiep_ownership", {
@@ -116,7 +117,7 @@ class TestTransferBieOwnership:
     @pytest.mark.asyncio
     async def test_transfer_top_level_asbiep_ownership_invalid_user_id(self, token, created_biz_ctx_id, valid_asccp_manifest_id):
         """Test transfer ownership with invalid user ID."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Create a business information entity
             create_result = await client.call_tool("create_top_level_asbiep", {
                 'asccp_manifest_id': valid_asccp_manifest_id,
@@ -146,7 +147,7 @@ class TestTransferBieOwnership:
     @pytest.mark.asyncio
     async def test_transfer_top_level_asbiep_ownership_role_mismatch(self, token, created_biz_ctx_id, valid_asccp_manifest_id):
         """Test transfer ownership with role mismatch (End-User to Developer)."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Create a business information entity
             create_result = await client.call_tool("create_top_level_asbiep", {
                 'asccp_manifest_id': valid_asccp_manifest_id,
@@ -168,7 +169,7 @@ class TestTransferBieOwnership:
     @pytest.mark.asyncio
     async def test_transfer_top_level_asbiep_ownership_to_self(self, token, created_biz_ctx_id, valid_asccp_manifest_id):
         """Test transfer ownership to self (should fail)."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Get current user ID
             current_user_result = await client.call_tool("who_am_i", {})
             current_user_id = current_user_result.data.user_id
@@ -203,7 +204,7 @@ class TestTransferBieOwnership:
     @pytest.mark.asyncio
     async def test_transfer_top_level_asbiep_ownership_response_format(self, token, created_biz_ctx_id, valid_asccp_manifest_id, temp_end_user_for_transfer):
         """Test that transfer ownership returns the correct response format."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Create a business information entity
             create_result = await client.call_tool("create_top_level_asbiep", {
                 'asccp_manifest_id': valid_asccp_manifest_id,
@@ -238,7 +239,7 @@ class TestTransferBieOwnership:
     @pytest.mark.asyncio
     async def test_transfer_top_level_asbiep_ownership_unauthorized(self, token, created_biz_ctx_id, valid_asccp_manifest_id, temp_end_user_for_transfer):
         """Test transfer ownership without permission (should fail)."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Create a business information entity
             create_result = await client.call_tool("create_top_level_asbiep", {
                 'asccp_manifest_id': valid_asccp_manifest_id,

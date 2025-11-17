@@ -8,16 +8,15 @@ information with support for filtering, pagination, and sorting.
 
 import logging
 
-from fastapi import HTTPException
 from sqlmodel import select, func
 
-from services.models import AppUser, AppOAuth2User
+from databases.models import AppUser, AppOAuth2User
+from services.cache import cache
 from services.models.common import Sort, PaginationParams, Page
 from services.transaction import transaction, db_exec
-from services.cache import cache
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.app_user")
 
 
 class AppUserService:
@@ -197,6 +196,52 @@ class AppUserService:
         
         return query
 
+    @cache(key_prefix="app_user.get_user_by_id")
+    @transaction(read_only=True)
+    def get_user_by_id(self, app_user_id: int) -> AppUser | None:
+        """
+        Get an AppUser by user ID.
+        
+        Args:
+            app_user_id: The app_user_id to look up
+            
+        Returns:
+            AppUser if found, None otherwise
+        """
+        logger.debug(f"Looking up AppUser by ID: {app_user_id}")
+        
+        user_stmt = select(AppUser).where(AppUser.app_user_id == app_user_id)
+        app_user = db_exec(user_stmt).first()
+        
+        if app_user:
+            logger.debug(f"Found AppUser: {app_user.login_id} (ID: {app_user.app_user_id})")
+        else:
+            logger.debug(f"AppUser not found for app_user_id: {app_user_id}")
+        return app_user
+
+    @transaction(read_only=True)
+    def get_user_display_name(self, app_user_id: int) -> str:
+        """
+        Get the display name for a user by ID.
+        
+        Returns the user's name if available, otherwise returns a formatted string
+        with the user ID.
+        
+        Args:
+            app_user_id: The app_user_id to look up
+            
+        Returns:
+            str: The user's display name or "User ID {app_user_id}" if name is not available
+        """
+        logger.debug(f"Getting display name for AppUser ID: {app_user_id}")
+        
+        user = self.get_user_by_id(app_user_id)
+        if user and user.name:
+            return user.name
+        else:
+            return f"User ID {app_user_id}"
+
+    @cache(key_prefix="app_user.get_user_by_oauth2_sub")
     @transaction(read_only=True)
     def get_user_by_oauth2_sub(self, sub: str) -> AppUser | None:
         """

@@ -58,25 +58,30 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from services.models import SeqKey, AsccManifest, BccManifest, AccManifest, Bcc, AsccpManifest, BccpManifest
+from databases.models import SeqKey, Bcc
 from services import CoreComponentService, DateRangeParams, PaginationParams
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
-from tools.models.core_component import (
+from services.models.common import WhoAndWhen
+from services.models.core_component import (
     AccInfo,
     AsccpInfo,
     AsccRelationshipInfo,
     BaseAccInfo,
-    BaseDtInfo,
     BccpInfo,
-    BccRelationshipInfo,
+    BccRelationshipInfo
+)
+from services.models.data_type import BaseDtInfo, DtInfo
+from services.models.library import LibraryInfo
+from services.models.log import LogInfo
+from services.models.namespace import NamespaceInfo
+from services.models.release import ReleaseInfo
+from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from tools.models.core_component import (
     CoreComponentInfo,
-    DtInfo,
     GetAccResponse,
     GetAsccpResponse,
     GetBccpResponse,
-    GetCoreComponentsResponse,
+    GetCoreComponentPaginationResponse,
 )
-from tools.models.common import LibraryInfo, LogInfo, NamespaceInfo, ReleaseInfo, WhoAndWhen
 from tools.utils import parse_date_range, validate_and_create_value_constraint
 
 # Configure logging
@@ -1648,7 +1653,7 @@ async def get_core_components(
         le=100,
         description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
     )]
-) -> GetCoreComponentsResponse:
+) -> GetCoreComponentPaginationResponse:
     """
     Get a paginated list of core components (ACC, ASCCP, BCCP) with unified response format.
     
@@ -1676,7 +1681,7 @@ async def get_core_components(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetCoreComponentsResponse: Response object containing:
+        GetCoreComponentPaginationResponse: Response object containing:
             - total_items: Total number of core components available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -1829,7 +1834,7 @@ async def get_core_components(
             )
             core_components.append(core_component)
 
-        return GetCoreComponentsResponse(
+        return GetCoreComponentPaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,

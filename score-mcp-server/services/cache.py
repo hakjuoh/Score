@@ -14,7 +14,6 @@ Cache type is controlled via CACHE_TYPE environment variable:
 """
 
 import hashlib
-import json
 import logging
 import os
 import pickle
@@ -26,7 +25,7 @@ from threading import Lock
 from typing import Any, Callable, Optional, TypeVar, ParamSpec
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.cache")
 
 P = ParamSpec('P')
 R = TypeVar('R')

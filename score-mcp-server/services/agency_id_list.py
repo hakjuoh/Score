@@ -10,17 +10,16 @@ pagination, sorting, and date range filtering.
 import logging
 
 from fastapi import HTTPException
-
-from sqlmodel import select, func
 from sqlalchemy.orm import selectinload
+from sqlmodel import select, func
 
-from services.models import AgencyIdList, AgencyIdListManifest, AgencyIdListValueManifest, Release
+from databases.models import AgencyIdList, AgencyIdListManifest, AgencyIdListValueManifest, Release
+from services.cache import cache
 from services.models.common import Sort, PaginationParams, DateRangeParams, Page
 from services.transaction import transaction, db_exec
-from services.cache import cache
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.agency_id_list")
 
 
 class AgencyIdListService:

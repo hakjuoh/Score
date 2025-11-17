@@ -11,21 +11,21 @@ Core Component data with full relationship loading.
 import logging
 
 from fastapi import HTTPException
-
-from sqlmodel import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy import and_
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
 
-from services.models import AppUser, Acc, AccManifest, Ascc, AsccManifest, Asccp, AsccpManifest, Bccp, BccpManifest, Release, \
+from databases.models import AppUser, Acc, AccManifest, Ascc, AsccManifest, Asccp, AsccpManifest, Bccp, BccpManifest, \
+    Release, \
     Library, Log, Tag, \
-    Namespace, AccManifestTag, AsccpManifestTag, BccpManifestTag, DtManifest, Dt, BccManifest, Bcc, SeqKey, Dt
-from .release import ReleaseService
+    Namespace, AccManifestTag, AsccpManifestTag, BccpManifestTag, DtManifest, BccManifest, Bcc, SeqKey, Dt
+from services.cache import cache
 from services.models.common import Sort, PaginationParams, DateRangeParams, Page
 from services.transaction import transaction, db_exec
-from services.cache import cache
+from .release import ReleaseService
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.core_component")
 
 
 class CoreComponentService:
@@ -542,7 +542,7 @@ class CoreComponentService:
             pagination = PaginationParams(offset=0, limit=10)
 
         from sqlalchemy.orm import aliased
-        from sqlmodel import union_all, func, and_, text, literal_column
+        from sqlmodel import union_all, func, and_
 
         # Get dependent releases using the existing ReleaseService method
         try:

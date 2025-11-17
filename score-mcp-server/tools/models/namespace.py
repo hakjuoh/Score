@@ -1,7 +1,11 @@
 """Models for Namespace tools."""
+from __future__ import annotations
+
 from pydantic import BaseModel
 
-from tools.models.common import LibraryInfo, UserInfo, WhoAndWhen
+from services.models.common import UserInfo, WhoAndWhen
+from tools.models.common import PaginationResponse
+from services.models.library import LibraryInfo
 
 
 class GetNamespaceResponse(BaseModel):
@@ -17,10 +21,7 @@ class GetNamespaceResponse(BaseModel):
     last_updated: WhoAndWhen  # Information about who last updated the namespace and when
 
 
-class GetNamespacesResponse(BaseModel):
+class GetNamespacePaginationResponse(PaginationResponse[GetNamespaceResponse]):
     """Response for get_namespaces tool."""
-    total_items: int  # Total number of namespaces available
-    offset: int  # Offset of the first item in this page
-    limit: int  # Number of items returned in this page
-    items: list[GetNamespaceResponse]  # List of namespaces on this page
+    pass
 

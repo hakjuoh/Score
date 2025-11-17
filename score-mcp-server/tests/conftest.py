@@ -32,11 +32,11 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session, text, select
 
 # Import AppUser model directly to avoid circular imports
-from services.models.app_user import AppUser
-from services.models.business_information_entity import TopLevelAsbiep
-from services.models.biz_ctx import BizCtx, BizCtxValue, BizCtxAssignment
-from services.models.ctx_category import CtxCategory
-from services.models.ctx_scheme import CtxScheme, CtxSchemeValue
+from databases.models.app_user import AppUser
+from databases.models.business_information_entity import TopLevelAsbiep
+from databases.models.biz_ctx import BizCtx, BizCtxValue, BizCtxAssignment
+from databases.models.ctx_category import CtxCategory
+from databases.models.ctx_scheme import CtxScheme, CtxSchemeValue
 
 
 def _create_test_engine() -> Engine:

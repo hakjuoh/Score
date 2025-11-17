@@ -21,7 +21,7 @@ from fastmcp.server.middleware import Middleware as FastMCPMiddleware, Middlewar
 from starlette.requests import Request
 from starlette.types import ASGIApp
 
-from services.models import AppUser
+from databases.models import AppUser
 
 # Configure logging
 logger = logging.getLogger(__name__)

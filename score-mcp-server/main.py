@@ -53,7 +53,7 @@ else:
     logger.debug("No .env file found, using environment variables only")
 
 from auth import create_auth_provider
-from database import create_engine, create_database_lifespan
+from databases import create_engine, create_database_lifespan
 from middleware import (
     AppUserContextMiddleware,
     DatabaseEngineMiddleware,

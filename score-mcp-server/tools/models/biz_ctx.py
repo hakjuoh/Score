@@ -1,14 +1,11 @@
 """Models for Business Context tools."""
+from __future__ import annotations
+
 from pydantic import BaseModel
 
-from tools.models.common import WhoAndWhen
-
-
-class BusinessContextInfo(BaseModel):
-    """Business context information object."""
-    biz_ctx_id: int  # Unique identifier for the business context
-    guid: str  # Globally unique identifier for the business context
-    name: str | None  # Human-readable name of the business context (e.g., "Production Environment", "Test Environment")
+from services.models.biz_ctx import BizCtxValueInfo
+from tools.models.common import PaginationResponse
+from services.models.common import WhoAndWhen
 
 
 class CreateBizCtxResponse(BaseModel):
@@ -45,18 +42,6 @@ class DeleteBizCtxResponse(BaseModel):
     message: str | None = None  # Optional message indicating the status of the deletion operation
 
 
-class CtxSchemeValueInfo(BaseModel):
-    """Context scheme value information."""
-    ctx_scheme_value_id: int  # Unique identifier for the context scheme value
-    value: str  # The actual value string of the context scheme entry (e.g., "US", "EUR")
-
-
-class BizCtxValueInfo(BaseModel):
-    """Business context value information."""
-    biz_ctx_value_id: int  # Unique identifier for the business context value
-    ctx_scheme_value: CtxSchemeValueInfo  # The context scheme value associated with this business context value
-
-
 class GetBizCtxResponse(BaseModel):
     """Response for get_business_context tool."""
     biz_ctx_id: int  # Unique identifier for the business context
@@ -67,10 +52,7 @@ class GetBizCtxResponse(BaseModel):
     last_updated: WhoAndWhen  # Information about who last updated the business context and when
 
 
-class GetBizCtxsResponse(BaseModel):
+class GetBizCtxPaginationResponse(PaginationResponse[GetBizCtxResponse]):
     """Response for get_business_contexts tool."""
-    total_items: int  # Total number of business contexts available
-    offset: int  # Offset of the first item in this page
-    limit: int  # Number of items returned in this page
-    items: list[GetBizCtxResponse]  # List of business contexts on this page
+    pass
 

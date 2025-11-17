@@ -45,9 +45,9 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import LibraryService, DateRangeParams, PaginationParams
+from services.models.common import WhoAndWhen
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
-from tools.models.library import GetLibrariesResponse, GetLibraryResponse
-from tools.models.common import WhoAndWhen
+from tools.models.library import GetLibraryPaginationResponse, GetLibraryResponse
 from tools.utils import parse_date_range, str_to_bool
 
 # Configure logging
@@ -317,7 +317,7 @@ async def get_libraries(
             le=100,
             description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
         )]
-) -> GetLibrariesResponse:
+) -> GetLibraryPaginationResponse:
     """
     Get a paginated list of libraries.
     
@@ -350,7 +350,7 @@ async def get_libraries(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetLibrariesResponse: Response object containing:
+        GetLibraryPaginationResponse: Response object containing:
             - total_items: Total number of libraries available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -456,7 +456,7 @@ async def get_libraries(
             sort_list=sort_list
         )
 
-        return GetLibrariesResponse(
+        return GetLibraryPaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,

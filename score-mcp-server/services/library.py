@@ -9,17 +9,16 @@ library information with support for filtering, pagination, and sorting.
 import logging
 
 from fastapi import HTTPException
-
-from sqlmodel import select, func
 from sqlalchemy.orm import selectinload
+from sqlmodel import select, func
 
-from services.models import Library
+from databases.models import Library
+from services.cache import cache
 from services.models.common import Sort, PaginationParams, DateRangeParams, Page
 from services.transaction import transaction, db_exec
-from services.cache import cache
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.library")
 
 
 class LibraryService:

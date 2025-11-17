@@ -48,9 +48,10 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import NamespaceService, DateRangeParams, PaginationParams
+from services.models.common import WhoAndWhen
+from services.models.library import LibraryInfo
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
-from tools.models.namespace import GetNamespaceResponse, GetNamespacesResponse
-from tools.models.common import LibraryInfo, WhoAndWhen
+from tools.models.namespace import GetNamespacePaginationResponse, GetNamespaceResponse
 from tools.utils import parse_date_range, str_to_bool
 
 # Configure logging
@@ -186,7 +187,7 @@ async def get_namespaces(
             le=100,
             description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
         )]
-) -> GetNamespacesResponse:
+) -> GetNamespacePaginationResponse:
     """
     Get a paginated list of namespaces.
     
@@ -219,7 +220,7 @@ async def get_namespaces(
             Defaults to None.
     
     Returns:
-        GetNamespacesResponse: Response object containing:
+        GetNamespacePaginationResponse: Response object containing:
             - total_items: Total number of namespaces available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -324,7 +325,7 @@ async def get_namespaces(
             sort_list=sort_list
         )
 
-        return GetNamespacesResponse(
+        return GetNamespacePaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,

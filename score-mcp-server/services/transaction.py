@@ -14,12 +14,11 @@ from functools import wraps
 from typing import Callable, TypeVar, ParamSpec, Type, Any
 
 from sqlmodel import Session
-from sqlalchemy.engine import Engine
 
 from middleware import get_engine
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("score.service.transaction")
 
 # Create a context variable to store the database session
 session_context_var: contextvars.ContextVar[Session | None] = contextvars.ContextVar(

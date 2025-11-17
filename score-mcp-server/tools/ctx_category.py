@@ -61,15 +61,15 @@ from fastmcp.server.elicitation import (
 from pydantic import Field
 
 from services import CtxCategoryService, DateRangeParams, PaginationParams
+from services.models.common import WhoAndWhen
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
 from tools.models.ctx_category import (
     CreateCtxCategoryResponse,
     DeleteCtxCategoryResponse,
-    GetCtxCategoriesResponse,
+    GetCtxCategoryPaginationResponse,
     GetCtxCategoryResponse,
     UpdateCtxCategoryResponse,
 )
-from tools.models.common import WhoAndWhen
 from tools.utils import parse_date_range
 
 # Configure logging
@@ -176,7 +176,7 @@ async def get_context_categories(
             le=100,
             description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
         )]
-) -> GetCtxCategoriesResponse:
+) -> GetCtxCategoryPaginationResponse:
     """
     Get a paginated list of context categories.
     
@@ -204,7 +204,7 @@ async def get_context_categories(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetCtxCategoriesResponse: Response object containing:
+        GetCtxCategoryPaginationResponse: Response object containing:
             - total_items: Total number of context categories available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -282,7 +282,7 @@ async def get_context_categories(
         page = ctx_category_service.get_ctx_categories(name, description, created_on_params, last_updated_on_params,
                                                        pagination, sort_list)
 
-        return GetCtxCategoriesResponse(
+        return GetCtxCategoryPaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,

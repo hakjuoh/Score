@@ -36,12 +36,12 @@ from typing import Annotated
 from fastapi import HTTPException
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from services import PaginationParams
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _get_user_roles
+from tools.models.app_user import GetUserPaginationResponse, GetUserResponse
 from tools.utils import str_to_bool
-from tools.models.app_user import GetUserResponse, GetUsersResponse
 
 # Configure logging
 logger = logging.getLogger("score.mcp.app_user")
@@ -124,7 +124,7 @@ async def get_users(
         le=100,
         description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
     )]
-) -> GetUsersResponse:
+) -> GetUserPaginationResponse:
     """
     Get a paginated list of users registered in connectCenter.
     
@@ -150,7 +150,7 @@ async def get_users(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetUsersResponse: Response object containing:
+        GetUserPaginationResponse: Response object containing:
             - total_items: Total number of users available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -263,7 +263,7 @@ async def get_users(
         )
         logger.info(f"Found {len(page.items)} users (total available: {page.total})")
 
-        result = GetUsersResponse(
+        result = GetUserPaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,

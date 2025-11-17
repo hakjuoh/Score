@@ -45,13 +45,17 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import CodeListService, DateRangeParams, PaginationParams
+from services.models.code_list import CodeListValueInfo
+from services.models.common import WhoAndWhen
+from services.models.library import LibraryInfo
+from services.models.log import LogInfo
+from services.models.namespace import NamespaceInfo
+from services.models.release import ReleaseInfo
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
 from tools.models.code_list import (
-    CodeListValueInfo,
     GetCodeListResponse,
-    GetCodeListsResponse,
+    GetCodeListPaginationResponse,
 )
-from tools.models.common import LibraryInfo, LogInfo, NamespaceInfo, ReleaseInfo, WhoAndWhen
 from tools.utils import parse_date_range
 
 # Configure logging
@@ -242,7 +246,7 @@ async def get_code_lists(
         le=100,
         description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
     )]
-) -> GetCodeListsResponse:
+) -> GetCodeListPaginationResponse:
     """
     Get a paginated list of code lists associated with a specific release.
     
@@ -273,7 +277,7 @@ async def get_code_lists(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetCodeListsResponse: Response object containing:
+        GetCodeListPaginationResponse: Response object containing:
             - total_items: Total number of code lists available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -379,7 +383,7 @@ async def get_code_lists(
             sort_list=sort_list
         )
 
-        return GetCodeListsResponse(
+        return GetCodeListPaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,

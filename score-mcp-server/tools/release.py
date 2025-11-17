@@ -46,12 +46,14 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import ReleaseService, DateRangeParams, PaginationParams
+from services.models.common import WhoAndWhen
+from services.models.library import LibraryInfo
+from services.models.namespace import NamespaceInfo
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
 from tools.models.release import (
     GetReleaseResponse,
-    GetReleasesResponse,
+    GetReleasePaginationResponse,
 )
-from tools.models.common import LibraryInfo, NamespaceInfo, WhoAndWhen
 from tools.utils import parse_date_range
 
 # Configure logging
@@ -342,7 +344,7 @@ async def get_releases(
             le=100,
             description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
         )]
-) -> GetReleasesResponse:
+) -> GetReleasePaginationResponse:
     """
     Get a paginated list of releases.
     
@@ -371,7 +373,7 @@ async def get_releases(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetReleasesResponse: Response object containing:
+        GetReleasePaginationResponse: Response object containing:
             - total_items: Total number of releases available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -468,7 +470,7 @@ async def get_releases(
         # Convert to response format
         release_results = [_create_release_result(release) for release in page.items]
 
-        result = GetReleasesResponse(
+        result = GetReleasePaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,

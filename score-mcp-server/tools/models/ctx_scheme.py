@@ -1,7 +1,12 @@
 """Models for Context Scheme tools."""
+from __future__ import annotations
+
 from pydantic import BaseModel
 
-from tools.models.common import WhoAndWhen
+from services.models.common import WhoAndWhen
+from tools.models.common import PaginationResponse
+from services.models.ctx_category import CtxCategoryInfo
+from services.models.ctx_scheme import CtxSchemeValueInfo
 
 
 class CreateCtxSchemeResponse(BaseModel):
@@ -38,20 +43,6 @@ class DeleteCtxSchemeResponse(BaseModel):
     message: str | None = None  # Optional message indicating the status of the deletion operation
 
 
-class CtxCategoryInfo(BaseModel):
-    """Context category information."""
-    ctx_category_id: int  # Unique identifier for the context category
-    name: str  # Name of the context category (e.g., "Geography", "Industry")
-
-
-class CtxSchemeValueInfo(BaseModel):
-    """Context scheme value information."""
-    ctx_scheme_value_id: int  # Unique identifier for the context scheme value
-    guid: str  # Globally unique identifier for the context scheme value
-    value: str  # The actual value string (e.g., "US", "EUR", "Production")
-    meaning: str | None = None  # Human-readable meaning or description of what this value represents
-
-
 class GetCtxSchemeResponse(BaseModel):
     """Response for get_ctx_schemes tool."""
     ctx_scheme_id: int  # Unique identifier for the context scheme
@@ -67,10 +58,7 @@ class GetCtxSchemeResponse(BaseModel):
     last_updated: WhoAndWhen  # Information about who last updated the context scheme and when
 
 
-class GetCtxSchemesResponse(BaseModel):
+class GetCtxSchemePaginationResponse(PaginationResponse[GetCtxSchemeResponse]):
     """Response for get_ctx_schemes tool."""
-    total_items: int  # Total number of context schemes available
-    offset: int  # Offset of the first item in this page
-    limit: int  # Number of items returned in this page
-    items: list[GetCtxSchemeResponse]  # List of context schemes on this page
+    pass
 

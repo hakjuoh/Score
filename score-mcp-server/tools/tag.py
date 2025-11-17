@@ -38,9 +38,10 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import TagService, DateRangeParams, PaginationParams
+from services.models.common import WhoAndWhen
+from services.models.tag import TagInfo
 from tools import _validate_auth_and_db, parse_order_by_to_sorts
-from tools.models.common import WhoAndWhen
-from tools.models.tag import GetTagsResponse, TagInfo
+from tools.models.tag import GetTagPaginationResponse
 from tools.utils import parse_date_range
 
 # Configure logging
@@ -148,7 +149,7 @@ async def get_tags(
         le=100,
         description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
     )]
-) -> GetTagsResponse:
+) -> GetTagPaginationResponse:
     """
     Get a paginated list of tags used to categorize and organize core components.
     
@@ -183,7 +184,7 @@ async def get_tags(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetTagsResponse: Response object containing:
+        GetTagPaginationResponse: Response object containing:
             - total_items: Total number of tags available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -280,7 +281,7 @@ async def get_tags(
             tag_info = _create_tag_result(tag)
             tag_items.append(tag_info)
 
-        return GetTagsResponse(
+        return GetTagPaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,

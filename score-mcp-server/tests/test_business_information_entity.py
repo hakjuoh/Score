@@ -1531,7 +1531,7 @@ class TestBusinessInformationEntity:
     @pytest.mark.asyncio
     async def test_transfer_top_level_asbiep_ownership(self, token, item_master_asccp_manifest_id, temp_end_user_for_transfer):
         """Test transferring ownership of a Top-Level ASBIEP to another user."""
-        async with Client("http://localhost:8000/mcp", auth=BearerAuth(token=token)) as client:
+        async with create_test_client(token) as client:
             # Get current user
             current_user_result = await client.call_tool("who_am_i", {})
             current_user_id = current_user_result.data.user_id

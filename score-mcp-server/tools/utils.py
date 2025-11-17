@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 
 from fastmcp.exceptions import ToolError
-from tools.models.core_component import ValueConstraint
+
+from services.models.core_component import ValueConstraint
 
 
 def parse_date_range(date_range: str) -> tuple[datetime | None, datetime | None]:

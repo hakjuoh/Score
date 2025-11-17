@@ -1,7 +1,10 @@
 """Models for Library tools."""
+from __future__ import annotations
+
 from pydantic import BaseModel
 
-from tools.models.common import WhoAndWhen
+from services.models.common import WhoAndWhen
+from tools.models.common import PaginationResponse
 
 
 class GetLibraryResponse(BaseModel):
@@ -20,10 +23,7 @@ class GetLibraryResponse(BaseModel):
     last_updated: WhoAndWhen  # Information about who last updated the library and when
 
 
-class GetLibrariesResponse(BaseModel):
+class GetLibraryPaginationResponse(PaginationResponse[GetLibraryResponse]):
     """Response for get_libraries tool."""
-    total_items: int  # Total number of libraries available
-    offset: int  # Offset of the first item in this page
-    limit: int  # Number of items returned in this page
-    items: list[GetLibraryResponse]  # List of libraries on this page
+    pass
 

@@ -12,7 +12,7 @@ from pydantic import AnyHttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlmodel import Session, select
 
-from services.models import AppUser, AppOAuth2User
+from databases.models import AppUser, AppOAuth2User
 
 # Import AppUserContextMiddleware and get_current_user from middleware module
 # Note: This import is placed here to avoid circular dependencies

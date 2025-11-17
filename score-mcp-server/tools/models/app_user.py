@@ -1,5 +1,9 @@
 """Models for App User tools."""
+from __future__ import annotations
+
 from pydantic import BaseModel
+
+from tools.models.common import PaginationResponse
 
 
 class GetUserResponse(BaseModel):
@@ -13,10 +17,7 @@ class GetUserResponse(BaseModel):
     is_enabled: bool  # Whether the user account is enabled and can access the system
 
 
-class GetUsersResponse(BaseModel):
+class GetUserPaginationResponse(PaginationResponse[GetUserResponse]):
     """Response for get_users tool."""
-    total_items: int  # Total number of users available
-    offset: int  # Offset of the first item in this page
-    limit: int  # Number of items returned in this page
-    items: list[GetUserResponse]  # List of users on this page
+    pass
 

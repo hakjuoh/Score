@@ -1,13 +1,12 @@
 """Models for Release tools."""
+from __future__ import annotations
+
 from pydantic import BaseModel
 
-from tools.models.common import LibraryInfo, NamespaceInfo, WhoAndWhen
-
-
-class ReleaseReference(BaseModel):
-    """Release reference object for prev/next release."""
-    release_id: int  # Unique identifier for the referenced release
-    release_num: str | None  # Release number of the referenced release (e.g., "10.0", "10.1")
+from services.models.common import WhoAndWhen
+from tools.models.common import PaginationResponse
+from services.models.library import LibraryInfo
+from services.models.namespace import NamespaceInfo
 
 
 class GetReleaseResponse(BaseModel):
@@ -24,10 +23,7 @@ class GetReleaseResponse(BaseModel):
     last_updated: WhoAndWhen  # Information about who last updated the release and when
 
 
-class GetReleasesResponse(BaseModel):
+class GetReleasePaginationResponse(PaginationResponse[GetReleaseResponse]):
     """Response for get_releases tool."""
-    total_items: int  # Total number of releases available
-    offset: int  # Offset of the first item in this page
-    limit: int  # Number of items returned in this page
-    items: list[GetReleaseResponse]  # List of releases on this page
+    pass
 

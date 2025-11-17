@@ -1,20 +1,15 @@
 """Models for Agency ID List tools."""
+from __future__ import annotations
+
 from pydantic import BaseModel
 
-from tools.models.common import LibraryInfo, LogInfo, NamespaceInfo, ReleaseInfo, UserInfo, WhoAndWhen
-
-
-class AgencyIdListValueInfo(BaseModel):
-    """Agency ID list value information object."""
-    agency_id_list_value_manifest_id: int  # Unique identifier for the agency ID list value manifest (release-specific version)
-    agency_id_list_value_id: int  # Unique identifier for the agency ID list value (base entity ID)
-    guid: str  # Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)
-    value: str  # The actual value string of the agency ID list entry
-    name: str | None  # Human-readable name of the agency ID list value (if available)
-    definition: str | None  # Definition or description of what this value represents
-    is_deprecated: bool  # Whether this agency ID list value is deprecated and should not be used
-    is_developer_default: bool  # Whether this is the default value recommended by developers
-    is_user_default: bool  # Whether this is the default value selected by end users
+from services.models.agency_id_list import AgencyIdListValueInfo
+from tools.models.common import PaginationResponse
+from services.models.common import UserInfo, WhoAndWhen
+from services.models.library import LibraryInfo
+from services.models.log import LogInfo
+from services.models.namespace import NamespaceInfo
+from services.models.release import ReleaseInfo
 
 
 class GetAgencyIdListResponse(BaseModel):
@@ -41,10 +36,7 @@ class GetAgencyIdListResponse(BaseModel):
     last_updated: WhoAndWhen  # Information about who last updated the agency ID list and when
 
 
-class GetAgencyIdListsResponse(BaseModel):
+class GetAgencyIdListPaginationResponse(PaginationResponse[GetAgencyIdListResponse]):
     """Response for get_agency_id_lists tool."""
-    total_items: int  # Total number of agency ID lists available
-    offset: int  # Offset of the first item in this page
-    limit: int  # Number of items returned in this page
-    items: list[GetAgencyIdListResponse]  # List of agency ID lists on this page
+    pass
 

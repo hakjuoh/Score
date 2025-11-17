@@ -1,7 +1,10 @@
 """Models for Context Category tools."""
+from __future__ import annotations
+
 from pydantic import BaseModel
 
-from tools.models.common import WhoAndWhen
+from services.models.common import WhoAndWhen
+from tools.models.common import PaginationResponse
 
 
 class CreateCtxCategoryResponse(BaseModel):
@@ -31,10 +34,7 @@ class DeleteCtxCategoryResponse(BaseModel):
     message: str | None = None  # Optional message indicating the status of the deletion operation
 
 
-class GetCtxCategoriesResponse(BaseModel):
+class GetCtxCategoryPaginationResponse(PaginationResponse[GetCtxCategoryResponse]):
     """Response for get_ctx_categories tool."""
-    total_items: int  # Total number of context categories available
-    offset: int  # Offset of the first item in this page
-    limit: int  # Number of items returned in this page
-    items: list[GetCtxCategoryResponse]  # List of context categories on this page
+    pass
 

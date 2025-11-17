@@ -47,13 +47,17 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import AgencyIdListService, DateRangeParams, PaginationParams
+from services.models.agency_id_list import AgencyIdListValueInfo
+from services.models.common import WhoAndWhen
+from services.models.library import LibraryInfo
+from services.models.log import LogInfo
+from services.models.namespace import NamespaceInfo
+from services.models.release import ReleaseInfo
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
 from tools.models.agency_id_list import (
-    AgencyIdListValueInfo,
     GetAgencyIdListResponse,
-    GetAgencyIdListsResponse,
+    GetAgencyIdListPaginationResponse,
 )
-from tools.models.common import LibraryInfo, LogInfo, NamespaceInfo, ReleaseInfo, WhoAndWhen
 from tools.utils import parse_date_range
 
 # Configure logging
@@ -245,7 +249,7 @@ async def get_agency_id_lists(
         le=100,
         description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
     )]
-) -> GetAgencyIdListsResponse:
+) -> GetAgencyIdListPaginationResponse:
     """
     Get a paginated list of agency ID lists associated with a specific release.
     
@@ -276,7 +280,7 @@ async def get_agency_id_lists(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetAgencyIdListsResponse: Response object containing:
+        GetAgencyIdListPaginationResponse: Response object containing:
             - total_items: Total number of agency ID lists available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -391,7 +395,7 @@ async def get_agency_id_lists(
         )
         logger.info(f"Found {len(page.items)} agency ID lists (total available: {page.total})")
 
-        result = GetAgencyIdListsResponse(
+        result = GetAgencyIdListPaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,

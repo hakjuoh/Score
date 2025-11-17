@@ -5,130 +5,115 @@ This package contains all Pydantic models used by the MCP tools,
 organized by domain.
 """
 
-from tools.models.common import (
-    LibraryInfo,
-    LogInfo,
-    NamespaceInfo,
-    PaginationResponse,
-    ReleaseInfo,
+from services.models.biz_ctx import BizCtxValueInfo, BusinessContextInfo
+from services.models.code_list import CodeListValueInfo
+from services.models.common import (
     UserInfo,
     WhoAndWhen,
 )
+from tools.models.common import PaginationResponse
+from services.models.core_component import (
+    AccInfo,
+    AsccInfo,
+    AsccpInfo,
+    AsccRelationshipInfo,
+    BaseAccInfo,
+    BaseAsccpInfo,
+    BaseBccpInfo,
+    BccInfo,
+    BccpInfo,
+    BccRelationshipInfo,
+    AccRelationshipInfo,
+    ValueConstraint,
+)
+from services.models.ctx_category import CtxCategoryInfo
+from services.models.ctx_scheme import CtxSchemeValueInfo
+from services.models.library import LibraryInfo
+from services.models.log import LogInfo
+from services.models.namespace import NamespaceInfo
+from services.models.release import ReleaseInfo
+from services.models.tag import TagInfo
+from services.models.xbt import SubtypeOfXbtInfo
 from tools.models.agency_id_list import (
-    AgencyIdListValueInfo,
+    GetAgencyIdListPaginationResponse,
     GetAgencyIdListResponse,
-    GetAgencyIdListsResponse,
 )
 from tools.models.app_user import (
+    GetUserPaginationResponse,
     GetUserResponse,
-    GetUsersResponse,
 )
 from tools.models.biz_ctx import (
-    BusinessContextInfo,
-    BizCtxValueInfo,
     CreateBizCtxResponse,
     CreateBizCtxValueResponse,
-    CtxSchemeValueInfo,
     DeleteBizCtxResponse,
     DeleteBizCtxValueResponse,
+    GetBizCtxPaginationResponse,
     GetBizCtxResponse,
-    GetBizCtxsResponse,
     UpdateBizCtxResponse,
     UpdateBizCtxValueResponse,
 )
 from tools.models.business_information_entity import (
-    AbieInfo,
-    AbieRelationshipInfo,
-    AsbieInfo,
-    AsbiepInfo,
-    BbieInfo,
-    BbieScInfo,
-    BbiepInfo,
     CreateTopLevelAsbiepResponse,
     DeleteTopLevelAsbiepResponse,
-    Facet,
     GetAsbieResponse,
     GetBbieResponse,
     GetBbiepResponse,
-    GetTopLevelAsbiepListResponse,
+    GetTopLevelAsbiepListPaginationResponse,
     GetTopLevelAsbiepListResponseEntry,
     GetTopLevelAsbiepResponse,
-    PrimitiveRestriction,
-    TopLevelAsbiepInfo,
     TransferTopLevelAsbiepOwnershipResponse,
     UpdateTopLevelAsbiepResponse,
     ValueConstraint,
 )
 from tools.models.code_list import (
-    CodeListValueInfo,
+    GetCodeListPaginationResponse,
     GetCodeListResponse,
-    GetCodeListsResponse,
 )
 from tools.models.core_component import (
-    AccInfo,
-    AsccInfo,
-    AsccpInfo,
-    BaseAccInfo,
-    BaseAsccpInfo,
-    BaseBccpInfo,
-    BaseDtInfo,
-    BccInfo,
-    BccpInfo,
     CoreComponentInfo,
-    DtInfo,
-    DtScInfo,
     GetAccResponse,
     GetAsccpResponse,
     GetBccpResponse,
-    GetCoreComponentsResponse,
-    GetRelatedComponentsResponse,
-    CoreComponentRelationshipInfo,
+    GetCoreComponentPaginationResponse,
 )
 from tools.models.ctx_category import (
     CreateCtxCategoryResponse,
     DeleteCtxCategoryResponse,
-    GetCtxCategoriesResponse,
+    GetCtxCategoryPaginationResponse,
     GetCtxCategoryResponse,
     UpdateCtxCategoryResponse,
 )
 from tools.models.ctx_scheme import (
     CreateCtxSchemeResponse,
     CreateCtxSchemeValueResponse,
-    CtxCategoryInfo,
-    CtxSchemeValueInfo,
     DeleteCtxSchemeResponse,
     DeleteCtxSchemeValueResponse,
+    GetCtxSchemePaginationResponse,
     GetCtxSchemeResponse,
-    GetCtxSchemesResponse,
     UpdateCtxSchemeResponse,
     UpdateCtxSchemeValueResponse,
 )
 from tools.models.data_type import (
-    BaseDataTypeInfo,
-    DataTypeSupplementaryComponentInfo,
+    GetDataTypePaginationResponse,
     GetDataTypeResponse,
-    GetDataTypesResponse,
 )
 from tools.models.library import (
-    GetLibrariesResponse,
+    GetLibraryPaginationResponse,
     GetLibraryResponse,
 )
 from tools.models.namespace import (
+    GetNamespacePaginationResponse,
     GetNamespaceResponse,
-    GetNamespacesResponse,
 )
 from tools.models.release import (
+    GetReleasePaginationResponse,
     GetReleaseResponse,
-    GetReleasesResponse,
-    ReleaseReference,
 )
 from tools.models.tag import (
-    GetTagsResponse,
-    TagInfo,
+    GetTagPaginationResponse,
 )
 from tools.models.xbt import (
     GetXbtResponse,
-    SubtypeOfXbtInfo,
 )
 
 __all__ = [
@@ -141,12 +126,11 @@ __all__ = [
     "UserInfo",
     "WhoAndWhen",
     # Agency ID List models
-    "AgencyIdListValueInfo",
+    "GetAgencyIdListPaginationResponse",
     "GetAgencyIdListResponse",
-    "GetAgencyIdListsResponse",
     # App User models
+    "GetUserPaginationResponse",
     "GetUserResponse",
-    "GetUsersResponse",
     # Business Context models
     "BusinessContextInfo",
     "BizCtxValueInfo",
@@ -155,59 +139,48 @@ __all__ = [
     "CtxSchemeValueInfo",
     "DeleteBizCtxResponse",
     "DeleteBizCtxValueResponse",
+    "GetBizCtxPaginationResponse",
     "GetBizCtxResponse",
-    "GetBizCtxsResponse",
     "UpdateBizCtxResponse",
     "UpdateBizCtxValueResponse",
     # Business Information Entity models
-    "AbieInfo",
-    "AbieRelationshipInfo",
-    "AsbieInfo",
-    "AsbiepInfo",
-    "BbieInfo",
-    "BbieScInfo",
-    "BbiepInfo",
     "CreateTopLevelAsbiepResponse",
     "DeleteTopLevelAsbiepResponse",
-    "Facet",
     "GetAsbieResponse",
     "GetBbieResponse",
     "GetBbiepResponse",
-    "GetTopLevelAsbiepListResponse",
+    "GetTopLevelAsbiepListPaginationResponse",
     "GetTopLevelAsbiepListResponseEntry",
     "GetTopLevelAsbiepResponse",
-    "PrimitiveRestriction",
-    "TopLevelAsbiepInfo",
     "TransferTopLevelAsbiepOwnershipResponse",
     "UpdateTopLevelAsbiepResponse",
     "ValueConstraint",
     # Code List models
     "CodeListValueInfo",
+    "GetCodeListPaginationResponse",
     "GetCodeListResponse",
-    "GetCodeListsResponse",
     # Core Component models
     "AccInfo",
     "AsccInfo",
     "AsccpInfo",
+    "AsccRelationshipInfo",
     "BaseAccInfo",
     "BaseAsccpInfo",
     "BaseBccpInfo",
-    "BaseDtInfo",
     "BccInfo",
     "BccpInfo",
+    "BccRelationshipInfo",
     "CoreComponentInfo",
-    "DtInfo",
-    "DtScInfo",
+    "AccRelationshipInfo",
     "GetAccResponse",
     "GetAsccpResponse",
     "GetBccpResponse",
-    "GetCoreComponentsResponse",
-    "GetRelatedComponentsResponse",
-    "CoreComponentRelationshipInfo",
+    "GetCoreComponentPaginationResponse",
+    "ValueConstraint",
     # Context Category models
     "CreateCtxCategoryResponse",
     "DeleteCtxCategoryResponse",
-    "GetCtxCategoriesResponse",
+    "GetCtxCategoryPaginationResponse",
     "GetCtxCategoryResponse",
     "UpdateCtxCategoryResponse",
     # Context Scheme models
@@ -217,27 +190,24 @@ __all__ = [
     "CtxSchemeValueInfo",
     "DeleteCtxSchemeResponse",
     "DeleteCtxSchemeValueResponse",
+    "GetCtxSchemePaginationResponse",
     "GetCtxSchemeResponse",
-    "GetCtxSchemesResponse",
     "UpdateCtxSchemeResponse",
     "UpdateCtxSchemeValueResponse",
     # Data Type models
-    "BaseDataTypeInfo",
-    "DataTypeSupplementaryComponentInfo",
+    "GetDataTypePaginationResponse",
     "GetDataTypeResponse",
-    "GetDataTypesResponse",
     # Library models
-    "GetLibrariesResponse",
+    "GetLibraryPaginationResponse",
     "GetLibraryResponse",
     # Namespace models
+    "GetNamespacePaginationResponse",
     "GetNamespaceResponse",
-    "GetNamespacesResponse",
     # Release models
+    "GetReleasePaginationResponse",
     "GetReleaseResponse",
-    "GetReleasesResponse",
-    "ReleaseReference",
     # Tag models
-    "GetTagsResponse",
+    "GetTagPaginationResponse",
     "TagInfo",
     # XBT models
     "GetXbtResponse",

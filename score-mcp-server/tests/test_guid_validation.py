@@ -1,10 +1,13 @@
-import pytest
-import sys
 import os
+import sys
+
+import pytest
+
+from databases.utils import validate_guid, generate_guid
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.utils import validate_guid, generate_guid
-from services.models import CtxCategoryBase, CtxSchemeBase, CtxSchemeValueBase, BizCtxBase
+from databases.models import CtxCategoryBase, CtxSchemeBase, CtxSchemeValueBase, BizCtxBase
 
 
 class TestGUIDValidation:

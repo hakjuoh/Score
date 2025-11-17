@@ -48,14 +48,17 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import DataTypeService, DateRangeParams, PaginationParams
+from services.models.common import WhoAndWhen
+from services.models.data_type import BaseDtInfo, DtScInfo
+from services.models.library import LibraryInfo
+from services.models.log import LogInfo
+from services.models.namespace import NamespaceInfo
+from services.models.release import ReleaseInfo
 from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
 from tools.models.data_type import (
-    BaseDataTypeInfo,
-    DataTypeSupplementaryComponentInfo,
     GetDataTypeResponse,
-    GetDataTypesResponse,
+    GetDataTypePaginationResponse,
 )
-from tools.models.common import LibraryInfo, LogInfo, NamespaceInfo, ReleaseInfo, WhoAndWhen
 from tools.utils import parse_date_range, validate_and_create_value_constraint
 
 # Configure logging
@@ -302,7 +305,7 @@ async def get_data_types(
         le=100,
         description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
     )]
-) -> GetDataTypesResponse:
+) -> GetDataTypePaginationResponse:
     """
     Get a paginated list of data types associated with a specific release.
     
@@ -335,7 +338,7 @@ async def get_data_types(
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
     
     Returns:
-        GetDataTypesResponse: Response object containing:
+        GetDataTypePaginationResponse: Response object containing:
             - total_items: Total number of data types available
             - offset: Offset of the first item in this page
             - limit: Number of items returned in this page
@@ -441,7 +444,7 @@ async def get_data_types(
             sort_list=sort_list
         )
 
-        return GetDataTypesResponse(
+        return GetDataTypePaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,
@@ -800,7 +803,7 @@ def _create_data_type_result(manifest, data_type_service) -> GetDataTypeResponse
             default_value=sc_manifest.dt_sc.default_value,
             fixed_value=sc_manifest.dt_sc.fixed_value
         )
-        supplementary_components_info.append(DataTypeSupplementaryComponentInfo(
+        supplementary_components_info.append(DtScInfo(
             dt_sc_manifest_id=sc_manifest.dt_sc_manifest_id,
             dt_sc_id=sc_manifest.dt_sc_id,
             guid=sc_manifest.dt_sc.guid,
@@ -843,7 +846,7 @@ def _create_data_type_result(manifest, data_type_service) -> GetDataTypeResponse
             state=base_manifest.release.state
         )
 
-        base_dt_info = BaseDataTypeInfo(
+        base_dt_info = BaseDtInfo(
             dt_manifest_id=base_manifest.dt_manifest_id,
             dt_id=base_data_type.dt_id,
             guid=base_data_type.guid,

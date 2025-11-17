@@ -73,7 +73,7 @@ All operations require proper authentication and authorization.
 
 import hashlib
 import logging
-from typing import Annotated
+from typing import Annotated, Union
 
 from fastapi import HTTPException
 from fastmcp import FastMCP, Context
@@ -86,19 +86,40 @@ from pydantic import Field
 
 from middleware import get_current_user
 from services import (
+    AppUserService,
     BusinessInformationEntityService,
     CoreComponentService,
     DataTypeService,
     DateRangeParams,
     PaginationParams)
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
-from tools.core_component import _get_relationships_for_acc
-from tools.models.biz_ctx import BusinessContextInfo
-from tools.models.business_information_entity import (
+from services.models.biz_ctx import BusinessContextInfo
+from services.models.business_information_entity import (
     AbieInfo,
     AsbiepInfo,
     BbieScInfo,
     BbiepInfo,
+    TopLevelAsbiepInfo,
+)
+from services.models.business_information_entity import (
+    AsbieRelationshipInfo,
+    BbieRelationshipInfo
+)
+from services.models.common import WhoAndWhen
+from services.models.core_component import (
+    AccInfo,
+    AsccInfo,
+    AsccpInfo,
+    AsccRelationshipInfo,
+    BccInfo,
+    BccpInfo,
+    BccRelationshipInfo,
+)
+from services.models.data_type import DtInfo, DtScInfo
+from services.models.library import LibraryInfo
+from services.models.release import ReleaseInfo
+from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from tools.core_component import _get_relationships_for_acc
+from tools.models.business_information_entity import (
     CreateTopLevelAsbiepResponse,
     CreateAsbieResponse,
     CreateBbieResponse,
@@ -106,10 +127,9 @@ from tools.models.business_information_entity import (
     DeleteTopLevelAsbiepResponse,
     GetAsbieResponse,
     GetBbieResponse,
-    GetTopLevelAsbiepListResponse,
+    GetTopLevelAsbiepListPaginationResponse,
     GetTopLevelAsbiepListResponseEntry,
     GetTopLevelAsbiepResponse,
-    TopLevelAsbiepInfo,
     TransferTopLevelAsbiepOwnershipResponse,
     UpdateTopLevelAsbiepResponse,
     UpdateAsbieResponse,
@@ -122,8 +142,6 @@ from tools.models.business_information_entity import (
     UpdateBbieRelationshipDetail,
     UpdateBbiepDetail,
     UpdateBbieScDetail,
-    AsbieRelationshipInfo,
-    BbieRelationshipInfo,
     Facet,
     PrimitiveRestriction,
     AsbiepRelationshipDetail,
@@ -138,17 +156,6 @@ from tools.models.business_information_entity import (
     CreateAsbiepRelationshipDetail,
     CreateRoleOfAbieDetail,
     CreateRelationshipDetail)
-from tools.models.common import LibraryInfo, ReleaseInfo, WhoAndWhen
-from tools.models.core_component import (
-    AccInfo,
-    AsccInfo,
-    AsccpInfo,
-    AsccRelationshipInfo,
-    BccInfo,
-    BccpInfo,
-    BccRelationshipInfo,
-    DtInfo,
-    DtScInfo)
 from tools.utils import parse_date_range, str_to_bool, str_to_int
 from tools.utils import validate_and_create_value_constraint
 
@@ -372,7 +379,7 @@ async def get_top_level_asbiep_list(
             le=100,
             description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
         )]
-) -> GetTopLevelAsbiepListResponse:
+) -> GetTopLevelAsbiepListPaginationResponse:
     """
     Get a paginated list of Top-Level ASBIEPs (Association Business Information Entity Properties).
 
@@ -559,7 +566,7 @@ async def get_top_level_asbiep_list(
             sort_list=sort_list
         )
 
-        return GetTopLevelAsbiepListResponse(
+        return GetTopLevelAsbiepListPaginationResponse(
             total_items=page.total,
             offset=page.offset,
             limit=page.limit,
@@ -4813,8 +4820,9 @@ async def transfer_top_level_asbiep_ownership(
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
 
-    # Create service instance
+    # Create service instances
     bie_service = BusinessInformationEntityService(requester=app_user)
+    app_user_service = AppUserService()
 
     # Get top-level ASBIEP for confirmation message
     top_level_asbiep = bie_service.get_top_level_asbiep_by_id(top_level_asbiep_id)
@@ -4829,7 +4837,9 @@ async def transfer_top_level_asbiep_ownership(
     # Get current owner information
     current_owner = top_level_asbiep.owner_user
     current_owner_name = current_owner.name if current_owner and current_owner.name else f"User ID {top_level_asbiep.owner_user_id}"
-    new_owner_name = new_owner.name if new_owner and new_owner.name else f"User ID {new_owner_user_id}"
+    
+    # Get new owner information for confirmation message
+    new_owner_name = app_user_service.get_user_display_name(new_owner_user_id)
     
     # Create confirmation message with ownership transfer details
     confirmation_message = (
@@ -5297,7 +5307,7 @@ async def create_asbie(
                 raise ToolError(f"ABIE with ID {from_abie_id} not found.")
             
             # Get relationships
-            relationships = _get_abie_related_components(
+            relationships = _get_abie_relationships(
                 from_abie.owner_top_level_asbiep_id, from_abie_id,
                 from_abie.based_acc_manifest_id, from_abie.path
             )
@@ -5380,7 +5390,7 @@ async def create_asbie(
         
         # Get relationships and find the matching ASBIE relationship (if not already fetched during property_term lookup)
         if not relationships_fetched:
-            relationships = _get_abie_related_components(
+            relationships = _get_abie_relationships(
                 from_abie.owner_top_level_asbiep_id, from_abie_id,
                 from_abie.based_acc_manifest_id, from_abie.path
             )
@@ -5935,7 +5945,7 @@ async def update_asbie(
             if existing_asbie.from_abie_id:
                 from_abie = bie_service.get_abie(existing_asbie.from_abie_id)
                 if from_abie:
-                    relationships = _get_abie_related_components(
+                    relationships = _get_abie_relationships(
                         from_abie.owner_top_level_asbiep_id,
                         from_abie.abie_id,
                         from_abie.based_acc_manifest_id,
@@ -6251,7 +6261,7 @@ async def create_bbie(
                 raise ToolError(f"ABIE with ID {from_abie_id} not found.")
             
             # Get relationships
-            relationships = _get_abie_related_components(
+            relationships = _get_abie_relationships(
                 from_abie.owner_top_level_asbiep_id, from_abie_id,
                 from_abie.based_acc_manifest_id, from_abie.path
             )
@@ -6291,7 +6301,7 @@ async def create_bbie(
         
         # Get relationships and find the matching BBIE relationship (if not already fetched during property_term lookup)
         if not relationships_fetched:
-            relationships = _get_abie_related_components(
+            relationships = _get_abie_relationships(
                 from_abie.owner_top_level_asbiep_id, from_abie_id,
                 from_abie.based_acc_manifest_id, from_abie.path
             )
@@ -6621,7 +6631,7 @@ async def update_bbie(
             # Also check in the parent ABIE's relationships (as a double-check)
             from_abie = bie_service.get_abie(existing_bbie.from_abie_id)
             if from_abie:
-                relationships = _get_abie_related_components(
+                relationships = _get_abie_relationships(
                     from_abie.owner_top_level_asbiep_id,
                     from_abie.abie_id,
                     from_abie.based_acc_manifest_id,
@@ -7294,8 +7304,8 @@ def _get_asbiep_info(top_level_asbiep_id: int, asbiep_id: int | None, asccp_mani
 
     # Get relationships for the ABIE
     if abie:
-        relationships = _get_abie_related_components(top_level_asbiep_id,
-                                                     abie.abie_id, abie.based_acc_manifest_id, abie.path)
+        relationships = _get_abie_relationships(top_level_asbiep_id,
+                                                abie.abie_id, abie.based_acc_manifest_id, abie.path)
         role_of_abie = AbieInfo(
             abie_id=abie.abie_id,
             guid=abie.guid,
@@ -7313,8 +7323,8 @@ def _get_asbiep_info(top_level_asbiep_id: int, asbiep_id: int | None, asccp_mani
             )
         )
     else:
-        relationships = _get_abie_related_components(top_level_asbiep_id,
-                                                     None, acc_manifest.acc_manifest_id, abie_path)
+        relationships = _get_abie_relationships(top_level_asbiep_id,
+                                                None, acc_manifest.acc_manifest_id, abie_path)
         role_of_abie = AbieInfo(
             abie_id=None,
             guid=None,
@@ -7384,6 +7394,12 @@ def _create_dt_sc_info_from_dt_sc_manifest(dt_sc_manifest) -> DtScInfo | None:
     if not dt_sc:
         return None
 
+    # Create ValueConstraint object with validation
+    value_constraint = validate_and_create_value_constraint(
+        default_value=dt_sc.default_value,
+        fixed_value=dt_sc.fixed_value
+    )
+
     return DtScInfo(
         dt_sc_manifest_id=dt_sc_manifest.dt_sc_manifest_id,
         dt_sc_id=dt_sc.dt_sc_id,
@@ -7395,8 +7411,7 @@ def _create_dt_sc_info_from_dt_sc_manifest(dt_sc_manifest) -> DtScInfo | None:
         definition_source=dt_sc.definition_source,
         cardinality_min=dt_sc.cardinality_min,
         cardinality_max=dt_sc.cardinality_max,
-        default_value=dt_sc.default_value,
-        fixed_value=dt_sc.fixed_value,
+        value_constraint=value_constraint,
         is_deprecated=dt_sc.is_deprecated
     )
 
@@ -7802,7 +7817,7 @@ def _build_create_role_of_abie_detail(
         return None
     
     # Get relationships of the ABIE
-    relationships = _get_abie_related_components(
+    relationships = _get_abie_relationships(
         abie.owner_top_level_asbiep_id,
         abie_id,
         abie.based_acc_manifest_id,
@@ -7903,7 +7918,7 @@ def _build_role_of_abie_detail(
         return None
     
     # Get relationships of the ABIE
-    relationships = _get_abie_related_components(
+    relationships = _get_abie_relationships(
         abie.owner_top_level_asbiep_id,
         abie_id,
         abie.based_acc_manifest_id,
@@ -8011,7 +8026,7 @@ def _process_mandatory_relationships_recursive(
         return
     
     # Get relationships of the ABIE
-    relationships = _get_abie_related_components(
+    relationships = _get_abie_relationships(
         abie.owner_top_level_asbiep_id,
         abie_id,
         abie.based_acc_manifest_id,
@@ -8282,7 +8297,7 @@ def _disable_all_relationships_for_asbie(
         return
     
     # Get relationships of the ABIE
-    relationships = _get_abie_related_components(
+    relationships = _get_abie_relationships(
         abie.owner_top_level_asbiep_id,
         abie.abie_id,
         abie.based_acc_manifest_id,
@@ -8454,7 +8469,7 @@ def _build_update_role_of_abie_detail(
         return None
     
     # Get relationships of the ABIE
-    relationships = _get_abie_related_components(
+    relationships = _get_abie_relationships(
         abie.owner_top_level_asbiep_id,
         abie_id,
         abie.based_acc_manifest_id,
@@ -8670,7 +8685,7 @@ def _build_update_bbiep_detail(
     )
 
 
-def _get_abie_related_components(top_level_asbiep_id: int, abie_id: int | None, acc_manifest_id: int, abie_path: str) -> list:
+def _get_abie_relationships(top_level_asbiep_id: int, abie_id: int | None, acc_manifest_id: int, abie_path: str) -> list[Union[AsbieRelationshipInfo, BbieRelationshipInfo]]:
     """
     Get relationships for an ABIE by combining CC associations and BIE associations.
 
@@ -8718,7 +8733,7 @@ def _get_abie_related_components(top_level_asbiep_id: int, abie_id: int | None, 
                     asbiep_path = f"{asbie_path}>ASCCP-{cc_assoc.to_asccp.asccp_manifest_id}"
                     role_of_abie_path = f"{asbiep_path}>ACC-{cc_assoc.to_asccp.role_of_acc_manifest_id}"
 
-                    group_abie_associations = _get_abie_related_components(
+                    group_abie_associations = _get_abie_relationships(
                         top_level_asbiep_id, abie_id, cc_assoc.to_asccp.role_of_acc_manifest_id, role_of_abie_path)
 
                     bie_associations.extend(group_abie_associations)
@@ -8950,7 +8965,7 @@ def _sync_version_to_version_identifier_bbie(
         return
     
     # Get relationships using _get_abie_related_components
-    relationships = _get_abie_related_components(
+    relationships = _get_abie_relationships(
         top_level_asbiep_id=top_level_asbiep_id,
         abie_id=abie.abie_id,
         acc_manifest_id=abie.based_acc_manifest_id,
@@ -9065,7 +9080,7 @@ def _sync_version_identifier_bbie_to_version(
         return
     
     # Get relationships to verify this is the Version Identifier BBIE
-    relationships = _get_abie_related_components(
+    relationships = _get_abie_relationships(
         top_level_asbiep_id=bbie.owner_top_level_asbiep_id,
         abie_id=from_abie.abie_id,
         acc_manifest_id=from_abie.based_acc_manifest_id,
