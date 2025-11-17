@@ -16,15 +16,19 @@ from fastapi import HTTPException
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, func, or_, text
 
-from databases.models import AppUser, TopLevelAsbiep, Asbiep, BizCtxAssignment, Abie, BizCtx, Release, AsccpManifest, \
-    Asccp, \
+from databases.models import (
+    AppUser, TopLevelAsbiep, Asbiep, BizCtxAssignment, Abie, BizCtx, Release, AsccpManifest, Asccp, \
     AccManifest, Asbie, AsccManifest, Bbie, BccManifest, BccpManifest, Bbiep, DtManifest, DtScManifest, BbieSc, \
     AsbiepSupportDoc, DtAwdPri, DtScAwdPri
+)
 from databases.utils import generate_guid
 from services.cache import cache, evict_cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info
+from services.core_component import CoreComponentService
+from services.models.biz_ctx import BizCtxSummary
+from services.models.business_information_entity import TopLevelAsbiepListEntry
+from services.models.common import Sort, PaginationParams, DateRangeParams, PaginationResponse, WhoAndWhen
 from services.transaction import transaction, db_add, db_get, db_delete, db_flush, db_exec
-from .core_component import CoreComponentService
 
 # Configure logging
 logger = logging.getLogger("score.service.business_information_entity")
@@ -133,7 +137,7 @@ class BusinessInformationEntityService:
             last_updated_on_params: DateRangeParams = None,
             pagination: PaginationParams = None,
             sort_list: list[Sort] = None
-    ) -> Page:
+    ) -> PaginationResponse[TopLevelAsbiepListEntry]:
         """
         Get business information entities by release with filtering, pagination, and sorting.
         
@@ -154,7 +158,7 @@ class BusinessInformationEntityService:
             sort_list: List of sort specifications
             
         Returns:
-            Page: Paginated response containing top_level_asbieps and pagination metadata
+            PaginationResponse: Paginated response containing top_level_asbieps and pagination metadata
         """
         # Set default pagination if not provided
         if pagination is None:
@@ -191,11 +195,12 @@ class BusinessInformationEntityService:
         top_level_asbieps = db_exec(query).all()
 
         # Create Page object
-        return Page(
-            total=total_count,
+        return PaginationResponse(
+            total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(top_level_asbieps)
+            items=[self.create_top_level_asbiep_list_entry(top_level_asbiep) for top_level_asbiep in
+                   top_level_asbieps]
         )
 
     def _get_base_query_with_eager_loading(self):
@@ -227,9 +232,9 @@ class BusinessInformationEntityService:
         )
 
     def _apply_filters(self, query, library_id: int = None, release_id_list: list[int] = None,
-                      den: str = None, version: str = None, status: str = None, state: str = None,
-                      is_deprecated: bool = None, created_on_params: DateRangeParams = None,
-                      last_updated_on_params: DateRangeParams = None):
+                       den: str = None, version: str = None, status: str = None, state: str = None,
+                       is_deprecated: bool = None, created_on_params: DateRangeParams = None,
+                       last_updated_on_params: DateRangeParams = None):
         """
         Apply filters to a query for top-level ASBIEPs.
         
@@ -332,6 +337,84 @@ class BusinessInformationEntityService:
 
         return query
 
+    def create_top_level_asbiep_list_entry(self, top_level_asbiep) -> TopLevelAsbiepListEntry:
+        """
+        Create a BIE (Business Information Entity) result from database models.
+
+        Args:
+            top_level_asbiep: TopLevelAsbiep model instance (contains asbiep relationship)
+            bie_service: BusinessInformationEntityService instance for retrieving related data
+
+        Returns:
+            GetBusinessInformationEntityResponse: Formatted BIE (Business Information Entity) result
+        """
+        business_contexts_info = self.get_business_contexts_info(top_level_asbiep.top_level_asbiep_id)
+
+        # Get asbiep from the relationship
+        asbiep = top_level_asbiep.asbiep
+
+        # Get property_term and den from asccp_manifest
+        property_term = None
+        den = None
+        if asbiep.based_asccp_manifest:
+            if asbiep.based_asccp_manifest.asccp:
+                property_term = asbiep.based_asccp_manifest.asccp.property_term
+            # Use the den field directly from asccp_manifest
+            den = asbiep.based_asccp_manifest.den
+
+        return TopLevelAsbiepListEntry(
+            top_level_asbiep_id=top_level_asbiep.top_level_asbiep_id,
+            asbiep_id=asbiep.asbiep_id,
+            guid=asbiep.guid,
+            den=den,
+            property_term=property_term,
+            display_name=asbiep.display_name,
+            version=top_level_asbiep.version,
+            status=top_level_asbiep.status,
+            biz_term=asbiep.biz_term,
+            remark=asbiep.remark,
+            business_contexts=business_contexts_info,
+            state=top_level_asbiep.state,
+            is_deprecated=top_level_asbiep.is_deprecated,
+            deprecated_reason=top_level_asbiep.deprecated_reason,
+            deprecated_remark=top_level_asbiep.deprecated_remark,
+            owner=create_user_info(top_level_asbiep.owner_user),
+            created=WhoAndWhen(
+                who=create_user_info(asbiep.created_by_user),
+                when=asbiep.creation_timestamp
+            ),
+            last_updated=WhoAndWhen(
+                who=create_user_info(top_level_asbiep.last_updated_by_user),
+                when=top_level_asbiep.last_update_timestamp
+            )
+        )
+
+    def get_business_contexts_info(self, top_level_asbiep_id: int) -> list[BizCtxSummary]:
+        """
+        Get business contexts information for a top-level ASBIEP.
+
+        Args:
+            top_level_asbiep: TopLevelAsbiep model instance
+
+        Returns:
+            list[BizCtxSummary]: List of business contexts information
+        """
+        # Get business contexts using the separate service function
+        business_contexts_info = []
+        try:
+            business_contexts = self.get_business_contexts_by_top_level_asbiep_id(top_level_asbiep_id)
+            for biz_ctx in business_contexts:
+                business_contexts_info.append(BizCtxSummary(
+                    biz_ctx_id=biz_ctx.biz_ctx_id,
+                    guid=biz_ctx.guid,
+                    name=biz_ctx.name
+                ))
+        except Exception as e:
+            logger.warning(f"Failed to retrieve business contexts for TopLevelAsbiep {top_level_asbiep_id}", e)
+            # Continue without business contexts rather than failing completely
+
+        return business_contexts_info
+
     def _calculate_hash_path(self, path: str) -> str:
         """Calculate hash path from path string."""
         return hashlib.sha256(path.encode()).hexdigest()
@@ -396,7 +479,7 @@ class BusinessInformationEntityService:
             Abie, full_path, Abie.based_acc_manifest_id,
             acc_manifest_id, top_level_asbiep_id
         )
-        
+
         if existing_abie:
             # Return existing ABIE instead of creating a new one
             return existing_abie
@@ -460,7 +543,7 @@ class BusinessInformationEntityService:
             Asbiep, full_path, Asbiep.based_asccp_manifest_id,
             asccp_manifest_id, top_level_asbiep_id
         )
-        
+
         if existing_asbiep:
             # Return existing ASBIEP instead of creating a new one
             return existing_asbiep
@@ -616,7 +699,8 @@ class BusinessInformationEntityService:
 
         # Evict cache entries for the new BIE
         evict_cache("business_information_entity.get_top_level_asbiep_list_by_release")  # Evict all list queries
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=top_level_asbiep.top_level_asbiep_id)  # Evict specific get query
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=top_level_asbiep.top_level_asbiep_id)  # Evict specific get query
 
         return top_level_asbiep.top_level_asbiep_id, asbiep.asbiep_id, abie.abie_id
 
@@ -795,35 +879,39 @@ class BusinessInformationEntityService:
             # Evict cache entries for the deleted BIE and all related entities
             # Top-level BIE cache eviction
             evict_cache("business_information_entity.get_top_level_asbiep_list_by_release")  # Evict all list queries
-            evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
-            evict_cache("business_information_entity.get_business_contexts_by_top_level_asbiep_id", top_level_asbiep_id=top_level_asbiep_id)  # Evict business contexts
-            
+            evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                        top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
+            evict_cache("business_information_entity.get_business_contexts_by_top_level_asbiep_id",
+                        top_level_asbiep_id=top_level_asbiep_id)  # Evict business contexts
+
             # Evict cache for ABIEs
             for abie_id in abie_ids:
                 evict_cache("business_information_entity.get_abie", abie_id=abie_id)
-            
+
             # Evict cache for ASBIEs
             for asbie_id in asbie_ids:
                 evict_cache("business_information_entity.get_asbie_by_asbie_id", asbie_id=asbie_id)
             for from_abie_id in from_abie_ids_for_asbie:
                 evict_cache("business_information_entity.get_asbie_list", from_abie_id=from_abie_id)
-            evict_cache("business_information_entity.get_asbie_by_based_ascc_manifest_id")  # Evict all queries by based_ascc_manifest_id
-            
+            evict_cache(
+                "business_information_entity.get_asbie_by_based_ascc_manifest_id")  # Evict all queries by based_ascc_manifest_id
+
             # Evict cache for ASBIEPs
             for asbiep_id in asbiep_ids:
                 evict_cache("business_information_entity.get_asbiep", asbiep_id=asbiep_id)
-            
+
             # Evict cache for BBIEs
             for bbie_id in bbie_ids:
                 evict_cache("business_information_entity.get_bbie_by_bbie_id", bbie_id=bbie_id)
             for from_abie_id in from_abie_ids_for_bbie:
                 evict_cache("business_information_entity.get_bbie_list", from_abie_id=from_abie_id)
-            evict_cache("business_information_entity.get_bbie_by_based_bcc_manifest_id")  # Evict all queries by based_bcc_manifest_id
-            
+            evict_cache(
+                "business_information_entity.get_bbie_by_based_bcc_manifest_id")  # Evict all queries by based_bcc_manifest_id
+
             # Evict cache for BBIEPs
             for bbiep_id in bbiep_ids:
                 evict_cache("business_information_entity.get_bbiep", bbiep_id=bbiep_id)
-            
+
             # Evict cache for BBIE_SCs
             for bbie_id in bbie_ids_for_bbie_sc:
                 evict_cache("business_information_entity.get_bbie_sc_list", bbie_id=bbie_id)
@@ -969,7 +1057,8 @@ class BusinessInformationEntityService:
 
         # Evict cache entries for the updated BIE
         evict_cache("business_information_entity.get_top_level_asbiep_list_by_release")  # Evict all list queries
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
 
         # Extract user information before session closes to avoid DetachedInstanceError
         previous_owner_info = {
@@ -1101,13 +1190,13 @@ class BusinessInformationEntityService:
                 remark=remark
             )
 
-
         # Combine all updated fields
         all_updated_fields = updated_fields + asbiep_updated_fields
 
         # Evict cache entries for the updated BIE
         evict_cache("business_information_entity.get_top_level_asbiep_list_by_release")  # Evict all list queries
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
 
         return all_updated_fields
 
@@ -1187,7 +1276,8 @@ class BusinessInformationEntityService:
 
         # Evict cache entries for the updated BIE
         evict_cache("business_information_entity.get_top_level_asbiep_list_by_release")  # Evict all list queries
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
 
         return current_state, new_state
 
@@ -1267,8 +1357,10 @@ class BusinessInformationEntityService:
         db_add(new_assignment)
 
         # Evict cache entries for business contexts and BIE
-        evict_cache("business_information_entity.get_business_contexts_by_top_level_asbiep_id", top_level_asbiep_id=top_level_asbiep_id)  # Evict business contexts
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
+        evict_cache("business_information_entity.get_business_contexts_by_top_level_asbiep_id",
+                    top_level_asbiep_id=top_level_asbiep_id)  # Evict business contexts
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
 
     @transaction(read_only=False)
     def unassign_business_context(self, top_level_asbiep_id: int, biz_ctx_id: int) -> None:
@@ -1330,10 +1422,12 @@ class BusinessInformationEntityService:
 
         if assignment:
             db_delete(assignment)
-        
+
         # Evict cache entries for business contexts and BIE
-        evict_cache("business_information_entity.get_business_contexts_by_top_level_asbiep_id", top_level_asbiep_id=top_level_asbiep_id)  # Evict business contexts
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
+        evict_cache("business_information_entity.get_business_contexts_by_top_level_asbiep_id",
+                    top_level_asbiep_id=top_level_asbiep_id)  # Evict business contexts
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
         # If assignment doesn't exist, that's fine - no error needed
 
     @cache(key_prefix="business_information_entity.get_business_contexts_by_top_level_asbiep_id")
@@ -1445,7 +1539,8 @@ class BusinessInformationEntityService:
         db_add(top_level_asbiep)
 
         # Evict cache entries for the updated ASBIEP and BIE
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=top_level_asbiep_id)  # Evict specific get query
         evict_cache("business_information_entity.get_asbiep", asbiep_id=asbiep.asbiep_id)  # Evict ASBIEP query
 
         return updated_fields
@@ -1527,8 +1622,8 @@ class BusinessInformationEntityService:
             .options(
                 selectinload(Bbiep.based_bccp_manifest).selectinload(BccpManifest.bccp),
                 selectinload(Bbiep.based_bccp_manifest)
-                    .selectinload(BccpManifest.bdt_manifest)
-                    .selectinload(DtManifest.dt),
+                .selectinload(BccpManifest.bdt_manifest)
+                .selectinload(DtManifest.dt),
                 selectinload(Bbiep.created_by_user),
                 selectinload(Bbiep.last_updated_by_user),
                 selectinload(Bbiep.owner_top_level_asbiep).selectinload(TopLevelAsbiep.release).selectinload(
@@ -1662,7 +1757,7 @@ class BusinessInformationEntityService:
         )
         if hash_path:
             query = query.where(Asbie.hash_path == hash_path)
-        
+
         asbie = db_exec(query).first()
         return asbie
 
@@ -1698,7 +1793,7 @@ class BusinessInformationEntityService:
                        f"Please check that the ID is correct and the ABIE exists. "
                        f"You can use get_abie or get_top_level_asbiep to view available ABIEs."
             )
-        
+
         owner_top_level_asbiep_id = from_abie.owner_top_level_asbiep_id
         if not owner_top_level_asbiep_id:
             raise HTTPException(
@@ -1706,7 +1801,7 @@ class BusinessInformationEntityService:
                 detail=f"The ABIE with ID {from_abie_id} is not associated with a top-level ASBIEP. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         return (from_abie, owner_top_level_asbiep_id)
 
     def _validate_existing_asbie_for_update(
@@ -1740,7 +1835,7 @@ class BusinessInformationEntityService:
                        f"Please check that the ID is correct. "
                        f"If you want to create a new ASBIE instead, simply omit the asbie_id parameter."
             )
-        
+
         # Verify it belongs to the same top-level ASBIEP
         if existing_asbie.owner_top_level_asbiep_id != owner_top_level_asbiep_id:
             raise HTTPException(
@@ -1749,7 +1844,7 @@ class BusinessInformationEntityService:
                        f"Please use an asbie_id that belongs to the same top-level ASBIEP as the from_abie_id, "
                        f"or use a different from_abie_id that matches the ASBIE's top-level ASBIEP."
             )
-        
+
         # Verify it belongs to the same from_abie_id
         if existing_asbie.from_abie_id != from_abie_id:
             raise HTTPException(
@@ -1758,7 +1853,7 @@ class BusinessInformationEntityService:
                        f"Please use a from_abie_id that matches the ASBIE's parent ABIE, "
                        f"or use a different asbie_id that belongs to the specified ABIE."
             )
-        
+
         # Verify it matches the based_ascc_manifest_id
         if existing_asbie.based_ascc_manifest_id != based_ascc_manifest_id:
             raise HTTPException(
@@ -1767,7 +1862,7 @@ class BusinessInformationEntityService:
                        f"Please use a based_ascc_manifest_id that matches the ASBIE's ASCC, "
                        f"or use a different asbie_id that is based on the specified ASCC manifest."
             )
-        
+
         return existing_asbie
 
     def _validate_top_level_asbiep_ownership_and_state(
@@ -1805,7 +1900,7 @@ class BusinessInformationEntityService:
                 detail=f"Could not find the top-level ASBIEP with ID {owner_top_level_asbiep_id}. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         # Check if user is the owner or an admin
         if top_level_asbiep.owner_user_id != self.requester.app_user_id and not self.requester.is_admin:
             raise HTTPException(
@@ -1814,7 +1909,7 @@ class BusinessInformationEntityService:
                        f"Only the owner (user ID: {top_level_asbiep.owner_user_id}) or an admin can make changes. "
                        f"Please contact the owner to update it, or ask them to transfer ownership to you using the transfer_top_level_asbiep_ownership tool."
             )
-        
+
         # Check if state is WIP
         if top_level_asbiep.state != "WIP":
             raise HTTPException(
@@ -1823,7 +1918,7 @@ class BusinessInformationEntityService:
                        f"Operations are only allowed when the state is 'WIP' (Work In Progress). "
                        f"Please use the update_top_level_asbiep_state tool to change the state to 'WIP' first, then try again."
             )
-        
+
         return top_level_asbiep
 
     def _validate_ascc_relationship_for_abie(
@@ -1849,7 +1944,7 @@ class BusinessInformationEntityService:
             HTTPException: If the ASCC is not a valid relationship
         """
         cc_service = CoreComponentService()
-        
+
         # Build ACC manifest queue (including based ACC hierarchy)
         acc_manifest_queue = []
         acc_manifest_id = from_abie.based_acc_manifest_id
@@ -1860,7 +1955,7 @@ class BusinessInformationEntityService:
                 acc_manifest_id = acc_manifest.based_acc_manifest_id
             else:
                 break
-        
+
         # Check each ACC in the queue (direct and inherited)
         for acc_manifest in acc_manifest_queue:
             # First check direct relationship
@@ -1870,24 +1965,24 @@ class BusinessInformationEntityService:
                 .where(AsccManifest.ascc_manifest_id == based_ascc_manifest_id)
             )
             ascc_relationship = db_exec(ascc_relationship_query).first()
-            
+
             if ascc_relationship:
                 # Found the relationship - validation passed
                 return
-            
+
             # If not found directly, check if any ASCC points to a group and flatten it
             # Get all ASCC relationships for this ACC
             from tools.core_component import _get_relationships_for_acc
             from services.models.core_component import AsccRelationshipInfo
             associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
-            
+
             for cc_assoc in associations:
                 if isinstance(cc_assoc, AsccRelationshipInfo):
                     # This is an ASCC relationship
                     if cc_assoc.ascc_manifest_id == based_ascc_manifest_id:
                         # Found the relationship - validation passed
                         return
-                    
+
                     # Check if this ASCC points to a group ACC
                     try:
                         if cc_assoc.to_asccp and cc_assoc.to_asccp.role_of_acc_manifest_id:
@@ -1898,15 +1993,15 @@ class BusinessInformationEntityService:
                             if role_of_acc_manifest.acc.oagis_component_type in [3, 4]:
                                 # Recursively validate within the group
                                 if self._check_ascc_in_group(
-                                    role_of_acc_manifest.acc_manifest_id,
-                                    based_ascc_manifest_id,
-                                    cc_service
+                                        role_of_acc_manifest.acc_manifest_id,
+                                        based_ascc_manifest_id,
+                                        cc_service
                                 ):
                                     return
                     except HTTPException:
                         # Skip if ACC not found, continue checking
                         continue
-        
+
         # Not found in any relationship (direct, inherited, or flattened from groups)
         raise HTTPException(
             status_code=400,
@@ -1915,7 +2010,7 @@ class BusinessInformationEntityService:
                    f"Please use get_abie or get_top_level_asbiep to view the available relationships, "
                    f"and choose a based_ascc_manifest_id that appears in the relationships list."
         )
-    
+
     def _check_ascc_in_group(
             self,
             group_acc_manifest_id: int,
@@ -1936,7 +2031,7 @@ class BusinessInformationEntityService:
             bool: True if the ASCC is found within the group, False otherwise
         """
         from tools.core_component import _get_relationships_for_acc
-        
+
         # Build ACC manifest queue for the group (including based ACC hierarchy)
         acc_manifest_queue = []
         acc_manifest_id = group_acc_manifest_id
@@ -1947,7 +2042,7 @@ class BusinessInformationEntityService:
                 acc_manifest_id = acc_manifest.based_acc_manifest_id
             else:
                 break
-        
+
         # Check each ACC in the queue
         for acc_manifest in acc_manifest_queue:
             # Check direct ASCC relationships
@@ -1957,20 +2052,20 @@ class BusinessInformationEntityService:
                 .where(AsccManifest.ascc_manifest_id == target_ascc_manifest_id)
             )
             ascc_relationship = db_exec(ascc_relationship_query).first()
-            
+
             if ascc_relationship:
                 return True
-            
+
             # Get all relationships and check for nested groups
             from services.models.core_component import AsccRelationshipInfo
             associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
-            
+
             for cc_assoc in associations:
                 if isinstance(cc_assoc, AsccRelationshipInfo):
                     # Check if this is the target ASCC
                     if cc_assoc.ascc_manifest_id == target_ascc_manifest_id:
                         return True
-                    
+
                     # Check if this ASCC points to another group and recursively check
                     try:
                         if cc_assoc.to_asccp and cc_assoc.to_asccp.role_of_acc_manifest_id:
@@ -1980,15 +2075,15 @@ class BusinessInformationEntityService:
                             # If it's a group, recursively check within that group
                             if role_of_acc_manifest.acc.oagis_component_type in [3, 4]:
                                 if self._check_ascc_in_group(
-                                    role_of_acc_manifest.acc_manifest_id,
-                                    target_ascc_manifest_id,
-                                    cc_service
+                                        role_of_acc_manifest.acc_manifest_id,
+                                        target_ascc_manifest_id,
+                                        cc_service
                                 ):
                                     return True
                     except HTTPException:
                         # Skip if not found, continue checking
                         continue
-        
+
         return False
 
     def _get_ascc_manifest_for_asbie(
@@ -2013,7 +2108,8 @@ class BusinessInformationEntityService:
             .options(
                 selectinload(AsccManifest.ascc),
                 selectinload(AsccManifest.to_asccp_manifest).selectinload(AsccpManifest.asccp),
-                selectinload(AsccManifest.to_asccp_manifest).selectinload(AsccpManifest.role_of_acc_manifest).selectinload(AccManifest.acc)
+                selectinload(AsccManifest.to_asccp_manifest).selectinload(
+                    AsccpManifest.role_of_acc_manifest).selectinload(AccManifest.acc)
             )
             .where(AsccManifest.ascc_manifest_id == based_ascc_manifest_id)
         )
@@ -2025,7 +2121,7 @@ class BusinessInformationEntityService:
                        f"Please check that the ID is correct. "
                        f"You can use get_ascc or get_acc tools to view available ASCC relationships."
             )
-        
+
         # Get ASCCP manifest from ASCC
         asccp_manifest = ascc_manifest.to_asccp_manifest
         if not asccp_manifest:
@@ -2034,7 +2130,7 @@ class BusinessInformationEntityService:
                 detail=f"The ASCC manifest (ID {based_ascc_manifest_id}) is missing its associated ASCCP manifest. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         # Get role_of_acc_manifest for creating ABIE
         role_of_acc_manifest = asccp_manifest.role_of_acc_manifest
         if not role_of_acc_manifest:
@@ -2043,7 +2139,7 @@ class BusinessInformationEntityService:
                 detail=f"The ASCCP manifest (ID {asccp_manifest.asccp_manifest_id}) is missing its associated ACC manifest. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         return (ascc_manifest, asccp_manifest, role_of_acc_manifest)
 
     def _validate_cardinality_for_asbie(
@@ -2069,11 +2165,11 @@ class BusinessInformationEntityService:
         # Get the base cardinality from ASCC
         base_cardinality_min = ascc_manifest.ascc.cardinality_min
         base_cardinality_max = ascc_manifest.ascc.cardinality_max
-        
+
         # Determine final cardinality values (use provided values or defaults from ASCC)
         final_cardinality_min = cardinality_min if cardinality_min is not None else base_cardinality_min
         final_cardinality_max = cardinality_max if cardinality_max is not None else base_cardinality_max
-        
+
         # Validate cardinality_min must not be less than base cardinality_min
         if final_cardinality_min < base_cardinality_min:
             raise HTTPException(
@@ -2082,7 +2178,7 @@ class BusinessInformationEntityService:
                        f"It must be at least {base_cardinality_min} as required by the base ASCC. "
                        f"Please set cardinality_min to {base_cardinality_min} or higher."
             )
-        
+
         # Validate cardinality_max must not exceed base cardinality_max (unless base is -1 for unbounded)
         if base_cardinality_max != -1:
             if final_cardinality_max != -1 and final_cardinality_max > base_cardinality_max:
@@ -2092,7 +2188,7 @@ class BusinessInformationEntityService:
                            f"It must be at most {base_cardinality_max} as allowed by the base ASCC. "
                            f"Please set cardinality_max to {base_cardinality_max} or lower, or use -1 for unbounded if needed."
                 )
-        
+
         # Validate cardinality_min must be <= cardinality_max
         if final_cardinality_max != -1:
             if final_cardinality_min > final_cardinality_max:
@@ -2102,7 +2198,7 @@ class BusinessInformationEntityService:
                            f"Please adjust the values so that the minimum is less than or equal to the maximum. "
                            f"For example, set cardinality_max to at least {final_cardinality_min}, or reduce cardinality_min."
                 )
-        
+
         return (final_cardinality_min, final_cardinality_max)
 
     def _create_new_asbie(
@@ -2137,14 +2233,14 @@ class BusinessInformationEntityService:
         # Use the provided path (calculated from _get_abie_related_components in tool layer)
         # Construct ASBIEP path from ASBIE path
         asbiep_path = f"{asbie_path}>ASCCP-{asccp_manifest.asccp_manifest_id}"
-        
+
         # Create ABIE first
         role_of_abie = self._create_abie(
             acc_manifest_id=role_of_acc_manifest.acc_manifest_id,
             top_level_asbiep_id=owner_top_level_asbiep_id,
             parent_asbiep_path=asbiep_path
         )
-        
+
         # Create ASBIEP
         asbiep = self._create_asbiep(
             asccp_manifest_id=asccp_manifest.asccp_manifest_id,
@@ -2152,14 +2248,14 @@ class BusinessInformationEntityService:
             top_level_asbiep_id=owner_top_level_asbiep_id,
             parent_asbie_path=asbie_path
         )
-        
+
         # Update ASBIEP remark if provided
         updates = []
-        
+
         # Create ASBIE
         asbie_guid = generate_guid()
         asbie_hash_path = self._calculate_hash_path(asbie_path)
-        
+
         new_asbie = Asbie(
             guid=asbie_guid,
             based_ascc_manifest_id=based_ascc_manifest_id,
@@ -2180,10 +2276,10 @@ class BusinessInformationEntityService:
             last_update_timestamp=datetime.now(timezone.utc),
             owner_top_level_asbiep_id=owner_top_level_asbiep_id
         )
-        
+
         db_add(new_asbie)
         db_flush()
-        
+
         updates.append("asbie_id")  # Created new ASBIE
         if final_cardinality_min != ascc_manifest.ascc.cardinality_min:
             updates.append("cardinality_min")
@@ -2191,7 +2287,7 @@ class BusinessInformationEntityService:
             updates.append("cardinality_max")
         updates.append("is_used")
         updates.append("is_deprecated")
-        
+
         return (new_asbie, updates)
 
     def _update_asbie(
@@ -2229,9 +2325,9 @@ class BusinessInformationEntityService:
         """
         existing_asbie.last_updated_by = self.requester.app_user_id
         existing_asbie.last_update_timestamp = datetime.now(timezone.utc)
-        
+
         updates = []
-        
+
         # Only update is_used if it was provided and actually changed
         if is_used is not None:
             if existing_asbie.is_used != is_used:
@@ -2241,15 +2337,15 @@ class BusinessInformationEntityService:
         if definition is not None:
             existing_asbie.definition = definition
             updates.append("definition")
-        
+
         if cardinality_min is not None:
             existing_asbie.cardinality_min = final_cardinality_min
             updates.append("cardinality_min")
-        
+
         if cardinality_max is not None:
             existing_asbie.cardinality_max = final_cardinality_max
             updates.append("cardinality_max")
-        
+
         if is_nillable is not None:
             existing_asbie.is_nillable = is_nillable
             updates.append("is_nillable")
@@ -2259,7 +2355,7 @@ class BusinessInformationEntityService:
             if existing_asbie.is_deprecated != is_deprecated:
                 existing_asbie.is_deprecated = is_deprecated
                 updates.append("is_deprecated")
-        
+
         # Update ASBIEP remark if provided
         if remark is not None:
             if existing_asbie.to_asbiep_id:
@@ -2273,13 +2369,13 @@ class BusinessInformationEntityService:
                         self._validate_top_level_asbiep_ownership_and_state(
                             asbiep.owner_top_level_asbiep_id
                         )
-                    
+
                     asbiep.remark = remark
                     asbiep.last_updated_by = self.requester.app_user_id
                     asbiep.last_update_timestamp = datetime.now(timezone.utc)
                     db_add(asbiep)
                     updates.append("remark")
-        
+
         db_add(existing_asbie)
         return updates
 
@@ -2316,31 +2412,31 @@ class BusinessInformationEntityService:
         from_abie, owner_top_level_asbiep_id = self._validate_and_get_abie_for_asbie_update(
             from_abie_id
         )
-        
+
         # 2) Validate ownership and state
         self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
-        
+
         # 3) Validate ASCC relationship
         self._validate_ascc_relationship_for_abie(
             from_abie, based_ascc_manifest_id
         )
-        
+
         # 4) Get ASCC/ASCCP/ACC manifests
         ascc_manifest, asccp_manifest, role_of_acc_manifest = self._get_ascc_manifest_for_asbie(
             based_ascc_manifest_id
         )
-        
+
         # 5) Validate cardinality
         final_cardinality_min, final_cardinality_max = ascc_manifest.ascc.cardinality_min, ascc_manifest.ascc.cardinality_max
-        
+
         # 6) Check for duplicate ASBIE before creating
         duplicate_asbie = self._check_duplicate_entity(
             Asbie, asbie_path, Asbie.based_ascc_manifest_id,
             based_ascc_manifest_id, owner_top_level_asbiep_id
         )
-        
+
         if duplicate_asbie:
             # Use existing ASBIE instead of creating a new one
             existing_asbie = duplicate_asbie
@@ -2352,16 +2448,19 @@ class BusinessInformationEntityService:
                 owner_top_level_asbiep_id=owner_top_level_asbiep_id,
                 is_used=True
             )
-            
+
             # Evict cache entries for ASBIE and related queries
             evict_cache("business_information_entity.get_asbie_list", from_abie_id=from_abie_id)  # Evict ASBIE list
-            evict_cache("business_information_entity.get_asbie_by_asbie_id", asbie_id=existing_asbie.asbie_id)  # Evict specific ASBIE
-            evict_cache("business_information_entity.get_asbie_by_based_ascc_manifest_id")  # Evict all queries by based_ascc_manifest_id
-            evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
+            evict_cache("business_information_entity.get_asbie_by_asbie_id",
+                        asbie_id=existing_asbie.asbie_id)  # Evict specific ASBIE
+            evict_cache(
+                "business_information_entity.get_asbie_by_based_ascc_manifest_id")  # Evict all queries by based_ascc_manifest_id
+            evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                        top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
             evict_cache("business_information_entity.get_abie", abie_id=from_abie_id)  # Evict parent ABIE
-            
+
             return (existing_asbie.asbie_id, updates)
-        
+
         # 7) Create new ASBIE
         new_asbie, updates = self._create_new_asbie(
             from_abie=from_abie,
@@ -2374,14 +2473,17 @@ class BusinessInformationEntityService:
             final_cardinality_max=final_cardinality_max,
             asbie_path=asbie_path
         )
-        
+
         # Evict cache entries for ASBIE and related queries
         evict_cache("business_information_entity.get_asbie_list", from_abie_id=from_abie_id)  # Evict ASBIE list
-        evict_cache("business_information_entity.get_asbie_by_asbie_id", asbie_id=new_asbie.asbie_id)  # Evict specific ASBIE
-        evict_cache("business_information_entity.get_asbie_by_based_ascc_manifest_id")  # Evict all queries by based_ascc_manifest_id
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
+        evict_cache("business_information_entity.get_asbie_by_asbie_id",
+                    asbie_id=new_asbie.asbie_id)  # Evict specific ASBIE
+        evict_cache(
+            "business_information_entity.get_asbie_by_based_ascc_manifest_id")  # Evict all queries by based_ascc_manifest_id
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
         evict_cache("business_information_entity.get_abie", abie_id=from_abie_id)  # Evict parent ABIE
-        
+
         return (new_asbie.asbie_id, updates)
 
     @transaction(read_only=False)
@@ -2423,7 +2525,8 @@ class BusinessInformationEntityService:
                 or database errors occur.
         """
         # Validate that at least one field is provided
-        if all(param is None for param in [is_used, is_deprecated, is_nillable, definition, cardinality_min, cardinality_max, remark]):
+        if all(param is None for param in
+               [is_used, is_deprecated, is_nillable, definition, cardinality_min, cardinality_max, remark]):
             raise HTTPException(
                 status_code=400,
                 detail="At least one field must be provided for update"
@@ -2433,42 +2536,42 @@ class BusinessInformationEntityService:
         existing_asbie = db_exec(
             select(Asbie).where(Asbie.asbie_id == asbie_id)
         ).first()
-        
+
         if not existing_asbie:
             raise HTTPException(
                 status_code=404,
                 detail=f"ASBIE with ID {asbie_id} not found"
             )
-        
+
         # 2) Get from_abie_id and based_ascc_manifest_id from existing ASBIE
         from_abie_id = existing_asbie.from_abie_id
         based_ascc_manifest_id = existing_asbie.based_ascc_manifest_id
-        
+
         # 3) Validate and get ABIE
         from_abie, owner_top_level_asbiep_id = self._validate_and_get_abie_for_asbie_update(
             from_abie_id
         )
-        
+
         # 4) Validate existing ASBIE
         existing_asbie = self._validate_existing_asbie_for_update(
             asbie_id, from_abie_id, based_ascc_manifest_id, owner_top_level_asbiep_id
         )
-        
+
         # 5) Validate ownership and state
         self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
-        
+
         # 6) Get ASCC/ASCCP/ACC manifests
         ascc_manifest, asccp_manifest, role_of_acc_manifest = self._get_ascc_manifest_for_asbie(
             based_ascc_manifest_id
         )
-        
+
         # 7) Validate cardinality
         final_cardinality_min, final_cardinality_max = self._validate_cardinality_for_asbie(
             ascc_manifest, cardinality_min, cardinality_max
         )
-        
+
         # 8) Update existing ASBIE
         updates = self._update_asbie(
             existing_asbie=existing_asbie,
@@ -2483,14 +2586,17 @@ class BusinessInformationEntityService:
             is_nillable=is_nillable,
             remark=remark
         )
-        
+
         # Evict cache entries for ASBIE and related queries
         evict_cache("business_information_entity.get_asbie_list", from_abie_id=from_abie_id)  # Evict ASBIE list
-        evict_cache("business_information_entity.get_asbie_by_asbie_id", asbie_id=existing_asbie.asbie_id)  # Evict specific ASBIE
-        evict_cache("business_information_entity.get_asbie_by_based_ascc_manifest_id")  # Evict all queries by based_ascc_manifest_id
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
+        evict_cache("business_information_entity.get_asbie_by_asbie_id",
+                    asbie_id=existing_asbie.asbie_id)  # Evict specific ASBIE
+        evict_cache(
+            "business_information_entity.get_asbie_by_based_ascc_manifest_id")  # Evict all queries by based_ascc_manifest_id
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
         evict_cache("business_information_entity.get_abie", abie_id=from_abie_id)  # Evict parent ABIE
-        
+
         return (existing_asbie.asbie_id, updates)
 
     @transaction(read_only=False)
@@ -2535,10 +2641,10 @@ class BusinessInformationEntityService:
                        f"Please check that the ID is correct. "
                        f"You can use get_asbie or get_top_level_asbiep tools to view available ASBIEs."
             )
-        
+
         # Get the owner top-level ASBIEP ID from the ASBIE
         owner_top_level_asbiep_id = asbie.owner_top_level_asbiep_id
-        
+
         # Validate that owner_top_level_asbiep_id and reuse_top_level_asbiep_id are different
         if owner_top_level_asbiep_id == reuse_top_level_asbiep_id:
             raise HTTPException(
@@ -2547,7 +2653,7 @@ class BusinessInformationEntityService:
                        f"The top-level ASBIEP to reuse must be different from the one that owns the ASBIE. "
                        f"Please choose a different top-level ASBIEP to reuse."
             )
-        
+
         # Get the reuse top-level ASBIEP with release relationship loaded
         reuse_top_level_asbiep_query = (
             select(TopLevelAsbiep)
@@ -2562,7 +2668,7 @@ class BusinessInformationEntityService:
                        f"Please check that the ID is correct. "
                        f"You can use get_top_level_asbiep_list to view available top-level ASBIEPs."
             )
-        
+
         # Get the owner top-level ASBIEP with release relationship loaded for release_id validation
         owner_top_level_asbiep_query = (
             select(TopLevelAsbiep)
@@ -2576,7 +2682,7 @@ class BusinessInformationEntityService:
                 detail=f"Could not find the owner top-level ASBIEP with ID {owner_top_level_asbiep_id}. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         # Validate that both top-level ASBIEPs are in the same release
         if owner_top_level_asbiep.release.release_id != reuse_top_level_asbiep.release.release_id:
             raise HTTPException(
@@ -2588,7 +2694,7 @@ class BusinessInformationEntityService:
                        f"Both top-level ASBIEPs must be in the same release to reuse. "
                        f"Please choose a different top-level ASBIEP that is in the same release as the ASBIE's owner."
             )
-        
+
         # Get the ASBIEP from the reuse top-level ASBIEP
         if not reuse_top_level_asbiep.asbiep_id:
             raise HTTPException(
@@ -2596,7 +2702,7 @@ class BusinessInformationEntityService:
                 detail=f"The top-level ASBIEP (ID {reuse_top_level_asbiep_id}) does not have an associated ASBIEP. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         reuse_asbiep = db_get(Asbiep, reuse_top_level_asbiep.asbiep_id)
         if not reuse_asbiep:
             raise HTTPException(
@@ -2604,7 +2710,7 @@ class BusinessInformationEntityService:
                 detail=f"Could not find the ASBIEP with ID {reuse_top_level_asbiep.asbiep_id} from the top-level ASBIEP. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         # Verify that the ASBIEP actually belongs to the reuse top-level ASBIEP
         if reuse_asbiep.owner_top_level_asbiep_id != reuse_top_level_asbiep_id:
             raise HTTPException(
@@ -2613,10 +2719,10 @@ class BusinessInformationEntityService:
                        f"The ASBIEP's owner is {reuse_asbiep.owner_top_level_asbiep_id}, but expected {reuse_top_level_asbiep_id}. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         # Get the based_asccp_manifest_id from the reuse ASBIEP
         reuse_asccp_manifest_id = reuse_asbiep.based_asccp_manifest_id
-        
+
         # Get the ASCC information from the ASBIE to get to_asccp_manifest_id
         ascc_manifest = db_get(AsccManifest, asbie.based_ascc_manifest_id)
         if not ascc_manifest:
@@ -2625,9 +2731,9 @@ class BusinessInformationEntityService:
                 detail=f"Could not find the ASCC manifest with ID {asbie.based_ascc_manifest_id} for the ASBIE. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         asbie_to_asccp_manifest_id = ascc_manifest.to_asccp_manifest_id
-        
+
         # Validate that ASBIE's based_ascc.to_asccp_manifest_id equals reuse_top_level_asbiep's asbiep.based_asccp_manifest_id
         if asbie_to_asccp_manifest_id != reuse_asccp_manifest_id:
             raise HTTPException(
@@ -2638,15 +2744,15 @@ class BusinessInformationEntityService:
                        f"To reuse a top-level ASBIEP, both must be based on the same ASCCP. "
                        f"Please choose a different top-level ASBIEP that is based on the same ASCCP as the ASBIE."
             )
-        
+
         # Validate ownership and state for the owner top-level ASBIEP
         self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
-        
+
         # Get the original ASBIEP ID before updating
         original_asbiep_id = asbie.to_asbiep_id
-        
+
         # Update the ASBIE's to_asbiep_id FIRST (before deleting the original ASBIEP)
         # This removes the foreign key reference so we can safely delete the original ASBIEP
         asbie.to_asbiep_id = reuse_asbiep.asbiep_id
@@ -2654,7 +2760,7 @@ class BusinessInformationEntityService:
         asbie.last_update_timestamp = datetime.now(timezone.utc)
         db_add(asbie)
         db_flush()  # Ensure the update is persisted before deleting the original ASBIEP
-        
+
         # Now delete the original ASBIEP and all its associated records if it exists
         # The ASBIE no longer references it, so it's safe to delete
         if original_asbiep_id:
@@ -2662,16 +2768,18 @@ class BusinessInformationEntityService:
                 asbiep_id=original_asbiep_id,
                 owner_top_level_asbiep_id=owner_top_level_asbiep_id
             )
-        
+
         # Evict cache entries
         evict_cache("business_information_entity.get_asbie_by_asbie_id", asbie_id=asbie_id)
         evict_cache("business_information_entity.get_asbie_by_based_ascc_manifest_id")
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=owner_top_level_asbiep_id)
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=reuse_top_level_asbiep_id)
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=owner_top_level_asbiep_id)
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=reuse_top_level_asbiep_id)
         evict_cache("business_information_entity.get_asbiep", asbiep_id=reuse_asbiep.asbiep_id)
         if asbie.from_abie_id:
             evict_cache("business_information_entity.get_abie", abie_id=asbie.from_abie_id)
-        
+
         return (asbie_id, reuse_asbiep.asbiep_id, ["to_asbiep_id"])
 
     @transaction(read_only=False)
@@ -2710,15 +2818,15 @@ class BusinessInformationEntityService:
                        f"Please check that the ID is correct. "
                        f"You can use get_asbie or get_top_level_asbiep tools to view available ASBIEs."
             )
-        
+
         # Get the owner top-level ASBIEP ID from the ASBIE
         owner_top_level_asbiep_id = asbie.owner_top_level_asbiep_id
-        
+
         # Validate ownership and state for the owner top-level ASBIEP
         self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
-        
+
         # Check if ASBIE has a to_asbiep_id
         if not asbie.to_asbiep_id:
             raise HTTPException(
@@ -2727,7 +2835,7 @@ class BusinessInformationEntityService:
                        f"Cannot remove a reused top-level ASBIEP because there is no ASBIEP to remove. "
                        f"This ASBIE may not have been fully created yet."
             )
-        
+
         # Get the current ASBIEP
         current_asbiep = db_get(Asbiep, asbie.to_asbiep_id)
         if not current_asbiep:
@@ -2736,7 +2844,7 @@ class BusinessInformationEntityService:
                 detail=f"Could not find the ASBIEP with ID {asbie.to_asbiep_id} associated with the ASBIE. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         # Check if it's reused (owner_top_level_asbiep_id != to_asbiep.owner_top_level_asbiep_id)
         if owner_top_level_asbiep_id == current_asbiep.owner_top_level_asbiep_id:
             raise HTTPException(
@@ -2747,12 +2855,12 @@ class BusinessInformationEntityService:
                        f"This operation can only be performed on ASBIEs that are using a reused top-level ASBIEP "
                        f"(where the ASBIE and its ASBIEP belong to different top-level ASBIEPs)."
             )
-        
+
         # Get ASCC/ASCCP/ACC manifests
         ascc_manifest, asccp_manifest, role_of_acc_manifest = self._get_ascc_manifest_for_asbie(
             asbie.based_ascc_manifest_id
         )
-        
+
         # Get the ASBIE's path
         asbie_path = asbie.path
         if not asbie_path:
@@ -2762,17 +2870,17 @@ class BusinessInformationEntityService:
                        f"Cannot create new ASBIEP and ABIE without a path. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         # Construct ASBIEP path from ASBIE path
         asbiep_path = f"{asbie_path}>ASCCP-{asccp_manifest.asccp_manifest_id}"
-        
+
         # Create ABIE first
         role_of_abie = self._create_abie(
             acc_manifest_id=role_of_acc_manifest.acc_manifest_id,
             top_level_asbiep_id=owner_top_level_asbiep_id,
             parent_asbiep_path=asbiep_path
         )
-        
+
         # Create ASBIEP
         new_asbiep = self._create_asbiep(
             asccp_manifest_id=asccp_manifest.asccp_manifest_id,
@@ -2780,23 +2888,25 @@ class BusinessInformationEntityService:
             top_level_asbiep_id=owner_top_level_asbiep_id,
             parent_asbie_path=asbie_path
         )
-        
+
         # Update the ASBIE's to_asbiep_id
         asbie.to_asbiep_id = new_asbiep.asbiep_id
         asbie.last_updated_by = self.requester.app_user_id
         asbie.last_update_timestamp = datetime.now(timezone.utc)
         db_add(asbie)
-        
+
         # Evict cache entries
         evict_cache("business_information_entity.get_asbie_by_asbie_id", asbie_id=asbie_id)
         evict_cache("business_information_entity.get_asbie_by_based_ascc_manifest_id")
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=owner_top_level_asbiep_id)
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=owner_top_level_asbiep_id)
         if asbie.from_abie_id:
             evict_cache("business_information_entity.get_abie", abie_id=asbie.from_abie_id)
-        
+
         return (asbie_id, ["to_asbiep_id"])
 
-    def _delete_asbiep_and_associated_records(self, asbiep_id: int, owner_top_level_asbiep_id: int, exclude_asbie_id: int | None = None):
+    def _delete_asbiep_and_associated_records(self, asbiep_id: int, owner_top_level_asbiep_id: int,
+                                              exclude_asbie_id: int | None = None):
         """
         Delete an ASBIEP and all its associated records recursively.
         
@@ -2820,9 +2930,9 @@ class BusinessInformationEntityService:
         asbiep = db_get(Asbiep, asbiep_id)
         if not asbiep:
             return  # Already deleted or doesn't exist
-        
+
         role_of_abie_id = asbiep.role_of_abie_id
-        
+
         # Step 1: Delete all ASBIEs that reference this ASBIEP (to_asbiep_id == asbiep_id)
         # These ASBIEs directly reference the ASBIEP we're deleting.
         # Exclude the ASBIE specified by exclude_asbie_id if provided (used when updating an ASBIE)
@@ -2832,15 +2942,15 @@ class BusinessInformationEntityService:
         ]
         if exclude_asbie_id is not None:
             conditions.append(Asbie.asbie_id != exclude_asbie_id)
-        
+
         asbies_referencing_asbiep = db_exec(
             select(Asbie).where(*conditions)
         ).all()
-        
+
         for asbie in asbies_referencing_asbiep:
             # Delete the ASBIE itself
             db_delete(asbie)
-        
+
         # Step 2: Delete all ASBIEs that are children of the ABIE (from_abie_id == role_of_abie_id)
         # For each of these ASBIEs, we need to recursively delete their to_asbiep and all associated records
         # because that ASBIEP's role_of_abie could have underlying ASBIEs too.
@@ -2851,7 +2961,7 @@ class BusinessInformationEntityService:
                     Asbie.owner_top_level_asbiep_id == owner_top_level_asbiep_id
                 )
             ).all()
-            
+
             for asbie in asbies_from_abie:
                 # Recursively delete the to_asbiep of this ASBIE if it exists
                 # This handles the case where asbie.to_asbiep.role_of_abie has underlying ASBIEs
@@ -2862,7 +2972,7 @@ class BusinessInformationEntityService:
                     )
                 # Delete the ASBIE itself
                 db_delete(asbie)
-        
+
         # Step 3: Delete all BBIEs that are children of the ABIE (from_abie_id == role_of_abie_id)
         if role_of_abie_id:
             bbies = db_exec(
@@ -2871,9 +2981,9 @@ class BusinessInformationEntityService:
                     Bbie.owner_top_level_asbiep_id == owner_top_level_asbiep_id
                 )
             ).all()
-            
+
             bbie_ids = [bbie.bbie_id for bbie in bbies]
-            
+
             # Step 3a: Delete all BBIE_SCs for these BBIEs
             if bbie_ids:
                 bbie_scs = db_exec(
@@ -2884,11 +2994,11 @@ class BusinessInformationEntityService:
                 ).all()
                 for bbie_sc in bbie_scs:
                     db_delete(bbie_sc)
-            
+
             # Step 3b: Delete all BBIEs
             for bbie in bbies:
                 db_delete(bbie)
-        
+
         # Step 4: Delete ASBIEP support docs (before deleting the ASBIEP)
         if self._table_exists("asbiep_support_doc"):
             try:
@@ -2902,17 +3012,17 @@ class BusinessInformationEntityService:
             except Exception as e:
                 # If deletion fails (e.g., table structure changed), log and continue
                 logger.warning(f"Failed to delete asbiep_support_doc records for asbiep {asbiep_id}", e)
-        
+
         # Step 5: Delete the ASBIEP itself (before deleting the ABIE to avoid foreign key constraint)
         # This removes the foreign key reference from ASBIEP to ABIE
         db_delete(asbiep)
-        
+
         # Step 6: Delete the ABIE itself (after deleting the ASBIEP that references it)
         if role_of_abie_id:
             abie = db_get(Abie, role_of_abie_id)
             if abie and abie.owner_top_level_asbiep_id == owner_top_level_asbiep_id:
                 db_delete(abie)
-        
+
         # Evict cache entries for deleted records
         evict_cache("business_information_entity.get_asbiep", asbiep_id=asbiep_id)
         if role_of_abie_id:
@@ -2951,7 +3061,7 @@ class BusinessInformationEntityService:
             Bbiep, full_path, Bbiep.based_bccp_manifest_id,
             bccp_manifest_id, top_level_asbiep_id
         )
-        
+
         if existing_bbiep:
             # Return existing BBIEP instead of creating a new one
             return existing_bbiep
@@ -3001,7 +3111,7 @@ class BusinessInformationEntityService:
             HTTPException: If the BCC is not a valid relationship
         """
         cc_service = CoreComponentService()
-        
+
         # Build ACC manifest queue (including based ACC hierarchy)
         acc_manifest_queue = []
         acc_manifest_id = from_abie.based_acc_manifest_id
@@ -3012,7 +3122,7 @@ class BusinessInformationEntityService:
                 acc_manifest_id = acc_manifest.based_acc_manifest_id
             else:
                 break
-        
+
         # Check each ACC in the queue (direct and inherited)
         for acc_manifest in acc_manifest_queue:
             # First check direct relationship
@@ -3022,23 +3132,23 @@ class BusinessInformationEntityService:
                 .where(BccManifest.bcc_manifest_id == based_bcc_manifest_id)
             )
             bcc_relationship = db_exec(bcc_relationship_query).first()
-            
+
             if bcc_relationship:
                 # Found the relationship - validation passed
                 return
-            
+
             # If not found directly, check if any ASCC points to a group and flatten it
             # Get all relationships for this ACC
             from tools.core_component import _get_relationships_for_acc
             from services.models.core_component import AsccRelationshipInfo, BccRelationshipInfo
             associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
-            
+
             for cc_assoc in associations:
                 # Check if this is the target BCC
                 if isinstance(cc_assoc, BccRelationshipInfo) and cc_assoc.bcc_manifest_id == based_bcc_manifest_id:
                     # Found the relationship - validation passed
                     return
-                
+
                 # Check if this ASCC points to a group ACC and recursively check within the group
                 if isinstance(cc_assoc, AsccRelationshipInfo):
                     try:
@@ -3050,15 +3160,15 @@ class BusinessInformationEntityService:
                             if role_of_acc_manifest.acc.oagis_component_type in [3, 4]:
                                 # Recursively validate within the group
                                 if self._check_bcc_in_group(
-                                    role_of_acc_manifest.acc_manifest_id,
-                                    based_bcc_manifest_id,
-                                    cc_service
+                                        role_of_acc_manifest.acc_manifest_id,
+                                        based_bcc_manifest_id,
+                                        cc_service
                                 ):
                                     return
                     except HTTPException:
                         # Skip if ACC not found, continue checking
                         continue
-        
+
         # Not found in any relationship (direct, inherited, or flattened from groups)
         raise HTTPException(
             status_code=400,
@@ -3067,7 +3177,7 @@ class BusinessInformationEntityService:
                    f"Please use get_abie or get_top_level_asbiep to view the available relationships, "
                    f"and choose a based_bcc_manifest_id that appears in the relationships list."
         )
-    
+
     def _check_bcc_in_group(
             self,
             group_acc_manifest_id: int,
@@ -3089,7 +3199,7 @@ class BusinessInformationEntityService:
         """
         from tools.core_component import _get_relationships_for_acc
         from services.models.core_component import AsccRelationshipInfo
-        
+
         # Build ACC manifest queue for the group (including based ACC hierarchy)
         acc_manifest_queue = []
         acc_manifest_id = group_acc_manifest_id
@@ -3100,7 +3210,7 @@ class BusinessInformationEntityService:
                 acc_manifest_id = acc_manifest.based_acc_manifest_id
             else:
                 break
-        
+
         # Check each ACC in the queue
         for acc_manifest in acc_manifest_queue:
             # Check direct BCC relationships
@@ -3110,19 +3220,19 @@ class BusinessInformationEntityService:
                 .where(BccManifest.bcc_manifest_id == target_bcc_manifest_id)
             )
             bcc_relationship = db_exec(bcc_relationship_query).first()
-            
+
             if bcc_relationship:
                 return True
-            
+
             # Get all relationships and check for nested groups
             from services.models.core_component import BccRelationshipInfo
             associations = _get_relationships_for_acc(acc_manifest.acc_manifest_id)
-            
+
             for cc_assoc in associations:
                 # Check if this is the target BCC
                 if isinstance(cc_assoc, BccRelationshipInfo) and cc_assoc.bcc_manifest_id == target_bcc_manifest_id:
                     return True
-                
+
                 # Check if this ASCC points to another group and recursively check
                 if isinstance(cc_assoc, AsccRelationshipInfo):
                     try:
@@ -3133,15 +3243,15 @@ class BusinessInformationEntityService:
                             # If it's a group, recursively check within that group
                             if role_of_acc_manifest.acc.oagis_component_type in [3, 4]:
                                 if self._check_bcc_in_group(
-                                    role_of_acc_manifest.acc_manifest_id,
-                                    target_bcc_manifest_id,
-                                    cc_service
+                                        role_of_acc_manifest.acc_manifest_id,
+                                        target_bcc_manifest_id,
+                                        cc_service
                                 ):
                                     return True
                     except HTTPException:
                         # Skip if not found, continue checking
                         continue
-        
+
         return False
 
     def _get_bcc_manifest_for_bbie(
@@ -3177,7 +3287,7 @@ class BusinessInformationEntityService:
                        f"Please check that the ID is correct. "
                        f"You can use get_bcc or get_acc tools to view available BCC relationships."
             )
-        
+
         # Get BCCP manifest from BCC
         bccp_manifest = bcc_manifest.to_bccp_manifest
         if not bccp_manifest:
@@ -3186,7 +3296,7 @@ class BusinessInformationEntityService:
                 detail=f"The BCC manifest (ID {based_bcc_manifest_id}) is missing its associated BCCP manifest. "
                        f"This appears to be a data integrity issue. Please contact your system administrator for assistance."
             )
-        
+
         return (bcc_manifest, bccp_manifest)
 
     @cache(key_prefix="business_information_entity.get_dt_awd_pri")
@@ -3222,35 +3332,35 @@ class BusinessInformationEntityService:
             .where(BccpManifest.bccp_manifest_id == bccp_manifest_id)
         )
         bccp_manifest = db_exec(bccp_manifest_query).first()
-        
+
         if not bccp_manifest:
             raise HTTPException(
                 status_code=404,
                 detail=f"BCCP manifest with ID {bccp_manifest_id} not found. "
                        f"Cannot retrieve default manifest IDs from dt_awd_pri."
             )
-        
+
         if not bccp_manifest.bdt_manifest_id:
             raise HTTPException(
                 status_code=400,
                 detail=f"BCCP manifest (ID {bccp_manifest_id}) does not have a BDT manifest ID assigned. "
                        f"Cannot retrieve default manifest IDs from dt_awd_pri."
             )
-        
+
         # Get dt_manifest to retrieve dt_id
         dt_manifest_query = (
             select(DtManifest)
             .where(DtManifest.dt_manifest_id == bccp_manifest.bdt_manifest_id)
         )
         dt_manifest = db_exec(dt_manifest_query).first()
-        
+
         if not dt_manifest:
             raise HTTPException(
                 status_code=404,
                 detail=f"DT manifest with ID {bccp_manifest.bdt_manifest_id} not found. "
                        f"Cannot retrieve default manifest IDs from dt_awd_pri."
             )
-        
+
         # Query dt_awd_pri with release_id, dt_id, and is_default=True
         dt_awd_pri_query = (
             select(DtAwdPri)
@@ -3261,7 +3371,7 @@ class BusinessInformationEntityService:
             )
         )
         dt_awd_pri = db_exec(dt_awd_pri_query).first()
-        
+
         if not dt_awd_pri:
             raise HTTPException(
                 status_code=404,
@@ -3269,7 +3379,7 @@ class BusinessInformationEntityService:
                        f"and dt_id {dt_manifest.dt_id} (DT manifest ID {bccp_manifest.bdt_manifest_id}). "
                        f"A default allowed primitive must be configured for this data type."
             )
-        
+
         return (
             dt_awd_pri.xbt_manifest_id,
             dt_awd_pri.code_list_manifest_id,
@@ -3310,23 +3420,23 @@ class BusinessInformationEntityService:
             .where(DtScManifest.dt_sc_manifest_id == dt_sc_manifest_id)
         )
         dt_sc_manifest = db_exec(dt_sc_manifest_query).first()
-        
+
         if not dt_sc_manifest:
             raise HTTPException(
                 status_code=404,
                 detail=f"DT_SC manifest with ID {dt_sc_manifest_id} not found. "
                        f"Cannot retrieve default manifest IDs from dt_sc_awd_pri."
             )
-        
+
         if not dt_sc_manifest.dt_sc:
             raise HTTPException(
                 status_code=400,
                 detail=f"DT_SC manifest (ID {dt_sc_manifest_id}) does not have a DT_SC assigned. "
                        f"Cannot retrieve default manifest IDs from dt_sc_awd_pri."
             )
-        
+
         dt_sc_id = dt_sc_manifest.dt_sc.dt_sc_id
-        
+
         # Query dt_sc_awd_pri with release_id, dt_sc_id, and is_default=True
         dt_sc_awd_pri_query = (
             select(DtScAwdPri)
@@ -3337,7 +3447,7 @@ class BusinessInformationEntityService:
             )
         )
         dt_sc_awd_pri = db_exec(dt_sc_awd_pri_query).first()
-        
+
         if not dt_sc_awd_pri:
             raise HTTPException(
                 status_code=404,
@@ -3345,7 +3455,7 @@ class BusinessInformationEntityService:
                        f"and dt_sc_id {dt_sc_id} (DT_SC manifest ID {dt_sc_manifest_id}). "
                        f"A default allowed primitive must be configured for this supplementary component."
             )
-        
+
         return (
             dt_sc_awd_pri.xbt_manifest_id,
             dt_sc_awd_pri.code_list_manifest_id,
@@ -3373,7 +3483,7 @@ class BusinessInformationEntityService:
                 detail=f"Cannot specify both default_value and fixed_value at the same time. "
                        f"They are mutually exclusive in XML. Please provide only one of them, or set both to None."
             )
-    
+
     def _find_version_identifier_bbie(
             self,
             abie_id: int
@@ -3389,7 +3499,7 @@ class BusinessInformationEntityService:
         """
         # Get all BBIEs for this ABIE
         bbie_list = self.get_bbie_list(abie_id)
-        
+
         # Check each BBIE to see if it's the Version Identifier
         for bbie in bbie_list:
             # Check if this BBIE is based on a BCC with property_term "Version Identifier"
@@ -3399,9 +3509,8 @@ class BusinessInformationEntityService:
                     # Check if property_term matches "Version Identifier" exactly (case-insensitive)
                     if bccp.property_term.lower() == "version identifier":
                         return bbie
-        
+
         return None
-    
 
     def _validate_cardinality_for_bbie(
             self,
@@ -3426,11 +3535,11 @@ class BusinessInformationEntityService:
         # Get the base cardinality from BCC
         base_cardinality_min = bcc_manifest.bcc.cardinality_min
         base_cardinality_max = bcc_manifest.bcc.cardinality_max
-        
+
         # Determine final cardinality values (use provided values or defaults from BCC)
         final_cardinality_min = cardinality_min if cardinality_min is not None else base_cardinality_min
         final_cardinality_max = cardinality_max if cardinality_max is not None else base_cardinality_max
-        
+
         # Validate cardinality_min must not be less than base cardinality_min
         if final_cardinality_min < base_cardinality_min:
             raise HTTPException(
@@ -3439,7 +3548,7 @@ class BusinessInformationEntityService:
                        f"It must be at least {base_cardinality_min} as required by the base BCC. "
                        f"Please set cardinality_min to {base_cardinality_min} or higher."
             )
-        
+
         # Validate cardinality_max must not exceed base cardinality_max (unless base is -1 for unbounded)
         if base_cardinality_max != -1:
             if final_cardinality_max != -1 and final_cardinality_max > base_cardinality_max:
@@ -3449,7 +3558,7 @@ class BusinessInformationEntityService:
                            f"It must be at most {base_cardinality_max} as allowed by the base BCC. "
                            f"Please set cardinality_max to {base_cardinality_max} or lower, or use -1 for unbounded if needed."
                 )
-        
+
         # Validate cardinality_min must be <= cardinality_max
         if final_cardinality_max != -1:
             if final_cardinality_min > final_cardinality_max:
@@ -3459,7 +3568,7 @@ class BusinessInformationEntityService:
                            f"Please adjust the values so that the minimum is less than or equal to the maximum. "
                            f"For example, set cardinality_max to at least {final_cardinality_min}, or reduce cardinality_min."
                 )
-        
+
         return (final_cardinality_min, final_cardinality_max)
 
     def _validate_existing_bbie_for_update(
@@ -3493,7 +3602,7 @@ class BusinessInformationEntityService:
                        f"Please check that the ID is correct. "
                        f"If you want to create a new BBIE instead, simply omit the bbie_id parameter."
             )
-        
+
         # Verify it belongs to the same top-level ASBIEP
         if existing_bbie.owner_top_level_asbiep_id != owner_top_level_asbiep_id:
             raise HTTPException(
@@ -3502,7 +3611,7 @@ class BusinessInformationEntityService:
                        f"Please use a bbie_id that belongs to the same top-level ASBIEP as the from_abie_id, "
                        f"or use a different from_abie_id that matches the BBIE's top-level ASBIEP."
             )
-        
+
         # Verify it belongs to the same from_abie_id
         if existing_bbie.from_abie_id != from_abie_id:
             raise HTTPException(
@@ -3511,7 +3620,7 @@ class BusinessInformationEntityService:
                        f"Please use a from_abie_id that matches the BBIE's parent ABIE, "
                        f"or use a different bbie_id that belongs to the specified ABIE."
             )
-        
+
         # Verify it matches the based_bcc_manifest_id
         if existing_bbie.based_bcc_manifest_id != based_bcc_manifest_id:
             raise HTTPException(
@@ -3520,7 +3629,7 @@ class BusinessInformationEntityService:
                        f"Please use a based_bcc_manifest_id that matches the BBIE's BCC, "
                        f"or use a different bbie_id that is based on the specified BCC manifest."
             )
-        
+
         return existing_bbie
 
     def _create_new_bbie(
@@ -3556,19 +3665,20 @@ class BusinessInformationEntityService:
             top_level_asbiep_id=owner_top_level_asbiep_id,
             parent_bbie_path=bbie_path
         )
-        
+
         # Update BBIEP remark if provided
         updates = []
-        
+
         # Get default manifest IDs from dt_awd_pri
-        xbt_manifest_id, code_list_manifest_id, agency_id_list_manifest_id = self.get_dt_awd_pri(bccp_manifest.bccp_manifest_id)
-        
+        xbt_manifest_id, code_list_manifest_id, agency_id_list_manifest_id = self.get_dt_awd_pri(
+            bccp_manifest.bccp_manifest_id)
+
         # Create BBIE
         bbie_guid = generate_guid()
         bbie_hash_path = self._calculate_hash_path(bbie_path)
-        
+
         final_is_nillable = False
-        
+
         # Cascade default_value and fixed_value from BCC if they exist (mutually exclusive)
         cascaded_default_value = None
         cascaded_fixed_value = None
@@ -3576,7 +3686,7 @@ class BusinessInformationEntityService:
             cascaded_fixed_value = bcc_manifest.bcc.fixed_value
         elif bcc_manifest.bcc.default_value is not None:
             cascaded_default_value = bcc_manifest.bcc.default_value
-        
+
         new_bbie = Bbie(
             guid=bbie_guid,
             based_bcc_manifest_id=based_bcc_manifest_id,
@@ -3602,10 +3712,10 @@ class BusinessInformationEntityService:
             is_deprecated=False,
             owner_top_level_asbiep_id=owner_top_level_asbiep_id
         )
-        
+
         db_add(new_bbie)
         db_flush()
-        
+
         updates.append("bbie_id")  # Created new BBIE
         if xbt_manifest_id is not None:
             updates.append("xbt_manifest_id")
@@ -3623,7 +3733,7 @@ class BusinessInformationEntityService:
             updates.append("fixed_value")
         updates.append("is_used")
         updates.append("is_deprecated")
-        
+
         return (new_bbie, updates)
 
     def _update_bbie(
@@ -3672,9 +3782,9 @@ class BusinessInformationEntityService:
         """
         existing_bbie.last_updated_by = self.requester.app_user_id
         existing_bbie.last_update_timestamp = datetime.now(timezone.utc)
-        
+
         updates = []
-        
+
         # Update fields if provided
         # Always update if parameter is provided, regardless of current value
         if definition is not None:
@@ -3684,30 +3794,30 @@ class BusinessInformationEntityService:
         if example is not None:
             existing_bbie.example = example
             updates.append("example")
-        
+
         if cardinality_min is not None:
             existing_bbie.cardinality_min = final_cardinality_min
             updates.append("cardinality_min")
-        
+
         if cardinality_max is not None:
             existing_bbie.cardinality_max = final_cardinality_max
             updates.append("cardinality_max")
-        
+
         if is_nillable is not None:
             existing_bbie.is_nillable = is_nillable
             updates.append("is_nillable")
-        
+
         # Handle default_value and fixed_value (mutually exclusive)
         # Check if parameters were explicitly provided (not Ellipsis)
         default_value_provided = default_value is not ...
         fixed_value_provided = fixed_value is not ...
-        
+
         # Normalize ellipsis to None for easier handling
         if default_value is ...:
             default_value = None
         if fixed_value is ...:
             fixed_value = None
-        
+
         # Check if this is a Version Identifier BBIE (special case - allows user to override fixed_value)
         is_version_identifier = False
         if bcc_manifest is not None and bcc_manifest.to_bccp_manifest and bcc_manifest.to_bccp_manifest.bccp:
@@ -3715,7 +3825,7 @@ class BusinessInformationEntityService:
             if bccp.property_term and bccp.property_term.lower() == "version identifier":
                 is_version_identifier = True
                 logger.debug(f"Version Identifier BBIE detected - allowing fixed_value override")
-        
+
         # If BCC has fixed_value, prevent changes and cascade it
         # Exception: Version Identifier BBIE allows user to override fixed_value for version syncing
         if bcc_manifest is not None and bcc_manifest.bcc.fixed_value is not None and not is_version_identifier:
@@ -3744,7 +3854,7 @@ class BusinessInformationEntityService:
             if not fixed_value_provided and existing_bbie.fixed_value != bcc_manifest.bcc.fixed_value:
                 fixed_value = bcc_manifest.bcc.fixed_value
                 fixed_value_provided = True  # Mark as provided so it gets set
-        
+
         # Cascade default_value from BCC if user didn't provide one and BCC has it (and BCC doesn't have fixed_value)
         # Don't cascade if user explicitly provided fixed_value (they are mutually exclusive)
         if not default_value_provided and not fixed_value_provided and bcc_manifest is not None and bcc_manifest.bcc.default_value is not None and bcc_manifest.bcc.fixed_value is None:
@@ -3752,7 +3862,7 @@ class BusinessInformationEntityService:
             if existing_bbie.default_value != bcc_manifest.bcc.default_value:
                 default_value = bcc_manifest.bcc.default_value
                 default_value_provided = True  # Mark as provided so it gets set
-        
+
         # Handle explicit None values (user wants to clear) or provided values
         # If both are provided, prioritize fixed_value (user explicitly provided it)
         if default_value_provided and not fixed_value_provided:
@@ -3783,31 +3893,31 @@ class BusinessInformationEntityService:
                 if existing_bbie.fixed_value is not None:
                     existing_bbie.fixed_value = None
                     updates.append("fixed_value")
-        
+
         if facet_min_length is not None:
             existing_bbie.facet_min_length = facet_min_length
             updates.append("facet_min_length")
-        
+
         if facet_max_length is not None:
             existing_bbie.facet_max_length = facet_max_length
             updates.append("facet_max_length")
-        
+
         if facet_pattern is not None:
             existing_bbie.facet_pattern = facet_pattern
             updates.append("facet_pattern")
-        
+
         # Only update is_used if it was provided and actually changed
         if is_used is not None:
             if existing_bbie.is_used != is_used:
                 existing_bbie.is_used = is_used
                 updates.append("is_used")
-        
+
         # Only update is_deprecated if it was provided and actually changed
         if is_deprecated is not None:
             if existing_bbie.is_deprecated != is_deprecated:
                 existing_bbie.is_deprecated = is_deprecated
                 updates.append("is_deprecated")
-        
+
         # Update BBIEP remark if provided
         if remark is not None:
             if existing_bbie.to_bbiep_id:
@@ -3819,8 +3929,7 @@ class BusinessInformationEntityService:
                     bbiep.last_update_timestamp = datetime.now(timezone.utc)
                     db_add(bbiep)
                     updates.append("remark")
-        
-        
+
         db_add(existing_bbie)
         return updates
 
@@ -3857,31 +3966,31 @@ class BusinessInformationEntityService:
         from_abie, owner_top_level_asbiep_id = self._validate_and_get_abie_for_asbie_update(
             from_abie_id
         )
-        
+
         # 2) Validate ownership and state (reuse ASBIE method)
         self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
-        
+
         # 3) Validate BCC relationship
         self._validate_bcc_relationship_for_abie(
             from_abie, based_bcc_manifest_id
         )
-        
+
         # 4) Get BCC/BCCP manifests
         bcc_manifest, bccp_manifest = self._get_bcc_manifest_for_bbie(
             based_bcc_manifest_id
         )
-        
+
         # 5) Validate cardinality
         final_cardinality_min, final_cardinality_max = bcc_manifest.bcc.cardinality_min, bcc_manifest.bcc.cardinality_max
-        
+
         # 6) Check for duplicate BBIE before creating
         duplicate_bbie = self._check_duplicate_entity(
             Bbie, bbie_path, Bbie.based_bcc_manifest_id,
             based_bcc_manifest_id, owner_top_level_asbiep_id
         )
-        
+
         if duplicate_bbie:
             # Use existing BBIE instead of creating a new one
             existing_bbie = duplicate_bbie
@@ -3895,16 +4004,19 @@ class BusinessInformationEntityService:
                 fixed_value=...,
                 bcc_manifest=bcc_manifest
             )
-            
+
             # Evict cache entries for BBIE and related queries
             evict_cache("business_information_entity.get_bbie_list", from_abie_id=from_abie_id)  # Evict BBIE list
-            evict_cache("business_information_entity.get_bbie_by_bbie_id", bbie_id=existing_bbie.bbie_id)  # Evict specific BBIE
-            evict_cache("business_information_entity.get_bbie_by_based_bcc_manifest_id")  # Evict all queries by based_bcc_manifest_id
-            evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
+            evict_cache("business_information_entity.get_bbie_by_bbie_id",
+                        bbie_id=existing_bbie.bbie_id)  # Evict specific BBIE
+            evict_cache(
+                "business_information_entity.get_bbie_by_based_bcc_manifest_id")  # Evict all queries by based_bcc_manifest_id
+            evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                        top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
             evict_cache("business_information_entity.get_abie", abie_id=from_abie_id)  # Evict parent ABIE
-            
+
             return (existing_bbie.bbie_id, updates)
-        
+
         # 7) Create new BBIE
         new_bbie, updates = self._create_new_bbie(
             from_abie=from_abie,
@@ -3916,14 +4028,16 @@ class BusinessInformationEntityService:
             final_cardinality_max=final_cardinality_max,
             bbie_path=bbie_path
         )
-        
+
         # Evict cache entries for BBIE and related queries
         evict_cache("business_information_entity.get_bbie_list", from_abie_id=from_abie_id)  # Evict BBIE list
         evict_cache("business_information_entity.get_bbie_by_bbie_id", bbie_id=new_bbie.bbie_id)  # Evict specific BBIE
-        evict_cache("business_information_entity.get_bbie_by_based_bcc_manifest_id")  # Evict all queries by based_bcc_manifest_id
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
+        evict_cache(
+            "business_information_entity.get_bbie_by_based_bcc_manifest_id")  # Evict all queries by based_bcc_manifest_id
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
         evict_cache("business_information_entity.get_abie", abie_id=from_abie_id)  # Evict parent ABIE
-        
+
         return (new_bbie.bbie_id, updates)
 
     @transaction(read_only=False)
@@ -3980,7 +4094,10 @@ class BusinessInformationEntityService:
         # Convert ellipsis to None for validation check
         default_value_for_validation = None if default_value is ... else default_value
         fixed_value_for_validation = None if fixed_value is ... else fixed_value
-        if all(param is None for param in [is_used, is_deprecated, is_nillable, cardinality_min, cardinality_max, definition, remark, example, default_value_for_validation, fixed_value_for_validation, facet_min_length, facet_max_length, facet_pattern]):
+        if all(param is None for param in
+               [is_used, is_deprecated, is_nillable, cardinality_min, cardinality_max, definition, remark, example,
+                default_value_for_validation, fixed_value_for_validation, facet_min_length, facet_max_length,
+                facet_pattern]):
             raise HTTPException(
                 status_code=400,
                 detail="At least one field must be provided for update"
@@ -3990,50 +4107,51 @@ class BusinessInformationEntityService:
         default_value_for_validation = None if default_value is ... else default_value
         fixed_value_for_validation = None if fixed_value is ... else fixed_value
         self._validate_default_and_fixed_value(default_value_for_validation, fixed_value_for_validation)
-        
+
         # 1) Get existing BBIE
         existing_bbie = db_exec(
             select(Bbie).where(Bbie.bbie_id == bbie_id)
         ).first()
-        
+
         if not existing_bbie:
             raise HTTPException(
                 status_code=404,
                 detail=f"BBIE with ID {bbie_id} not found"
             )
-        
+
         # 2) Get from_abie_id and based_bcc_manifest_id from existing BBIE
         from_abie_id = existing_bbie.from_abie_id
         based_bcc_manifest_id = existing_bbie.based_bcc_manifest_id
-        
+
         # 3) Validate and get ABIE
         from_abie, owner_top_level_asbiep_id = self._validate_and_get_abie_for_asbie_update(
             from_abie_id
         )
-        
+
         # 4) Validate existing BBIE
         existing_bbie = self._validate_existing_bbie_for_update(
             bbie_id, from_abie_id, based_bcc_manifest_id, owner_top_level_asbiep_id
         )
-        
+
         # 5) Validate ownership and state (reuse ASBIE method)
         self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
-        
+
         # 6) Get BCC/BCCP manifests
         bcc_manifest, bccp_manifest = self._get_bcc_manifest_for_bbie(
             based_bcc_manifest_id
         )
-        
+
         # 7) Validate cardinality
         final_cardinality_min, final_cardinality_max = self._validate_cardinality_for_bbie(
             bcc_manifest, cardinality_min, cardinality_max
         )
-        
+
         # 8) Update existing BBIE
         # Pass parameters as-is (sentinel for not provided, None for explicitly None, str for value)
-        logger.debug(f"update_bbie calling _update_bbie with fixed_value={fixed_value}, fixed_value is ... = {fixed_value is ...}")
+        logger.debug(
+            f"update_bbie calling _update_bbie with fixed_value={fixed_value}, fixed_value is ... = {fixed_value is ...}")
         updates = self._update_bbie(
             existing_bbie=existing_bbie,
             final_cardinality_min=final_cardinality_min,
@@ -4054,14 +4172,17 @@ class BusinessInformationEntityService:
             bcc_manifest=bcc_manifest
         )
         logger.debug(f"update_bbie returned updates: {updates}")
-        
+
         # Evict cache entries for BBIE and related queries
         evict_cache("business_information_entity.get_bbie_list", from_abie_id=from_abie_id)  # Evict BBIE list
-        evict_cache("business_information_entity.get_bbie_by_bbie_id", bbie_id=existing_bbie.bbie_id)  # Evict specific BBIE
-        evict_cache("business_information_entity.get_bbie_by_based_bcc_manifest_id")  # Evict all queries by based_bcc_manifest_id
-        evict_cache("business_information_entity.get_top_level_asbiep_by_id", top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
+        evict_cache("business_information_entity.get_bbie_by_bbie_id",
+                    bbie_id=existing_bbie.bbie_id)  # Evict specific BBIE
+        evict_cache(
+            "business_information_entity.get_bbie_by_based_bcc_manifest_id")  # Evict all queries by based_bcc_manifest_id
+        evict_cache("business_information_entity.get_top_level_asbiep_by_id",
+                    top_level_asbiep_id=owner_top_level_asbiep_id)  # Evict parent BIE
         evict_cache("business_information_entity.get_abie", abie_id=from_abie_id)  # Evict parent ABIE
-        
+
         return (existing_bbie.bbie_id, updates)
 
     @cache(key_prefix="business_information_entity.get_bbie_by_bbie_id")
@@ -4125,7 +4246,7 @@ class BusinessInformationEntityService:
         )
         if hash_path:
             query = query.where(Bbie.hash_path == hash_path)
-        
+
         bbie = db_exec(query).first()
         return bbie
 
@@ -4184,25 +4305,26 @@ class BusinessInformationEntityService:
         bbie = db_exec(
             select(Bbie)
             .options(
-                selectinload(Bbie.based_bcc_manifest).selectinload(BccManifest.to_bccp_manifest).selectinload(BccpManifest.bdt_manifest),
+                selectinload(Bbie.based_bcc_manifest).selectinload(BccManifest.to_bccp_manifest).selectinload(
+                    BccpManifest.bdt_manifest),
                 selectinload(Bbie.owner_top_level_asbiep)
             )
             .where(Bbie.bbie_id == bbie_id)
         ).first()
-        
+
         if not bbie:
             raise HTTPException(
                 status_code=404,
                 detail=f"BBIE with ID {bbie_id} not found"
             )
-        
+
         owner_top_level_asbiep_id = bbie.owner_top_level_asbiep_id
-        
+
         # 2) Validate ownership and state
         self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
-        
+
         # 3) Get and validate DT_SC manifest
         dt_sc_manifest = db_exec(
             select(DtScManifest)
@@ -4212,13 +4334,13 @@ class BusinessInformationEntityService:
             )
             .where(DtScManifest.dt_sc_manifest_id == based_dt_sc_manifest_id)
         ).first()
-        
+
         if not dt_sc_manifest:
             raise HTTPException(
                 status_code=404,
                 detail=f"DT_SC manifest with ID {based_dt_sc_manifest_id} not found"
             )
-        
+
         # 4) Validate DT_SC belongs to the BDT of the BBIE's BCCP
         bccp_manifest = bbie.based_bcc_manifest.to_bccp_manifest
         if not bccp_manifest:
@@ -4226,7 +4348,7 @@ class BusinessInformationEntityService:
                 status_code=404,
                 detail=f"BCCP manifest not found for BBIE {bbie_id}"
             )
-        
+
         bdt_manifest_id = bccp_manifest.bdt_manifest_id
         if dt_sc_manifest.owner_dt_manifest_id != bdt_manifest_id:
             raise HTTPException(
@@ -4234,7 +4356,7 @@ class BusinessInformationEntityService:
                 detail=f"DT_SC manifest {based_dt_sc_manifest_id} does not belong to the BDT (ID {bdt_manifest_id}) "
                        f"of the BCCP associated with BBIE {bbie_id}"
             )
-        
+
         # 5) Check for duplicate BBIE_SC before creating
         bbie_sc_hash_path = self._calculate_hash_path(bbie_sc_path)
         duplicate_bbie_sc_query = (
@@ -4250,15 +4372,16 @@ class BusinessInformationEntityService:
             )
         )
         duplicate_bbie_sc = db_exec(duplicate_bbie_sc_query).first()
-        
+
         # 6) Get cardinality from DT_SC
         dt_sc = dt_sc_manifest.dt_sc
         final_cardinality_min = dt_sc.cardinality_min
         final_cardinality_max = dt_sc.cardinality_max if dt_sc.cardinality_max is not None else -1
-        
+
         # 7) Get default manifest IDs from dt_sc_awd_pri
-        xbt_manifest_id, code_list_manifest_id, agency_id_list_manifest_id = self.get_dt_sc_awd_pri(dt_sc_manifest.dt_sc_manifest_id)
-        
+        xbt_manifest_id, code_list_manifest_id, agency_id_list_manifest_id = self.get_dt_sc_awd_pri(
+            dt_sc_manifest.dt_sc_manifest_id)
+
         if duplicate_bbie_sc:
             # Use existing BBIE_SC instead of creating a new one
             existing_bbie_sc = duplicate_bbie_sc
@@ -4277,7 +4400,7 @@ class BusinessInformationEntityService:
             # Evict cache entries for BBIE_SC list
             evict_cache("business_information_entity.get_bbie_sc_list", bbie_id=bbie_id)  # Evict BBIE_SC list
             return (existing_bbie_sc.bbie_sc_id, updates)
-        
+
         # 8) Create new BBIE_SC
         new_bbie_sc, updates = self._create_new_bbie_sc(
             bbie_id=bbie_id,
@@ -4292,10 +4415,10 @@ class BusinessInformationEntityService:
             code_list_manifest_id=code_list_manifest_id,
             agency_id_list_manifest_id=agency_id_list_manifest_id
         )
-        
+
         # Evict cache entries for BBIE_SC list
         evict_cache("business_information_entity.get_bbie_sc_list", bbie_id=bbie_id)  # Evict BBIE_SC list
-        
+
         return (new_bbie_sc.bbie_sc_id, updates)
 
     @transaction(read_only=False)
@@ -4350,7 +4473,10 @@ class BusinessInformationEntityService:
         # Convert ellipsis to None for validation check
         default_value_for_validation = None if default_value is ... else default_value
         fixed_value_for_validation = None if fixed_value is ... else fixed_value
-        if all(param is None for param in [is_used, is_deprecated, cardinality_min, cardinality_max, definition, remark, example, default_value_for_validation, fixed_value_for_validation, facet_min_length, facet_max_length, facet_pattern]):
+        if all(param is None for param in
+               [is_used, is_deprecated, cardinality_min, cardinality_max, definition, remark, example,
+                default_value_for_validation, fixed_value_for_validation, facet_min_length, facet_max_length,
+                facet_pattern]):
             raise HTTPException(
                 status_code=400,
                 detail="At least one field must be provided for update"
@@ -4358,7 +4484,7 @@ class BusinessInformationEntityService:
 
         # Validate default_value and fixed_value are mutually exclusive
         self._validate_default_and_fixed_value(default_value_for_validation, fixed_value_for_validation)
-        
+
         # 1) Get existing BBIE_SC
         existing_bbie_sc = db_exec(
             select(BbieSc)
@@ -4368,32 +4494,32 @@ class BusinessInformationEntityService:
             )
             .where(BbieSc.bbie_sc_id == bbie_sc_id)
         ).first()
-        
+
         if not existing_bbie_sc:
             raise HTTPException(
                 status_code=404,
                 detail=f"BBIE_SC with ID {bbie_sc_id} not found"
             )
-        
+
         owner_top_level_asbiep_id = existing_bbie_sc.owner_top_level_asbiep_id
-        
+
         # 2) Validate ownership and state
         self._validate_top_level_asbiep_ownership_and_state(
             owner_top_level_asbiep_id
         )
-        
+
         # 3) Get DT_SC manifest for validation
         dt_sc_manifest = existing_bbie_sc.based_dt_sc_manifest
         dt_sc = dt_sc_manifest.dt_sc
-        
+
         # 4) Validate cardinality if provided
         base_cardinality_min = dt_sc.cardinality_min
         base_cardinality_max = dt_sc.cardinality_max if dt_sc.cardinality_max is not None else -1
-        
+
         # Determine final cardinality values (use provided values or defaults from existing)
         final_cardinality_min = cardinality_min if cardinality_min is not None else existing_bbie_sc.cardinality_min
         final_cardinality_max = cardinality_max if cardinality_max is not None else existing_bbie_sc.cardinality_max
-        
+
         # Validate cardinality_min must not be less than base cardinality_min
         if final_cardinality_min < base_cardinality_min:
             raise HTTPException(
@@ -4401,7 +4527,7 @@ class BusinessInformationEntityService:
                 detail=f"The minimum cardinality ({final_cardinality_min}) is too low. "
                        f"It must be at least {base_cardinality_min} as required by the base DT_SC."
             )
-        
+
         # Validate cardinality_max must not exceed base cardinality_max (unless base is -1 for unbounded)
         if base_cardinality_max != -1:
             if final_cardinality_max != -1 and final_cardinality_max > base_cardinality_max:
@@ -4410,7 +4536,7 @@ class BusinessInformationEntityService:
                     detail=f"The maximum cardinality ({final_cardinality_max}) exceeds the limit. "
                            f"It must be at most {base_cardinality_max} as allowed by the base DT_SC."
                 )
-        
+
         # Validate cardinality_min must be <= cardinality_max
         if final_cardinality_max != -1:
             if final_cardinality_min > final_cardinality_max:
@@ -4418,7 +4544,7 @@ class BusinessInformationEntityService:
                     status_code=400,
                     detail=f"The minimum cardinality ({final_cardinality_min}) cannot be greater than the maximum cardinality ({final_cardinality_max})."
                 )
-        
+
         # 5) Update existing BBIE_SC
         updates = self._update_bbie_sc(
             existing_bbie_sc=existing_bbie_sc,
@@ -4437,10 +4563,11 @@ class BusinessInformationEntityService:
             facet_max_length=facet_max_length,
             facet_pattern=facet_pattern
         )
-        
+
         # Evict cache entries for BBIE_SC list
-        evict_cache("business_information_entity.get_bbie_sc_list", bbie_id=existing_bbie_sc.bbie_id)  # Evict BBIE_SC list
-        
+        evict_cache("business_information_entity.get_bbie_sc_list",
+                    bbie_id=existing_bbie_sc.bbie_id)  # Evict BBIE_SC list
+
         return (existing_bbie_sc.bbie_sc_id, updates)
 
     def _create_new_bbie_sc(
@@ -4477,7 +4604,7 @@ class BusinessInformationEntityService:
             tuple: (new_bbie_sc, list of updated fields)
         """
         dt_sc = dt_sc_manifest.dt_sc
-        
+
         # Cascade default_value and fixed_value from DT_SC if they exist (mutually exclusive)
         cascaded_default_value = None
         cascaded_fixed_value = None
@@ -4485,10 +4612,10 @@ class BusinessInformationEntityService:
             cascaded_fixed_value = dt_sc.fixed_value
         elif dt_sc.default_value is not None:
             cascaded_default_value = dt_sc.default_value
-        
+
         # Create new BBIE_SC
         bbie_sc_guid = generate_guid()
-        
+
         new_bbie_sc = BbieSc(
             guid=bbie_sc_guid,
             based_dt_sc_manifest_id=based_dt_sc_manifest_id,
@@ -4511,10 +4638,10 @@ class BusinessInformationEntityService:
             last_update_timestamp=datetime.now(timezone.utc),
             owner_top_level_asbiep_id=owner_top_level_asbiep_id
         )
-        
+
         db_add(new_bbie_sc)
         db_flush()
-        
+
         updates = ["bbie_sc_id"]  # Created new BBIE_SC
         if xbt_manifest_id is not None:
             updates.append("xbt_manifest_id")
@@ -4532,7 +4659,7 @@ class BusinessInformationEntityService:
             updates.append("fixed_value")
         updates.append("is_used")
         updates.append("is_deprecated")
-        
+
         return (new_bbie_sc, updates)
 
     def _update_bbie_sc(
@@ -4584,9 +4711,9 @@ class BusinessInformationEntityService:
         """
         existing_bbie_sc.last_updated_by = self.requester.app_user_id
         existing_bbie_sc.last_update_timestamp = datetime.now(timezone.utc)
-        
+
         updates = []
-        
+
         # Update fields if provided
         # Always update if parameter is provided, regardless of current value
         if definition is not None:
@@ -4596,30 +4723,30 @@ class BusinessInformationEntityService:
         if example is not None:
             existing_bbie_sc.example = example
             updates.append("example")
-        
+
         if cardinality_min is not None:
             existing_bbie_sc.cardinality_min = final_cardinality_min
             updates.append("cardinality_min")
-        
+
         if cardinality_max is not None:
             existing_bbie_sc.cardinality_max = final_cardinality_max
             updates.append("cardinality_max")
-        
+
         # Handle default_value and fixed_value (mutually exclusive)
         # Check if parameters were explicitly provided (not Ellipsis)
         default_value_provided = default_value is not ...
         fixed_value_provided = fixed_value is not ...
-        
+
         # Normalize ellipsis to None for easier handling
         if default_value is ...:
             default_value = None
         if fixed_value is ...:
             fixed_value = None
-        
+
         # Get DT_SC to check for value constraints
         dt_sc_manifest = existing_bbie_sc.based_dt_sc_manifest
         dt_sc = dt_sc_manifest.dt_sc if dt_sc_manifest else None
-        
+
         # If DT_SC has fixed_value, prevent changes and cascade it
         if dt_sc is not None and dt_sc.fixed_value is not None:
             # Prevent setting default_value when DT_SC has fixed_value
@@ -4647,14 +4774,14 @@ class BusinessInformationEntityService:
             if not fixed_value_provided and existing_bbie_sc.fixed_value != dt_sc.fixed_value:
                 fixed_value = dt_sc.fixed_value
                 fixed_value_provided = True  # Mark as provided so it gets set
-        
+
         # Cascade default_value from DT_SC if user didn't provide one and DT_SC has it (and DT_SC doesn't have fixed_value)
         if not default_value_provided and dt_sc is not None and dt_sc.default_value is not None and dt_sc.fixed_value is None:
             # Only cascade if the current value is different from the DT_SC's default_value
             if existing_bbie_sc.default_value != dt_sc.default_value:
                 default_value = dt_sc.default_value
                 default_value_provided = True  # Mark as provided so it gets set
-        
+
         # Handle explicit None values (user wants to clear) or provided values
         if default_value_provided:
             if default_value is not None:
@@ -4683,48 +4810,48 @@ class BusinessInformationEntityService:
                 if existing_bbie_sc.fixed_value is not None:
                     existing_bbie_sc.fixed_value = None
                     updates.append("fixed_value")
-        
+
         if facet_min_length is not None:
             existing_bbie_sc.facet_min_length = facet_min_length
             updates.append("facet_min_length")
-        
+
         if facet_max_length is not None:
             existing_bbie_sc.facet_max_length = facet_max_length
             updates.append("facet_max_length")
-        
+
         if facet_pattern is not None:
             existing_bbie_sc.facet_pattern = facet_pattern
             updates.append("facet_pattern")
-        
+
         # Only update is_used if it was provided and actually changed
         if is_used is not None:
             if existing_bbie_sc.is_used != is_used:
                 existing_bbie_sc.is_used = is_used
                 updates.append("is_used")
-        
+
         # Only update is_deprecated if it was provided and actually changed
         if is_deprecated is not None:
             if existing_bbie_sc.is_deprecated != is_deprecated:
                 existing_bbie_sc.is_deprecated = is_deprecated
                 updates.append("is_deprecated")
-        
+
         # Update remark if provided
         if remark is not None:
             existing_bbie_sc.remark = remark
             updates.append("remark")
-        
+
         # Update manifest IDs if provided (only during creation/duplicate update)
         if xbt_manifest_id is not None:
             existing_bbie_sc.xbt_manifest_id = xbt_manifest_id
             updates.append("xbt_manifest_id")
-        
+
         if code_list_manifest_id is not None:
             existing_bbie_sc.code_list_manifest_id = code_list_manifest_id
             updates.append("code_list_manifest_id")
-        
+
         if agency_id_list_manifest_id is not None:
             existing_bbie_sc.agency_id_list_manifest_id = agency_id_list_manifest_id
             updates.append("agency_id_list_manifest_id")
-        
+
         db_add(existing_bbie_sc)
         return updates

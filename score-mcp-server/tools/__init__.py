@@ -7,24 +7,9 @@ from sqlalchemy.engine import Engine
 from databases.models import AppUser
 from middleware import get_current_user, get_engine
 from services import Sort
-from services.models.common import UserInfo
 
 # Configure logging
 logger = logging.getLogger("score.mcp.tools")
-
-
-
-
-def _get_user_roles(creator: AppUser) -> list[str]:
-    """Extract user roles from creator information."""
-    roles = []
-    if creator.is_admin:
-        roles.append('Admin')
-    if creator.is_developer:
-        roles.append('Developer')
-    if not roles:  # Only add End-User if no other roles
-        roles.append('End-User')
-    return roles
 
 
 def _validate_auth_and_db() -> tuple[AppUser, Engine]:
@@ -75,18 +60,6 @@ def _validate_auth_and_db() -> tuple[AppUser, Engine]:
                 f"An unexpected error occurred during authentication or database validation: {str(e)}. Please contact your system administrator if the issue persists.") from e
 
 
-def _create_user_info(creator: AppUser | None) -> UserInfo | None:
-    """Create UserInfo object from creator."""
-    if creator is None:
-        return None
-    return UserInfo(
-        user_id=creator.app_user_id,
-        login_id=creator.login_id,
-        username=creator.name or creator.login_id,
-        roles=_get_user_roles(creator)
-    )
-
-
 def parse_order_by_to_sorts(order_by: str) -> list[Sort]:
     """
     Parse order_by string format and create Sort objects.
@@ -101,7 +74,7 @@ def parse_order_by_to_sorts(order_by: str) -> list[Sort]:
         ValueError: If the format is invalid
     """
     logger.debug(f"Parsing sort order: {order_by}")
-    
+
     if not order_by.strip():
         logger.warning("Empty sort order string provided")
         raise ValueError("Order by string cannot be empty")

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from services.models.common import WhoAndWhen
 
 
-class TagInfo(BaseModel):
+class TagDto(BaseModel):
     """Tag information object."""
     tag_id: int  # Unique identifier for the tag
     name: str  # Tag name (e.g., "BOD" for Business Object Document, "Noun", "Verb")

@@ -12,7 +12,9 @@ from sqlmodel import select, func
 
 from databases.models import AppUser, AppOAuth2User
 from services.cache import cache
-from services.models.common import Sort, PaginationParams, Page
+from services.common import get_user_roles, get_user_roles_by_user
+from services.models.app_user import UserDto
+from services.models.common import Sort, PaginationParams, PaginationResponse
 from services.transaction import transaction, db_exec
 
 # Configure logging
@@ -70,30 +72,30 @@ class AppUserService:
             is_enabled=True
         )
     """
-    
+
     def __init__(self):
         """
         Initialize the service.
         """
         self.allowed_columns_for_order_by = [
-            'login_id', 'username', 'organization', 'email', 
+            'login_id', 'username', 'organization', 'email',
             'is_admin', 'is_developer', 'is_enabled'
         ]
 
     @cache(key_prefix="app_user.get_users")
     @transaction(read_only=True)
     def get_users(
-        self,
-        login_id: str = None,
-        username: str = None,
-        organization: str = None,
-        email: str = None,
-        is_admin: bool = None,
-        is_developer: bool = None,
-        is_enabled: bool = None,
-        pagination: PaginationParams = PaginationParams(offset=0, limit=10),
-        sort_list: list[Sort] = None
-    ) -> Page:
+            self,
+            login_id: str = None,
+            username: str = None,
+            organization: str = None,
+            email: str = None,
+            is_admin: bool = None,
+            is_developer: bool = None,
+            is_enabled: bool = None,
+            pagination: PaginationParams = PaginationParams(offset=0, limit=10),
+            sort_list: list[Sort] = None
+    ) -> PaginationResponse[UserDto]:
         """
         Get users with optional filtering and pagination.
         
@@ -109,14 +111,14 @@ class AppUserService:
             sort_list: List of sort specifications
         
         Returns:
-            Page: Paginated response containing users
+            PaginationResponse: Paginated response containing users
         """
         logger.info(
             f"Querying users: login_id={login_id}, username={username}, organization={organization}, "
             f"email={email}, is_admin={is_admin}, is_developer={is_developer}, is_enabled={is_enabled}, "
             f"pagination={pagination}, sort_list={sort_list}"
         )
-        
+
         # Set default pagination if not provided
         if pagination is None:
             pagination = PaginationParams(offset=0, limit=10)
@@ -124,45 +126,45 @@ class AppUserService:
 
         # Build the base query
         query = select(AppUser)
-        
+
         # Apply filters
         query = self._apply_filters(query, login_id, username, organization, email,
-                                   is_admin, is_developer, is_enabled)
-        
+                                    is_admin, is_developer, is_enabled)
+
         # Get total count
         logger.debug("Counting total matching users")
         count_query = select(func.count()).select_from(query.subquery())
         total_count = db_exec(count_query).one()
         logger.debug(f"Total matching users: {total_count}")
-        
+
         # Apply sorting
         query = self._apply_sorting(query, sort_list)
         if sort_list:
             logger.debug(f"Applied sorting: {[f'{s.column} {s.direction}' for s in sort_list]}")
-        
+
         # Apply pagination
         query = query.offset(pagination.offset).limit(pagination.limit)
         logger.debug(f"Applied pagination: offset={pagination.offset}, limit={pagination.limit}")
-        
+
         # Execute query
         logger.debug("Executing query to retrieve users")
         users = db_exec(query).all()
         logger.info(f"Retrieved {len(users)} users (total available: {total_count})")
-        
+
         # Create Page object
-        result = Page(
-            total=total_count,
+        result = PaginationResponse(
+            total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(users)
+            items=[self.create_user_result(user) for user in users]
         )
         logger.debug(f"Prepared page with {len(result.items)} users")
         return result
 
     def _apply_filters(self, query, login_id: str = None, username: str = None,
-                      organization: str = None, email: str = None,
-                      is_admin: bool = None, is_developer: bool = None,
-                      is_enabled: bool = None):
+                       organization: str = None, email: str = None,
+                       is_admin: bool = None, is_developer: bool = None,
+                       is_enabled: bool = None):
         """
         Apply filters to a query for app users.
         
@@ -193,8 +195,28 @@ class AppUserService:
             query = query.where(AppUser.is_developer == is_developer)
         if is_enabled is not None:
             query = query.where(AppUser.is_enabled == is_enabled)
-        
+
         return query
+
+    def create_user_result(self, user) -> UserDto:
+        """
+        Create a user result from an AppUser model instance.
+
+        Args:
+            user: AppUser model instance
+
+        Returns:
+            GetUserResponse: Formatted user result
+        """
+        return UserDto(
+            user_id=user.app_user_id,
+            login_id=user.login_id,
+            username=user.name,
+            organization=user.organization,
+            email=user.email,
+            roles=get_user_roles_by_user(user),
+            is_enabled=user.is_enabled
+        )
 
     @cache(key_prefix="app_user.get_user_by_id")
     @transaction(read_only=True)
@@ -209,10 +231,10 @@ class AppUserService:
             AppUser if found, None otherwise
         """
         logger.debug(f"Looking up AppUser by ID: {app_user_id}")
-        
+
         user_stmt = select(AppUser).where(AppUser.app_user_id == app_user_id)
         app_user = db_exec(user_stmt).first()
-        
+
         if app_user:
             logger.debug(f"Found AppUser: {app_user.login_id} (ID: {app_user.app_user_id})")
         else:
@@ -234,7 +256,7 @@ class AppUserService:
             str: The user's display name or "User ID {app_user_id}" if name is not available
         """
         logger.debug(f"Getting display name for AppUser ID: {app_user_id}")
-        
+
         user = self.get_user_by_id(app_user_id)
         if user and user.name:
             return user.name
@@ -257,16 +279,16 @@ class AppUserService:
             AppUser if found, None otherwise
         """
         logger.debug(f"Looking up AppUser by OAuth2 sub claim: {sub}")
-        
+
         # Find the OAuth2 user record by sub claim
         oauth2_user_stmt = select(AppOAuth2User).where(AppOAuth2User.sub == sub)
         oauth2_user = db_exec(oauth2_user_stmt).first()
-        
+
         if oauth2_user and oauth2_user.app_user_id:
             # Get the corresponding app_user
             user_stmt = select(AppUser).where(AppUser.app_user_id == oauth2_user.app_user_id)
             app_user = db_exec(user_stmt).first()
-            
+
             if app_user:
                 logger.debug(f"Found AppUser: {app_user.login_id} (ID: {app_user.app_user_id})")
             else:
@@ -295,5 +317,5 @@ class AppUserService:
                         query = query.order_by(column.desc())
                     else:
                         query = query.order_by(column.asc())
-        
+
         return query

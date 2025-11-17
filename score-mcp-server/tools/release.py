@@ -46,10 +46,7 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import ReleaseService, DateRangeParams, PaginationParams
-from services.models.common import WhoAndWhen
-from services.models.library import LibraryInfo
-from services.models.namespace import NamespaceInfo
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.release import (
     GetReleaseResponse,
     GetReleasePaginationResponse,
@@ -195,11 +192,8 @@ async def get_release(
         # Get the release
         release = release_service.get_release(release_id)
 
-        # Convert to response format
-        result = _create_release_result(release)
-
         logger.info(f"Successfully retrieved release {release_id}")
-        return result
+        return GetReleaseResponse(**release.model_dump())
 
     except ToolError:
         raise
@@ -467,17 +461,14 @@ async def get_releases(
             sort_list=sort_list
         )
 
-        # Convert to response format
-        release_results = [_create_release_result(release) for release in page.items]
-
         result = GetReleasePaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=release_results
+            items=[GetReleaseResponse(**release.model_dump()) for release in page.items]
         )
 
-        logger.info(f"Successfully retrieved {len(page.items)} releases (total: {page.total})")
+        logger.info(f"Successfully retrieved {len(page.items)} releases (total: {page.total_items})")
         return result
 
     except ToolError:
@@ -495,48 +486,3 @@ async def get_releases(
         logger.error(f"Unexpected error retrieving releases", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the releases: {str(e)}. Please contact your system administrator.") from e
-
-
-# Helper functions (placed after their usage)
-
-def _create_release_result(release) -> GetReleaseResponse:
-    """
-    Create a release result from a Release model instance.
-    
-    Args:
-        release: Release model instance
-        
-    Returns:
-        GetReleaseResponse: Formatted release result
-    """
-    # Create library info
-    library_info = LibraryInfo(
-        library_id=release.library_id,
-        name=release.library.name if release.library else None
-    )
-    
-    # Create namespace info if available
-    namespace_info = None
-    if release.namespace:
-        namespace_info = NamespaceInfo(
-            namespace_id=release.namespace.namespace_id,
-            prefix=release.namespace.prefix,
-            uri=release.namespace.uri
-        )
-    
-    # Create user info for creator and last_updater, handling None values
-    creator_info = _create_user_info(release.creator) if release.creator else None
-    last_updater_info = _create_user_info(release.last_updater) if release.last_updater else None
-    
-    return GetReleaseResponse(
-        release_id=release.release_id,
-        library=library_info,
-        guid=release.guid,
-        release_num=release.release_num,
-        release_note=release.release_note,
-        release_license=release.release_license,
-        namespace=namespace_info,
-        state=release.state,
-        created=WhoAndWhen(who=creator_info, when=release.creation_timestamp),
-        last_updated=WhoAndWhen(who=last_updater_info, when=release.last_update_timestamp)
-    )

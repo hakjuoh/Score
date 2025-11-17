@@ -5,13 +5,11 @@ This package contains all Pydantic models used by the MCP tools,
 organized by domain.
 """
 
-from services.models.biz_ctx import BizCtxValueInfo, BusinessContextInfo
-from services.models.code_list import CodeListValueInfo
+from services.models.biz_ctx import BizCtxValueDto, BizCtxSummary
+from services.models.code_list import CodeListValueDto
 from services.models.common import (
-    UserInfo,
-    WhoAndWhen,
-)
-from tools.models.common import PaginationResponse
+    UserSummary,
+    WhoAndWhen, )
 from services.models.core_component import (
     AccInfo,
     AsccInfo,
@@ -26,14 +24,14 @@ from services.models.core_component import (
     AccRelationshipInfo,
     ValueConstraint,
 )
-from services.models.ctx_category import CtxCategoryInfo
-from services.models.ctx_scheme import CtxSchemeValueInfo
-from services.models.library import LibraryInfo
+from services.models.ctx_category import CtxCategorySummary
+from services.models.ctx_scheme import CtxSchemeValueDto
+from services.models.library import LibrarySummary
 from services.models.log import LogInfo
-from services.models.namespace import NamespaceInfo
-from services.models.release import ReleaseInfo
-from services.models.tag import TagInfo
-from services.models.xbt import SubtypeOfXbtInfo
+from services.models.namespace import NamespaceSummary
+from services.models.release import ReleaseSummary
+from services.models.tag import TagDto
+from services.models.xbt import XbtSummary
 from tools.models.agency_id_list import (
     GetAgencyIdListPaginationResponse,
     GetAgencyIdListResponse,
@@ -59,7 +57,7 @@ from tools.models.business_information_entity import (
     GetBbieResponse,
     GetBbiepResponse,
     GetTopLevelAsbiepListPaginationResponse,
-    GetTopLevelAsbiepListResponseEntry,
+    TopLevelAsbiepListEntry,
     GetTopLevelAsbiepResponse,
     TransferTopLevelAsbiepOwnershipResponse,
     UpdateTopLevelAsbiepResponse,
@@ -70,7 +68,7 @@ from tools.models.code_list import (
     GetCodeListResponse,
 )
 from tools.models.core_component import (
-    CoreComponentInfo,
+    CoreComponentListEntry,
     GetAccResponse,
     GetAsccpResponse,
     GetBccpResponse,
@@ -118,12 +116,11 @@ from tools.models.xbt import (
 
 __all__ = [
     # Shared models
-    "LibraryInfo",
+    "LibrarySummary",
     "LogInfo",
-    "NamespaceInfo",
-    "PaginationResponse",
-    "ReleaseInfo",
-    "UserInfo",
+    "NamespaceSummary",
+    "ReleaseSummary",
+    "UserSummary",
     "WhoAndWhen",
     # Agency ID List models
     "GetAgencyIdListPaginationResponse",
@@ -132,11 +129,11 @@ __all__ = [
     "GetUserPaginationResponse",
     "GetUserResponse",
     # Business Context models
-    "BusinessContextInfo",
-    "BizCtxValueInfo",
+    "BizCtxSummary",
+    "BizCtxValueDto",
     "CreateBizCtxResponse",
     "CreateBizCtxValueResponse",
-    "CtxSchemeValueInfo",
+    "CtxSchemeValueDto",
     "DeleteBizCtxResponse",
     "DeleteBizCtxValueResponse",
     "GetBizCtxPaginationResponse",
@@ -150,13 +147,13 @@ __all__ = [
     "GetBbieResponse",
     "GetBbiepResponse",
     "GetTopLevelAsbiepListPaginationResponse",
-    "GetTopLevelAsbiepListResponseEntry",
+    "TopLevelAsbiepListEntry",
     "GetTopLevelAsbiepResponse",
     "TransferTopLevelAsbiepOwnershipResponse",
     "UpdateTopLevelAsbiepResponse",
     "ValueConstraint",
     # Code List models
-    "CodeListValueInfo",
+    "CodeListValueDto",
     "GetCodeListPaginationResponse",
     "GetCodeListResponse",
     # Core Component models
@@ -170,7 +167,7 @@ __all__ = [
     "BccInfo",
     "BccpInfo",
     "BccRelationshipInfo",
-    "CoreComponentInfo",
+    "CoreComponentListEntry",
     "AccRelationshipInfo",
     "GetAccResponse",
     "GetAsccpResponse",
@@ -186,8 +183,8 @@ __all__ = [
     # Context Scheme models
     "CreateCtxSchemeResponse",
     "CreateCtxSchemeValueResponse",
-    "CtxCategoryInfo",
-    "CtxSchemeValueInfo",
+    "CtxCategorySummary",
+    "CtxSchemeValueDto",
     "DeleteCtxSchemeResponse",
     "DeleteCtxSchemeValueResponse",
     "GetCtxSchemePaginationResponse",
@@ -208,9 +205,9 @@ __all__ = [
     "GetReleaseResponse",
     # Tag models
     "GetTagPaginationResponse",
-    "TagInfo",
+    "TagDto",
     # XBT models
     "GetXbtResponse",
-    "SubtypeOfXbtInfo",
+    "XbtSummary",
 ]
 

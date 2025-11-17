@@ -1,10 +1,12 @@
 """
 Shared models and data classes used across services.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Union
+from typing import TypeVar
+from typing import Union, Generic
 
 from pydantic import BaseModel, field_serializer, field_validator, model_validator
 
@@ -49,22 +51,24 @@ class DateRangeParams:
             raise ValueError("Before date must be earlier than after date")
 
 
-@dataclass
-class Page:
-    """Paginated response object."""
-    total: int
-    offset: int
-    limit: int
-    items: list
+T = TypeVar('T')
+
+
+class PaginationResponse(BaseModel, Generic[T]):
+    """Response model for paginated data."""
+    total_items: int  # Total number of items available
+    offset: int  # Number of items to skip from the beginning
+    limit: int  # Maximum number of items to return
+    items: list[T]  # List of items in the current page
 
 
 # Import Info models from their respective domain modules
-from services.models.app_user import UserInfo
+from services.models.app_user import UserSummary
 
 
 class WhoAndWhen(BaseModel):
     """Who and when information object."""
-    who: UserInfo  # Information about the user who performed the action
+    who: UserSummary  # Information about the user who performed the action
     when: datetime  # RFC 3339 timestamp
 
     @field_validator('when', mode='before')

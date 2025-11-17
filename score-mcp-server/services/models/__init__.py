@@ -41,10 +41,10 @@ from databases.models import (
     TopLevelAsbiepBase, TopLevelAsbiepRead, Xbt, XbtBase, XbtManifest,
     XbtManifestBase, XbtManifestRead, XbtRead
 )
-from services.models.agency_id_list import AgencyIdListValueInfo
+from services.models.agency_id_list import AgencyIdListValueDto
 # Export generic domain models
-from services.models.app_user import UserInfo
-from services.models.biz_ctx import BizCtxValueInfo, BusinessContextInfo
+from services.models.app_user import UserSummary
+from services.models.biz_ctx import BizCtxValueDto, BizCtxSummary
 from services.models.business_information_entity import (
     AbieInfo,
     AbieRelationshipInfo,
@@ -59,9 +59,9 @@ from services.models.business_information_entity import (
     PrimitiveRestriction,
     TopLevelAsbiepInfo,
 )
-from services.models.code_list import CodeListValueInfo
+from services.models.code_list import CodeListValueDto
 # Export common utility classes
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page, WhoAndWhen
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen
 from services.models.core_component import (
     AccInfo,
     AsccInfo,
@@ -76,30 +76,29 @@ from services.models.core_component import (
     AccRelationshipInfo,
     ValueConstraint,
 )
-from services.models.ctx_category import CtxCategoryInfo
-from services.models.ctx_scheme import CtxSchemeValueInfo
-from services.models.data_type import BaseDtInfo, DtInfo, DtScInfo
-from services.models.library import LibraryInfo
+from services.models.ctx_category import CtxCategorySummary
+from services.models.ctx_scheme import CtxSchemeValueDto
+from services.models.data_type import DtSummary, DtScDto
+from services.models.library import LibrarySummary
 from services.models.log import LogInfo
-from services.models.namespace import NamespaceInfo
-from services.models.release import ReleaseInfo
-from services.models.tag import TagInfo
-from services.models.xbt import SubtypeOfXbtInfo
+from services.models.namespace import NamespaceSummary
+from services.models.release import ReleaseSummary
+from services.models.tag import TagDto
+from services.models.xbt import XbtSummary
 
 __all__ = [
     "Sort",
     "PaginationParams",
     "DateRangeParams",
-    "Page",
     "WhoAndWhen",
-    "UserInfo",
-    "LibraryInfo",
+    "UserSummary",
+    "LibrarySummary",
     "LogInfo",
-    "NamespaceInfo",
-    "ReleaseInfo",
-    "AgencyIdListValueInfo",
-    "BizCtxValueInfo",
-    "BusinessContextInfo",
+    "NamespaceSummary",
+    "ReleaseSummary",
+    "AgencyIdListValueDto",
+    "BizCtxValueDto",
+    "BizCtxSummary",
     "AbieInfo",
     "AbieRelationshipInfo",
     "AsbieInfo",
@@ -112,14 +111,13 @@ __all__ = [
     "Facet",
     "PrimitiveRestriction",
     "TopLevelAsbiepInfo",
-    "CodeListValueInfo",
-    "CtxCategoryInfo",
-    "CtxSchemeValueInfo",
-    "BaseDtInfo",
-    "DtInfo",
-    "DtScInfo",
-    "TagInfo",
-    "SubtypeOfXbtInfo",
+    "CodeListValueDto",
+    "CtxCategorySummary",
+    "CtxSchemeValueDto",
+    "DtSummary",
+    "DtScDto",
+    "TagDto",
+    "XbtSummary",
     "AccInfo",
     "AsccInfo",
     "AsccpInfo",

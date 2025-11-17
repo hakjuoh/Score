@@ -20,6 +20,12 @@ from sqlmodel import select
 from databases.models.data_type import XbtManifest, Xbt
 from databases.models.release import Release
 from services.cache import cache
+from services.common import create_user_info
+from services.models.common import WhoAndWhen
+from services.models.library import LibrarySummary
+from services.models.log import LogInfo
+from services.models.release import ReleaseSummary
+from services.models.xbt import XbtDto, XbtSummary
 from services.transaction import db_exec, transaction
 
 # Configure logging
@@ -41,10 +47,10 @@ class XbtService:
     - Subtype relationships (parent XBT in type hierarchy)
     - User information (owner, creator, last_updater)
     """
-    
+
     @cache(key_prefix="xbt.get_xbt_by_manifest_id")
     @transaction(read_only=True)
-    def get_xbt_by_manifest_id(self, xbt_manifest_id: int) -> XbtManifest:
+    def get_xbt_by_manifest_id(self, xbt_manifest_id: int) -> XbtDto:
         """
         Get an XBT manifest by its manifest ID with all relationships loaded.
         
@@ -65,7 +71,7 @@ class XbtService:
             HTTPException: If XBT manifest not found (404) or data integrity issue (404)
         """
         logger.debug(f"Retrieving XBT manifest with ID: {xbt_manifest_id}")
-        
+
         # Get XBT manifest with all relationships loaded
         xbt_manifest_query = (
             select(XbtManifest)
@@ -80,16 +86,16 @@ class XbtService:
             .where(XbtManifest.xbt_manifest_id == xbt_manifest_id)
         )
         xbt_manifest = db_exec(xbt_manifest_query).first()
-        
+
         if not xbt_manifest:
             logger.warning(f"XBT manifest with ID {xbt_manifest_id} not found")
             raise HTTPException(
                 status_code=404,
                 detail=f"XBT manifest with ID {xbt_manifest_id} not found"
             )
-        
+
         logger.debug(f"Found XBT manifest: xbt_id={xbt_manifest.xbt_id}, release_id={xbt_manifest.release_id}")
-        
+
         # Verify XBT exists
         if not xbt_manifest.xbt:
             logger.error(f"XBT with ID {xbt_manifest.xbt_id} not found for manifest {xbt_manifest_id}")
@@ -97,9 +103,9 @@ class XbtService:
                 status_code=404,
                 detail=f"XBT data not found for manifest ID {xbt_manifest_id}. This appears to be a data integrity issue."
             )
-        
-        return xbt_manifest
-    
+
+        return self._create_xbt_dto(xbt_manifest)
+
     @cache(key_prefix="xbt.get_subtype_xbt_manifest")
     @transaction(read_only=True)
     def get_subtype_xbt_manifest(self, xbt_id: int, release_id: int) -> XbtManifest | None:
@@ -124,7 +130,7 @@ class XbtService:
                 None if not found (e.g., parent XBT doesn't exist in this release)
         """
         logger.debug(f"Retrieving subtype XBT manifest for xbt_id={xbt_id}, release_id={release_id}")
-        
+
         subtype_xbt_manifest_query = (
             select(XbtManifest)
             .options(
@@ -136,11 +142,94 @@ class XbtService:
             )
         )
         subtype_xbt_manifest = db_exec(subtype_xbt_manifest_query).first()
-        
+
         if subtype_xbt_manifest:
             logger.debug(f"Found subtype XBT manifest: xbt_manifest_id={subtype_xbt_manifest.xbt_manifest_id}")
         else:
             logger.debug(f"No subtype XBT manifest found for xbt_id={xbt_id}, release_id={release_id}")
-        
+
         return subtype_xbt_manifest
 
+    def _create_xbt_dto(self, xbt_manifest: XbtManifest) -> XbtDto:
+        xbt = xbt_manifest.xbt
+
+        # Create library info from release
+        library_info = LibrarySummary(
+            library_id=xbt_manifest.release.library_id,
+            name=xbt_manifest.release.library.name
+        )
+
+        # Create release info from manifest
+        release_info = ReleaseSummary(
+            release_id=xbt_manifest.release_id,
+            release_num=xbt_manifest.release.release_num,
+            state=xbt_manifest.release.state
+        )
+
+        # Create log info from manifest
+        log_info = None
+        if xbt_manifest.log:
+            log_info = LogInfo(
+                log_id=xbt_manifest.log.log_id,
+                revision_num=xbt_manifest.log.revision_num,
+                revision_tracking_num=xbt_manifest.log.revision_tracking_num
+            )
+
+        # Create subtype_of_xbt info if available
+        subtype_of_xbt_info = None
+        if xbt.subtype_of_xbt_id and xbt.subtype_of_xbt:
+            # Get the subtype XBT manifest for the same release
+            subtype_xbt_manifest = self.get_subtype_xbt_manifest(
+                xbt.subtype_of_xbt_id,
+                xbt_manifest.release_id
+            )
+
+            if subtype_xbt_manifest:
+                subtype_library_info = LibrarySummary(
+                    library_id=subtype_xbt_manifest.release.library_id,
+                    name=subtype_xbt_manifest.release.library.name
+                )
+                subtype_release_info = ReleaseSummary(
+                    release_id=subtype_xbt_manifest.release_id,
+                    release_num=subtype_xbt_manifest.release.release_num,
+                    state=subtype_xbt_manifest.release.state
+                )
+                subtype_of_xbt_info = XbtSummary(
+                    xbt_manifest_id=subtype_xbt_manifest.xbt_manifest_id,
+                    xbt_id=subtype_xbt_manifest.xbt_id,
+                    guid=xbt.subtype_of_xbt.guid,
+                    name=xbt.subtype_of_xbt.name,
+                    builtIn_type=xbt.subtype_of_xbt.builtIn_type,
+                    library=subtype_library_info,
+                    release=subtype_release_info
+                )
+
+        logger.info(f"Successfully retrieved XBT: xbt_id={xbt.xbt_id}, name={xbt.name}")
+
+        return XbtDto(
+            xbt_manifest_id=xbt_manifest.xbt_manifest_id,
+            xbt_id=xbt.xbt_id,
+            guid=xbt.guid,
+            name=xbt.name,
+            builtIn_type=xbt.builtIn_type,
+            jbt_draft05_map=xbt.jbt_draft05_map,
+            openapi30_map=xbt.openapi30_map,
+            avro_map=xbt.avro_map,
+            subtype_of_xbt=subtype_of_xbt_info,
+            schema_definition=xbt.schema_definition,
+            revision_doc=xbt.revision_doc,
+            state=xbt.state,
+            is_deprecated=xbt.is_deprecated,
+            library=library_info,
+            release=release_info,
+            log=log_info,
+            owner=create_user_info(xbt.owner),
+            created=WhoAndWhen(
+                who=create_user_info(xbt.creator),
+                when=xbt.creation_timestamp
+            ),
+            last_updated=WhoAndWhen(
+                who=create_user_info(xbt.last_updater),
+                when=xbt.last_update_timestamp
+            )
+        )

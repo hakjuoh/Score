@@ -3,11 +3,36 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, computed_field
 
-from services.models.common import ValueConstraint
-from services.models.data_type import DtInfo
-from services.models.library import LibraryInfo
-from services.models.namespace import NamespaceInfo
-from services.models.release import ReleaseInfo
+from services.models.app_user import UserSummary
+from services.models.common import ValueConstraint, WhoAndWhen
+from services.models.data_type import DtSummary
+from services.models.library import LibrarySummary
+from services.models.log import LogInfo
+from services.models.namespace import NamespaceSummary
+from services.models.release import ReleaseSummary
+
+
+# Unified Core Component Response Models
+class CoreComponentListEntry(BaseModel):
+    """Unified core component information object."""
+    component_type: Literal["ACC", "ASCCP", "BCCP"]  # Type of component: "ACC" (Aggregation), "ASCCP" (Association Property), or "BCCP" (Basic Property)
+    manifest_id: int  # Unique identifier for the component manifest (release-specific version)
+    component_id: int  # Unique identifier for the component (base entity ID)
+    guid: str  # Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)
+    den: str | None  # Dictionary Entry Name (DEN) - the standardized name as defined by CCTS v3
+    name: str | None  # Component name: object_class_term for ACC, property_term for ASCCP/BCCP
+    definition: str | None  # Definition or description of the component
+    definition_source: str | None  # URL indicating the source of the definition
+    is_deprecated: bool  # Whether the component is deprecated and should not be used
+    state: str | None  # Current state of the component (e.g., "Published", "Draft", "WIP", "QA", "Candidate", "Production")
+    tag: str | None  # Tag name associated with the component (e.g., "BOD" for Business Object Document)
+    namespace: NamespaceSummary | None  # Namespace information if the component belongs to a specific namespace
+    library: LibrarySummary  # Library information where this component is stored
+    release: ReleaseSummary  # Release information indicating which release this version belongs to
+    log: LogInfo | None  # Log information tracking revision history (if available)
+    owner: UserSummary  # User information about the owner of the component
+    created: WhoAndWhen  # Information about who created the component and when
+    last_updated: WhoAndWhen  # Information about who last updated the component and when
 
 
 class AsccpInfo(BaseModel):
@@ -33,7 +58,7 @@ class BccpInfo(BaseModel):
     representation_term: str  # Representation term as specified in CCTS v3, indicates the data format
     definition: str | None  # Definition or description of the BCCP
     definition_source: str | None  # URL indicating the source of the definition
-    bdt_manifest: DtInfo  # Basic Data Type (BDT) information associated with this BCCP
+    bdt_manifest: DtSummary  # Basic Data Type (BDT) information associated with this BCCP
     is_deprecated: bool  # Whether the BCCP is deprecated and should not be used
 
 
@@ -121,7 +146,8 @@ class BccRelationshipInfo(AccRelationshipInfo):
     component_type: Literal["BCC"] = "BCC"  # Type of related component, always "BCC" for this class
     bcc_manifest_id: int  # Unique identifier for the BCC manifest (release-specific version)
     bcc_id: int  # Unique identifier for the BCC (base entity ID)
-    entity_type: Optional[Literal["Attribute", "Element"]] = None  # Entity type: "Attribute" (XML attribute) or "Element" (XML element)
+    entity_type: Optional[
+        Literal["Attribute", "Element"]] = None  # Entity type: "Attribute" (XML attribute) or "Element" (XML element)
     is_nillable: bool  # Whether the BCC can have a nil/null value
     value_constraint: ValueConstraint | None  # Value constraint (default_value or fixed_value) for the BCC
     to_bccp: BccpInfo  # Information about the BCCP that this BCC connects to
@@ -142,9 +168,9 @@ class BaseAccInfo(BaseModel):
     type: str  # Type of ACC (e.g., "Default", "Extension", "SemanticGroup")
     definition: str | None  # Definition or description of the ACC
     definition_source: str | None  # URL indicating the source of the definition
-    namespace: NamespaceInfo | None  # Namespace information if the ACC belongs to a specific namespace
-    library: LibraryInfo  # Library information where this ACC is stored
-    release: ReleaseInfo  # Release information indicating which release this version belongs to
+    namespace: NamespaceSummary | None  # Namespace information if the ACC belongs to a specific namespace
+    library: LibrarySummary  # Library information where this ACC is stored
+    release: ReleaseSummary  # Release information indicating which release this version belongs to
 
 
 class BaseAsccpInfo(BaseModel):
@@ -157,9 +183,9 @@ class BaseAsccpInfo(BaseModel):
     type: str  # Type of ASCCP (e.g., "Default", "Extension")
     definition: str | None  # Definition or description of the ASCCP
     definition_source: str | None  # URL indicating the source of the definition
-    namespace: NamespaceInfo | None  # Namespace information if the ASCCP belongs to a specific namespace
-    library: LibraryInfo  # Library information where this ASCCP is stored
-    release: ReleaseInfo  # Release information indicating which release this version belongs to
+    namespace: NamespaceSummary | None  # Namespace information if the ASCCP belongs to a specific namespace
+    library: LibrarySummary  # Library information where this ASCCP is stored
+    release: ReleaseSummary  # Release information indicating which release this version belongs to
 
 
 class BaseBccpInfo(BaseModel):
@@ -172,7 +198,6 @@ class BaseBccpInfo(BaseModel):
     representation_term: str  # Representation term as specified in CCTS v3, indicates the data format
     definition: str | None  # Definition or description of the BCCP
     definition_source: str | None  # URL indicating the source of the definition
-    namespace: NamespaceInfo | None  # Namespace information if the BCCP belongs to a specific namespace
-    library: LibraryInfo  # Library information where this BCCP is stored
-    release: ReleaseInfo  # Release information indicating which release this version belongs to
-
+    namespace: NamespaceSummary | None  # Namespace information if the BCCP belongs to a specific namespace
+    library: LibrarySummary  # Library information where this BCCP is stored
+    release: ReleaseSummary  # Release information indicating which release this version belongs to

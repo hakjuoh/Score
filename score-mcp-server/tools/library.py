@@ -45,8 +45,7 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import LibraryService, DateRangeParams, PaginationParams
-from services.models.common import WhoAndWhen
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.library import GetLibraryPaginationResponse, GetLibraryResponse
 from tools.utils import parse_date_range, str_to_bool
 
@@ -172,9 +171,9 @@ async def get_library(
     # Get library
     try:
         service = LibraryService()
-        library = service.get_library(library_id)
+        library_detail = service.get_library(library_id)
 
-        return _create_library_result(library)
+        return GetLibraryResponse(**library_detail.model_dump())
     except HTTPException as e:
         logger.error(f"HTTP error retrieving library", e)
         if e.status_code == 400:
@@ -457,10 +456,10 @@ async def get_libraries(
         )
 
         return GetLibraryPaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=[_create_library_result(library) for library in page.items]
+            items=[GetLibraryResponse(**library_detail.model_dump()) for library_detail in page.items]
         )
     except HTTPException as e:
         logger.error(f"HTTP error retrieving libraries", e)
@@ -476,30 +475,3 @@ async def get_libraries(
         raise ToolError(
             f"An unexpected error occurred while retrieving the libraries: {str(e)}. Please contact your system administrator.") from e
 
-
-# Helper functions (placed after their usage)
-
-def _create_library_result(library) -> GetLibraryResponse:
-    """
-    Create a library result from a Library model instance.
-    
-    Args:
-        library: Library model instance
-        
-    Returns:
-        GetLibraryResponse: Formatted library result
-    """
-    return GetLibraryResponse(
-        library_id=library.library_id,
-        name=library.name,
-        type=library.type,
-        organization=library.organization,
-        description=library.description,
-        link=library.link,
-        domain=library.domain,
-        state=library.state,
-        is_read_only=library.is_read_only,
-        is_default=library.is_default,
-        created=WhoAndWhen(who=_create_user_info(library.creator), when=library.creation_timestamp),
-        last_updated=WhoAndWhen(who=_create_user_info(library.last_updater), when=library.last_update_timestamp)
-    )

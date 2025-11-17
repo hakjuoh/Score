@@ -38,8 +38,9 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
+from services import AppUserService
 from services import PaginationParams
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _get_user_roles
+from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.app_user import GetUserPaginationResponse, GetUserResponse
 from tools.utils import str_to_bool
 
@@ -56,9 +57,15 @@ mcp = FastMCP("Score MCP Server - App User Tools")
         "type": "object",
         "description": "Response containing paginated list of users.",
         "properties": {
-            "total_items": {"type": "integer", "description": "Total number of users available. Allowed values: non-negative integers (≥0).", "example": 25},
-            "offset": {"type": "integer", "description": "Offset of the first item in this page. Allowed values: non-negative integers (≥0). Default value: 0.", "example": 0},
-            "limit": {"type": "integer", "description": "Number of items returned in this page. Allowed values: integers between 1 and 100 (inclusive). Default value: 10.", "example": 10},
+            "total_items": {"type": "integer",
+                            "description": "Total number of users available. Allowed values: non-negative integers (≥0).",
+                            "example": 25},
+            "offset": {"type": "integer",
+                       "description": "Offset of the first item in this page. Allowed values: non-negative integers (≥0). Default value: 0.",
+                       "example": 0},
+            "limit": {"type": "integer",
+                      "description": "Number of items returned in this page. Allowed values: integers between 1 and 100 (inclusive). Default value: 10.",
+                      "example": 10},
             "items": {
                 "type": "array",
                 "description": "List of users on this page",
@@ -67,11 +74,17 @@ mcp = FastMCP("Score MCP Server - App User Tools")
                     "properties": {
                         "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
                         "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-                        "username": {"type": ["string", "null"], "description": "Display name of the user", "example": "Administrator"},
-                        "organization": {"type": ["string", "null"], "description": "The company the user represents", "example": "ACME Corp"},
-                        "email": {"type": ["string", "null"], "description": "Email address of the user", "example": "admin@example.com"},
-                        "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]},
-                        "is_enabled": {"type": "boolean", "description": "Whether the user account is enabled", "example": True}
+                        "username": {"type": ["string", "null"], "description": "Display name of the user",
+                                     "example": "Administrator"},
+                        "organization": {"type": ["string", "null"], "description": "The company the user represents",
+                                         "example": "ACME Corp"},
+                        "email": {"type": ["string", "null"], "description": "Email address of the user",
+                                  "example": "admin@example.com"},
+                        "roles": {"type": "array",
+                                  "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]},
+                                  "description": "List of roles assigned to the user", "example": ["Admin"]},
+                        "is_enabled": {"type": "boolean", "description": "Whether the user account is enabled",
+                                       "example": True}
                     },
                     "required": ["user_id", "login_id", "username", "roles", "is_enabled"]
                 }
@@ -81,49 +94,49 @@ mcp = FastMCP("Score MCP Server - App User Tools")
     }
 )
 async def get_users(
-    login_id: Annotated[str | None, Field(
-        default=None,
-        description="Filter by login ID using partial match (case-insensitive)."
-    )],
-    username: Annotated[str | None, Field(
-        default=None,
-        description="Filter by username (display name) using partial match (case-insensitive)."
-    )],
-    organization: Annotated[str | None, Field(
-        default=None,
-        description="Filter by organization using partial match (case-insensitive)."
-    )],
-    email: Annotated[str | None, Field(
-        default=None,
-        description="Filter by email address using partial match (case-insensitive)."
-    )],
-    is_admin: Annotated[bool | str | None, Field(
-        default=None,
-        description="Filter by admin status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
-    )],
-    is_developer: Annotated[bool | str | None, Field(
-        default=None,
-        description="Filter by developer status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
-    )],
-    is_enabled: Annotated[bool | str | None, Field(
-        default=None,
-        description="Filter by enabled status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
-    )],
-    order_by: Annotated[str | None, Field(
-        default=None,
-        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: login_id, username, organization, email, is_admin, is_developer, is_enabled. Example: '-login_id,+username' translates to 'login_id DESC, username ASC'."
-    )],
-    offset: Annotated[int, Field(
-        default=0,
-        ge=0,
-        description="The offset from the beginning of the list. Must be a non-negative number."
-    )],
-    limit: Annotated[int, Field(
-        default=10,
-        ge=1,
-        le=100,
-        description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
-    )]
+        login_id: Annotated[str | None, Field(
+            default=None,
+            description="Filter by login ID using partial match (case-insensitive)."
+        )],
+        username: Annotated[str | None, Field(
+            default=None,
+            description="Filter by username (display name) using partial match (case-insensitive)."
+        )],
+        organization: Annotated[str | None, Field(
+            default=None,
+            description="Filter by organization using partial match (case-insensitive)."
+        )],
+        email: Annotated[str | None, Field(
+            default=None,
+            description="Filter by email address using partial match (case-insensitive)."
+        )],
+        is_admin: Annotated[bool | str | None, Field(
+            default=None,
+            description="Filter by admin status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
+        )],
+        is_developer: Annotated[bool | str | None, Field(
+            default=None,
+            description="Filter by developer status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
+        )],
+        is_enabled: Annotated[bool | str | None, Field(
+            default=None,
+            description="Filter by enabled status. Accepts bool, str, or None. String values are converted: 'True'/'true'/'1' -> True, 'False'/'false'/'0' -> False."
+        )],
+        order_by: Annotated[str | None, Field(
+            default=None,
+            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: login_id, username, organization, email, is_admin, is_developer, is_enabled. Example: '-login_id,+username' translates to 'login_id DESC, username ASC'."
+        )],
+        offset: Annotated[int, Field(
+            default=0,
+            ge=0,
+            description="The offset from the beginning of the list. Must be a non-negative number."
+        )],
+        limit: Annotated[int, Field(
+            default=10,
+            ge=1,
+            le=100,
+            description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+        )]
 ) -> GetUserPaginationResponse:
     """
     Get a paginated list of users registered in connectCenter.
@@ -201,18 +214,20 @@ async def get_users(
         f"organization={organization}, email={email}, is_admin={is_admin}, is_developer={is_developer}, "
         f"is_enabled={is_enabled}, order_by={order_by}"
     )
-    
+
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
     logger.debug(f"User authenticated: {app_user.login_id} (ID: {app_user.app_user_id})")
-    
+
     # Convert string parameters to their proper types
     try:
-        logger.debug(f"Converting boolean parameters: is_admin={is_admin}, is_developer={is_developer}, is_enabled={is_enabled}")
+        logger.debug(
+            f"Converting boolean parameters: is_admin={is_admin}, is_developer={is_developer}, is_enabled={is_enabled}")
         is_admin = str_to_bool(is_admin)
         is_developer = str_to_bool(is_developer)
         is_enabled = str_to_bool(is_enabled)
-        logger.debug(f"Boolean values converted: is_admin={is_admin}, is_developer={is_developer}, is_enabled={is_enabled}")
+        logger.debug(
+            f"Boolean values converted: is_admin={is_admin}, is_developer={is_developer}, is_enabled={is_enabled}")
     except ToolError:
         raise  # Re-raise ToolError as-is
     except Exception as e:
@@ -222,7 +237,6 @@ async def get_users(
         ) from e
 
     # Create service instance
-    from services import AppUserService
     user_service = AppUserService()
 
     # Validate and create pagination parameters
@@ -232,7 +246,6 @@ async def get_users(
         raise ToolError(
             f"Pagination validation failed: {str(e)}. Please provide valid offset (≥0) and limit (1-100) values.") from e
 
-
     # Validate order_by parameter and create Sort objects
     sort_list = None
     if order_by:
@@ -241,7 +254,8 @@ async def get_users(
             # Validate that all column names are in the allowed list
             for sort in sort_list:
                 if sort.column not in user_service.allowed_columns_for_order_by:
-                    raise ValueError(f"Invalid column name: '{sort.column}'. Allowed columns: {', '.join(user_service.allowed_columns_for_order_by)}")
+                    raise ValueError(
+                        f"Invalid column name: '{sort.column}'. Allowed columns: {', '.join(user_service.allowed_columns_for_order_by)}")
         except ValueError as e:
             raise ToolError(
                 f"Invalid order_by: {str(e)}. Please use format: '(-|+)?<column_name>(,(-|+)?<column_name>)*'. "
@@ -261,13 +275,13 @@ async def get_users(
             pagination=pagination,
             sort_list=sort_list
         )
-        logger.info(f"Found {len(page.items)} users (total available: {page.total})")
+        logger.info(f"Found {len(page.items)} users (total available: {page.total_items})")
 
         result = GetUserPaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=[_create_user_result(user) for user in page.items]
+            items=[GetUserResponse(**user.model_dump()) for user in page.items]
         )
         logger.debug(f"Response prepared with {len(result.items)} users")
         return result
@@ -295,10 +309,14 @@ async def get_users(
         "properties": {
             "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
             "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-            "username": {"type": ["string", "null"], "description": "Display name of the user", "example": "Administrator"},
-            "organization": {"type": ["string", "null"], "description": "The company the user represents", "example": "ACME Corp"},
-            "email": {"type": ["string", "null"], "description": "Email address of the user", "example": "admin@example.com"},
-            "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]},
+            "username": {"type": ["string", "null"], "description": "Display name of the user",
+                         "example": "Administrator"},
+            "organization": {"type": ["string", "null"], "description": "The company the user represents",
+                             "example": "ACME Corp"},
+            "email": {"type": ["string", "null"], "description": "Email address of the user",
+                      "example": "admin@example.com"},
+            "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]},
+                      "description": "List of roles assigned to the user", "example": ["Admin"]},
             "is_enabled": {"type": "boolean", "description": "Whether the user account is enabled", "example": True}
         },
         "required": ["user_id", "login_id", "username", "organization", "email", "roles", "is_enabled"]
@@ -351,41 +369,21 @@ async def who_am_i() -> GetUserResponse:
         ...     print("User account is disabled")
     """
     logger.info("Retrieving current user information")
-    
+
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
     logger.debug(f"User authenticated: {app_user.login_id} (ID: {app_user.app_user_id})")
-    
+
     try:
+        # Create service instance
+        user_service = AppUserService()
+
         # Create response with current user information using existing helper
         logger.debug(f"Preparing user information for {app_user.login_id}")
-        result = _create_user_result(app_user)
+        user = user_service.create_user_result(app_user)
         logger.info(f"Retrieved user information for {app_user.login_id}")
-        return result
+        return GetUserResponse(**user.model_dump())
     except Exception as e:
         logger.error(f"Failed to retrieve current user information: {str(e)}", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving your user information: {str(e)}. Please contact your system administrator.") from e
-
-
-# Helper functions (placed after their usage)
-
-def _create_user_result(user) -> GetUserResponse:
-    """
-    Create a user result from an AppUser model instance.
-    
-    Args:
-        user: AppUser model instance
-        
-    Returns:
-        GetUserResponse: Formatted user result
-    """
-    return GetUserResponse(
-        user_id=user.app_user_id,
-        login_id=user.login_id,
-        username=user.name,
-        organization=user.organization,
-        email=user.email,
-        roles=_get_user_roles(user),
-        is_enabled=user.is_enabled
-    )

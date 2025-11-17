@@ -15,7 +15,14 @@ from sqlmodel import select, func
 
 from databases.models import AgencyIdList, AgencyIdListManifest, AgencyIdListValueManifest, Release
 from services.cache import cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info
+from services.models.agency_id_list import AgencyIdListDto, AgencyIdListValueDto
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen, \
+    PaginationResponse
+from services.models.library import LibrarySummary
+from services.models.log import LogInfo
+from services.models.namespace import NamespaceSummary
+from services.models.release import ReleaseSummary
 from services.transaction import transaction, db_exec
 
 # Configure logging
@@ -42,14 +49,14 @@ class AgencyIdListService:
     Main Operations:
     - get_agency_id_lists_by_release(): Retrieve paginated lists of Agency ID Lists
       filtered by release with optional filters for name, list_id, version_id, and
-      date ranges. Supports custom sorting and pagination.
+      date ranges. Supports custom sorting and pagination. Returns Page[AgencyIdListInfo].
     
     - get_agency_id_list_by_id(): Retrieve a single Agency ID List by its internal ID,
       including all related entities (namespace, creator, owner, values, release, log).
     
     - get_agency_id_list_by_manifest_id(): Retrieve a single Agency ID List by its
-      manifest ID, which represents the list in a specific release context. Includes
-      all relationships and value manifests.
+      manifest ID, which represents the list in a specific release context. Returns
+      AgencyIdListInfo with all relationships and value manifests.
     
     - get_agency_id_list_value_manifests_by_manifest_id(): Retrieve all value manifests
       associated with a specific Agency ID List manifest, representing the individual
@@ -84,7 +91,7 @@ class AgencyIdListService:
         )
         
         # Get a specific list by manifest ID
-        manifest = service.get_agency_id_list_by_manifest_id(123)
+        agency_id_list_info = service.get_agency_id_list_by_manifest_id(123)
         
         # Get value manifests for a list
         values = service.get_agency_id_list_value_manifests_by_manifest_id(123)
@@ -118,7 +125,7 @@ class AgencyIdListService:
         last_updated_on_params: DateRangeParams = None,
         pagination: PaginationParams = PaginationParams(offset=0, limit=10),
         sort_list: list[Sort] = None
-    ) -> Page:
+    ) -> PaginationResponse[AgencyIdListDto]:
         """
         Get agency ID lists associated with a specific release.
         
@@ -133,7 +140,7 @@ class AgencyIdListService:
             last_updated_on_params: Date range filter for last update timestamp
         
         Returns:
-            Page: Paginated response containing agency ID list manifests with value manifests included
+            Page[AgencyIdListDto]: Paginated response containing agency ID list information with value manifests included
         """
         logger.info(
             f"Querying agency ID lists: release_id={release_id}, name={name}, "
@@ -179,11 +186,11 @@ class AgencyIdListService:
         logger.info(f"Retrieved {len(manifests)} agency ID list manifests (total available: {total_count})")
 
         # Create Page object
-        result = Page(
-            total=total_count,
+        result = PaginationResponse(
+            total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(manifests)
+            items=[self.create_agency_id_list_dto(manifest) for manifest in manifests]
         )
         logger.debug(f"Prepared page with {len(result.items)} items")
         return result
@@ -296,7 +303,7 @@ class AgencyIdListService:
 
     @cache(key_prefix="agency_id_list.get_agency_id_list_by_manifest_id")
     @transaction(read_only=True)
-    def get_agency_id_list_by_manifest_id(self, agency_id_list_manifest_id: int) -> AgencyIdListManifest:
+    def get_agency_id_list_by_manifest_id(self, agency_id_list_manifest_id: int) -> AgencyIdListDto:
         """
         Get an agency ID list by its manifest ID.
         
@@ -304,7 +311,7 @@ class AgencyIdListService:
             agency_id_list_manifest_id: ID of the agency ID list manifest to retrieve
         
         Returns:
-            AgencyIdListManifest: The agency ID list manifest with loaded relationships if found
+            AgencyIdListDto: The agency ID list information with all related data
         
         Raises:
             HTTPException: If agency ID list manifest not found
@@ -335,7 +342,7 @@ class AgencyIdListService:
             )
 
         logger.info(f"Retrieved agency ID list: '{manifest.agency_id_list.name if manifest.agency_id_list else 'N/A'}' (manifest_id: {agency_id_list_manifest_id})")
-        return manifest
+        return self.create_agency_id_list_dto(manifest)
 
     @cache(key_prefix="agency_id_list.get_agency_id_list_value_manifests_by_manifest_id")
     @transaction(read_only=True)
@@ -360,3 +367,101 @@ class AgencyIdListService:
         value_manifests = db_exec(query).all()
         logger.info(f"Found {len(value_manifests)} value manifests for manifest {agency_id_list_manifest_id}")
         return list(value_manifests)
+
+    def create_agency_id_list_dto(self, agency_id_list_manifest) -> AgencyIdListDto:
+        """
+        Create an agency ID list info from an AgencyIdListManifest model instance.
+        
+        Args:
+            agency_id_list_manifest: AgencyIdListManifest model instance with agency_id_list relationship
+            
+        Returns:
+            AgencyIdListDto: Formatted agency ID list info
+        """
+        logger.debug(f"Building response for agency ID list manifest {agency_id_list_manifest.agency_id_list_manifest_id}")
+        agency_id_list = agency_id_list_manifest.agency_id_list
+        
+        # Get value manifests using the separate service function
+        try:
+            logger.debug(f"Retrieving value manifests for manifest {agency_id_list_manifest.agency_id_list_manifest_id}")
+            value_manifests = self.get_agency_id_list_value_manifests_by_manifest_id(agency_id_list_manifest.agency_id_list_manifest_id)
+            logger.debug(f"Found {len(value_manifests)} value manifests")
+        except Exception as e:
+            logger.warning(f"Could not retrieve value manifests for manifest {agency_id_list_manifest.agency_id_list_manifest_id}", e)
+            value_manifests = []  # Continue without value manifests rather than failing completely
+        
+        # Create namespace info if available
+        namespace_info = None
+        if agency_id_list.namespace:
+            namespace_info = NamespaceSummary(
+                namespace_id=agency_id_list.namespace.namespace_id,
+                prefix=agency_id_list.namespace.prefix,
+                uri=agency_id_list.namespace.uri
+            )
+
+        # Create library info from release
+        library_info = LibrarySummary(
+            library_id=agency_id_list_manifest.release.library_id,
+            name=agency_id_list_manifest.release.library.name
+        )
+
+        # Create release info from manifest
+        # Since release_id is required and release relationship is loaded, release should always be available
+        release_info = ReleaseSummary(
+            release_id=agency_id_list_manifest.release_id,
+            release_num=agency_id_list_manifest.release.release_num,
+            state=agency_id_list_manifest.release.state
+        )
+
+        # Create log info from manifest
+        log_info = None
+        if agency_id_list_manifest.log:
+            log_info = LogInfo(
+                log_id=agency_id_list_manifest.log.log_id,
+                revision_num=agency_id_list_manifest.log.revision_num,
+                revision_tracking_num=agency_id_list_manifest.log.revision_tracking_num
+            )
+
+        # Create agency ID list values info from value manifests
+        agency_id_list_values_info = []
+        for value_manifest in value_manifests:
+            agency_id_list_values_info.append(AgencyIdListValueDto(
+                agency_id_list_value_manifest_id=value_manifest.agency_id_list_value_manifest_id,
+                agency_id_list_value_id=value_manifest.agency_id_list_value_id,
+                guid=value_manifest.agency_id_list_value.guid,
+                value=value_manifest.agency_id_list_value.value,
+                name=value_manifest.agency_id_list_value.name,
+                definition=value_manifest.agency_id_list_value.definition,
+                is_deprecated=value_manifest.agency_id_list_value.is_deprecated,
+                is_developer_default=value_manifest.agency_id_list_value.is_developer_default,
+                is_user_default=value_manifest.agency_id_list_value.is_user_default
+            ))
+
+        return AgencyIdListDto(
+            agency_id_list_manifest_id=agency_id_list_manifest.agency_id_list_manifest_id,
+            agency_id_list_id=agency_id_list.agency_id_list_id,
+            guid=agency_id_list.guid,
+            enum_type_guid=agency_id_list.enum_type_guid,
+            name=agency_id_list.name,
+            list_id=agency_id_list.list_id,
+            version_id=agency_id_list.version_id,
+            definition=agency_id_list.definition,
+            remark=agency_id_list.remark,
+            definition_source=agency_id_list.definition_source,
+            namespace=namespace_info,
+            library=library_info,
+            release=release_info,
+            log=log_info,
+            is_deprecated=agency_id_list.is_deprecated,
+            state=agency_id_list.state,
+            owner=create_user_info(agency_id_list.owner),
+            values=agency_id_list_values_info,
+            created=WhoAndWhen(
+                who=create_user_info(agency_id_list.creator),
+                when=agency_id_list.creation_timestamp
+            ),
+            last_updated=WhoAndWhen(
+                who=create_user_info(agency_id_list.last_updater),
+                when=agency_id_list.last_update_timestamp
+            )
+        )

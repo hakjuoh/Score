@@ -14,7 +14,10 @@ from sqlmodel import select, func
 
 from databases.models import Namespace
 from services.cache import cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen, PaginationResponse
+from services.models.library import LibrarySummary
+from services.models.namespace import NamespaceDto
 from services.transaction import transaction, db_exec
 
 # Configure logging
@@ -97,7 +100,7 @@ class NamespaceService:
 
     @cache(key_prefix="namespace.get_namespace")
     @transaction(read_only=True)
-    def get_namespace(self, namespace_id: int) -> Namespace:
+    def get_namespace(self, namespace_id: int) -> NamespaceDto:
         """
         Get a namespace by ID.
         
@@ -127,7 +130,7 @@ class NamespaceService:
                 detail=f"Namespace with ID {namespace_id} not found"
             )
 
-        return namespace
+        return self._create_namespace_result(namespace)
 
     @cache(key_prefix="namespace.get_namespaces")
     @transaction(read_only=True)
@@ -135,7 +138,7 @@ class NamespaceService:
                        library_id: int = None, uri: str = None, prefix: str = None, is_std_nmsp: bool = None,
                        created_on_params: DateRangeParams = None, last_updated_on_params: DateRangeParams = None,
                        pagination: PaginationParams = PaginationParams(offset=0, limit=10),
-                       sort_list: list[Sort] = None) -> Page:
+                       sort_list: list[Sort] = None) -> PaginationResponse[NamespaceDto]:
         """
         Get namespaces with optional filtering and pagination.
         
@@ -150,7 +153,7 @@ class NamespaceService:
             is_std_nmsp: Filter by standard namespace flag (optional)
         
         Returns:
-            Page: Paginated response containing namespaces and pagination metadata
+            PaginationResponse: Paginated response containing namespaces and pagination metadata
         """
         # Set default pagination if not provided
         if pagination is None:
@@ -166,7 +169,7 @@ class NamespaceService:
 
         # Apply filters
         query = self._apply_filters(query, library_id, uri, prefix, is_std_nmsp,
-                                   created_on_params, last_updated_on_params)
+                                    created_on_params, last_updated_on_params)
 
         # Get total count
         count_query = select(func.count()).select_from(query.subquery())
@@ -182,17 +185,17 @@ class NamespaceService:
         namespaces = db_exec(query).all()
 
         # Create Page object
-        return Page(
-            total=total_count,
+        return PaginationResponse(
+            total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(namespaces)
+            items=[self._create_namespace_result(namespace) for namespace in namespaces]
         )
 
     def _apply_filters(self, query, library_id: int = None, uri: str = None,
-                      prefix: str = None, is_std_nmsp: bool = None,
-                      created_on_params: DateRangeParams = None,
-                      last_updated_on_params: DateRangeParams = None):
+                       prefix: str = None, is_std_nmsp: bool = None,
+                       created_on_params: DateRangeParams = None,
+                       last_updated_on_params: DateRangeParams = None):
         """
         Apply filters to a query for namespaces.
         
@@ -257,3 +260,25 @@ class NamespaceService:
             query = query.order_by(Namespace.creation_timestamp.desc())
 
         return query
+
+    def _create_namespace_result(self, namespace) -> NamespaceDto:
+        """
+        Create a namespace result from a Namespace model instance.
+
+        Args:
+            namespace: Namespace model instance with loaded relationships
+
+        Returns:
+            GetNamespaceResponse: Formatted namespace result
+        """
+        return NamespaceDto(
+            namespace_id=namespace.namespace_id,
+            library=LibrarySummary(library_id=namespace.library.library_id, name=namespace.library.name),
+            uri=namespace.uri,
+            prefix=namespace.prefix,
+            description=namespace.description,
+            is_std_nmsp=namespace.is_std_nmsp,
+            owner=create_user_info(namespace.owner),
+            created=WhoAndWhen(who=create_user_info(namespace.creator), when=namespace.creation_timestamp),
+            last_updated=WhoAndWhen(who=create_user_info(namespace.last_updater), when=namespace.last_update_timestamp)
+        )

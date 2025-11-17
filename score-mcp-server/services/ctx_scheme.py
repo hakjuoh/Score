@@ -17,7 +17,10 @@ from sqlmodel import select, func
 from databases.models import AppUser, CtxCategory, CtxScheme, CtxSchemeValue, BizCtxValue
 from databases.utils import generate_guid
 from services.cache import cache, evict_cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen, PaginationResponse
+from services.models.ctx_category import CtxCategorySummary
+from services.models.ctx_scheme import CtxSchemeDto, CtxSchemeValueDto
 from services.transaction import transaction, db_add, db_get, db_delete, db_flush, db_exec
 
 # Configure logging
@@ -56,11 +59,11 @@ class CtxSchemeService:
       Values. Cascades deletion to all related values.
     
     - get_ctx_scheme(): Retrieve a single Context Scheme by ID with all relationships
-      and values loaded.
+      and values loaded. Returns CtxSchemeInfo.
     
     - get_ctx_schemes(): Retrieve paginated lists of Context Schemes with optional
       filters for scheme_id, scheme_name, description, agency_id, version_id,
-      category_id, category_name, and date ranges. Supports custom sorting.
+      category_id, category_name, and date ranges. Supports custom sorting. Returns Page[CtxSchemeInfo].
     
     Context Scheme Value Management:
     - create_ctx_scheme_value(): Create a new value for a Context Scheme with
@@ -421,7 +424,7 @@ class CtxSchemeService:
 
     @cache(key_prefix="ctx_scheme.get_ctx_scheme")
     @transaction(read_only=True)
-    def get_ctx_scheme(self, ctx_scheme_id: int) -> CtxScheme:
+    def get_ctx_scheme(self, ctx_scheme_id: int) -> CtxSchemeDto:
         """
         Get a context scheme by ID.
         
@@ -429,7 +432,7 @@ class CtxSchemeService:
             ctx_scheme_id: ID of the context scheme to retrieve
         
         Returns:
-            CtxScheme: The context scheme with relationships loaded
+            CtxSchemeDto: The context scheme information with all related data
         """
         # Validate input parameters
         if not ctx_scheme_id or ctx_scheme_id <= 0:
@@ -447,7 +450,7 @@ class CtxSchemeService:
                 detail=f"Context scheme with ID {ctx_scheme_id} not found"
             )
 
-        return ctx_scheme
+        return self.create_ctx_scheme_info(ctx_scheme)
 
     @cache(key_prefix="ctx_scheme.get_ctx_scheme_by_value_id")
     @transaction(read_only=True)
@@ -495,7 +498,7 @@ class CtxSchemeService:
                         ctx_category_id: int = None,
                         created_on: DateRangeParams = None, last_updated_on: DateRangeParams = None,
                         pagination: PaginationParams = PaginationParams(offset=0, limit=10),
-                        sort_list: list[Sort] = None, ctx_category_name: str = None) -> Page:
+                        sort_list: list[Sort] = None, ctx_category_name: str = None) -> PaginationResponse[CtxSchemeDto]:
         """
         Get a paginated list of context schemes.
         
@@ -513,7 +516,7 @@ class CtxSchemeService:
             ctx_category_name: Filter by context category name (partial match, case-insensitive)
             
         Returns:
-            Page: Paginated result with total count and items
+            Page[CtxSchemeDto]: Paginated result with total count and items
         """
 
         # Set default pagination if not provided
@@ -551,11 +554,15 @@ class CtxSchemeService:
             )
         ).all()
 
-        return Page(
-            total=total,
+        # Convert ctx_schemes to CtxSchemeInfo
+        logger.debug("Converting context schemes to CtxSchemeInfo")
+        ctx_scheme_infos = [self.create_ctx_scheme_info(ctx_scheme) for ctx_scheme in ctx_schemes]
+
+        return PaginationResponse(
+            total_items=total,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(ctx_schemes)
+            items=ctx_scheme_infos
         )
 
     def _apply_filters(self, query, scheme_id: str = None, scheme_name: str = None,
@@ -660,6 +667,66 @@ class CtxSchemeService:
             query = query.order_by(CtxScheme.scheme_id)
 
         return query
+
+    def create_ctx_scheme_info(self, ctx_scheme) -> CtxSchemeDto:
+        """
+        Create a context scheme info from a CtxScheme model instance.
+        
+        Args:
+            ctx_scheme: The CtxScheme database model instance to format
+            
+        Returns:
+            CtxSchemeDto: A formatted context scheme info object containing:
+                - ctx_scheme_id: The unique identifier of the context scheme
+                - guid: The globally unique identifier
+                - scheme_id: External identification of the scheme
+                - scheme_name: Pretty print name of the context scheme
+                - description: Description of the context scheme
+                - scheme_agency_id: Identification of the agency maintaining the scheme
+                - scheme_version_id: Version number of the context scheme
+                - ctx_category: Associated context category
+                - values: List of associated context scheme values
+                - created: WhoAndWhen object with creator info and creation timestamp
+                - last_updated: WhoAndWhen object with updater info and update timestamp
+        """
+        # Create context category info
+        ctx_category_info = None
+        if ctx_scheme.ctx_category:
+            ctx_category_info = CtxCategorySummary(
+                ctx_category_id=ctx_scheme.ctx_category.ctx_category_id,
+                name=ctx_scheme.ctx_category.name
+            )
+
+        # Create context scheme values info
+        values_info = []
+        if hasattr(ctx_scheme, 'ctx_scheme_values') and ctx_scheme.ctx_scheme_values:
+            for value in ctx_scheme.ctx_scheme_values:
+                values_info.append(CtxSchemeValueDto(
+                    ctx_scheme_value_id=value.ctx_scheme_value_id,
+                    guid=value.guid,
+                    value=value.value,
+                    meaning=value.meaning
+                ))
+
+        return CtxSchemeDto(
+            ctx_scheme_id=ctx_scheme.ctx_scheme_id,
+            guid=ctx_scheme.guid,
+            scheme_id=ctx_scheme.scheme_id,
+            scheme_name=ctx_scheme.scheme_name,
+            description=ctx_scheme.description,
+            scheme_agency_id=ctx_scheme.scheme_agency_id,
+            scheme_version_id=ctx_scheme.scheme_version_id,
+            ctx_category=ctx_category_info,
+            values=values_info,
+            created=WhoAndWhen(
+                who=create_user_info(ctx_scheme.creator),
+                when=ctx_scheme.creation_timestamp
+            ),
+            last_updated=WhoAndWhen(
+                who=create_user_info(ctx_scheme.last_updater),
+                when=ctx_scheme.last_update_timestamp
+            )
+        )
 
     @transaction(read_only=False)
     def create_ctx_scheme_value(self, ctx_scheme_id: int, value: str,

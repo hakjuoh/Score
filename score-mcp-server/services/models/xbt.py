@@ -1,18 +1,70 @@
 """Generic models for XBT (XML Built-in Type) domain."""
+
 from pydantic import BaseModel
 
-from services.models.library import LibraryInfo
-from services.models.release import ReleaseInfo
+from services.models.app_user import UserSummary
+from services.models.common import WhoAndWhen
+from services.models.library import LibrarySummary
+from services.models.log import LogInfo
+from services.models.release import ReleaseSummary
 
 
-class SubtypeOfXbtInfo(BaseModel):
+class XbtDto(BaseModel):
+    """Xbt information with full details.
+
+    Contains complete information about an XBT (XML Built-in Type), including its type hierarchy
+    relationships, data format mappings, and metadata.
+
+    Attributes:
+        xbt_manifest_id: Unique identifier for the XBT manifest (release-specific version)
+        xbt_id: Unique identifier for the XBT (base entity ID, same across all releases)
+        guid: Globally unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)
+        name: Human-readable name of the built-in type (e.g., "string", "date time", "boolean", "normalized string")
+        builtIn_type: Built-in type as it should appear in XML schema with namespace prefix (e.g., "xsd:string", "xsd:dateTime", "xsd:normalizedString")
+        jbt_draft05_map: JSON Schema Draft 05 mapping as a JSON string (e.g., '{"type":"string"}', '{"type":"string", "format":"date-time"}')
+        openapi30_map: OpenAPI 3.0 specification mapping as a JSON string (e.g., '{"type":"string", "format":"date-time"}')
+        avro_map: Apache Avro schema mapping as a JSON string (e.g., '{"type":"string"}', '{"type":"int"}')
+        subtype_of_xbt: Information about the parent XBT in the type hierarchy, if this XBT is a subtype of another (None for root types like anyType)
+        schema_definition: XML Schema Definition (XSD) schema definition string, if custom schema is defined (typically None for built-in types)
+        revision_doc: Revision documentation describing changes or updates to this XBT (typically None for standard built-in types)
+        state: State of the XBT (e.g., 3 = Published). Indicates the lifecycle state of the XBT.
+        is_deprecated: Whether the XBT is deprecated and should not be used in new implementations
+        library: Library information where this XBT is stored
+        release: Release information indicating which release this version belongs to
+        log: Log information tracking revision history (if available)
+        owner: User information about the owner of the XBT
+        created: Information about who created the XBT and when
+        last_updated: Information about who last updated the XBT and when
+    """
+    xbt_manifest_id: int  # Unique identifier for the XBT manifest (release-specific version)
+    xbt_id: int  # Unique identifier for the XBT (base entity ID, same across all releases)
+    guid: str  # Globally unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)
+    name: str | None  # Human-readable name of the built-in type (e.g., "string", "date time", "boolean", "normalized string")
+    builtIn_type: str | None  # Built-in type as it should appear in XML schema with namespace prefix (e.g., "xsd:string", "xsd:dateTime", "xsd:normalizedString")
+    jbt_draft05_map: str | None  # JSON Schema Draft 05 mapping as a JSON string (e.g., '{"type":"string"}', '{"type":"string", "format":"date-time"}')
+    openapi30_map: str | None  # OpenAPI 3.0 specification mapping as a JSON string (e.g., '{"type":"string", "format":"date-time"}')
+    avro_map: str | None  # Apache Avro schema mapping as a JSON string (e.g., '{"type":"string"}', '{"type":"int"}')
+    subtype_of_xbt: "XbtSummary | None"  # Information about the parent XBT in the type hierarchy, if this XBT is a subtype of another (None for root types like anyType)
+    schema_definition: str | None  # XML Schema Definition (XSD) schema definition string, if custom schema is defined (typically None for built-in types)
+    revision_doc: str | None  # Revision documentation describing changes or updates to this XBT (typically None for standard built-in types)
+    state: int | None  # State of the XBT (e.g., 3 = Published). Indicates the lifecycle state of the XBT.
+    is_deprecated: bool  # Whether the XBT is deprecated and should not be used in new implementations
+    library: LibrarySummary  # Library information where this XBT is stored
+    release: ReleaseSummary  # Release information indicating which release this version belongs to
+    log: LogInfo | None  # Log information tracking revision history (if available)
+    owner: UserSummary  # User information about the owner of the XBT
+    created: WhoAndWhen  # Information about who created the XBT and when
+    last_updated: WhoAndWhen  # Information about who last updated the XBT and when
+
+
+class XbtSummary(BaseModel):
     """Subtype of XBT information object.
-    
+
     Represents the parent XBT in the type hierarchy. XBTs can be subtypes of other XBTs,
     forming a specialization hierarchy. For example, 'normalizedString' is a subtype of 'string',
     and 'integer' is a subtype of 'decimal'. The root type is typically 'anyType', with 'anySimpleType'
     as its direct subtype.
-    
+
     Attributes:
         xbt_manifest_id: Unique identifier for the subtype XBT manifest (release-specific version)
         xbt_id: Unique identifier for the subtype XBT (base entity ID, same across all releases)
@@ -27,6 +79,9 @@ class SubtypeOfXbtInfo(BaseModel):
     guid: str  # Globally unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)
     name: str | None  # Human-readable name of the built-in type (e.g., "string", "date time", "boolean")
     builtIn_type: str | None  # Built-in type as it should appear in XML schema with namespace prefix (e.g., "xsd:string", "xsd:dateTime")
-    library: LibraryInfo  # Library information where this XBT is stored
-    release: ReleaseInfo  # Release information indicating which release this version belongs to
+    library: LibrarySummary  # Library information where this XBT is stored
+    release: ReleaseSummary  # Release information indicating which release this version belongs to
 
+
+# Update forward references - must be called after all class definitions
+XbtDto.model_rebuild()

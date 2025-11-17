@@ -15,7 +15,10 @@ from sqlmodel import select, func
 
 from databases.models import CodeList, CodeListManifest, CodeListValueManifest, Release
 from services.cache import cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info
+from services.models import NamespaceSummary, LibrarySummary, ReleaseSummary, LogInfo
+from services.models.code_list import CodeListDto, CodeListValueDto
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen, PaginationResponse
 from services.transaction import transaction, db_exec
 
 # Configure logging
@@ -109,16 +112,16 @@ class CodeListService:
     @cache(key_prefix="code_list.get_code_lists_by_release")
     @transaction(read_only=True)
     def get_code_lists_by_release(
-        self,
-        release_id: int,
-        name: str = None,
-        list_id: str = None,
-        version_id: str = None,
-        created_on_params: DateRangeParams = None,
-        last_updated_on_params: DateRangeParams = None,
-        pagination: PaginationParams = PaginationParams(offset=0, limit=10),
-        sort_list: list[Sort] = None
-    ) -> Page:
+            self,
+            release_id: int,
+            name: str = None,
+            list_id: str = None,
+            version_id: str = None,
+            created_on_params: DateRangeParams = None,
+            last_updated_on_params: DateRangeParams = None,
+            pagination: PaginationParams = PaginationParams(offset=0, limit=10),
+            sort_list: list[Sort] = None
+    ) -> PaginationResponse[CodeListDto]:
         """
         Get code lists associated with a specific release.
         
@@ -133,7 +136,7 @@ class CodeListService:
             last_updated_on_params: Date range filter for last update timestamp
         
         Returns:
-            Page: Paginated response containing code list manifests with value manifests included
+            PaginationResponse: Paginated response containing code list manifests with value manifests included
         """
         # Set default pagination if not provided
         if pagination is None:
@@ -163,19 +166,19 @@ class CodeListService:
         query = query.offset(pagination.offset).limit(pagination.limit)
 
         # Execute query
-        manifests = db_exec(query).all()
+        code_list_manifests = db_exec(query).all()
 
         # Create Page object
-        return Page(
-            total=total_count,
+        return PaginationResponse(
+            total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(manifests)
+            items=[self._create_code_list_result(code_list_manifest) for code_list_manifest in code_list_manifests]
         )
 
     def _apply_filters(self, query, name: str = None, list_id: str = None,
-                      version_id: str = None, created_on_params: DateRangeParams = None,
-                      last_updated_on_params: DateRangeParams = None):
+                       version_id: str = None, created_on_params: DateRangeParams = None,
+                       last_updated_on_params: DateRangeParams = None):
         """
         Apply filters to a query for code lists.
         
@@ -232,7 +235,7 @@ class CodeListService:
                         status_code=400,
                         detail=f"Invalid sort column: '{sort.column}'. Allowed columns: {', '.join(self.allowed_columns_for_order_by)}"
                     )
-            
+
             # Apply sorting
             for sort in sort_list:
                 column = getattr(CodeList, sort.column)
@@ -245,43 +248,9 @@ class CodeListService:
 
         return query
 
-    @cache(key_prefix="code_list.get_code_list_by_id")
-    @transaction(read_only=True)
-    def get_code_list_by_id(self, code_list_id: int) -> CodeListManifest:
-        """
-        Get a code list by its ID.
-        
-        Args:
-            code_list_id: ID of the code list to retrieve
-        
-        Returns:
-            CodeListManifest: The code list manifest if found
-        
-        Raises:
-            HTTPException: If code list not found
-        """
-        query = select(CodeListManifest).options(
-            selectinload(CodeListManifest.code_list).selectinload(CodeList.namespace),
-            selectinload(CodeListManifest.code_list).selectinload(CodeList.creator),
-            selectinload(CodeListManifest.code_list).selectinload(CodeList.owner),
-            selectinload(CodeListManifest.code_list).selectinload(CodeList.last_updater),
-            selectinload(CodeListManifest.code_list).selectinload(CodeList.code_list_values),
-            selectinload(CodeListManifest.release),
-            selectinload(CodeListManifest.log)
-        ).where(CodeListManifest.code_list_id == code_list_id)
-
-        manifest = db_exec(query).first()
-        if not manifest:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Code list with ID {code_list_id} not found"
-            )
-
-        return manifest
-
     @cache(key_prefix="code_list.get_code_list_by_manifest_id")
     @transaction(read_only=True)
-    def get_code_list_by_manifest_id(self, code_list_manifest_id: int) -> CodeListManifest:
+    def get_code_list_by_manifest_id(self, code_list_manifest_id: int) -> CodeListDto:
         """
         Get a code list by its manifest ID.
         
@@ -314,7 +283,7 @@ class CodeListService:
                 detail=f"Code list manifest with ID {code_list_manifest_id} not found"
             )
 
-        return manifest
+        return self._create_code_list_result(manifest)
 
     @cache(key_prefix="code_list.get_code_list_value_manifests_by_manifest_id")
     @transaction(read_only=True)
@@ -333,3 +302,99 @@ class CodeListService:
         ).where(CodeListValueManifest.code_list_manifest_id == code_list_manifest_id)
         value_manifests = db_exec(query).all()
         return list(value_manifests)
+
+    def _create_code_list_result(self, code_list_manifest) -> CodeListDto:
+        """
+        Create a code list result from a CodeListManifest model instance.
+
+        Args:
+            code_list_manifest: CodeListManifest model instance with code_list relationship
+
+        Returns:
+            CodeListDto: Formatted code list result
+        """
+        code_list = code_list_manifest.code_list
+
+        # Get value manifests using the separate service function
+        try:
+            value_manifests = self.get_code_list_value_manifests_by_manifest_id(
+                code_list_manifest.code_list_manifest_id)
+        except Exception as e:
+            logger.warning(f"Failed to retrieve value manifests for CodeListManifest {code_list_manifest.code_list_manifest_id}",
+                           e)
+            value_manifests = []  # Continue without value manifests rather than failing completely
+
+        # Create namespace info if available
+        namespace_info = None
+        if code_list.namespace:
+            namespace_info = NamespaceSummary(
+                namespace_id=code_list.namespace.namespace_id,
+                prefix=code_list.namespace.prefix,
+                uri=code_list.namespace.uri
+            )
+
+        # Create library info from release
+        library_info = LibrarySummary(
+            library_id=code_list_manifest.release.library_id,
+            name=code_list_manifest.release.library.name
+        )
+
+        # Create release info from manifest
+        # Since release_id is required and release relationship is loaded, release should always be available
+        release_info = ReleaseSummary(
+            release_id=code_list_manifest.release_id,
+            release_num=code_list_manifest.release.release_num,
+            state=code_list_manifest.release.state
+        )
+
+        # Create log info from manifest
+        log_info = None
+        if code_list_manifest.log:
+            log_info = LogInfo(
+                log_id=code_list_manifest.log.log_id,
+                revision_num=code_list_manifest.log.revision_num,
+                revision_tracking_num=code_list_manifest.log.revision_tracking_num
+            )
+
+        # Create code list values info from value manifests
+        code_list_values_info = []
+        for value_manifest in value_manifests:
+            code_list_values_info.append(CodeListValueDto(
+                code_list_value_manifest_id=value_manifest.code_list_value_manifest_id,
+                code_list_value_id=value_manifest.code_list_value_id,
+                guid=value_manifest.code_list_value.guid,
+                value=value_manifest.code_list_value.value,
+                meaning=value_manifest.code_list_value.meaning,
+                definition=value_manifest.code_list_value.definition,
+                is_deprecated=value_manifest.code_list_value.is_deprecated
+            ))
+
+        return CodeListDto(
+            code_list_manifest_id=code_list_manifest.code_list_manifest_id,
+            code_list_id=code_list.code_list_id,
+            guid=code_list.guid,
+            enum_type_guid=code_list.enum_type_guid,
+            name=code_list.name,
+            list_id=code_list.list_id,
+            version_id=code_list.version_id,
+            definition=code_list.definition,
+            remark=code_list.remark,
+            definition_source=code_list.definition_source,
+            namespace=namespace_info,
+            library=library_info,
+            release=release_info,
+            log=log_info,
+            extensible_indicator=code_list.extensible_indicator,
+            is_deprecated=code_list.is_deprecated,
+            state=code_list.state,
+            owner=create_user_info(code_list.owner),
+            values=code_list_values_info,
+            created=WhoAndWhen(
+                who=create_user_info(code_list.creator),
+                when=code_list.creation_timestamp
+            ),
+            last_updated=WhoAndWhen(
+                who=create_user_info(code_list.last_updater),
+                when=code_list.last_update_timestamp
+            )
+        )

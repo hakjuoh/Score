@@ -77,10 +77,7 @@ from fastmcp.server.elicitation import (
 from pydantic import Field
 
 from services import BizCtxService, DateRangeParams, PaginationParams
-from services.models.biz_ctx import BizCtxValueInfo
-from services.models.common import WhoAndWhen
-from services.models.ctx_scheme import CtxSchemeValueInfo
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.biz_ctx import (
     CreateBizCtxResponse,
     CreateBizCtxValueResponse,
@@ -320,10 +317,10 @@ async def get_business_contexts(
         )
 
         return GetBizCtxPaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=[_create_biz_ctx_result(biz_ctx) for biz_ctx in page.items]
+            items=[GetBizCtxResponse(**biz_ctx_info.model_dump()) for biz_ctx_info in page.items]
         )
     except HTTPException as e:
         logger.error(f"HTTP error retrieving business contexts", e)
@@ -460,9 +457,9 @@ async def get_business_context(
     # Get business context
     try:
         service = BizCtxService(requester=app_user)
-        biz_ctx = service.get_biz_ctx(biz_ctx_id)
+        biz_ctx_info = service.get_biz_ctx(biz_ctx_id)
 
-        return _create_biz_ctx_result(biz_ctx)
+        return GetBizCtxResponse(**biz_ctx_info.model_dump())
     except HTTPException as e:
         logger.error(f"HTTP error retrieving business context", e)
         if e.status_code == 400:
@@ -1014,54 +1011,3 @@ async def delete_business_context_value(
         logger.error(f"Unexpected error deleting business context value", e)
         raise ToolError(
             f"An unexpected error occurred while deleting the business context value: {str(e)}. Please contact your system administrator.") from e
-
-
-# Helper functions (placed after their usage)
-
-def _create_biz_ctx_result(biz_ctx) -> GetBizCtxResponse:
-    """
-    Create a formatted response object for business context data.
-
-    This helper function transforms a BizCtx database model into a standardized
-    response format that includes related entities.
-    
-    Args:
-        biz_ctx: The BizCtx database model instance to format
-        
-    Returns:
-        GetBizCtxResponse: A formatted response object containing:
-            - biz_ctx_id: The unique identifier of the business context
-            - guid: The globally unique identifier
-            - name: Short, descriptive name of the business context
-            - values: List of associated business context values
-            - created: WhoAndWhen object with creator info and creation timestamp
-            - last_updated: WhoAndWhen object with updater info and update timestamp
-    """
-    # Create business context values info
-    values_info = []
-    if hasattr(biz_ctx, 'biz_ctx_values') and biz_ctx.biz_ctx_values:
-        for biz_ctx_value in biz_ctx.biz_ctx_values:
-            values_info.append(BizCtxValueInfo(
-                biz_ctx_value_id=biz_ctx_value.biz_ctx_value_id,
-                ctx_scheme_value=CtxSchemeValueInfo(
-                    ctx_scheme_value_id=biz_ctx_value.ctx_scheme_value.ctx_scheme_value_id,
-                    guid=biz_ctx_value.ctx_scheme_value.guid,
-                    value=biz_ctx_value.ctx_scheme_value.value,
-                    meaning=biz_ctx_value.ctx_scheme_value.meaning)
-            ))
-
-    
-    return GetBizCtxResponse(
-        biz_ctx_id=biz_ctx.biz_ctx_id,
-        guid=biz_ctx.guid,
-        name=biz_ctx.name,
-        values=values_info,
-        created=WhoAndWhen(
-            who=_create_user_info(biz_ctx.creator),
-            when=biz_ctx.creation_timestamp
-        ),
-        last_updated=WhoAndWhen(
-            who=_create_user_info(biz_ctx.last_updater),
-            when=biz_ctx.last_update_timestamp
-        )
-    )

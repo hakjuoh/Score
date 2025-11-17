@@ -2,8 +2,6 @@ from datetime import datetime, timedelta
 
 from fastmcp.exceptions import ToolError
 
-from services.models.core_component import ValueConstraint
-
 
 def parse_date_range(date_range: str) -> tuple[datetime | None, datetime | None]:
     """
@@ -118,47 +116,3 @@ def str_to_int(value: int | str | None) -> int | None:
                 f"Please provide a valid integer string (e.g., '0', '1', '-1')."
             )
     return value
-
-
-def validate_and_create_value_constraint(default_value: str | None, fixed_value: str | None) -> ValueConstraint | None:
-    """
-    Validate and create a ValueConstraint object.
-    
-    Validation rules:
-    - Can return None if both values are None
-    - If not None, exactly one of default_value or fixed_value must be set (not both, not neither)
-    
-    Args:
-        default_value: Default value for the component
-        fixed_value: Fixed value for the component
-        
-    Returns:
-        ValueConstraint | None: ValueConstraint object if valid, None if both are None
-        
-    Raises:
-        ValueError: If both values are set or validation fails
-    """
-    if default_value is None and fixed_value is None:
-        return None
-    
-    # Validate: exactly one must be set
-    has_default = default_value is not None
-    has_fixed = fixed_value is not None
-    
-    if has_default and has_fixed:
-        raise ValueError(
-            f"ValueConstraint validation failed: Both default_value and fixed_value cannot be set. "
-            f"default_value='{default_value}', fixed_value='{fixed_value}'. "
-            f"Exactly one must be set, the other must be None."
-        )
-    
-    if not has_default and not has_fixed:
-        raise ValueError(
-            "ValueConstraint validation failed: Either default_value or fixed_value must be set. "
-            "Both cannot be None."
-        )
-    
-    return ValueConstraint(
-        default_value=default_value,
-        fixed_value=fixed_value
-    )

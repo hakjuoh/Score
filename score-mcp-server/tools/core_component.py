@@ -59,7 +59,9 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from databases.models import SeqKey, Bcc
-from services import CoreComponentService, DateRangeParams, PaginationParams
+from services import CoreComponentService, DateRangeParams, PaginationParams, DataTypeService
+from services.common import create_user_info
+from services.common import validate_and_create_value_constraint
 from services.models.common import WhoAndWhen
 from services.models.core_component import (
     AccInfo,
@@ -69,20 +71,20 @@ from services.models.core_component import (
     BccpInfo,
     BccRelationshipInfo
 )
-from services.models.data_type import BaseDtInfo, DtInfo
-from services.models.library import LibraryInfo
+from services.models.data_type import DtSummary
+from services.models.library import LibrarySummary
 from services.models.log import LogInfo
-from services.models.namespace import NamespaceInfo
-from services.models.release import ReleaseInfo
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from services.models.namespace import NamespaceSummary
+from services.models.release import ReleaseSummary
+from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.core_component import (
-    CoreComponentInfo,
+    CoreComponentListEntry,
     GetAccResponse,
     GetAsccpResponse,
     GetBccpResponse,
     GetCoreComponentPaginationResponse,
 )
-from tools.utils import parse_date_range, validate_and_create_value_constraint
+from tools.utils import parse_date_range
 
 # Configure logging
 logger = logging.getLogger("score.mcp.core_component")
@@ -535,7 +537,10 @@ def _create_relationship_info(seq_key: SeqKey, acc_info: AccInfo) -> Union[AsccR
         # BCC connects the source ACC to a BCCP, which has a BDT/DT providing the data type
         bcc_manifest = seq_key.bcc_manifest
         bccp_manifest = bcc_manifest.to_bccp_manifest
-        
+
+        dt_service = DataTypeService()
+        bdt = dt_service.get_data_type_by_manifest_id(bccp_manifest.bdt_manifest_id)
+
         # Create BCCP info
         bccp_info = BccpInfo(
             bccp_manifest_id=bccp_manifest.bccp_manifest_id,
@@ -545,20 +550,7 @@ def _create_relationship_info(seq_key: SeqKey, acc_info: AccInfo) -> Union[AsccR
             representation_term=bccp_manifest.bccp.representation_term,
             definition=bccp_manifest.bccp.definition,
             definition_source=bccp_manifest.bccp.definition_source,
-            bdt_manifest=DtInfo(
-                dt_manifest_id=bccp_manifest.bdt_manifest.dt_manifest_id,
-                dt_id=bccp_manifest.bdt_manifest.dt_id,
-                guid=bccp_manifest.bdt_manifest.dt.guid,
-                den=bccp_manifest.bdt_manifest.den,
-                data_type_term=bccp_manifest.bdt_manifest.dt.data_type_term,
-                qualifier=bccp_manifest.bdt_manifest.dt.qualifier,
-                representation_term=bccp_manifest.bdt_manifest.dt.representation_term,
-                six_digit_id=bccp_manifest.bdt_manifest.dt.six_digit_id,
-                based_dt_manifest_id=bccp_manifest.bdt_manifest.based_dt_manifest_id,
-                definition=bccp_manifest.bdt_manifest.dt.definition,
-                definition_source=bccp_manifest.bdt_manifest.dt.definition_source,
-                is_deprecated=bccp_manifest.bdt_manifest.dt.is_deprecated
-            ),
+            bdt_manifest=dt_service.create_dt_summary(bdt),
             den=bccp_manifest.den,
             is_deprecated=bccp_manifest.bccp.is_deprecated
         )
@@ -663,20 +655,20 @@ def _create_acc_result(acc, manifest, engine=None) -> GetAccResponse:
     # Create namespace info if available
     namespace_info = None
     if acc.namespace:
-        namespace_info = NamespaceInfo(
+        namespace_info = NamespaceSummary(
             namespace_id=acc.namespace.namespace_id,
             prefix=acc.namespace.prefix,
             uri=acc.namespace.uri
         )
 
     # Create library info from release
-    library_info = LibraryInfo(
+    library_info = LibrarySummary(
         library_id=manifest.release.library_id,
         name=manifest.release.library.name
     )
 
     # Create release info from manifest
-    release_info = ReleaseInfo(
+    release_info = ReleaseSummary(
         release_id=manifest.release_id,
         release_num=manifest.release.release_num,
         state=manifest.release.state
@@ -700,20 +692,20 @@ def _create_acc_result(acc, manifest, engine=None) -> GetAccResponse:
         # Create namespace info for base ACC if available
         base_namespace_info = None
         if base_acc.namespace:
-            base_namespace_info = NamespaceInfo(
+            base_namespace_info = NamespaceSummary(
                 namespace_id=base_acc.namespace.namespace_id,
                 prefix=base_acc.namespace.prefix,
                 uri=base_acc.namespace.uri
             )
 
         # Create library info for base ACC from its release
-        base_library_info = LibraryInfo(
+        base_library_info = LibrarySummary(
             library_id=base_manifest.release.library_id,
             name=base_manifest.release.library.name
         )
 
         # Create release info for base ACC
-        base_release_info = ReleaseInfo(
+        base_release_info = ReleaseSummary(
             release_id=base_manifest.release_id,
             release_num=base_manifest.release.release_num,
             state=base_manifest.release.state
@@ -758,13 +750,13 @@ def _create_acc_result(acc, manifest, engine=None) -> GetAccResponse:
         library=library_info,
         release=release_info,
         log=log_info,
-        owner=_create_user_info(acc.owner),
+        owner=create_user_info(acc.owner),
         created=WhoAndWhen(
-            who=_create_user_info(acc.creator),
+            who=create_user_info(acc.creator),
             when=acc.creation_timestamp
         ),
         last_updated=WhoAndWhen(
-            who=_create_user_info(acc.last_updater),
+            who=create_user_info(acc.last_updater),
             when=acc.last_update_timestamp
         )
     )
@@ -1020,20 +1012,20 @@ def _create_asccp_result(asccp, manifest) -> GetAsccpResponse:
     # Create namespace info if available
     namespace_info = None
     if asccp.namespace:
-        namespace_info = NamespaceInfo(
+        namespace_info = NamespaceSummary(
             namespace_id=asccp.namespace.namespace_id,
             prefix=asccp.namespace.prefix,
             uri=asccp.namespace.uri
         )
 
     # Create library info from release
-    library_info = LibraryInfo(
+    library_info = LibrarySummary(
         library_id=manifest.release.library_id,
         name=manifest.release.library.name
     )
 
     # Create release info from manifest
-    release_info = ReleaseInfo(
+    release_info = ReleaseSummary(
         release_id=manifest.release_id,
         release_num=manifest.release.release_num,
         state=manifest.release.state
@@ -1058,20 +1050,20 @@ def _create_asccp_result(asccp, manifest) -> GetAsccpResponse:
     # Create namespace info for role ACC if available
     role_namespace_info = None
     if role_acc.namespace:
-        role_namespace_info = NamespaceInfo(
+        role_namespace_info = NamespaceSummary(
             namespace_id=role_acc.namespace.namespace_id,
             prefix=role_acc.namespace.prefix,
             uri=role_acc.namespace.uri
         )
 
     # Create library info for role ACC from its release
-    role_library_info = LibraryInfo(
+    role_library_info = LibrarySummary(
         library_id=role_manifest.release.library_id,
         name=role_manifest.release.library.name
     )
 
     # Create release info for role ACC
-    role_release_info = ReleaseInfo(
+    role_release_info = ReleaseSummary(
         release_id=role_manifest.release_id,
         release_num=role_manifest.release.release_num,
         state=role_manifest.release.state
@@ -1108,13 +1100,13 @@ def _create_asccp_result(asccp, manifest) -> GetAsccpResponse:
         library=library_info,
         release=release_info,
         log=log_info,
-        owner=_create_user_info(asccp.owner),
+        owner=create_user_info(asccp.owner),
         created=WhoAndWhen(
-            who=_create_user_info(asccp.creator),
+            who=create_user_info(asccp.creator),
             when=asccp.creation_timestamp
         ),
         last_updated=WhoAndWhen(
-            who=_create_user_info(asccp.last_updater),
+            who=create_user_info(asccp.last_updater),
             when=asccp.last_update_timestamp
         )
     )
@@ -1383,20 +1375,20 @@ def _create_bccp_result(bccp, manifest) -> GetBccpResponse:
     # Create namespace info if available
     namespace_info = None
     if bccp.namespace:
-        namespace_info = NamespaceInfo(
+        namespace_info = NamespaceSummary(
             namespace_id=bccp.namespace.namespace_id,
             prefix=bccp.namespace.prefix,
             uri=bccp.namespace.uri
         )
 
     # Create library info from release
-    library_info = LibraryInfo(
+    library_info = LibrarySummary(
         library_id=manifest.release.library_id,
         name=manifest.release.library.name
     )
 
     # Create release info from manifest
-    release_info = ReleaseInfo(
+    release_info = ReleaseSummary(
         release_id=manifest.release_id,
         release_num=manifest.release.release_num,
         state=manifest.release.state
@@ -1421,28 +1413,29 @@ def _create_bccp_result(bccp, manifest) -> GetBccpResponse:
     # Create namespace info for BDT if available
     bdt_namespace_info = None
     if bdt.namespace:
-        bdt_namespace_info = NamespaceInfo(
+        bdt_namespace_info = NamespaceSummary(
             namespace_id=bdt.namespace.namespace_id,
             prefix=bdt.namespace.prefix,
             uri=bdt.namespace.uri
         )
 
     # Create library info for BDT from its release
-    bdt_library_info = LibraryInfo(
+    bdt_library_info = LibrarySummary(
         library_id=bdt_manifest.release.library_id,
         name=bdt_manifest.release.library.name
     )
 
     # Create release info for BDT
-    bdt_release_info = ReleaseInfo(
+    bdt_release_info = ReleaseSummary(
         release_id=bdt_manifest.release_id,
         release_num=bdt_manifest.release.release_num,
         state=bdt_manifest.release.state
     )
 
-    bdt_info = BaseDtInfo(
+    bdt_info = DtSummary(
         dt_manifest_id=bdt_manifest.dt_manifest_id,
         dt_id=bdt.dt_id,
+        based_dt_manifest_id=bdt_manifest.based_dt_manifest_id,
         guid=bdt.guid,
         den=bdt_manifest.den,
         data_type_term=bdt.data_type_term,
@@ -1452,6 +1445,7 @@ def _create_bccp_result(bccp, manifest) -> GetBccpResponse:
         definition=bdt.definition,
         definition_source=bdt.definition_source,
         content_component_definition=bdt.content_component_definition,
+        is_deprecated=bdt.is_deprecated,
         namespace=bdt_namespace_info,
         library=bdt_library_info,
         release=bdt_release_info
@@ -1478,13 +1472,13 @@ def _create_bccp_result(bccp, manifest) -> GetBccpResponse:
         library=library_info,
         release=release_info,
         log=log_info,
-        owner=_create_user_info(bccp.owner),
+        owner=create_user_info(bccp.owner),
         created=WhoAndWhen(
-            who=_create_user_info(bccp.creator),
+            who=create_user_info(bccp.creator),
             when=bccp.creation_timestamp
         ),
         last_updated=WhoAndWhen(
-            who=_create_user_info(bccp.last_updater),
+            who=create_user_info(bccp.last_updater),
             when=bccp.last_update_timestamp
         )
     )
@@ -1809,36 +1803,11 @@ async def get_core_components(
             sort_list=sort_list
         )
 
-        # Convert dict items to CoreComponentInfo objects
-        core_components = []
-        for item in page.items:
-            core_component = CoreComponentInfo(
-                component_type=item["component_type"],
-                manifest_id=item["manifest_id"],
-                component_id=item["component_id"],
-                guid=item["guid"],
-                den=item["den"],
-                name=item["name"],
-                definition=item["definition"],
-                definition_source=item["definition_source"],
-                is_deprecated=item["is_deprecated"],
-                state=item["state"],
-                tag=item["tag"],
-                namespace=item["namespace"],
-                library=item["library"],
-                release=item["release"],
-                log=item["log"],
-                owner=item["owner"],
-                created=item["created"],
-                last_updated=item["last_updated"]
-            )
-            core_components.append(core_component)
-
         return GetCoreComponentPaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=core_components
+            items=page.items
         )
     except HTTPException as e:
         logger.error(f"HTTP error retrieving core components", e)
@@ -1855,7 +1824,7 @@ async def get_core_components(
             f"An unexpected error occurred while retrieving the core components: {str(e)}. Please contact your system administrator.") from e
 
 
-def _create_unified_core_component_result(component_data, component_type: str) -> CoreComponentInfo:
+def _create_unified_core_component_result(component_data, component_type: str) -> CoreComponentListEntry:
     """
     Create a unified core component result from any core component type.
     
@@ -1864,11 +1833,11 @@ def _create_unified_core_component_result(component_data, component_type: str) -
         component_type: The type of component ("ACC", "ASCCP", or "BCCP")
         
     Returns:
-        CoreComponentInfo: Unified core component result
+        CoreComponentListEntry: Unified core component result
     """
     # Extract common fields based on component type
     if component_type == "ACC":
-        return CoreComponentInfo(
+        return CoreComponentListEntry(
             component_type="ACC",
             manifest_id=component_data.acc_manifest_id,
             component_id=component_data.acc_id,
@@ -1888,7 +1857,7 @@ def _create_unified_core_component_result(component_data, component_type: str) -
             last_updated=component_data.last_updated
         )
     elif component_type == "ASCCP":
-        return CoreComponentInfo(
+        return CoreComponentListEntry(
             component_type="ASCCP",
             manifest_id=component_data.asccp_manifest_id,
             component_id=component_data.asccp_id,
@@ -1908,7 +1877,7 @@ def _create_unified_core_component_result(component_data, component_type: str) -
             last_updated=component_data.last_updated
         )
     else:  # BCCP
-        return CoreComponentInfo(
+        return CoreComponentListEntry(
             component_type="BCCP",
             manifest_id=component_data.bccp_manifest_id,
             component_id=component_data.bccp_id,

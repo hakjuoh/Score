@@ -61,8 +61,7 @@ from fastmcp.server.elicitation import (
 from pydantic import Field
 
 from services import CtxCategoryService, DateRangeParams, PaginationParams
-from services.models.common import WhoAndWhen
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.ctx_category import (
     CreateCtxCategoryResponse,
     DeleteCtxCategoryResponse,
@@ -283,10 +282,10 @@ async def get_context_categories(
                                                        pagination, sort_list)
 
         return GetCtxCategoryPaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=[_create_ctx_category_result(ctx_category) for ctx_category in page.items]
+            items=[GetCtxCategoryResponse(**ctx_category_info.model_dump()) for ctx_category_info in page.items]
         )
     except HTTPException as e:
         logger.error(f"HTTP error retrieving context categories", e)
@@ -402,9 +401,9 @@ async def get_context_category(
     # Get context category
     try:
         service = CtxCategoryService(requester=app_user)
-        ctx_category = service.get_ctx_category(ctx_category_id)
+        ctx_category_info = service.get_ctx_category(ctx_category_id)
 
-        return _create_ctx_category_result(ctx_category)
+        return GetCtxCategoryResponse(**ctx_category_info.model_dump())
     except HTTPException as e:
         logger.error(f"HTTP error retrieving context category", e)
         if e.status_code == 400:
@@ -711,36 +710,3 @@ async def delete_context_category(
 
 # Helper functions (placed after their usage)
 
-def _create_ctx_category_result(ctx_category) -> GetCtxCategoryResponse:
-    """
-    Create a formatted response object for context category data.
-    
-    This helper function transforms a CtxCategory database model into a standardized
-    response format that includes user information and timestamps.
-    
-    Args:
-        ctx_category: The CtxCategory database model instance to format
-        
-    Returns:
-        GetCtxCategoryResponse: A formatted response object containing:
-            - ctx_category_id: The unique identifier of the context category
-            - guid: The globally unique identifier
-            - name: The name of the context category
-            - description: The description (may be None)
-            - created: WhoAndWhen object with creator info and creation timestamp
-            - last_updated: WhoAndWhen object with updater info and update timestamp
-    """
-    return GetCtxCategoryResponse(
-        ctx_category_id=ctx_category.ctx_category_id,
-        guid=ctx_category.guid,
-        name=ctx_category.name,
-        description=ctx_category.description,
-        created=WhoAndWhen(
-            who=_create_user_info(ctx_category.creator),
-            when=ctx_category.creation_timestamp
-        ),
-        last_updated=WhoAndWhen(
-            who=_create_user_info(ctx_category.last_updater),
-            when=ctx_category.last_update_timestamp
-        )
-    )

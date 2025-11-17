@@ -38,8 +38,6 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import TagService, DateRangeParams, PaginationParams
-from services.models.common import WhoAndWhen
-from services.models.tag import TagInfo
 from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.tag import GetTagPaginationResponse
 from tools.utils import parse_date_range
@@ -273,19 +271,11 @@ async def get_tags(
             sort_list=sort_list
         )
 
-        # Convert to TagInfo objects
-        from tools import _create_user_info
-        
-        tag_items = []
-        for tag in page.items:
-            tag_info = _create_tag_result(tag)
-            tag_items.append(tag_info)
-
         return GetTagPaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=tag_items
+            items=page.items
         )
     except HTTPException as e:
         logger.error(f"HTTP error retrieving tags", e)
@@ -300,34 +290,3 @@ async def get_tags(
         logger.error(f"Unexpected error retrieving tags", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the tags: {str(e)}. Please contact your system administrator.") from e
-
-
-# Helper functions (placed after their usage)
-
-def _create_tag_result(tag) -> TagInfo:
-    """
-    Create a tag result from a Tag model instance.
-    
-    Args:
-        tag: Tag model instance
-        
-    Returns:
-        TagInfo: Formatted tag result
-    """
-    from tools import _create_user_info
-    
-    return TagInfo(
-        tag_id=tag.tag_id,
-        name=tag.name,
-        description=tag.description,
-        color=tag.background_color,  # Use background_color as the main color
-        text_color=tag.text_color,
-        created=WhoAndWhen(
-            who=_create_user_info(tag.creator),
-            when=tag.creation_timestamp
-        ),
-        last_updated=WhoAndWhen(
-            who=_create_user_info(tag.last_updater),
-            when=tag.last_update_timestamp
-        )
-    )

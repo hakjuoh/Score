@@ -17,7 +17,9 @@ from sqlmodel import select, func
 from databases.models import AppUser, CtxCategory, CtxScheme
 from databases.utils import generate_guid
 from services.cache import cache, evict_cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen, PaginationResponse
+from services.models.ctx_category import CtxCategoryDto
 from services.transaction import transaction, db_add, db_get, db_delete, db_flush, db_exec
 
 # Configure logging
@@ -57,10 +59,10 @@ class CtxCategoryService:
       has linked Context Schemes, providing detailed error messages with scheme IDs.
     
     - get_ctx_category(): Retrieve a single Context Category by ID with all relationships
-      loaded (creator, last_updater).
+      loaded (creator, last_updater). Returns CtxCategoryDetailInfo.
     
     - get_ctx_categories(): Retrieve paginated lists of Context Categories with optional
-      filters for name, description, and date ranges. Supports custom sorting.
+      filters for name, description, and date ranges. Supports custom sorting. Returns Page[CtxCategoryDetailInfo].
     
     Filtering and Sorting:
     - Supports filtering by name and description (case-insensitive partial matching)
@@ -335,7 +337,7 @@ class CtxCategoryService:
 
     @cache(key_prefix="ctx_category.get_ctx_category")
     @transaction(read_only=True)
-    def get_ctx_category(self, ctx_category_id: int) -> CtxCategory:
+    def get_ctx_category(self, ctx_category_id: int) -> CtxCategoryDto:
         """
         Get a context category by ID.
         
@@ -343,7 +345,7 @@ class CtxCategoryService:
             ctx_category_id: ID of the context category to retrieve
         
         Returns:
-            CtxCategory: The context category with relationships loaded
+            CtxCategoryDto: The context category information with all related data
         """
         # Validate input parameters
         if not ctx_category_id or ctx_category_id <= 0:
@@ -361,14 +363,14 @@ class CtxCategoryService:
                 detail=f"Context category with ID {ctx_category_id} not found"
             )
 
-        return ctx_category
+        return self.create_ctx_category_info(ctx_category)
 
     @cache(key_prefix="ctx_category.get_ctx_categories")
     @transaction(read_only=True)
     def get_ctx_categories(self, name: str = None, description: str = None,
                            created_on: DateRangeParams = None, last_updated_on: DateRangeParams = None,
                            pagination: PaginationParams = PaginationParams(offset=0, limit=10),
-                           sort_list: list[Sort] = None) -> Page:
+                           sort_list: list[Sort] = None) -> PaginationResponse[CtxCategoryDto]:
         """
         Get a paginated list of context categories.
         
@@ -381,7 +383,7 @@ class CtxCategoryService:
             sort_list: List of Sort objects for ordering
             
         Returns:
-            Page: Paginated result with total count and items
+            PaginationResponse: Paginated result with total count and items
         """
 
         # Set default pagination if not provided
@@ -414,11 +416,15 @@ class CtxCategoryService:
             )
         ).all()
 
-        return Page(
-            total=total,
+        # Convert ctx_categories to CtxCategoryDetailInfo
+        logger.debug("Converting context categories to CtxCategoryDetailInfo")
+        ctx_category_infos = [self.create_ctx_category_info(ctx_category) for ctx_category in ctx_categories]
+
+        return PaginationResponse(
+            total_items=total,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(ctx_categories)
+            items=ctx_category_infos
         )
 
     def _apply_filters(self, query, name: str = None, description: str = None,
@@ -495,3 +501,34 @@ class CtxCategoryService:
             query = query.order_by(CtxCategory.name)
 
         return query
+
+    def create_ctx_category_info(self, ctx_category) -> CtxCategoryDto:
+        """
+        Create a context category info from a CtxCategory model instance.
+        
+        Args:
+            ctx_category: The CtxCategory database model instance to format
+            
+        Returns:
+            CtxCategoryDto: A formatted context category info object containing:
+                - ctx_category_id: The unique identifier of the context category
+                - guid: The globally unique identifier
+                - name: The name of the context category
+                - description: The description (may be None)
+                - created: WhoAndWhen object with creator info and creation timestamp
+                - last_updated: WhoAndWhen object with updater info and update timestamp
+        """
+        return CtxCategoryDto(
+            ctx_category_id=ctx_category.ctx_category_id,
+            guid=ctx_category.guid,
+            name=ctx_category.name,
+            description=ctx_category.description,
+            created=WhoAndWhen(
+                who=create_user_info(ctx_category.creator),
+                when=ctx_category.creation_timestamp
+            ),
+            last_updated=WhoAndWhen(
+                who=create_user_info(ctx_category.last_updater),
+                when=ctx_category.last_update_timestamp
+            )
+        )

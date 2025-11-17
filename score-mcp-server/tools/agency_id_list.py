@@ -47,13 +47,7 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import AgencyIdListService, DateRangeParams, PaginationParams
-from services.models.agency_id_list import AgencyIdListValueInfo
-from services.models.common import WhoAndWhen
-from services.models.library import LibraryInfo
-from services.models.log import LogInfo
-from services.models.namespace import NamespaceInfo
-from services.models.release import ReleaseInfo
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.agency_id_list import (
     GetAgencyIdListResponse,
     GetAgencyIdListPaginationResponse,
@@ -393,13 +387,13 @@ async def get_agency_id_lists(
             pagination=pagination,
             sort_list=sort_list
         )
-        logger.info(f"Found {len(page.items)} agency ID lists (total available: {page.total})")
+        logger.info(f"Found {len(page.items)} agency ID lists (total available: {page.total_items})")
 
         result = GetAgencyIdListPaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=[_create_agency_id_list_result(manifest, agency_id_list_service) for manifest in page.items]
+            items=[GetAgencyIdListResponse(**agency_id_list_info.model_dump()) for agency_id_list_info in page.items]
         )
         logger.debug(f"Response prepared with {len(result.items)} items")
         return result
@@ -616,10 +610,10 @@ async def get_agency_id_list(
     try:
         service = AgencyIdListService()
         logger.debug(f"Querying agency ID list manifest {agency_id_list_manifest_id}")
-        manifest = service.get_agency_id_list_by_manifest_id(agency_id_list_manifest_id)
-        logger.info(f"Retrieved agency ID list: '{manifest.agency_id_list.name if manifest.agency_id_list else 'N/A'}' (manifest_id: {manifest.agency_id_list_manifest_id})")
+        agency_id_list_info = service.get_agency_id_list_by_manifest_id(agency_id_list_manifest_id)
+        logger.info(f"Retrieved agency ID list: '{agency_id_list_info.name}' (manifest_id: {agency_id_list_info.agency_id_list_manifest_id})")
 
-        result = _create_agency_id_list_result(manifest, service)
+        result = GetAgencyIdListResponse(**agency_id_list_info.model_dump())
         logger.debug(f"Response prepared for agency ID list manifest {agency_id_list_manifest_id}")
         return result
     except HTTPException as e:
@@ -640,101 +634,3 @@ async def get_agency_id_list(
             f"An unexpected error occurred while retrieving the agency ID list: {str(e)}. Please contact your system administrator.") from e
 
 
-def _create_agency_id_list_result(manifest, agency_id_list_service) -> GetAgencyIdListResponse:
-    """
-    Create an agency ID list result from an AgencyIdListManifest model instance.
-    
-    Args:
-        manifest: AgencyIdListManifest model instance with agency_id_list relationship
-        agency_id_list_service: AgencyIdListService instance for retrieving related data
-        
-    Returns:
-        GetAgencyIdListResponse: Formatted agency ID list result
-    """
-    logger.debug(f"Building response for agency ID list manifest {manifest.agency_id_list_manifest_id}")
-    agency_id_list = manifest.agency_id_list
-    
-    # Get value manifests using the separate service function
-    try:
-        logger.debug(f"Retrieving value manifests for manifest {manifest.agency_id_list_manifest_id}")
-        value_manifests = agency_id_list_service.get_agency_id_list_value_manifests_by_manifest_id(manifest.agency_id_list_manifest_id)
-        logger.debug(f"Found {len(value_manifests)} value manifests")
-    except Exception as e:
-        logger.warning(f"Could not retrieve value manifests for manifest {manifest.agency_id_list_manifest_id}", e)
-        value_manifests = []  # Continue without value manifests rather than failing completely
-    
-    # Create namespace info if available
-    namespace_info = None
-    if agency_id_list.namespace:
-        namespace_info = NamespaceInfo(
-            namespace_id=agency_id_list.namespace.namespace_id,
-            prefix=agency_id_list.namespace.prefix,
-            uri=agency_id_list.namespace.uri
-        )
-
-    # Create library info from release
-    library_info = LibraryInfo(
-        library_id=manifest.release.library_id,
-        name=manifest.release.library.name
-    )
-
-    # Create release info from manifest
-    # Since release_id is required and release relationship is loaded, release should always be available
-    release_info = ReleaseInfo(
-        release_id=manifest.release_id,
-        release_num=manifest.release.release_num,
-        state=manifest.release.state
-    )
-
-    # Create log info from manifest
-    log_info = None
-    if manifest.log:
-        log_info = LogInfo(
-            log_id=manifest.log.log_id,
-            revision_num=manifest.log.revision_num,
-            revision_tracking_num=manifest.log.revision_tracking_num
-        )
-
-    # Create agency ID list values info from value manifests
-    agency_id_list_values_info = []
-    for value_manifest in value_manifests:
-        agency_id_list_values_info.append(AgencyIdListValueInfo(
-            agency_id_list_value_manifest_id=value_manifest.agency_id_list_value_manifest_id,
-            agency_id_list_value_id=value_manifest.agency_id_list_value_id,
-            guid=value_manifest.agency_id_list_value.guid,
-            value=value_manifest.agency_id_list_value.value,
-            name=value_manifest.agency_id_list_value.name,
-            definition=value_manifest.agency_id_list_value.definition,
-            is_deprecated=value_manifest.agency_id_list_value.is_deprecated,
-            is_developer_default=value_manifest.agency_id_list_value.is_developer_default,
-            is_user_default=value_manifest.agency_id_list_value.is_user_default
-        ))
-
-    return GetAgencyIdListResponse(
-        agency_id_list_manifest_id=manifest.agency_id_list_manifest_id,
-        agency_id_list_id=agency_id_list.agency_id_list_id,
-        guid=agency_id_list.guid,
-        enum_type_guid=agency_id_list.enum_type_guid,
-        name=agency_id_list.name,
-        list_id=agency_id_list.list_id,
-        version_id=agency_id_list.version_id,
-        definition=agency_id_list.definition,
-        remark=agency_id_list.remark,
-        definition_source=agency_id_list.definition_source,
-        namespace=namespace_info,
-        library=library_info,
-        release=release_info,
-        log=log_info,
-        is_deprecated=agency_id_list.is_deprecated,
-        state=agency_id_list.state,
-        owner=_create_user_info(agency_id_list.owner),
-        values=agency_id_list_values_info,
-        created=WhoAndWhen(
-            who=_create_user_info(agency_id_list.creator),
-            when=agency_id_list.creation_timestamp
-        ),
-        last_updated=WhoAndWhen(
-            who=_create_user_info(agency_id_list.last_updater),
-            when=agency_id_list.last_update_timestamp
-        )
-    )

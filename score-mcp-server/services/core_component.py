@@ -20,9 +20,12 @@ from databases.models import AppUser, Acc, AccManifest, Ascc, AsccManifest, Ascc
     Library, Log, Tag, \
     Namespace, AccManifestTag, AsccpManifestTag, BccpManifestTag, DtManifest, BccManifest, Bcc, SeqKey, Dt
 from services.cache import cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import get_user_roles
+from services.models import UserSummary, NamespaceSummary, LibrarySummary, ReleaseSummary, LogInfo
+from services.models.common import Sort, PaginationParams, DateRangeParams, PaginationResponse, WhoAndWhen
+from services.models.core_component import CoreComponentListEntry
+from services.release import ReleaseService
 from services.transaction import transaction, db_exec
-from .release import ReleaseService
 
 # Configure logging
 logger = logging.getLogger("score.service.core_component")
@@ -248,7 +251,8 @@ class CoreComponentService:
             selectinload(AsccpManifest.release).selectinload(Release.library),
             selectinload(AsccpManifest.log),
             selectinload(AsccpManifest.role_of_acc_manifest).selectinload(AccManifest.acc).selectinload(Acc.namespace),
-            selectinload(AsccpManifest.role_of_acc_manifest).selectinload(AccManifest.release).selectinload(Release.library)
+            selectinload(AsccpManifest.role_of_acc_manifest).selectinload(AccManifest.release).selectinload(
+                Release.library)
         ).where(
             AsccpManifest.asccp_manifest_id == asccp_manifest_id
         )
@@ -300,7 +304,8 @@ class CoreComponentService:
 
     def _build_common_columns(self, component_type: str, manifest_id_col, component_id_col, guid_col, den_col, name_col,
                               definition_col, definition_source_col, is_deprecated_col, state_col,
-                              AppUser, AppUserCreator, AppUserUpdater, creation_timestamp_col, last_update_timestamp_col,
+                              AppUser, AppUserCreator, AppUserUpdater, creation_timestamp_col,
+                              last_update_timestamp_col,
                               den: str = None, sort_list: list[Sort] = None):
         """Build common columns for component queries."""
         from sqlmodel import literal_column, func, text
@@ -359,7 +364,7 @@ class CoreComponentService:
         ordering_by_den = False
         if sort_list:
             ordering_by_den = any(sort.column == 'den' for sort in sort_list)
-        
+
         # Add Levenshtein score if DEN filter is provided AND we're not ordering by den
         # When ordering by den, we want actual alphabetical ordering, not similarity-based ordering
         if den and not ordering_by_den:
@@ -369,8 +374,8 @@ class CoreComponentService:
         return columns
 
     def _build_where_conditions(self, release_id_col, den_col, component_col, all_release_ids: list[int],
-                               den: str = None, tag: str = None, created_on_params: DateRangeParams = None,
-                               last_updated_on_params: DateRangeParams = None):
+                                den: str = None, tag: str = None, created_on_params: DateRangeParams = None,
+                                last_updated_on_params: DateRangeParams = None):
         """Build where conditions for component queries."""
         from sqlmodel import func
         conditions = [release_id_col.in_(all_release_ids)]
@@ -390,99 +395,76 @@ class CoreComponentService:
                 conditions.append(component_col.last_update_timestamp >= last_updated_on_params.after)
         return conditions
 
-    def _build_user_info(self, user_id, login_id, name, is_admin, is_developer):
-        """Build user info dictionary from row data."""
-        if not user_id:
-            return None
-        info = {
-            "user_id": user_id,
-            "login_id": login_id,
-            "username": name or login_id,
-            "roles": []
-        }
-        if is_admin:
-            info["roles"].append("Admin")
-        if is_developer:
-            info["roles"].append("Developer")
-        if not info["roles"]:
-            info["roles"].append("End-User")
-        return info
-
-    def _process_component_row(self, row):
+    def _process_component_row(self, row) -> CoreComponentListEntry:
         """Process a single component row into unified format."""
         # Build namespace info
-        namespace_info = {
-            "namespace_id": row.ns_id,
-            "prefix": row.ns_prefix,
-            "uri": row.ns_uri
-        } if row.ns_id else None
+        namespace_info = NamespaceSummary(
+            namespace_id=row.ns_id,
+            prefix=row.ns_prefix,
+            uri=row.ns_uri
+        ) if row.ns_id else None
 
         # Build library info
-        library_info = {
-            "library_id": row.lib_id,
-            "name": row.lib_name
-        } if row.lib_id else None
+        library_info = LibrarySummary(
+            library_id=row.lib_id,
+            name=row.lib_name
+        ) if row.lib_id else None
 
         # Build release info
-        release_info = {
-            "release_id": row.rel_id,
-            "release_num": row.rel_num,
-            "state": row.rel_state
-        } if row.rel_id else None
+        release_info = ReleaseSummary(
+            release_id=row.rel_id,
+            release_num=row.rel_num,
+            state=row.rel_state
+        ) if row.rel_id else None
 
         # Build log info
-        log_info = {
-            "log_id": row.log_log_id,
-            "revision_num": row.log_revision_num,
-            "revision_tracking_num": row.log_revision_tracking_num
-        } if row.log_log_id else None
-
-        # Build user info
-        owner_info = self._build_user_info(
-            row.owner_id, row.owner_login_id, row.owner_name,
-            row.owner_is_admin, row.owner_is_developer
-        )
-        creator_info = self._build_user_info(
-            row.creator_id, row.creator_login_id, row.creator_name,
-            row.creator_is_admin, row.creator_is_developer
-        )
-        updater_info = self._build_user_info(
-            row.updater_id, row.updater_login_id, row.updater_name,
-            row.updater_is_admin, row.updater_is_developer
-        )
-
-        # Build created and last_updated info
-        created_info = {
-            "who": creator_info,
-            "when": row.creation_timestamp
-        } if creator_info and row.creation_timestamp else None
-
-        last_updated_info = {
-            "who": updater_info,
-            "when": row.last_update_timestamp
-        } if updater_info and row.last_update_timestamp else None
+        log_info = LogInfo(
+            log_id=row.log_log_id,
+            revision_num=row.log_revision_num,
+            revision_tracking_num=row.log_revision_tracking_num
+        ) if row.log_log_id else None
 
         # Create unified component info
-        return {
-            "component_type": row.component_type,
-            "manifest_id": row.manifest_id,
-            "component_id": row.component_id,
-            "guid": row.guid,
-            "den": row.den,
-            "name": row.name,
-            "definition": row.definition,
-            "definition_source": row.definition_source,
-            "is_deprecated": row.is_deprecated,
-            "state": row.state,
-            "namespace": namespace_info,
-            "library": library_info,
-            "release": release_info,
-            "log": log_info,
-            "owner": owner_info,
-            "created": created_info,
-            "last_updated": last_updated_info,
-            "tag": row.tag_name
-        }
+        return CoreComponentListEntry(
+            component_type=row.component_type,
+            manifest_id=row.manifest_id,
+            component_id=row.component_id,
+            guid=row.guid,
+            den=row.den,
+            name=row.name,
+            definition=row.definition,
+            definition_source=row.definition_source,
+            is_deprecated=row.is_deprecated,
+            state=row.state,
+            tag=row.tag_name,
+            namespace=namespace_info,
+            library=library_info,
+            release=release_info,
+            log=log_info,
+            owner=UserSummary(
+                user_id=row.owner_id,
+                login_id=row.owner_login_id,
+                username=row.owner_name,
+                roles=get_user_roles(row.owner_is_admin, row.owner_is_developer)
+            ),
+            created=WhoAndWhen(
+                who=UserSummary(
+                    user_id=row.creator_id,
+                    login_id=row.creator_login_id,
+                    username=row.creator_name,
+                    roles=get_user_roles(row.creator_is_admin, row.creator_is_developer)),
+                when=row.creation_timestamp
+            ),
+            last_updated=WhoAndWhen(
+                who=UserSummary(
+                    user_id=row.updater_id,
+                    login_id=row.updater_login_id,
+                    username=row.updater_name,
+                    roles=get_user_roles(row.updater_is_admin, row.updater_is_developer)),
+                when=row.last_update_timestamp
+            )
+        )
+
 
     def _apply_sorting_to_union_query(self, base_query, sort_list):
         """Apply sorting to union query."""
@@ -508,22 +490,23 @@ class CoreComponentService:
             base_query = base_query.order_by(text("levenshtein_score ASC"))
         return base_query
 
+
     @cache(key_prefix="core_component.get_core_components_by_release")
     @transaction(read_only=True)
     def get_core_components_by_release(
-        self,
-        release_id: int,
-        types: list[str],
-        den: str = None,
-        tag: str = None,
-        created_on_params: DateRangeParams = None,
-        last_updated_on_params: DateRangeParams = None,
-        pagination: PaginationParams = PaginationParams(offset=0, limit=10),
-        sort_list: list[Sort] = None
-    ) -> Page:
+            self,
+            release_id: int,
+            types: list[str],
+            den: str = None,
+            tag: str = None,
+            created_on_params: DateRangeParams = None,
+            last_updated_on_params: DateRangeParams = None,
+            pagination: PaginationParams = PaginationParams(offset=0, limit=10),
+            sort_list: list[Sort] = None
+    ) -> PaginationResponse[CoreComponentListEntry]:
         """
         Get core components (ACC, ASCCP, BCCP) using UNION query with SQLModel select for proper pagination.
-        
+
         Args:
             release_id: Release ID to filter by
             types: List of component types to include ('ACC', 'ASCCP', 'BCCP')
@@ -533,9 +516,9 @@ class CoreComponentService:
             last_updated_on_params: Last update date range filter
             pagination: Pagination parameters
             sort_list: Sort parameters
-            
+
         Returns:
-            Page: Paginated response containing core components and pagination metadata
+            PaginationResponse: Paginated response containing core components and pagination metadata
         """
         # Set default pagination if not provided
         if pagination is None:
@@ -609,7 +592,8 @@ class CoreComponentService:
                 .join(AppUserCreator, Asccp.created_by == AppUserCreator.app_user_id)
                 .join(AppUserUpdater, Asccp.last_updated_by == AppUserUpdater.app_user_id)
                 .outerjoin(Namespace.__table__, Asccp.namespace_id == Namespace.namespace_id)
-                .outerjoin(AsccpManifestTag.__table__, AsccpManifest.asccp_manifest_id == AsccpManifestTag.asccp_manifest_id)
+                .outerjoin(AsccpManifestTag.__table__,
+                           AsccpManifest.asccp_manifest_id == AsccpManifestTag.asccp_manifest_id)
                 .outerjoin(Tag.__table__, AsccpManifestTag.tag_id == Tag.tag_id)
             ).where(and_(*self._build_where_conditions(
                 AsccpManifest.release_id, AsccpManifest.den, Asccp, all_release_ids,
@@ -674,25 +658,26 @@ class CoreComponentService:
         unified_items = [self._process_component_row(row) for row in results]
 
         # Create Page object
-        return Page(
-            total=total_count,
+        return PaginationResponse(
+            total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
             items=unified_items
         )
+
 
     @cache(key_prefix="core_component.get_relationships_for_acc")
     @transaction(read_only=True)
     def get_relationships_for_acc(self, acc_manifest_id: int) -> list[SeqKey]:
         """
         Get relationships (SeqKeys) for a specific ACC manifest.
-        
+
         ACC has relationships with ASCC (which relates to ASCCP → ACC) and BCC (which relates to BCCP → DT).
         This method returns SeqKey objects with all relationships eagerly loaded.
-        
+
         Args:
             acc_manifest_id: Unique identifier of the ACC manifest
-            
+
         Returns:
             list[SeqKey]: List of SeqKey objects with relationships loaded, ordered by their linked list structure
         """
@@ -701,19 +686,22 @@ class CoreComponentService:
             select(AccManifest)
             .where(AccManifest.acc_manifest_id == acc_manifest_id)
         ).one_or_none()
-        
+
         if not acc_manifest:
             return []
-        
+
         # Find the first seq_key (where prev_seq_key_id is null)
         first_seq_key = db_exec(
             select(SeqKey)
             .options(
                 selectinload(SeqKey.ascc_manifest).selectinload(AsccManifest.ascc),
-                selectinload(SeqKey.ascc_manifest).selectinload(AsccManifest.to_asccp_manifest).selectinload(AsccpManifest.asccp),
+                selectinload(SeqKey.ascc_manifest).selectinload(AsccManifest.to_asccp_manifest).selectinload(
+                    AsccpManifest.asccp),
                 selectinload(SeqKey.bcc_manifest).selectinload(BccManifest.bcc),
-                selectinload(SeqKey.bcc_manifest).selectinload(BccManifest.to_bccp_manifest).selectinload(BccpManifest.bccp),
-                selectinload(SeqKey.bcc_manifest).selectinload(BccManifest.to_bccp_manifest).selectinload(BccpManifest.bdt_manifest).selectinload(DtManifest.dt)
+                selectinload(SeqKey.bcc_manifest).selectinload(BccManifest.to_bccp_manifest).selectinload(
+                    BccpManifest.bccp),
+                selectinload(SeqKey.bcc_manifest).selectinload(BccManifest.to_bccp_manifest).selectinload(
+                    BccpManifest.bdt_manifest).selectinload(DtManifest.dt)
             )
             .where(
                 and_(
@@ -722,31 +710,34 @@ class CoreComponentService:
                 )
             )
         ).one_or_none()
-        
+
         if not first_seq_key:
             return []
-        
+
         # Traverse the linked list to get all associations in order
         seq_keys = []
         current_seq_key = first_seq_key
-        
+
         while current_seq_key:
             seq_keys.append(current_seq_key)
-            
+
             # Move to next seq_key
             if current_seq_key.next_seq_key_id:
                 current_seq_key = db_exec(
                     select(SeqKey)
                     .options(
                         selectinload(SeqKey.ascc_manifest).selectinload(AsccManifest.ascc),
-                        selectinload(SeqKey.ascc_manifest).selectinload(AsccManifest.to_asccp_manifest).selectinload(AsccpManifest.asccp),
+                        selectinload(SeqKey.ascc_manifest).selectinload(AsccManifest.to_asccp_manifest).selectinload(
+                            AsccpManifest.asccp),
                         selectinload(SeqKey.bcc_manifest).selectinload(BccManifest.bcc),
-                        selectinload(SeqKey.bcc_manifest).selectinload(BccManifest.to_bccp_manifest).selectinload(BccpManifest.bccp),
-                        selectinload(SeqKey.bcc_manifest).selectinload(BccManifest.to_bccp_manifest).selectinload(BccpManifest.bdt_manifest).selectinload(DtManifest.dt)
+                        selectinload(SeqKey.bcc_manifest).selectinload(BccManifest.to_bccp_manifest).selectinload(
+                            BccpManifest.bccp),
+                        selectinload(SeqKey.bcc_manifest).selectinload(BccManifest.to_bccp_manifest).selectinload(
+                            BccpManifest.bdt_manifest).selectinload(DtManifest.dt)
                     )
                     .where(SeqKey.seq_key_id == current_seq_key.next_seq_key_id)
                 ).one_or_none()
             else:
                 current_seq_key = None
-        
+
         return seq_keys

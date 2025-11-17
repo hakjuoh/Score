@@ -13,7 +13,9 @@ from sqlmodel import select, func, and_
 
 from databases.models import Tag
 from services.cache import cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen, PaginationResponse
+from services.models.tag import TagDto
 from services.transaction import transaction, db_exec
 
 # Configure logging
@@ -68,24 +70,24 @@ class TagService:
             sort_list=[Sort(column="name", direction="asc")]
         )
     """
-    
+
     def __init__(self):
         """
         Initialize the service.
         """
         pass
-    
+
     @cache(key_prefix="tag.get_tags")
     @transaction(read_only=True)
     def get_tags(
-        self,
-        name: str | None = None,
-        description: str | None = None,
-        created_on_params: DateRangeParams | None = None,
-        last_updated_on_params: DateRangeParams | None = None,
-        pagination: PaginationParams | None = None,
-        sort_list: list[Sort] | None = None
-    ) -> Page:
+            self,
+            name: str | None = None,
+            description: str | None = None,
+            created_on_params: DateRangeParams | None = None,
+            last_updated_on_params: DateRangeParams | None = None,
+            pagination: PaginationParams | None = None,
+            sort_list: list[Sort] | None = None
+    ) -> PaginationResponse[TagDto]:
         """
         Get tags with optional filtering and pagination.
         
@@ -98,7 +100,7 @@ class TagService:
             sort_list: List of sort specifications
             
         Returns:
-            Page: Paginated list of tags
+            PaginationResponse: Paginated list of tags
         """
         # Set default pagination if not provided
         if pagination is None:
@@ -107,35 +109,35 @@ class TagService:
         # Build base query with creator and last_updater relationships loaded
         query = select(Tag).options(selectinload(Tag.creator), selectinload(Tag.last_updater))
         conditions = []
-        
+
         # Apply filters
         if name:
             conditions.append(Tag.name.ilike(f"%{name}%"))
-        
+
         if description:
             conditions.append(Tag.description.ilike(f"%{description}%"))
-        
+
         if created_on_params:
             if created_on_params.before:
                 conditions.append(Tag.creation_timestamp < created_on_params.before)
             if created_on_params.after:
                 conditions.append(Tag.creation_timestamp > created_on_params.after)
-        
+
         if last_updated_on_params:
             if last_updated_on_params.before:
                 conditions.append(Tag.last_update_timestamp < last_updated_on_params.before)
             if last_updated_on_params.after:
                 conditions.append(Tag.last_update_timestamp > last_updated_on_params.after)
-        
+
         if conditions:
             query = query.where(and_(*conditions))
-        
+
         # Get total count
         count_query = select(func.count(Tag.tag_id))
         if conditions:
             count_query = count_query.where(and_(*conditions))
         total_count = db_exec(count_query).one()
-        
+
         # Apply ordering
         if sort_list:
             order_columns = []
@@ -160,16 +162,43 @@ class TagService:
                             order_columns.append(getattr(Tag, sort_obj))
             if order_columns:
                 query = query.order_by(*order_columns)
-        
+
         # Apply pagination
         query = query.offset(pagination.offset).limit(pagination.limit)
-        
+
         # Execute query
         tags = db_exec(query).all()
-        
-        return Page(
-            total=total_count,
+
+        return PaginationResponse(
+            total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(tags)
+            items=[self._create_tag_result(tag) for tag in tags]
+        )
+
+    def _create_tag_result(self, tag) -> TagDto:
+        """
+        Create a tag result from a Tag model instance.
+
+        Args:
+            tag: Tag model instance
+
+        Returns:
+            TagDto: Formatted tag result
+        """
+
+        return TagDto(
+            tag_id=tag.tag_id,
+            name=tag.name,
+            description=tag.description,
+            color=tag.background_color,  # Use background_color as the main color
+            text_color=tag.text_color,
+            created=WhoAndWhen(
+                who=create_user_info(tag.creator),
+                when=tag.creation_timestamp
+            ),
+            last_updated=WhoAndWhen(
+                who=create_user_info(tag.last_updater),
+                when=tag.last_update_timestamp
+            )
         )

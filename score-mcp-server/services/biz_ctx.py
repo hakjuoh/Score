@@ -18,7 +18,11 @@ from sqlmodel import select, func
 from databases.models import AppUser, BizCtx, BizCtxValue, CtxSchemeValue, BizCtxAssignment
 from databases.utils import generate_guid
 from services.cache import cache, evict_cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info
+from services.models.biz_ctx import BizCtxDto, BizCtxValueDto
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen, \
+    PaginationResponse
+from services.models.ctx_scheme import CtxSchemeValueDto
 from services.transaction import transaction, db_add, db_get, db_delete, db_flush, db_exec
 
 # Configure logging
@@ -58,11 +62,10 @@ class BizCtxService:
       providing detailed error messages with assignment IDs.
     
     - get_biz_ctx(): Retrieve a single Business Context by ID with all relationships
-      and values loaded, including nested Context Scheme Value information.
+      and values loaded, including nested Context Scheme Value information. Returns BizCtxInfo.
     
     - get_biz_ctxs(): Retrieve paginated lists of Business Contexts with optional
-      filters for name and date ranges. Supports custom sorting. All results include
-      full relationship loading.
+      filters for name and date ranges. Supports custom sorting. Returns Page[BizCtxInfo].
     
     Business Context Value Management:
     - create_biz_ctx_value(): Create a new Business Context Value linking a Business
@@ -519,7 +522,7 @@ class BizCtxService:
 
     @cache(key_prefix="biz_ctx.get_biz_ctx")
     @transaction(read_only=True)
-    def get_biz_ctx(self, biz_ctx_id: int) -> BizCtx:
+    def get_biz_ctx(self, biz_ctx_id: int) -> BizCtxDto:
         """
         Get a business context by ID.
         
@@ -527,7 +530,7 @@ class BizCtxService:
             biz_ctx_id: ID of the business context to retrieve
         
         Returns:
-            BizCtx: The business context
+            BizCtxDto: The business context information with all related data
         """
         # Validate input parameters
         if not biz_ctx_id or biz_ctx_id <= 0:
@@ -553,7 +556,7 @@ class BizCtxService:
                 detail=f"Business context with ID {biz_ctx_id} not found"
             )
 
-        return biz_ctx
+        return self.create_biz_ctx_info(biz_ctx)
 
     @cache(key_prefix="biz_ctx.get_biz_ctx_by_value_id")
     @transaction(read_only=True)
@@ -599,7 +602,7 @@ class BizCtxService:
     def get_biz_ctxs(self, name: str = None, created_on_params: DateRangeParams = None,
                      last_updated_on_params: DateRangeParams = None,
                      pagination: PaginationParams = PaginationParams(offset=0, limit=10),
-                     sort_list: list[Sort] = None) -> Page:
+                     sort_list: list[Sort] = None) -> PaginationResponse[BizCtxDto]:
         """
         Get a paginated list of business contexts.
         
@@ -611,7 +614,7 @@ class BizCtxService:
             sort_list: List of sort specifications
         
         Returns:
-            Page: Paginated list of business contexts
+            Page[BizCtxDto]: Paginated list of business context information
         """
         # Set default pagination if not provided
         if pagination is None:
@@ -643,11 +646,15 @@ class BizCtxService:
             )
         ).all()
 
-        return Page(
-            total=total,
+        # Convert biz_ctxs to BizCtxInfo
+        logger.debug("Converting business contexts to BizCtxInfo")
+        biz_ctx_infos = [self.create_biz_ctx_info(biz_ctx) for biz_ctx in biz_ctxs]
+
+        return PaginationResponse(
+            total_items=total,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(biz_ctxs)
+            items=biz_ctx_infos
         )
 
     def _apply_filters(self, query, name: str = None, created_on_params: DateRangeParams = None,
@@ -702,3 +709,47 @@ class BizCtxService:
                         query = query.order_by(column.asc())
 
         return query
+
+    def create_biz_ctx_info(self, biz_ctx) -> BizCtxDto:
+        """
+        Create a business context info from a BizCtx model instance.
+        
+        Args:
+            biz_ctx: The BizCtx database model instance to format
+            
+        Returns:
+            BizCtxDto: A formatted business context info object containing:
+                - biz_ctx_id: The unique identifier of the business context
+                - guid: The globally unique identifier
+                - name: Short, descriptive name of the business context
+                - values: List of associated business context values
+                - created: WhoAndWhen object with creator info and creation timestamp
+                - last_updated: WhoAndWhen object with updater info and update timestamp
+        """
+        # Create business context values info
+        values_info = []
+        if hasattr(biz_ctx, 'biz_ctx_values') and biz_ctx.biz_ctx_values:
+            for biz_ctx_value in biz_ctx.biz_ctx_values:
+                values_info.append(BizCtxValueDto(
+                    biz_ctx_value_id=biz_ctx_value.biz_ctx_value_id,
+                    ctx_scheme_value=CtxSchemeValueDto(
+                        ctx_scheme_value_id=biz_ctx_value.ctx_scheme_value.ctx_scheme_value_id,
+                        guid=biz_ctx_value.ctx_scheme_value.guid,
+                        value=biz_ctx_value.ctx_scheme_value.value,
+                        meaning=biz_ctx_value.ctx_scheme_value.meaning)
+                ))
+
+        return BizCtxDto(
+            biz_ctx_id=biz_ctx.biz_ctx_id,
+            guid=biz_ctx.guid,
+            name=biz_ctx.name,
+            values=values_info,
+            created=WhoAndWhen(
+                who=create_user_info(biz_ctx.creator),
+                when=biz_ctx.creation_timestamp
+            ),
+            last_updated=WhoAndWhen(
+                who=create_user_info(biz_ctx.last_updater),
+                when=biz_ctx.last_update_timestamp
+            )
+        )

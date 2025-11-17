@@ -14,7 +14,9 @@ from sqlmodel import select, func
 
 from databases.models import Library
 from services.cache import cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen, PaginationResponse
+from services.models.library import LibraryDto
 from services.transaction import transaction, db_exec
 
 # Configure logging
@@ -101,7 +103,7 @@ class LibraryService:
 
     @cache(key_prefix="library.get_library")
     @transaction(read_only=True)
-    def get_library(self, library_id: int) -> Library:
+    def get_library(self, library_id: int) -> LibraryDto:
         """
         Get a library by ID.
         
@@ -129,7 +131,7 @@ class LibraryService:
                 detail=f"Library with ID {library_id} not found"
             )
 
-        return library
+        return self._create_library_result(library)
 
     @cache(key_prefix="library.get_libraries")
     @transaction(read_only=True)
@@ -138,7 +140,7 @@ class LibraryService:
                       domain: str = None, state: str = None, description: str = None, is_default: bool = None,
                       created_on_params: DateRangeParams = None, last_updated_on_params: DateRangeParams = None,
                       pagination: PaginationParams = PaginationParams(offset=0, limit=10),
-                      sort_list: list[Sort] = None) -> Page:
+                      sort_list: list[Sort] = None) -> PaginationResponse[LibraryDto]:
         """
         Get libraries with optional filtering and pagination.
         
@@ -156,7 +158,7 @@ class LibraryService:
             is_default: Filter by default library flag (optional)
         
         Returns:
-            Page: Paginated response containing libraries and pagination metadata
+            PaginationResponse: Paginated response containing libraries and pagination metadata
         """
         # Set default pagination if not provided
         if pagination is None:
@@ -170,8 +172,8 @@ class LibraryService:
 
         # Apply filters
         query = self._apply_filters(query, name, type, organization, domain, state,
-                                   description, is_default, created_on_params,
-                                   last_updated_on_params)
+                                    description, is_default, created_on_params,
+                                    last_updated_on_params)
 
         # Get total count
         count_query = select(func.count()).select_from(query.subquery())
@@ -187,18 +189,18 @@ class LibraryService:
         libraries = db_exec(query).all()
 
         # Create Page object
-        return Page(
-            total=total_count,
+        return PaginationResponse(
+            total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(libraries)
+            items=[self._create_library_result(library) for library in libraries]
         )
 
     def _apply_filters(self, query, name: str = None, type: str = None,
-                      organization: str = None, domain: str = None, state: str = None,
-                      description: str = None, is_default: bool = None,
-                      created_on_params: DateRangeParams = None,
-                      last_updated_on_params: DateRangeParams = None):
+                       organization: str = None, domain: str = None, state: str = None,
+                       description: str = None, is_default: bool = None,
+                       created_on_params: DateRangeParams = None,
+                       last_updated_on_params: DateRangeParams = None):
         """
         Apply filters to a query for libraries.
         
@@ -275,3 +277,28 @@ class LibraryService:
             query = query.order_by(Library.creation_timestamp.desc())
 
         return query
+
+    def _create_library_result(service, library) -> LibraryDto:
+        """
+        Create a library result from a Library model instance.
+
+        Args:
+            library: Library model instance
+
+        Returns:
+            LibraryDto: Formatted library result
+        """
+        return LibraryDto(
+            library_id=library.library_id,
+            name=library.name,
+            type=library.type,
+            organization=library.organization,
+            description=library.description,
+            link=library.link,
+            domain=library.domain,
+            state=library.state,
+            is_read_only=library.is_read_only,
+            is_default=library.is_default,
+            created=WhoAndWhen(who=create_user_info(library.creator), when=library.creation_timestamp),
+            last_updated=WhoAndWhen(who=create_user_info(library.last_updater), when=library.last_update_timestamp)
+        )

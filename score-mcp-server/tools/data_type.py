@@ -48,18 +48,12 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import DataTypeService, DateRangeParams, PaginationParams
-from services.models.common import WhoAndWhen
-from services.models.data_type import BaseDtInfo, DtScInfo
-from services.models.library import LibraryInfo
-from services.models.log import LogInfo
-from services.models.namespace import NamespaceInfo
-from services.models.release import ReleaseInfo
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.data_type import (
     GetDataTypeResponse,
     GetDataTypePaginationResponse,
 )
-from tools.utils import parse_date_range, validate_and_create_value_constraint
+from tools.utils import parse_date_range
 
 # Configure logging
 logger = logging.getLogger("score.mcp.data_type")
@@ -74,51 +68,77 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
         "type": "object",
         "description": "Response containing paginated list of data types",
         "properties": {
-            "total_items": {"type": "integer", "description": "Total number of data types available. Allowed values: non-negative integers (≥0).", "example": 50},
-            "offset": {"type": "integer", "description": "Offset of the first item in this page. Allowed values: non-negative integers (≥0). Default value: 0.", "example": 0},
-            "limit": {"type": "integer", "description": "Number of items returned in this page. Allowed values: integers between 1 and 100 (inclusive). Default value: 10.", "example": 10},
+            "total_items": {"type": "integer",
+                            "description": "Total number of data types available. Allowed values: non-negative integers (≥0).",
+                            "example": 50},
+            "offset": {"type": "integer",
+                       "description": "Offset of the first item in this page. Allowed values: non-negative integers (≥0). Default value: 0.",
+                       "example": 0},
+            "limit": {"type": "integer",
+                      "description": "Number of items returned in this page. Allowed values: integers between 1 and 100 (inclusive). Default value: 10.",
+                      "example": 10},
             "items": {
                 "type": "array",
                 "description": "List of data types on this page",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "dt_manifest_id": {"type": "integer", "description": "Unique identifier for the data type (DT) manifest", "example": 12345},
-                        "dt_id": {"type": "integer", "description": "Unique identifier for the data type (DT)", "example": 6789},
-                        "guid": {"type": "string", "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)", "example": "a1b2c3d4e5f6789012345678901234ab"},
-                        "den": {"type": "string", "description": "Dictionary Entry Name (DEN) - the standardized name of the data type (DT) as defined by CCTS v3, uniquely identifying the data type within its namespace", "example": "Price_ Amount. Type"},
-                        "data_type_term": {"type": ["string", "null"], "description": "Data type (DT) term as specified in CCTS v3", "example": "Amount"},
-                        "qualifier": {"type": ["string", "null"], "description": "Qualifier for the data type (DT)", "example": "Price"},
-                        "representation_term": {"type": ["string", "null"], "description": "Representation term for the data type (DT)", "example": "Amount"},
-                        "six_digit_id": {"type": ["string", "null"], "description": "Six-digit identifier for the data type (DT)", "example": "123456"},
-                        "definition": {"type": ["string", "null"], "description": "Definition of the data type (DT)", "example": "A number of monetary units specified in a currency where the unit of currency is explicit or implied"},
-                        "definition_source": {"type": ["string", "null"], "description": "URL indicating the source of the definition", "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
-                        "content_component_definition": {"type": ["string", "null"], "description": "Content component definition", "example": "A numeric value determined by measuring an object along with the specified unit of measure"},
-                        "commonly_used": {"type": "boolean", "description": "Whether the data type (DT) is commonly used", "example": False},
-                        "is_deprecated": {"type": "boolean", "description": "Whether the data type (DT) is deprecated", "example": False},
-                        "state": {"type": ["string", "null"], "description": "State of the data type (DT)", "example": "Published"},
+                        "dt_manifest_id": {"type": "integer",
+                                           "description": "Unique identifier for the data type (DT) manifest",
+                                           "example": 12345},
+                        "dt_id": {"type": "integer", "description": "Unique identifier for the data type (DT)",
+                                  "example": 6789},
                         "base_dt": {
                             "type": ["object", "null"],
                             "description": "Base data type information if this data type is based on another",
                             "properties": {
-                                "dt_manifest_id": {"type": "integer", "description": "Unique identifier for the base data type manifest", "example": 12345},
-                                "dt_id": {"type": "integer", "description": "Unique identifier for the base data type", "example": 6789},
-                                "guid": {"type": "string", "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)", "example": "a1b2c3d4e5f6789012345678901234ab"},
-                                "den": {"type": "string", "description": "Dictionary Entry Name (DEN) - the standardized name of the data type (DT) as defined by CCTS v3", "example": "Amount. Type"},
-                                "data_type_term": {"type": ["string", "null"], "description": "Data type (DT) term as specified in CCTS v3", "example": "Amount"},
-                                "qualifier": {"type": ["string", "null"], "description": "Qualifier for the data type (DT)", "example": "Price"},
-                                "representation_term": {"type": ["string", "null"], "description": "Representation term for the data type (DT)", "example": "Amount"},
-                                "six_digit_id": {"type": ["string", "null"], "description": "Six-digit identifier for the data type (DT)", "example": "123456"},
-                                "definition": {"type": ["string", "null"], "description": "Definition of the data type (DT)", "example": "A number of monetary units specified in a currency where the unit of currency is explicit or implied"},
-                                "definition_source": {"type": ["string", "null"], "description": "URL indicating the source of the definition", "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
-                                "content_component_definition": {"type": ["string", "null"], "description": "Content component definition", "example": "A numeric value determined by measuring an object along with the specified unit of measure"},
+                                "dt_manifest_id": {"type": "integer",
+                                                   "description": "Unique identifier for the base data type manifest",
+                                                   "example": 12345},
+                                "dt_id": {"type": "integer", "description": "Unique identifier for the base data type",
+                                          "example": 6789},
+                                "based_dt_manifest_id": {"type": ["integer", "null"], "description": "Unique identifier for the base data type manifest of the base data type",
+                                                         "example": 6789},
+                                "guid": {"type": "string",
+                                         "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)",
+                                         "example": "a1b2c3d4e5f6789012345678901234ab"},
+                                "den": {"type": "string",
+                                        "description": "Dictionary Entry Name (DEN) - the standardized name of the data type (DT) as defined by CCTS v3",
+                                        "example": "Amount. Type"},
+                                "data_type_term": {"type": ["string", "null"],
+                                                   "description": "Data type (DT) term as specified in CCTS v3",
+                                                   "example": "Amount"},
+                                "qualifier": {"type": ["string", "null"],
+                                              "description": "Qualifier for the data type (DT)", "example": "Price"},
+                                "representation_term": {"type": ["string", "null"],
+                                                        "description": "Representation term for the data type (DT)",
+                                                        "example": "Amount"},
+                                "six_digit_id": {"type": ["string", "null"],
+                                                 "description": "Six-digit identifier for the data type (DT)",
+                                                 "example": "123456"},
+                                "definition": {"type": ["string", "null"],
+                                               "description": "Definition of the data type (DT)",
+                                               "example": "A number of monetary units specified in a currency where the unit of currency is explicit or implied"},
+                                "definition_source": {"type": ["string", "null"],
+                                                      "description": "URL indicating the source of the definition",
+                                                      "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
+                                "content_component_definition": {"type": ["string", "null"],
+                                                                 "description": "Content component definition",
+                                                                 "example": "A numeric value determined by measuring an object along with the specified unit of measure"},
+                                "is_deprecated": {"type": "boolean", "description": "Whether the data type (DT) is deprecated",
+                                                  "example": False},
                                 "namespace": {
                                     "type": ["object", "null"],
                                     "description": "Namespace information",
                                     "properties": {
-                                        "namespace_id": {"type": "integer", "description": "Unique identifier for the namespace", "example": 1},
-                                        "uri": {"type": "string", "description": "Namespace URI (Uniform Resource Identifier)", "example": "http://www.openapplications.org/oagis/10"},
-                                        "prefix": {"type": ["string", "null"], "description": "Namespace prefix", "example": "oagis"}
+                                        "namespace_id": {"type": "integer",
+                                                         "description": "Unique identifier for the namespace",
+                                                         "example": 1},
+                                        "uri": {"type": "string",
+                                                "description": "Namespace URI (Uniform Resource Identifier)",
+                                                "example": "http://www.openapplications.org/oagis/10"},
+                                        "prefix": {"type": ["string", "null"], "description": "Namespace prefix",
+                                                   "example": "oagis"}
                                     },
                                     "required": ["namespace_id", "uri"]
                                 },
@@ -126,8 +146,11 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
                                     "type": "object",
                                     "description": "Library information",
                                     "properties": {
-                                        "library_id": {"type": "integer", "description": "Unique identifier for the library", "example": 1},
-                                        "name": {"type": "string", "description": "Library name", "example": "connectSpec"}
+                                        "library_id": {"type": "integer",
+                                                       "description": "Unique identifier for the library",
+                                                       "example": 1},
+                                        "name": {"type": "string", "description": "Library name",
+                                                 "example": "connectSpec"}
                                     },
                                     "required": ["library_id", "name"]
                                 },
@@ -135,51 +158,118 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
                                     "type": "object",
                                     "description": "Release information",
                                     "properties": {
-                                        "release_id": {"type": "integer", "description": "Unique identifier for the release", "example": 1},
-                                        "release_num": {"type": "string", "description": "Release number", "example": "10.6"},
-                                        "state": {"type": "string", "enum": ["Processing", "Initialized", "Draft", "Published"], "description": "Release state", "example": "Published"}
+                                        "release_id": {"type": "integer",
+                                                       "description": "Unique identifier for the release",
+                                                       "example": 1},
+                                        "release_num": {"type": "string", "description": "Release number",
+                                                        "example": "10.6"},
+                                        "state": {"type": "string",
+                                                  "enum": ["Processing", "Initialized", "Draft", "Published"],
+                                                  "description": "Release state", "example": "Published"}
                                     },
                                     "required": ["release_id", "release_num", "state"]
                                 }
                             },
                             "required": ["dt_manifest_id", "dt_id", "guid", "den", "library", "release"]
                         },
+                        "guid": {"type": "string",
+                                 "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)",
+                                 "example": "a1b2c3d4e5f6789012345678901234ab"},
+                        "den": {"type": "string",
+                                "description": "Dictionary Entry Name (DEN) - the standardized name of the data type (DT) as defined by CCTS v3, uniquely identifying the data type within its namespace",
+                                "example": "Price_ Amount. Type"},
+                        "data_type_term": {"type": ["string", "null"],
+                                           "description": "Data type (DT) term as specified in CCTS v3",
+                                           "example": "Amount"},
+                        "qualifier": {"type": ["string", "null"], "description": "Qualifier for the data type (DT)",
+                                      "example": "Price"},
+                        "representation_term": {"type": ["string", "null"],
+                                                "description": "Representation term for the data type (DT)",
+                                                "example": "Amount"},
+                        "six_digit_id": {"type": ["string", "null"],
+                                         "description": "Six-digit identifier for the data type (DT)",
+                                         "example": "123456"},
+                        "definition": {"type": ["string", "null"], "description": "Definition of the data type (DT)",
+                                       "example": "A number of monetary units specified in a currency where the unit of currency is explicit or implied"},
+                        "definition_source": {"type": ["string", "null"],
+                                              "description": "URL indicating the source of the definition",
+                                              "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
+                        "content_component_definition": {"type": ["string", "null"],
+                                                         "description": "Content component definition",
+                                                         "example": "A numeric value determined by measuring an object along with the specified unit of measure"},
+                        "commonly_used": {"type": "boolean",
+                                          "description": "Whether the data type (DT) is commonly used",
+                                          "example": False},
+                        "is_deprecated": {"type": "boolean", "description": "Whether the data type (DT) is deprecated",
+                                          "example": False},
+                        "state": {"type": ["string", "null"], "description": "State of the data type (DT)",
+                                  "example": "Published"},
                         "supplementary_components": {
                             "type": "array",
                             "description": "List of supplementary components for the data type (DT)",
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "dt_sc_manifest_id": {"type": "integer", "description": "Unique identifier for the data type supplementary component manifest", "example": 12345},
-                                    "dt_sc_id": {"type": "integer", "description": "Unique identifier for the data type supplementary component", "example": 6789},
-                                    "guid": {"type": "string", "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)", "example": "a1b2c3d4e5f6789012345678901234ab"},
-                                    "object_class_term": {"type": ["string", "null"], "description": "Object class term for the supplementary component", "example": "Amount"},
-                                    "property_term": {"type": ["string", "null"], "description": "Property term for the supplementary component", "example": "Format"},
-                                    "representation_term": {"type": ["string", "null"], "description": "Representation term for the supplementary component", "example": "Text"},
-                                    "definition": {"type": ["string", "null"], "description": "Definition of the supplementary component", "example": "Whether the number is an integer, decimal, real number or percentage"},
-                                    "definition_source": {"type": ["string", "null"], "description": "URL indicating the source of the definition", "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
-                                    "cardinality_min": {"type": "integer", "description": "Minimum cardinality for the supplementary component", "example": 0},
-                                    "cardinality_max": {"type": "integer", "description": "Maximum cardinality for the supplementary component", "example": 1},
+                                    "dt_sc_manifest_id": {"type": "integer",
+                                                          "description": "Unique identifier for the data type supplementary component manifest",
+                                                          "example": 12345},
+                                    "dt_sc_id": {"type": "integer",
+                                                 "description": "Unique identifier for the data type supplementary component",
+                                                 "example": 6789},
+                                    "guid": {"type": "string",
+                                             "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)",
+                                             "example": "a1b2c3d4e5f6789012345678901234ab"},
+                                    "object_class_term": {"type": ["string", "null"],
+                                                          "description": "Object class term for the supplementary component",
+                                                          "example": "Amount"},
+                                    "property_term": {"type": ["string", "null"],
+                                                      "description": "Property term for the supplementary component",
+                                                      "example": "Format"},
+                                    "representation_term": {"type": ["string", "null"],
+                                                            "description": "Representation term for the supplementary component",
+                                                            "example": "Text"},
+                                    "definition": {"type": ["string", "null"],
+                                                   "description": "Definition of the supplementary component",
+                                                   "example": "Whether the number is an integer, decimal, real number or percentage"},
+                                    "definition_source": {"type": ["string", "null"],
+                                                          "description": "URL indicating the source of the definition",
+                                                          "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
+                                    "cardinality_min": {"type": "integer",
+                                                        "description": "Minimum cardinality for the supplementary component",
+                                                        "example": 0},
+                                    "cardinality_max": {"type": "integer",
+                                                        "description": "Maximum cardinality for the supplementary component",
+                                                        "example": 1},
                                     "value_constraint": {
                                         "type": ["object", "null"],
                                         "description": "Value constraint (default_value or fixed_value) for the supplementary component. Exactly one of default_value or fixed_value must be set.",
                                         "properties": {
-                                            "default_value": {"type": ["string", "null"], "description": "Default value for the supplementary component", "example": "decimal"},
-                                            "fixed_value": {"type": ["string", "null"], "description": "Fixed value for the supplementary component", "example": "integer"}
+                                            "default_value": {"type": ["string", "null"],
+                                                              "description": "Default value for the supplementary component",
+                                                              "example": "decimal"},
+                                            "fixed_value": {"type": ["string", "null"],
+                                                            "description": "Fixed value for the supplementary component",
+                                                            "example": "integer"}
                                         }
                                     },
-                                    "is_deprecated": {"type": "boolean", "description": "Whether the supplementary component is deprecated", "example": False}
+                                    "is_deprecated": {"type": "boolean",
+                                                      "description": "Whether the supplementary component is deprecated",
+                                                      "example": False}
                                 },
-                                "required": ["dt_sc_manifest_id", "dt_sc_id", "guid", "cardinality_min", "is_deprecated"]
+                                "required": ["dt_sc_manifest_id", "dt_sc_id", "guid", "cardinality_min",
+                                             "is_deprecated"]
                             }
                         },
                         "namespace": {
                             "type": ["object", "null"],
                             "description": "Namespace information",
                             "properties": {
-                                "namespace_id": {"type": "integer", "description": "Unique identifier for the namespace", "example": 1},
-                                "uri": {"type": "string", "description": "Namespace URI (Uniform Resource Identifier)", "example": "http://www.openapplications.org/oagis/10"},
-                                "prefix": {"type": ["string", "null"], "description": "Namespace prefix", "example": "oagis"}
+                                "namespace_id": {"type": "integer",
+                                                 "description": "Unique identifier for the namespace", "example": 1},
+                                "uri": {"type": "string", "description": "Namespace URI (Uniform Resource Identifier)",
+                                        "example": "http://www.openapplications.org/oagis/10"},
+                                "prefix": {"type": ["string", "null"], "description": "Namespace prefix",
+                                           "example": "oagis"}
                             },
                             "required": ["namespace_id", "uri"]
                         },
@@ -187,7 +277,8 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
                             "type": "object",
                             "description": "Library information",
                             "properties": {
-                                "library_id": {"type": "integer", "description": "Unique identifier for the library", "example": 1},
+                                "library_id": {"type": "integer", "description": "Unique identifier for the library",
+                                               "example": 1},
                                 "name": {"type": "string", "description": "Library name", "example": "connectSpec"}
                             },
                             "required": ["library_id", "name"]
@@ -196,9 +287,11 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
                             "type": "object",
                             "description": "Release information",
                             "properties": {
-                                "release_id": {"type": "integer", "description": "Unique identifier for the release", "example": 1},
+                                "release_id": {"type": "integer", "description": "Unique identifier for the release",
+                                               "example": 1},
                                 "release_num": {"type": "string", "description": "Release number", "example": "10.6"},
-                                "state": {"type": "string", "enum": ["Processing", "Initialized", "Draft", "Published"], "description": "Release state", "example": "Published"}
+                                "state": {"type": "string", "enum": ["Processing", "Initialized", "Draft", "Published"],
+                                          "description": "Release state", "example": "Published"}
                             },
                             "required": ["release_id", "release_num", "state"]
                         },
@@ -206,9 +299,11 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
                             "type": ["object", "null"],
                             "description": "Log information",
                             "properties": {
-                                "log_id": {"type": "integer", "description": "Unique identifier for the log", "example": 123},
+                                "log_id": {"type": "integer", "description": "Unique identifier for the log",
+                                           "example": 123},
                                 "revision_num": {"type": "integer", "description": "Revision number", "example": 1},
-                                "revision_tracking_num": {"type": "integer", "description": "Revision tracking number", "example": 1}
+                                "revision_tracking_num": {"type": "integer", "description": "Revision tracking number",
+                                                          "example": 1}
                             },
                             "required": ["log_id", "revision_num", "revision_tracking_num"]
                         },
@@ -216,10 +311,15 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
                             "type": "object",
                             "description": "User information about the owner of the data type (DT)",
                             "properties": {
-                                "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
-                                "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-                                "username": {"type": "string", "description": "Display name of the user", "example": "Administrator"},
-                                "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]}
+                                "user_id": {"type": "integer", "description": "Unique identifier for the user",
+                                            "example": 1},
+                                "login_id": {"type": "string", "description": "User's login identifier",
+                                             "example": "admin"},
+                                "username": {"type": "string", "description": "Display name of the user",
+                                             "example": "Administrator"},
+                                "roles": {"type": "array",
+                                          "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]},
+                                          "description": "List of roles assigned to the user", "example": ["Admin"]}
                             },
                             "required": ["user_id", "login_id", "username", "roles"]
                         },
@@ -231,14 +331,23 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
                                     "type": "object",
                                     "description": "User who created the data type (DT)",
                                     "properties": {
-                                        "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
-                                        "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-                                        "username": {"type": "string", "description": "Display name of the user", "example": "Administrator"},
-                                        "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]}
+                                        "user_id": {"type": "integer", "description": "Unique identifier for the user",
+                                                    "example": 1},
+                                        "login_id": {"type": "string", "description": "User's login identifier",
+                                                     "example": "admin"},
+                                        "username": {"type": "string", "description": "Display name of the user",
+                                                     "example": "Administrator"},
+                                        "roles": {"type": "array", "items": {"type": "string",
+                                                                             "enum": ["Admin", "Developer",
+                                                                                      "End-User"]},
+                                                  "description": "List of roles assigned to the user",
+                                                  "example": ["Admin"]}
                                     },
                                     "required": ["user_id", "login_id", "username", "roles"]
                                 },
-                                "when": {"type": "string", "format": "date-time", "description": "Creation timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)", "example": "2024-01-15T10:30:00Z"}
+                                "when": {"type": "string", "format": "date-time",
+                                         "description": "Creation timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)",
+                                         "example": "2024-01-15T10:30:00Z"}
                             },
                             "required": ["who", "when"]
                         },
@@ -250,19 +359,29 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
                                     "type": "object",
                                     "description": "User who last updated the data type (DT)",
                                     "properties": {
-                                        "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
-                                        "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-                                        "username": {"type": "string", "description": "Display name of the user", "example": "Administrator"},
-                                        "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]}
+                                        "user_id": {"type": "integer", "description": "Unique identifier for the user",
+                                                    "example": 1},
+                                        "login_id": {"type": "string", "description": "User's login identifier",
+                                                     "example": "admin"},
+                                        "username": {"type": "string", "description": "Display name of the user",
+                                                     "example": "Administrator"},
+                                        "roles": {"type": "array", "items": {"type": "string",
+                                                                             "enum": ["Admin", "Developer",
+                                                                                      "End-User"]},
+                                                  "description": "List of roles assigned to the user",
+                                                  "example": ["Admin"]}
                                     },
                                     "required": ["user_id", "login_id", "username", "roles"]
                                 },
-                                "when": {"type": "string", "format": "date-time", "description": "Last update timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)", "example": "2024-01-20T14:45:00Z"}
+                                "when": {"type": "string", "format": "date-time",
+                                         "description": "Last update timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)",
+                                         "example": "2024-01-20T14:45:00Z"}
                             },
                             "required": ["who", "when"]
                         }
                     },
-                    "required": ["dt_manifest_id", "dt_id", "guid", "den", "library", "release", "commonly_used", "is_deprecated", "supplementary_components", "owner", "created", "last_updated"]
+                    "required": ["dt_manifest_id", "dt_id", "guid", "den", "library", "release", "commonly_used",
+                                 "is_deprecated", "supplementary_components", "owner", "created", "last_updated"]
                 }
             }
         },
@@ -270,41 +389,41 @@ mcp = FastMCP("Score MCP Server - Data Type Tools")
     }
 )
 async def get_data_types(
-    release_id: Annotated[int, Field(
-        gt=0,
-        description="Filter by release ID using exact match."
-    )],
-    den: Annotated[str | None, Field(
-        default=None,
-        description="Filter by Dictionary Entry Name (DEN) using partial match (case-insensitive). DEN format: '((qualifier) ? qualifier + \"_ \" : \"\") + data_type_term + \". Type\"'."
-    )],
-    representation_term: Annotated[str | None, Field(
-        default=None,
-        description="Filter by representation term using partial match (case-insensitive)."
-    )],
-    created_on: Annotated[str | None, Field(
-        default=None,
-        description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
-    )],
-    last_updated_on: Annotated[str | None, Field(
-        default=None,
-        description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
-    )],
-    order_by: Annotated[str | None, Field(
-        default=None,
-        description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: data_type_term, qualifier, representation_term, six_digit_id, definition, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+data_type_term' translates to 'creation_timestamp DESC, data_type_term ASC'."
-    )],
-    offset: Annotated[int, Field(
-        default=0,
-        ge=0,
-        description="The offset from the beginning of the list. Must be a non-negative number."
-    )],
-    limit: Annotated[int, Field(
-        default=10,
-        ge=1,
-        le=100,
-        description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
-    )]
+        release_id: Annotated[int, Field(
+            gt=0,
+            description="Filter by release ID using exact match."
+        )],
+        den: Annotated[str | None, Field(
+            default=None,
+            description="Filter by Dictionary Entry Name (DEN) using partial match (case-insensitive). DEN format: '((qualifier) ? qualifier + \"_ \" : \"\") + data_type_term + \". Type\"'."
+        )],
+        representation_term: Annotated[str | None, Field(
+            default=None,
+            description="Filter by representation term using partial match (case-insensitive)."
+        )],
+        created_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by creation date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        last_updated_on: Annotated[str | None, Field(
+            default=None,
+            description="Filter by last update date using an inclusive range: '[before~after]'. 'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD. Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted, e.g., '[~2025-02-01]' or '[2025-01-01~]'."
+        )],
+        order_by: Annotated[str | None, Field(
+            default=None,
+            description="Comma-separated list of properties to order results by. Prefix with '-' for descending, '+' for ascending (default ascending). Allowed columns: data_type_term, qualifier, representation_term, six_digit_id, definition, creation_timestamp, last_update_timestamp. Example: '-creation_timestamp,+data_type_term' translates to 'creation_timestamp DESC, data_type_term ASC'."
+        )],
+        offset: Annotated[int, Field(
+            default=0,
+            ge=0,
+            description="The offset from the beginning of the list. Must be a non-negative number."
+        )],
+        limit: Annotated[int, Field(
+            default=10,
+            ge=1,
+            le=100,
+            description="The maximum number of items to return. Must be between 1 and 100 (inclusive)."
+        )]
 ) -> GetDataTypePaginationResponse:
     """
     Get a paginated list of data types associated with a specific release.
@@ -445,10 +564,10 @@ async def get_data_types(
         )
 
         return GetDataTypePaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=[_create_data_type_result(manifest, data_type_service) for manifest in page.items]
+            items=[GetDataTypeResponse(**dt.model_dump()) for dt in page.items]
         )
     except HTTPException as e:
         logger.error(f"HTTP error retrieving data types", e)
@@ -472,42 +591,60 @@ async def get_data_types(
         "type": "object",
         "description": "Response containing data type information",
         "properties": {
-            "dt_manifest_id": {"type": "integer", "description": "Unique identifier for the data type (DT) manifest", "example": 12345},
+            "dt_manifest_id": {"type": "integer", "description": "Unique identifier for the data type (DT) manifest",
+                               "example": 12345},
             "dt_id": {"type": "integer", "description": "Unique identifier for the data type (DT)", "example": 6789},
-            "guid": {"type": "string", "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)", "example": "a1b2c3d4e5f6789012345678901234ab"},
-            "den": {"type": "string", "description": "Dictionary Entry Name (DEN) - the standardized name of the data type (DT) as defined by CCTS v3, uniquely identifying the data type within its namespace", "example": "Price_ Amount. Type"},
-            "data_type_term": {"type": ["string", "null"], "description": "Data type (DT) term as specified in CCTS v3", "example": "Amount"},
-            "qualifier": {"type": ["string", "null"], "description": "Qualifier for the data type (DT)", "example": "Price"},
-            "representation_term": {"type": ["string", "null"], "description": "Representation term for the data type (DT)", "example": "Amount"},
-            "six_digit_id": {"type": ["string", "null"], "description": "Six-digit identifier for the data type (DT)", "example": "123456"},
-            "definition": {"type": ["string", "null"], "description": "Definition of the data type (DT)", "example": "A number of monetary units specified in a currency where the unit of currency is explicit or implied"},
-            "definition_source": {"type": ["string", "null"], "description": "URL indicating the source of the definition", "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
-            "content_component_definition": {"type": ["string", "null"], "description": "Content component definition", "example": "A numeric value determined by measuring an object along with the specified unit of measure"},
-            "commonly_used": {"type": "boolean", "description": "Whether the data type (DT) is commonly used", "example": False},
-            "is_deprecated": {"type": "boolean", "description": "Whether the data type (DT) is deprecated", "example": False},
-            "state": {"type": ["string", "null"], "description": "State of the data type (DT)", "example": "Published"},
             "base_dt": {
                 "type": ["object", "null"],
                 "description": "Base data type information if this data type is based on another",
                 "properties": {
-                    "dt_manifest_id": {"type": "integer", "description": "Unique identifier for the base data type manifest", "example": 12345},
-                    "dt_id": {"type": "integer", "description": "Unique identifier for the base data type", "example": 6789},
-                    "guid": {"type": "string", "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)", "example": "a1b2c3d4e5f6789012345678901234ab"},
-                    "den": {"type": "string", "description": "Dictionary Entry Name (DEN) - the standardized name of the data type (DT) as defined by CCTS v3", "example": "Amount. Type"},
-                    "data_type_term": {"type": ["string", "null"], "description": "Data type (DT) term as specified in CCTS v3", "example": "Amount"},
-                    "qualifier": {"type": ["string", "null"], "description": "Qualifier for the data type (DT)", "example": "Price"},
-                    "representation_term": {"type": ["string", "null"], "description": "Representation term for the data type (DT)", "example": "Amount"},
-                    "six_digit_id": {"type": ["string", "null"], "description": "Six-digit identifier for the data type (DT)", "example": "123456"},
-                    "definition": {"type": ["string", "null"], "description": "Definition of the data type (DT)", "example": "A number of monetary units specified in a currency where the unit of currency is explicit or implied"},
-                    "definition_source": {"type": ["string", "null"], "description": "URL indicating the source of the definition", "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
-                    "content_component_definition": {"type": ["string", "null"], "description": "Content component definition", "example": "A numeric value determined by measuring an object along with the specified unit of measure"},
+                    "dt_manifest_id": {"type": "integer",
+                                       "description": "Unique identifier for the base data type manifest",
+                                       "example": 12345},
+                    "dt_id": {"type": "integer", "description": "Unique identifier for the base data type",
+                              "example": 6789},
+                    "based_dt_manifest_id": {"type": ["integer", "null"], "description": "Unique identifier for the base data type manifest of the base data type",
+                                             "example": 6789},
+                    "guid": {"type": "string",
+                             "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)",
+                             "example": "a1b2c3d4e5f6789012345678901234ab"},
+                    "den": {"type": "string",
+                            "description": "Dictionary Entry Name (DEN) - the standardized name of the data type (DT) as defined by CCTS v3",
+                            "example": "Amount. Type"},
+                    "data_type_term": {"type": ["string", "null"],
+                                       "description": "Data type (DT) term as specified in CCTS v3",
+                                       "example": "Amount"},
+                    "qualifier": {"type": ["string", "null"],
+                                  "description": "Qualifier for the data type (DT)", "example": "Price"},
+                    "representation_term": {"type": ["string", "null"],
+                                            "description": "Representation term for the data type (DT)",
+                                            "example": "Amount"},
+                    "six_digit_id": {"type": ["string", "null"],
+                                     "description": "Six-digit identifier for the data type (DT)",
+                                     "example": "123456"},
+                    "definition": {"type": ["string", "null"],
+                                   "description": "Definition of the data type (DT)",
+                                   "example": "A number of monetary units specified in a currency where the unit of currency is explicit or implied"},
+                    "definition_source": {"type": ["string", "null"],
+                                          "description": "URL indicating the source of the definition",
+                                          "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
+                    "content_component_definition": {"type": ["string", "null"],
+                                                     "description": "Content component definition",
+                                                     "example": "A numeric value determined by measuring an object along with the specified unit of measure"},
+                    "is_deprecated": {"type": "boolean", "description": "Whether the data type (DT) is deprecated",
+                                      "example": False},
                     "namespace": {
                         "type": ["object", "null"],
                         "description": "Namespace information",
                         "properties": {
-                            "namespace_id": {"type": "integer", "description": "Unique identifier for the namespace", "example": 1},
-                            "uri": {"type": "string", "description": "Namespace URI (Uniform Resource Identifier)", "example": "http://www.openapplications.org/oagis/10"},
-                            "prefix": {"type": ["string", "null"], "description": "Namespace prefix", "example": "oagis"}
+                            "namespace_id": {"type": "integer",
+                                             "description": "Unique identifier for the namespace",
+                                             "example": 1},
+                            "uri": {"type": "string",
+                                    "description": "Namespace URI (Uniform Resource Identifier)",
+                                    "example": "http://www.openapplications.org/oagis/10"},
+                            "prefix": {"type": ["string", "null"], "description": "Namespace prefix",
+                                       "example": "oagis"}
                         },
                         "required": ["namespace_id", "uri"]
                     },
@@ -515,8 +652,11 @@ async def get_data_types(
                         "type": "object",
                         "description": "Library information",
                         "properties": {
-                            "library_id": {"type": "integer", "description": "Unique identifier for the library", "example": 1},
-                            "name": {"type": "string", "description": "Library name", "example": "connectSpec"}
+                            "library_id": {"type": "integer",
+                                           "description": "Unique identifier for the library",
+                                           "example": 1},
+                            "name": {"type": "string", "description": "Library name",
+                                     "example": "connectSpec"}
                         },
                         "required": ["library_id", "name"]
                     },
@@ -524,40 +664,97 @@ async def get_data_types(
                         "type": "object",
                         "description": "Release information",
                         "properties": {
-                            "release_id": {"type": "integer", "description": "Unique identifier for the release", "example": 1},
-                            "release_num": {"type": "string", "description": "Release number", "example": "10.6"},
-                            "state": {"type": "string", "enum": ["Processing", "Initialized", "Draft", "Published"], "description": "Release state", "example": "Published"}
+                            "release_id": {"type": "integer",
+                                           "description": "Unique identifier for the release",
+                                           "example": 1},
+                            "release_num": {"type": "string", "description": "Release number",
+                                            "example": "10.6"},
+                            "state": {"type": "string",
+                                      "enum": ["Processing", "Initialized", "Draft", "Published"],
+                                      "description": "Release state", "example": "Published"}
                         },
                         "required": ["release_id", "release_num", "state"]
                     }
                 },
                 "required": ["dt_manifest_id", "dt_id", "guid", "den", "library", "release"]
             },
+            "guid": {"type": "string",
+                     "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)",
+                     "example": "a1b2c3d4e5f6789012345678901234ab"},
+            "den": {"type": "string",
+                    "description": "Dictionary Entry Name (DEN) - the standardized name of the data type (DT) as defined by CCTS v3, uniquely identifying the data type within its namespace",
+                    "example": "Price_ Amount. Type"},
+            "data_type_term": {"type": ["string", "null"], "description": "Data type (DT) term as specified in CCTS v3",
+                               "example": "Amount"},
+            "qualifier": {"type": ["string", "null"], "description": "Qualifier for the data type (DT)",
+                          "example": "Price"},
+            "representation_term": {"type": ["string", "null"],
+                                    "description": "Representation term for the data type (DT)", "example": "Amount"},
+            "six_digit_id": {"type": ["string", "null"], "description": "Six-digit identifier for the data type (DT)",
+                             "example": "123456"},
+            "definition": {"type": ["string", "null"], "description": "Definition of the data type (DT)",
+                           "example": "A number of monetary units specified in a currency where the unit of currency is explicit or implied"},
+            "definition_source": {"type": ["string", "null"],
+                                  "description": "URL indicating the source of the definition",
+                                  "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
+            "content_component_definition": {"type": ["string", "null"], "description": "Content component definition",
+                                             "example": "A numeric value determined by measuring an object along with the specified unit of measure"},
+            "commonly_used": {"type": "boolean", "description": "Whether the data type (DT) is commonly used",
+                              "example": False},
+            "is_deprecated": {"type": "boolean", "description": "Whether the data type (DT) is deprecated",
+                              "example": False},
+            "state": {"type": ["string", "null"], "description": "State of the data type (DT)", "example": "Published"},
             "supplementary_components": {
                 "type": "array",
                 "description": "List of supplementary components for the data type (DT)",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "dt_sc_manifest_id": {"type": "integer", "description": "Unique identifier for the data type supplementary component manifest", "example": 12345},
-                        "dt_sc_id": {"type": "integer", "description": "Unique identifier for the data type supplementary component", "example": 6789},
-                        "guid": {"type": "string", "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)", "example": "a1b2c3d4e5f6789012345678901234ab"},
-                        "object_class_term": {"type": ["string", "null"], "description": "Object class term for the supplementary component", "example": "Amount"},
-                        "property_term": {"type": ["string", "null"], "description": "Property term for the supplementary component", "example": "Format"},
-                        "representation_term": {"type": ["string", "null"], "description": "Representation term for the supplementary component", "example": "Text"},
-                        "definition": {"type": ["string", "null"], "description": "Definition of the supplementary component", "example": "Whether the number is an integer, decimal, real number or percentage"},
-                        "definition_source": {"type": ["string", "null"], "description": "URL indicating the source of the definition", "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
-                        "cardinality_min": {"type": "integer", "description": "Minimum cardinality for the supplementary component", "example": 0},
-                        "cardinality_max": {"type": "integer", "description": "Maximum cardinality for the supplementary component", "example": 1},
+                        "dt_sc_manifest_id": {"type": "integer",
+                                              "description": "Unique identifier for the data type supplementary component manifest",
+                                              "example": 12345},
+                        "dt_sc_id": {"type": "integer",
+                                     "description": "Unique identifier for the data type supplementary component",
+                                     "example": 6789},
+                        "guid": {"type": "string",
+                                 "description": "Unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)",
+                                 "example": "a1b2c3d4e5f6789012345678901234ab"},
+                        "object_class_term": {"type": ["string", "null"],
+                                              "description": "Object class term for the supplementary component",
+                                              "example": "Amount"},
+                        "property_term": {"type": ["string", "null"],
+                                          "description": "Property term for the supplementary component",
+                                          "example": "Format"},
+                        "representation_term": {"type": ["string", "null"],
+                                                "description": "Representation term for the supplementary component",
+                                                "example": "Text"},
+                        "definition": {"type": ["string", "null"],
+                                       "description": "Definition of the supplementary component",
+                                       "example": "Whether the number is an integer, decimal, real number or percentage"},
+                        "definition_source": {"type": ["string", "null"],
+                                              "description": "URL indicating the source of the definition",
+                                              "example": "https://unece.org/trade/uncefact/core-components-data-type-catalogue"},
+                        "cardinality_min": {"type": "integer",
+                                            "description": "Minimum cardinality for the supplementary component",
+                                            "example": 0},
+                        "cardinality_max": {"type": "integer",
+                                            "description": "Maximum cardinality for the supplementary component",
+                                            "example": 1},
                         "value_constraint": {
                             "type": ["object", "null"],
                             "description": "Value constraint (default_value or fixed_value) for the supplementary component. Exactly one of default_value or fixed_value must be set.",
                             "properties": {
-                                "default_value": {"type": ["string", "null"], "description": "Default value for the supplementary component", "example": "decimal"},
-                                "fixed_value": {"type": ["string", "null"], "description": "Fixed value for the supplementary component", "example": "integer"}
+                                "default_value": {"type": ["string", "null"],
+                                                  "description": "Default value for the supplementary component",
+                                                  "example": "decimal"},
+                                "fixed_value": {"type": ["string", "null"],
+                                                "description": "Fixed value for the supplementary component",
+                                                "example": "integer"}
                             }
                         },
-                        "is_deprecated": {"type": "boolean", "description": "Whether the supplementary component is deprecated", "example": False}
+                        "is_deprecated": {"type": "boolean",
+                                          "description": "Whether the supplementary component is deprecated",
+                                          "example": False}
                     },
                     "required": ["dt_sc_manifest_id", "dt_sc_id", "guid", "cardinality_min", "is_deprecated"]
                 }
@@ -566,8 +763,10 @@ async def get_data_types(
                 "type": ["object", "null"],
                 "description": "Namespace information",
                 "properties": {
-                    "namespace_id": {"type": "integer", "description": "Unique identifier for the namespace", "example": 1},
-                    "uri": {"type": "string", "description": "Namespace URI (Uniform Resource Identifier)", "example": "http://www.openapplications.org/oagis/10"},
+                    "namespace_id": {"type": "integer", "description": "Unique identifier for the namespace",
+                                     "example": 1},
+                    "uri": {"type": "string", "description": "Namespace URI (Uniform Resource Identifier)",
+                            "example": "http://www.openapplications.org/oagis/10"},
                     "prefix": {"type": ["string", "null"], "description": "Namespace prefix", "example": "oagis"}
                 },
                 "required": ["namespace_id", "uri"]
@@ -587,7 +786,8 @@ async def get_data_types(
                 "properties": {
                     "release_id": {"type": "integer", "description": "Unique identifier for the release", "example": 1},
                     "release_num": {"type": "string", "description": "Release number", "example": "10.6"},
-                    "state": {"type": "string", "enum": ["Processing", "Initialized", "Draft", "Published"], "description": "Release state", "example": "Published"}
+                    "state": {"type": "string", "enum": ["Processing", "Initialized", "Draft", "Published"],
+                              "description": "Release state", "example": "Published"}
                 },
                 "required": ["release_id", "release_num", "state"]
             },
@@ -597,7 +797,8 @@ async def get_data_types(
                 "properties": {
                     "log_id": {"type": "integer", "description": "Unique identifier for the log", "example": 123},
                     "revision_num": {"type": "integer", "description": "Revision number", "example": 1},
-                    "revision_tracking_num": {"type": "integer", "description": "Revision tracking number", "example": 1}
+                    "revision_tracking_num": {"type": "integer", "description": "Revision tracking number",
+                                              "example": 1}
                 },
                 "required": ["log_id", "revision_num", "revision_tracking_num"]
             },
@@ -607,8 +808,10 @@ async def get_data_types(
                 "properties": {
                     "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
                     "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-                    "username": {"type": "string", "description": "Display name of the user", "example": "Administrator"},
-                    "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]}
+                    "username": {"type": "string", "description": "Display name of the user",
+                                 "example": "Administrator"},
+                    "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]},
+                              "description": "List of roles assigned to the user", "example": ["Admin"]}
                 },
                 "required": ["user_id", "login_id", "username", "roles"]
             },
@@ -620,14 +823,21 @@ async def get_data_types(
                         "type": "object",
                         "description": "User who created the data type (DT)",
                         "properties": {
-                            "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
-                            "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-                            "username": {"type": "string", "description": "Display name of the user", "example": "Administrator"},
-                            "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]}
+                            "user_id": {"type": "integer", "description": "Unique identifier for the user",
+                                        "example": 1},
+                            "login_id": {"type": "string", "description": "User's login identifier",
+                                         "example": "admin"},
+                            "username": {"type": "string", "description": "Display name of the user",
+                                         "example": "Administrator"},
+                            "roles": {"type": "array",
+                                      "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]},
+                                      "description": "List of roles assigned to the user", "example": ["Admin"]}
                         },
                         "required": ["user_id", "login_id", "username", "roles"]
                     },
-                    "when": {"type": "string", "format": "date-time", "description": "Creation timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)", "example": "2024-01-15T10:30:00Z"}
+                    "when": {"type": "string", "format": "date-time",
+                             "description": "Creation timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)",
+                             "example": "2024-01-15T10:30:00Z"}
                 },
                 "required": ["who", "when"]
             },
@@ -639,26 +849,34 @@ async def get_data_types(
                         "type": "object",
                         "description": "User who last updated the data type (DT)",
                         "properties": {
-                            "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
-                            "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-                            "username": {"type": "string", "description": "Display name of the user", "example": "Administrator"},
-                            "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]}
+                            "user_id": {"type": "integer", "description": "Unique identifier for the user",
+                                        "example": 1},
+                            "login_id": {"type": "string", "description": "User's login identifier",
+                                         "example": "admin"},
+                            "username": {"type": "string", "description": "Display name of the user",
+                                         "example": "Administrator"},
+                            "roles": {"type": "array",
+                                      "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]},
+                                      "description": "List of roles assigned to the user", "example": ["Admin"]}
                         },
                         "required": ["user_id", "login_id", "username", "roles"]
                     },
-                    "when": {"type": "string", "format": "date-time", "description": "Last update timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)", "example": "2024-01-20T14:45:00Z"}
+                    "when": {"type": "string", "format": "date-time",
+                             "description": "Last update timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)",
+                             "example": "2024-01-20T14:45:00Z"}
                 },
                 "required": ["who", "when"]
             }
         },
-        "required": ["dt_manifest_id", "dt_id", "guid", "den", "library", "release", "commonly_used", "is_deprecated", "supplementary_components", "owner", "created", "last_updated"]
+        "required": ["dt_manifest_id", "dt_id", "guid", "den", "library", "release", "commonly_used", "is_deprecated",
+                     "supplementary_components", "owner", "created", "last_updated"]
     }
 )
 async def get_data_type(
-    dt_manifest_id: Annotated[int, Field(
-        gt=0,
-        description="Unique numeric identifier of the data type manifest to retrieve."
-    )]
+        dt_manifest_id: Annotated[int, Field(
+            gt=0,
+            description="Unique numeric identifier of the data type manifest to retrieve."
+        )]
 ) -> GetDataTypeResponse:
     """
     Get a specific data type by its manifest ID.
@@ -721,9 +939,9 @@ async def get_data_type(
     # Get data type
     try:
         service = DataTypeService()
-        manifest, sc_manifests = service.get_data_type_by_manifest_id(dt_manifest_id)
+        dt = service.get_data_type_by_manifest_id(dt_manifest_id)
 
-        return _create_data_type_result(manifest, service)
+        return GetDataTypeResponse(**dt.model_dump())
     except HTTPException as e:
         logger.error(f"HTTP error retrieving data type", e)
         if e.status_code == 400:
@@ -740,157 +958,3 @@ async def get_data_type(
         logger.error(f"Unexpected error retrieving data type", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the data type: {str(e)}. Please contact your system administrator.") from e
-
-
-# Helper functions (placed after their usage)
-
-def _create_data_type_result(manifest, data_type_service) -> GetDataTypeResponse:
-    """
-    Create a data type result from a DtManifest model instance.
-    
-    Args:
-        manifest: DtManifest model instance with dt relationship
-        data_type_service: DataTypeService instance for retrieving related data
-        
-    Returns:
-        GetDataTypeResponse: Formatted data type result
-    """
-    data_type = manifest.dt
-    
-    # Get supplementary components using the separate service function
-    try:
-        sc_manifests = data_type_service.get_supplementary_components_by_dt_manifest_id(manifest.dt_manifest_id)
-    except Exception as e:
-        logger.warning(f"Failed to retrieve supplementary components for DtManifest {manifest.dt_manifest_id}", e)
-        sc_manifests = []  # Continue without supplementary components rather than failing completely
-    
-    # Create namespace info if available
-    namespace_info = None
-    if data_type.namespace:
-        namespace_info = NamespaceInfo(
-            namespace_id=data_type.namespace.namespace_id,
-            prefix=data_type.namespace.prefix,
-            uri=data_type.namespace.uri
-        )
-
-    # Create library info from release
-    library_info = LibraryInfo(
-        library_id=manifest.release.library_id,
-        name=manifest.release.library.name
-    )
-
-    # Create release info from manifest
-    # Since release_id is required and release relationship is loaded, release should always be available
-    release_info = ReleaseInfo(
-        release_id=manifest.release_id,
-        release_num=manifest.release.release_num,
-        state=manifest.release.state
-    )
-
-    # Create log info from manifest
-    log_info = None
-    if manifest.log:
-        log_info = LogInfo(
-            log_id=manifest.log.log_id,
-            revision_num=manifest.log.revision_num,
-            revision_tracking_num=manifest.log.revision_tracking_num
-        )
-
-    # Create supplementary components info from sc manifests
-    supplementary_components_info = []
-    for sc_manifest in sc_manifests:
-        value_constraint = validate_and_create_value_constraint(
-            default_value=sc_manifest.dt_sc.default_value,
-            fixed_value=sc_manifest.dt_sc.fixed_value
-        )
-        supplementary_components_info.append(DtScInfo(
-            dt_sc_manifest_id=sc_manifest.dt_sc_manifest_id,
-            dt_sc_id=sc_manifest.dt_sc_id,
-            guid=sc_manifest.dt_sc.guid,
-            object_class_term=sc_manifest.dt_sc.object_class_term,
-            property_term=sc_manifest.dt_sc.property_term,
-            representation_term=sc_manifest.dt_sc.representation_term,
-            definition=sc_manifest.dt_sc.definition,
-            definition_source=sc_manifest.dt_sc.definition_source,
-            cardinality_min=sc_manifest.dt_sc.cardinality_min,
-            cardinality_max=sc_manifest.dt_sc.cardinality_max,
-            value_constraint=value_constraint,
-            is_deprecated=sc_manifest.dt_sc.is_deprecated
-        ))
-
-    # Create base data type info if available
-    base_dt_info = None
-    if manifest.based_dt_manifest:
-        base_manifest = manifest.based_dt_manifest
-        base_data_type = base_manifest.dt
-        
-        # Create namespace info for base data type if available
-        base_namespace_info = None
-        if base_data_type.namespace:
-            base_namespace_info = NamespaceInfo(
-                namespace_id=base_data_type.namespace.namespace_id,
-                prefix=base_data_type.namespace.prefix,
-                uri=base_data_type.namespace.uri
-            )
-
-        # Create library info for base data type from its release
-        base_library_info = LibraryInfo(
-            library_id=base_manifest.release.library_id,
-            name=base_manifest.release.library.name
-        )
-
-        # Create release info for base data type
-        base_release_info = ReleaseInfo(
-            release_id=base_manifest.release_id,
-            release_num=base_manifest.release.release_num,
-            state=base_manifest.release.state
-        )
-
-        base_dt_info = BaseDtInfo(
-            dt_manifest_id=base_manifest.dt_manifest_id,
-            dt_id=base_data_type.dt_id,
-            guid=base_data_type.guid,
-            den=base_manifest.den,
-            data_type_term=base_data_type.data_type_term,
-            qualifier=base_data_type.qualifier,
-            representation_term=base_data_type.representation_term,
-            six_digit_id=base_data_type.six_digit_id,
-            definition=base_data_type.definition,
-            definition_source=base_data_type.definition_source,
-            content_component_definition=base_data_type.content_component_definition,
-            namespace=base_namespace_info,
-            library=base_library_info,
-            release=base_release_info
-        )
-
-    return GetDataTypeResponse(
-        dt_manifest_id=manifest.dt_manifest_id,
-        dt_id=data_type.dt_id,
-        guid=data_type.guid,
-        den=manifest.den,
-        data_type_term=data_type.data_type_term,
-        qualifier=data_type.qualifier,
-        representation_term=data_type.representation_term,
-        six_digit_id=data_type.six_digit_id,
-        definition=data_type.definition,
-        definition_source=data_type.definition_source,
-        content_component_definition=data_type.content_component_definition,
-        namespace=namespace_info,
-        library=library_info,
-        release=release_info,
-        log=log_info,
-        commonly_used=data_type.commonly_used,
-        is_deprecated=data_type.is_deprecated,
-        state=data_type.state,
-        base_dt=base_dt_info,
-        supplementary_components=supplementary_components_info,
-        owner=_create_user_info(data_type.owner),
-        created=WhoAndWhen(
-            who=_create_user_info(data_type.creator),
-            when=data_type.creation_timestamp
-        ),
-        last_updated=WhoAndWhen(
-            who=_create_user_info(data_type.last_updater),
-            when=data_type.last_update_timestamp
-        )
-    )

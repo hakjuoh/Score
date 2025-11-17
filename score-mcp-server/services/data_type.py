@@ -15,9 +15,15 @@ from sqlmodel import select, func
 
 from databases.models import Dt, DtManifest, DtScManifest, Release
 from services.cache import cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info, validate_and_create_value_constraint
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen, PaginationResponse
+from services.models.data_type import DtDto, DtScDto, DtSummary
+from services.models.library import LibrarySummary
+from services.models.log import LogInfo
+from services.models.namespace import NamespaceSummary
+from services.models.release import ReleaseSummary
+from services.release import ReleaseService
 from services.transaction import transaction, db_exec
-from .release import ReleaseService
 
 # Configure logging
 logger = logging.getLogger("score.service.data_type")
@@ -124,15 +130,15 @@ class DataTypeService:
     @cache(key_prefix="data_type.get_data_types_by_release")
     @transaction(read_only=True)
     def get_data_types_by_release(
-        self,
-        release_id: int,
-        den: str = None,
-        representation_term: str = None,
-        created_on_params: DateRangeParams = None,
-        last_updated_on_params: DateRangeParams = None,
-        pagination: PaginationParams = PaginationParams(offset=0, limit=10),
-        sort_list: list[Sort] = None
-    ) -> Page:
+            self,
+            release_id: int,
+            den: str = None,
+            representation_term: str = None,
+            created_on_params: DateRangeParams = None,
+            last_updated_on_params: DateRangeParams = None,
+            pagination: PaginationParams = PaginationParams(offset=0, limit=10),
+            sort_list: list[Sort] = None
+    ) -> PaginationResponse[DtDto]:
         """
         Get data types associated with a specific release and its dependent releases.
         
@@ -147,7 +153,7 @@ class DataTypeService:
             last_updated_on_params: Date range filter for last update timestamp
         
         Returns:
-            Page: Paginated response containing data type manifests with supplementary components included
+            PaginationResponse: Paginated response containing data type manifests with supplementary components included
         """
         # Set default pagination if not provided
         if pagination is None:
@@ -156,10 +162,10 @@ class DataTypeService:
         # Get dependent releases
         release_service = ReleaseService()
         dependent_release_ids = release_service.get_dependent_releases(release_id)
-        
+
         # Include the original release ID and all dependent release IDs
         all_release_ids = [release_id] + dependent_release_ids
-        
+
         # Build the base query to get manifests with loaded relationships
         query = select(DtManifest).options(
             selectinload(DtManifest.dt).selectinload(Dt.namespace),
@@ -189,34 +195,16 @@ class DataTypeService:
         manifests = db_exec(query).all()
 
         # Create Page object
-        return Page(
-            total=total_count,
+        return PaginationResponse(
+            total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(manifests)
-        )
-
-    def _get_base_query_with_eager_loading(self):
-        """
-        Get a base query for DtManifest with eager loading of relationships.
-        
-        Returns:
-            Select statement with eager loading options applied
-        """
-        return select(DtManifest).options(
-            selectinload(DtManifest.dt).selectinload(Dt.namespace),
-            selectinload(DtManifest.dt).selectinload(Dt.creator),
-            selectinload(DtManifest.dt).selectinload(Dt.owner),
-            selectinload(DtManifest.dt).selectinload(Dt.last_updater),
-            selectinload(DtManifest.release).selectinload(Release.library),
-            selectinload(DtManifest.log),
-            selectinload(DtManifest.based_dt_manifest).selectinload(DtManifest.dt).selectinload(Dt.namespace),
-            selectinload(DtManifest.based_dt_manifest).selectinload(DtManifest.release).selectinload(Release.library)
+            items=[self._create_data_type_result(dt_manifest) for dt_manifest in manifests]
         )
 
     def _apply_filters(self, query, den: str = None, representation_term: str = None,
-                      created_on_params: DateRangeParams = None,
-                      last_updated_on_params: DateRangeParams = None):
+                       created_on_params: DateRangeParams = None,
+                       last_updated_on_params: DateRangeParams = None):
         """
         Apply filters to a query for data types.
         
@@ -269,7 +257,7 @@ class DataTypeService:
                         status_code=400,
                         detail=f"Invalid sort column: '{sort.column}'. Allowed columns: {', '.join(self.allowed_columns_for_order_by)}"
                     )
-            
+
             # Apply sorting
             for sort in sort_list:
                 if sort.column == 'den':
@@ -285,35 +273,9 @@ class DataTypeService:
 
         return query
 
-    @cache(key_prefix="data_type.get_data_type_by_id")
-    @transaction(read_only=True)
-    def get_data_type_by_id(self, dt_id: int) -> DtManifest:
-        """
-        Get a data type by its ID.
-        
-        Args:
-            dt_id: ID of the data type to retrieve
-        
-        Returns:
-            DtManifest: The data type manifest if found
-        
-        Raises:
-            HTTPException: If data type not found
-        """
-        query = self._get_base_query_with_eager_loading().where(DtManifest.dt_id == dt_id)
-
-        manifest = db_exec(query).first()
-        if not manifest:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Data type with ID {dt_id} not found"
-            )
-
-        return manifest
-
     @cache(key_prefix="data_type.get_data_type_by_manifest_id")
     @transaction(read_only=True)
-    def get_data_type_by_manifest_id(self, dt_manifest_id: int) -> tuple[DtManifest, list[DtScManifest]]:
+    def get_data_type_by_manifest_id(self, dt_manifest_id: int) -> DtDto:
         """
         Get a data type by its manifest ID.
         
@@ -327,7 +289,16 @@ class DataTypeService:
             HTTPException: If data type manifest not found
         """
         # Get the manifest with all relationships loaded
-        manifest_query = self._get_base_query_with_eager_loading().where(
+        manifest_query = select(DtManifest).options(
+            selectinload(DtManifest.dt).selectinload(Dt.namespace),
+            selectinload(DtManifest.dt).selectinload(Dt.creator),
+            selectinload(DtManifest.dt).selectinload(Dt.owner),
+            selectinload(DtManifest.dt).selectinload(Dt.last_updater),
+            selectinload(DtManifest.release).selectinload(Release.library),
+            selectinload(DtManifest.log),
+            selectinload(DtManifest.based_dt_manifest).selectinload(DtManifest.dt).selectinload(Dt.namespace),
+            selectinload(DtManifest.based_dt_manifest).selectinload(DtManifest.release).selectinload(Release.library)
+        ).where(
             DtManifest.dt_manifest_id == dt_manifest_id
         )
         manifest = db_exec(manifest_query).first()
@@ -337,10 +308,7 @@ class DataTypeService:
                 detail=f"Data type manifest with ID {dt_manifest_id} not found"
             )
 
-        # Get supplementary component manifests for this manifest
-        sc_manifests = self.get_supplementary_components_by_dt_manifest_id(manifest.dt_manifest_id)
-
-        return manifest, sc_manifests
+        return self._create_data_type_result(manifest)
 
     @cache(key_prefix="data_type.get_supplementary_components_by_dt_manifest_id")
     @transaction(read_only=True)
@@ -359,3 +327,138 @@ class DataTypeService:
         ).where(DtScManifest.owner_dt_manifest_id == dt_manifest_id)
         sc_manifests = db_exec(query).all()
         return list(sc_manifests)
+
+    def _create_data_type_result(self, manifest) -> DtDto:
+        """
+        Create a data type result from a DtManifest model instance.
+
+        Args:
+            manifest: DtManifest model instance with dt relationship
+            data_type_service: DataTypeService instance for retrieving related data
+
+        Returns:
+            GetDataTypeResponse: Formatted data type result
+        """
+        data_type = manifest.dt
+
+        # Get supplementary components using the separate service function
+        try:
+            sc_manifests = self.get_supplementary_components_by_dt_manifest_id(manifest.dt_manifest_id)
+        except Exception as e:
+            logger.warning(f"Failed to retrieve supplementary components for DtManifest {manifest.dt_manifest_id}", e)
+            sc_manifests = []  # Continue without supplementary components rather than failing completely
+
+        # Create namespace info if available
+        namespace_info = None
+        if data_type.namespace:
+            namespace_info = NamespaceSummary(
+                namespace_id=data_type.namespace.namespace_id,
+                prefix=data_type.namespace.prefix,
+                uri=data_type.namespace.uri
+            )
+
+        # Create library info from release
+        library_info = LibrarySummary(
+            library_id=manifest.release.library_id,
+            name=manifest.release.library.name
+        )
+
+        # Create release info from manifest
+        # Since release_id is required and release relationship is loaded, release should always be available
+        release_info = ReleaseSummary(
+            release_id=manifest.release_id,
+            release_num=manifest.release.release_num,
+            state=manifest.release.state
+        )
+
+        # Create log info from manifest
+        log_info = None
+        if manifest.log:
+            log_info = LogInfo(
+                log_id=manifest.log.log_id,
+                revision_num=manifest.log.revision_num,
+                revision_tracking_num=manifest.log.revision_tracking_num
+            )
+
+        # Create supplementary components info from sc manifests
+        supplementary_components_info = []
+        for sc_manifest in sc_manifests:
+            value_constraint = validate_and_create_value_constraint(
+                default_value=sc_manifest.dt_sc.default_value,
+                fixed_value=sc_manifest.dt_sc.fixed_value
+            )
+            supplementary_components_info.append(DtScDto(
+                dt_sc_manifest_id=sc_manifest.dt_sc_manifest_id,
+                dt_sc_id=sc_manifest.dt_sc_id,
+                guid=sc_manifest.dt_sc.guid,
+                object_class_term=sc_manifest.dt_sc.object_class_term,
+                property_term=sc_manifest.dt_sc.property_term,
+                representation_term=sc_manifest.dt_sc.representation_term,
+                definition=sc_manifest.dt_sc.definition,
+                definition_source=sc_manifest.dt_sc.definition_source,
+                cardinality_min=sc_manifest.dt_sc.cardinality_min,
+                cardinality_max=sc_manifest.dt_sc.cardinality_max,
+                value_constraint=value_constraint,
+                is_deprecated=sc_manifest.dt_sc.is_deprecated
+            ))
+
+        # Create base data type info if available
+        base_dt_info = None
+        if manifest.based_dt_manifest_id:
+            based_dt = self.get_data_type_by_manifest_id(manifest.based_dt_manifest_id)
+            base_dt_info = self.create_dt_summary(based_dt)
+
+        return DtDto(
+            dt_manifest_id=manifest.dt_manifest_id,
+            dt_id=data_type.dt_id,
+            base_dt=base_dt_info,
+            guid=data_type.guid,
+            den=manifest.den,
+            data_type_term=data_type.data_type_term,
+            qualifier=data_type.qualifier,
+            representation_term=data_type.representation_term,
+            six_digit_id=data_type.six_digit_id,
+            definition=data_type.definition,
+            definition_source=data_type.definition_source,
+            content_component_definition=data_type.content_component_definition,
+            namespace=namespace_info,
+            library=library_info,
+            release=release_info,
+            log=log_info,
+            commonly_used=data_type.commonly_used,
+            is_deprecated=data_type.is_deprecated,
+            state=data_type.state,
+            supplementary_components=supplementary_components_info,
+            owner=create_user_info(data_type.owner),
+            created=WhoAndWhen(
+                who=create_user_info(data_type.creator),
+                when=data_type.creation_timestamp
+            ),
+            last_updated=WhoAndWhen(
+                who=create_user_info(data_type.last_updater),
+                when=data_type.last_update_timestamp
+            )
+        )
+
+    def create_dt_summary(self, dt: DtDto) -> DtSummary | None:
+        if not dt:
+            return None
+
+        return DtSummary(
+            dt_manifest_id=dt.dt_manifest_id,
+            dt_id=dt.dt_id,
+            based_dt_manifest_id=dt.base_dt.dt_manifest_id if dt.base_dt else None,
+            guid=dt.guid,
+            den=dt.den,
+            data_type_term=dt.data_type_term,
+            qualifier=dt.qualifier,
+            representation_term=dt.representation_term,
+            six_digit_id=dt.six_digit_id,
+            definition=dt.definition,
+            definition_source=dt.definition_source,
+            content_component_definition=dt.content_component_definition,
+            is_deprecated=dt.is_deprecated,
+            namespace=dt.namespace,
+            library=dt.library,
+            release=dt.release
+        )

@@ -4,19 +4,18 @@ from __future__ import annotations
 
 from pydantic import BaseModel, computed_field
 
-from services.models.biz_ctx import BusinessContextInfo
+from services.models.biz_ctx import BizCtxSummary
 from services.models.business_information_entity import (
     AsbiepInfo,
     BbieScInfo,
     BbiepInfo,
     Facet,
     PrimitiveRestriction,
-    TopLevelAsbiepInfo,
+    TopLevelAsbiepInfo, TopLevelAsbiepListEntry,
 )
-from services.models.common import UserInfo, WhoAndWhen
+from services.models.common import UserSummary, WhoAndWhen, PaginationResponse
 from services.models.core_component import AsccInfo, BccInfo, BccpInfo, ValueConstraint
-from services.models.data_type import DtScInfo
-from tools.models.common import PaginationResponse
+from services.models.data_type import DtScDto
 
 
 # Response classes for each MCP tool
@@ -28,39 +27,17 @@ class GetTopLevelAsbiepResponse(BaseModel):
     asbiep: AsbiepInfo  # Detailed information about the ASBIEP associated with this top-level ASBIEP
     version: str | None  # Version string of the top-level ASBIEP (e.g., "1.0", "2.1")
     status: str | None  # Status of the top-level ASBIEP (e.g., "Production", "Draft")
-    business_contexts: list[BusinessContextInfo]  # List of business contexts associated with this top-level ASBIEP
+    business_contexts: list[BizCtxSummary]  # List of business contexts associated with this top-level ASBIEP
     state: str  # Current state of the top-level ASBIEP (e.g., "WIP", "QA", "Production", "Published")
     is_deprecated: bool  # Whether the top-level ASBIEP is deprecated and should not be used
     deprecated_reason: str | None  # Reason why the top-level ASBIEP was deprecated
     deprecated_remark: str | None  # Additional remarks about the deprecation
-    owner: UserInfo  # User information about the owner of the top-level ASBIEP
+    owner: UserSummary  # User information about the owner of the top-level ASBIEP
     created: WhoAndWhen  # Information about who created the top-level ASBIEP and when
     last_updated: WhoAndWhen  # Information about who last updated the top-level ASBIEP and when
 
 
-class GetTopLevelAsbiepListResponseEntry(BaseModel):
-    """Response for get_top_level_asbiep tool."""
-    top_level_asbiep_id: int  # Unique identifier for the top-level ASBIEP
-    asbiep_id: int  # Unique identifier for the ASBIEP (base entity ID)
-    guid: str  # Globally unique identifier for the ASBIEP
-    den: str  # Dictionary Entry Name (DEN) - the standardized name as defined by CCTS v3
-    property_term: str  # Property term from the underlying ASCCP
-    display_name: str | None  # Display name intended for user interface presentation
-    version: str | None  # Version string of the top-level ASBIEP (e.g., "1.0", "2.1")
-    status: str | None  # Status of the top-level ASBIEP (e.g., "Production", "Draft")
-    biz_term: str | None  # Business term that represents this top-level ASBIEP in business language
-    remark: str | None  # Additional remarks or notes about the top-level ASBIEP
-    business_contexts: list[BusinessContextInfo]  # List of business contexts associated with this top-level ASBIEP
-    state: str  # Current state of the top-level ASBIEP (e.g., "WIP", "QA", "Production", "Published")
-    is_deprecated: bool  # Whether the top-level ASBIEP is deprecated and should not be used
-    deprecated_reason: str | None  # Reason why the top-level ASBIEP was deprecated
-    deprecated_remark: str | None  # Additional remarks about the deprecation
-    owner: UserInfo  # User information about the owner of the top-level ASBIEP
-    created: WhoAndWhen  # Information about who created the top-level ASBIEP and when
-    last_updated: WhoAndWhen  # Information about who last updated the top-level ASBIEP and when
-
-
-class GetTopLevelAsbiepListPaginationResponse(PaginationResponse[GetTopLevelAsbiepListResponseEntry]):
+class GetTopLevelAsbiepListPaginationResponse(PaginationResponse[TopLevelAsbiepListEntry]):
     """Response for get_top_level_asbiep_list tool."""
     pass
 
@@ -120,7 +97,7 @@ class CreateBbieScInfo(BaseModel):
     """BBIE SC info for create_bbie response (excludes definition, remark, default_value, fixed_value, facets)."""
     bbie_sc_id: int | None  # Unique identifier for the BBIE SC (None if not yet created)
     guid: str | None  # Globally unique identifier for the BBIE SC (if available)
-    based_dt_sc: DtScInfo  # Information about the data type supplementary component
+    based_dt_sc: DtScDto  # Information about the data type supplementary component
     path: str  # Hierarchical path string
     hash_path: str  # Hashed version of the path
     cardinality_min: int  # Minimum cardinality
@@ -263,7 +240,7 @@ class UpdateBbieScDetail(BaseModel):
     bbie_sc_id: int | None
     updates: list[str]  # List of fields that were updated on this BBIE SC
     guid: str | None
-    based_dt_sc: DtScInfo
+    based_dt_sc: DtScDto
     path: str
     hash_path: str
     cardinality_min: int

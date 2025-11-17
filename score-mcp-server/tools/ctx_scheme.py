@@ -74,10 +74,7 @@ from fastmcp.server.elicitation import (
 from pydantic import Field
 
 from services import CtxSchemeService, DateRangeParams, PaginationParams
-from services.models.common import WhoAndWhen
-from services.models.ctx_category import CtxCategoryInfo
-from services.models.ctx_scheme import CtxSchemeValueInfo
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.ctx_scheme import (
     CreateCtxSchemeResponse,
     CreateCtxSchemeValueResponse,
@@ -351,10 +348,10 @@ async def get_context_schemes(
         )
 
         return GetCtxSchemePaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=[_create_ctx_scheme_result(ctx_scheme) for ctx_scheme in page.items]
+            items=[GetCtxSchemeResponse(**ctx_scheme_info.model_dump()) for ctx_scheme_info in page.items]
         )
     except HTTPException as e:
         logger.error(f"HTTP error retrieving context schemes", e)
@@ -506,9 +503,9 @@ async def get_context_scheme(
     # Get context scheme
     try:
         service = CtxSchemeService(requester=app_user)
-        ctx_scheme = service.get_ctx_scheme(ctx_scheme_id)
+        ctx_scheme_info = service.get_ctx_scheme(ctx_scheme_id)
 
-        return _create_ctx_scheme_result(ctx_scheme)
+        return GetCtxSchemeResponse(**ctx_scheme_info.model_dump())
     except HTTPException as e:
         logger.error(f"HTTP error retrieving context scheme", e)
         if e.status_code == 400:
@@ -1144,65 +1141,3 @@ async def delete_context_scheme(
 
 # Helper functions (placed after their usage)
 
-def _create_ctx_scheme_result(ctx_scheme) -> GetCtxSchemeResponse:
-    """
-    Create a formatted response object for context scheme data.
-
-    This helper function transforms a CtxScheme database model into a standardized
-    response format that includes related entities.
-    
-    Args:
-        ctx_scheme: The CtxScheme database model instance to format
-        
-    Returns:
-        GetCtxSchemeResponse: A formatted response object containing:
-            - ctx_scheme_id: The unique identifier of the context scheme
-            - guid: The globally unique identifier
-            - scheme_id: External identification of the scheme
-            - scheme_name: Pretty print name of the context scheme
-            - description: Description of the context scheme
-            - scheme_agency_id: Identification of the agency maintaining the scheme
-            - scheme_version_id: Version number of the context scheme
-            - ctx_category: Associated context category
-            - values: List of associated context scheme values
-            - created: WhoAndWhen object with creator info and creation timestamp
-            - last_updated: WhoAndWhen object with updater info and update timestamp
-    """
-    # Create context category info
-    ctx_category_info = None
-    if ctx_scheme.ctx_category:
-        ctx_category_info = CtxCategoryInfo(
-            ctx_category_id=ctx_scheme.ctx_category.ctx_category_id,
-            name=ctx_scheme.ctx_category.name
-        )
-
-    # Create context scheme values info
-    values_info = []
-    if hasattr(ctx_scheme, 'ctx_scheme_values') and ctx_scheme.ctx_scheme_values:
-        for value in ctx_scheme.ctx_scheme_values:
-            values_info.append(CtxSchemeValueInfo(
-                ctx_scheme_value_id=value.ctx_scheme_value_id,
-                guid=value.guid,
-                value=value.value,
-                meaning=value.meaning
-            ))
-
-    return GetCtxSchemeResponse(
-        ctx_scheme_id=ctx_scheme.ctx_scheme_id,
-        guid=ctx_scheme.guid,
-        scheme_id=ctx_scheme.scheme_id,
-        scheme_name=ctx_scheme.scheme_name,
-        description=ctx_scheme.description,
-        scheme_agency_id=ctx_scheme.scheme_agency_id,
-        scheme_version_id=ctx_scheme.scheme_version_id,
-        ctx_category=ctx_category_info,
-        values=values_info,
-        created=WhoAndWhen(
-            who=_create_user_info(ctx_scheme.creator),
-            when=ctx_scheme.creation_timestamp
-        ),
-        last_updated=WhoAndWhen(
-            who=_create_user_info(ctx_scheme.last_updater),
-            when=ctx_scheme.last_update_timestamp
-        )
-    )

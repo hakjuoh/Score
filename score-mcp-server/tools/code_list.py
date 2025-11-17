@@ -45,13 +45,7 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from services import CodeListService, DateRangeParams, PaginationParams
-from services.models.code_list import CodeListValueInfo
-from services.models.common import WhoAndWhen
-from services.models.library import LibraryInfo
-from services.models.log import LogInfo
-from services.models.namespace import NamespaceInfo
-from services.models.release import ReleaseInfo
-from tools import _validate_auth_and_db, parse_order_by_to_sorts, _create_user_info
+from tools import _validate_auth_and_db, parse_order_by_to_sorts
 from tools.models.code_list import (
     GetCodeListResponse,
     GetCodeListPaginationResponse,
@@ -384,10 +378,10 @@ async def get_code_lists(
         )
 
         return GetCodeListPaginationResponse(
-            total_items=page.total,
+            total_items=page.total_items,
             offset=page.offset,
             limit=page.limit,
-            items=[_create_code_list_result(manifest, code_list_service) for manifest in page.items]
+            items=[GetCodeListResponse(**code_list_manifest.model_dump()) for code_list_manifest in page.items]
         )
     except HTTPException as e:
         logger.error(f"HTTP error retrieving code lists", e)
@@ -598,9 +592,9 @@ async def get_code_list(
     # Get code list
     try:
         service = CodeListService()
-        manifest = service.get_code_list_by_manifest_id(code_list_manifest_id)
+        code_list = service.get_code_list_by_manifest_id(code_list_manifest_id)
 
-        return _create_code_list_result(manifest, service)
+        return GetCodeListResponse(**code_list.model_dump())
     except HTTPException as e:
         logger.error(f"HTTP error retrieving code list", e)
         if e.status_code == 400:
@@ -617,101 +611,3 @@ async def get_code_list(
         logger.error(f"Unexpected error retrieving code list", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the code list: {str(e)}. Please contact your system administrator.") from e
-
-
-# Helper functions (placed after their usage)
-
-def _create_code_list_result(manifest, code_list_service) -> GetCodeListResponse:
-    """
-    Create a code list result from a CodeListManifest model instance.
-    
-    Args:
-        manifest: CodeListManifest model instance with code_list relationship
-        code_list_service: CodeListService instance for retrieving related data
-        
-    Returns:
-        GetCodeListResponse: Formatted code list result
-    """
-    code_list = manifest.code_list
-    
-    # Get value manifests using the separate service function
-    try:
-        value_manifests = code_list_service.get_code_list_value_manifests_by_manifest_id(manifest.code_list_manifest_id)
-    except Exception as e:
-        logger.warning(f"Failed to retrieve value manifests for CodeListManifest {manifest.code_list_manifest_id}", e)
-        value_manifests = []  # Continue without value manifests rather than failing completely
-    
-    # Create namespace info if available
-    namespace_info = None
-    if code_list.namespace:
-        namespace_info = NamespaceInfo(
-            namespace_id=code_list.namespace.namespace_id,
-            prefix=code_list.namespace.prefix,
-            uri=code_list.namespace.uri
-        )
-
-    # Create library info from release
-    library_info = LibraryInfo(
-        library_id=manifest.release.library_id,
-        name=manifest.release.library.name
-    )
-
-    # Create release info from manifest
-    # Since release_id is required and release relationship is loaded, release should always be available
-    release_info = ReleaseInfo(
-        release_id=manifest.release_id,
-        release_num=manifest.release.release_num,
-        state=manifest.release.state
-    )
-
-    # Create log info from manifest
-    log_info = None
-    if manifest.log:
-        log_info = LogInfo(
-            log_id=manifest.log.log_id,
-            revision_num=manifest.log.revision_num,
-            revision_tracking_num=manifest.log.revision_tracking_num
-        )
-
-    # Create code list values info from value manifests
-    code_list_values_info = []
-    for value_manifest in value_manifests:
-        code_list_values_info.append(CodeListValueInfo(
-            code_list_value_manifest_id=value_manifest.code_list_value_manifest_id,
-            code_list_value_id=value_manifest.code_list_value_id,
-            guid=value_manifest.code_list_value.guid,
-            value=value_manifest.code_list_value.value,
-            meaning=value_manifest.code_list_value.meaning,
-            definition=value_manifest.code_list_value.definition,
-            is_deprecated=value_manifest.code_list_value.is_deprecated
-        ))
-
-    return GetCodeListResponse(
-        code_list_manifest_id=manifest.code_list_manifest_id,
-        code_list_id=code_list.code_list_id,
-        guid=code_list.guid,
-        enum_type_guid=code_list.enum_type_guid,
-        name=code_list.name,
-        list_id=code_list.list_id,
-        version_id=code_list.version_id,
-        definition=code_list.definition,
-        remark=code_list.remark,
-        definition_source=code_list.definition_source,
-        namespace=namespace_info,
-        library=library_info,
-        release=release_info,
-        log=log_info,
-        extensible_indicator=code_list.extensible_indicator,
-        is_deprecated=code_list.is_deprecated,
-        state=code_list.state,
-        owner=_create_user_info(code_list.owner),
-        values=code_list_values_info,
-        created=WhoAndWhen(
-            who=_create_user_info(code_list.creator),
-            when=code_list.creation_timestamp
-        ),
-        last_updated=WhoAndWhen(
-            who=_create_user_info(code_list.last_updater),
-            when=code_list.last_update_timestamp
-        )
-    )

@@ -5,25 +5,48 @@ from typing import Literal, List, Union
 
 from pydantic import BaseModel, computed_field, model_validator
 
-from services.models.common import UserInfo, WhoAndWhen, ValueConstraint
+from services.models.biz_ctx import BizCtxSummary
+from services.models.common import UserSummary, WhoAndWhen, ValueConstraint
 from services.models.core_component import AccInfo, AsccInfo, AsccpInfo, BccInfo, BccpInfo
-from services.models.data_type import DtScInfo
-from services.models.library import LibraryInfo
-from services.models.release import ReleaseInfo
+from services.models.data_type import DtScDto
+from services.models.library import LibrarySummary
+from services.models.release import ReleaseSummary
+
+
+class TopLevelAsbiepListEntry(BaseModel):
+    """Response for get_top_level_asbiep tool."""
+    top_level_asbiep_id: int  # Unique identifier for the top-level ASBIEP
+    asbiep_id: int  # Unique identifier for the ASBIEP (base entity ID)
+    guid: str  # Globally unique identifier for the ASBIEP
+    den: str  # Dictionary Entry Name (DEN) - the standardized name as defined by CCTS v3
+    property_term: str  # Property term from the underlying ASCCP
+    display_name: str | None  # Display name intended for user interface presentation
+    version: str | None  # Version string of the top-level ASBIEP (e.g., "1.0", "2.1")
+    status: str | None  # Status of the top-level ASBIEP (e.g., "Production", "Draft")
+    biz_term: str | None  # Business term that represents this top-level ASBIEP in business language
+    remark: str | None  # Additional remarks or notes about the top-level ASBIEP
+    business_contexts: list[BizCtxSummary]  # List of business contexts associated with this top-level ASBIEP
+    state: str  # Current state of the top-level ASBIEP (e.g., "WIP", "QA", "Production", "Published")
+    is_deprecated: bool  # Whether the top-level ASBIEP is deprecated and should not be used
+    deprecated_reason: str | None  # Reason why the top-level ASBIEP was deprecated
+    deprecated_remark: str | None  # Additional remarks about the deprecation
+    owner: UserSummary  # User information about the owner of the top-level ASBIEP
+    created: WhoAndWhen  # Information about who created the top-level ASBIEP and when
+    last_updated: WhoAndWhen  # Information about who last updated the top-level ASBIEP and when
 
 
 class TopLevelAsbiepInfo(BaseModel):
     """Top-Level ASBIEP information object."""
     top_level_asbiep_id: int  # Unique identifier for the top-level ASBIEP
-    library: LibraryInfo  # Library information where this top-level ASBIEP is stored
-    release: ReleaseInfo  # Release information indicating which release this version belongs to
+    library: LibrarySummary  # Library information where this top-level ASBIEP is stored
+    release: ReleaseSummary  # Release information indicating which release this version belongs to
     version: str | None  # Version string of the top-level ASBIEP (e.g., "1.0", "2.1")
     status: str | None  # Status of the top-level ASBIEP (e.g., "Production", "Draft")
     state: str  # Current state of the top-level ASBIEP (e.g., "WIP", "QA", "Production", "Published")
     is_deprecated: bool  # Whether the top-level ASBIEP is deprecated and should not be used
     deprecated_reason: str | None  # Reason why the top-level ASBIEP was deprecated
     deprecated_remark: str | None  # Additional remarks about the deprecation
-    owner: UserInfo  # User information about the owner of the top-level ASBIEP
+    owner: UserSummary  # User information about the owner of the top-level ASBIEP
 
 
 class AbieRelationshipInfo(BaseModel):
@@ -91,16 +114,16 @@ class PrimitiveRestriction(BaseModel):
     xbtManifestId: int | None  # XBT (eXtended Built-in Type) manifest ID
     codeListManifestId: int | None  # Code list manifest ID
     agencyIdListManifestId: int | None  # Agency ID list manifest ID
-    
+
     @model_validator(mode='after')
     def validate_primitive_restriction(self):
         """Validate that exactly one of xbtManifestId, codeListManifestId, or agencyIdListManifestId is set."""
         has_xbt = self.xbtManifestId is not None
         has_code_list = self.codeListManifestId is not None
         has_agency_id_list = self.agencyIdListManifestId is not None
-        
+
         count = sum([has_xbt, has_code_list, has_agency_id_list])
-        
+
         if count == 0:
             raise ValueError(
                 "PrimitiveRestriction: Exactly one of xbtManifestId, codeListManifestId, or agencyIdListManifestId must be set. "
@@ -114,7 +137,7 @@ class PrimitiveRestriction(BaseModel):
                 f"{'codeListManifestId' if has_code_list else ''} "
                 f"{'agencyIdListManifestId' if has_agency_id_list else ''}".strip()
             )
-        
+
         return self
 
 
@@ -147,7 +170,7 @@ class BbieScInfo(BaseModel):
     """BBIE SC (Business Information Entity Supplementary Component) information object."""
     bbie_sc_id: int | None  # Unique identifier for the BBIE SC (base entity ID, None if not yet created)
     guid: str | None  # Globally unique identifier for the BBIE SC (if available)
-    based_dt_sc: DtScInfo  # Information about the data type supplementary component that this BBIE SC is based on
+    based_dt_sc: DtScDto  # Information about the data type supplementary component that this BBIE SC is based on
     path: str  # Hierarchical path string indicating the position of this BBIE SC within the BIE structure
     hash_path: str  # Hashed version of the path for efficient lookups
     definition: str | None  # Definition or description of the BBIE SC
@@ -226,7 +249,7 @@ class AbieInfo(BaseModel):
     based_acc_manifest: AccInfo  # Information about the ACC that this ABIE is based on
     definition: str | None  # Definition or description of the ABIE
     remark: str | None  # Additional remarks or notes about the ABIE
-    relationships: List[Union[AsbieRelationshipInfo, BbieRelationshipInfo]]  # List of relationships (ASBIEs and BBIEs) contained in the ABIE
+    relationships: List[Union[
+        AsbieRelationshipInfo, BbieRelationshipInfo]]  # List of relationships (ASBIEs and BBIEs) contained in the ABIE
     created: WhoAndWhen | None  # Information about who created the ABIE and when (if available)
     last_updated: WhoAndWhen | None  # Information about who last updated the ABIE and when (if available)
-

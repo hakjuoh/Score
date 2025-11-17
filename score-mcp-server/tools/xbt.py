@@ -47,13 +47,8 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from services.models.common import WhoAndWhen
-from services.models.library import LibraryInfo
-from services.models.log import LogInfo
-from services.models.release import ReleaseInfo
-from services.models.xbt import SubtypeOfXbtInfo
 from services.xbt import XbtService
-from tools import _validate_auth_and_db, _create_user_info
+from tools import _validate_auth_and_db
 from tools.models.xbt import GetXbtResponse
 
 # Configure logging
@@ -69,28 +64,55 @@ mcp = FastMCP("Score MCP Server - XBT Tools")
         "type": "object",
         "description": "Response containing XBT (XML Built-in Type) information, including type hierarchy relationships, data format mappings, and metadata",
         "properties": {
-            "xbt_manifest_id": {"type": "integer", "description": "Unique identifier for the XBT manifest (release-specific version)", "example": 12345},
-            "xbt_id": {"type": "integer", "description": "Unique identifier for the XBT (base entity ID, same across all releases)", "example": 6789},
-            "guid": {"type": "string", "description": "Globally unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)", "example": "a1b2c3d4e5f6789012345678901234ab"},
-            "name": {"type": ["string", "null"], "description": "Human-readable name of the built-in type (e.g., 'string', 'date time', 'boolean', 'normalized string')", "example": "string"},
-            "builtIn_type": {"type": ["string", "null"], "description": "Built-in type as it should appear in XML schema with namespace prefix (e.g., 'xsd:string', 'xsd:dateTime', 'xsd:normalizedString')", "example": "xsd:string"},
-            "jbt_draft05_map": {"type": ["string", "null"], "description": "JSON Schema Draft 05 mapping as a JSON string (e.g., '{\"type\":\"string\"}', '{\"type\":\"string\", \"format\":\"date-time\"}')", "example": "{\"type\":\"string\"}"},
-            "openapi30_map": {"type": ["string", "null"], "description": "OpenAPI 3.0 specification mapping as a JSON string (e.g., '{\"type\":\"string\", \"format\":\"date-time\"}')", "example": "{\"type\":\"string\", \"format\":\"date-time\"}"},
-            "avro_map": {"type": ["string", "null"], "description": "Apache Avro schema mapping as a JSON string (e.g., '{\"type\":\"string\"}', '{\"type\":\"int\"}')", "example": "{\"type\":\"string\"}"},
+            "xbt_manifest_id": {"type": "integer",
+                                "description": "Unique identifier for the XBT manifest (release-specific version)",
+                                "example": 12345},
+            "xbt_id": {"type": "integer",
+                       "description": "Unique identifier for the XBT (base entity ID, same across all releases)",
+                       "example": 6789},
+            "guid": {"type": "string",
+                     "description": "Globally unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)",
+                     "example": "a1b2c3d4e5f6789012345678901234ab"},
+            "name": {"type": ["string", "null"],
+                     "description": "Human-readable name of the built-in type (e.g., 'string', 'date time', 'boolean', 'normalized string')",
+                     "example": "string"},
+            "builtIn_type": {"type": ["string", "null"],
+                             "description": "Built-in type as it should appear in XML schema with namespace prefix (e.g., 'xsd:string', 'xsd:dateTime', 'xsd:normalizedString')",
+                             "example": "xsd:string"},
+            "jbt_draft05_map": {"type": ["string", "null"],
+                                "description": "JSON Schema Draft 05 mapping as a JSON string (e.g., '{\"type\":\"string\"}', '{\"type\":\"string\", \"format\":\"date-time\"}')",
+                                "example": "{\"type\":\"string\"}"},
+            "openapi30_map": {"type": ["string", "null"],
+                              "description": "OpenAPI 3.0 specification mapping as a JSON string (e.g., '{\"type\":\"string\", \"format\":\"date-time\"}')",
+                              "example": "{\"type\":\"string\", \"format\":\"date-time\"}"},
+            "avro_map": {"type": ["string", "null"],
+                         "description": "Apache Avro schema mapping as a JSON string (e.g., '{\"type\":\"string\"}', '{\"type\":\"int\"}')",
+                         "example": "{\"type\":\"string\"}"},
             "subtype_of_xbt": {
                 "type": ["object", "null"],
                 "description": "Information about the parent XBT in the type hierarchy, if this XBT is a subtype of another. For example, 'normalizedString' has 'string' as its subtype_of_xbt, and 'integer' has 'decimal' as its subtype_of_xbt. Root types like 'anyType' have this field as null.",
                 "properties": {
-                    "xbt_manifest_id": {"type": "integer", "description": "Unique identifier for the parent XBT manifest (release-specific version)", "example": 12345},
-                    "xbt_id": {"type": "integer", "description": "Unique identifier for the parent XBT (base entity ID, same across all releases)", "example": 6789},
-                    "guid": {"type": "string", "description": "Globally unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)", "example": "a1b2c3d4e5f6789012345678901234ab"},
-                    "name": {"type": ["string", "null"], "description": "Human-readable name of the parent built-in type (e.g., 'string', 'decimal', 'anySimpleType')", "example": "string"},
-                    "builtIn_type": {"type": ["string", "null"], "description": "Parent built-in type as it should appear in XML schema with namespace prefix (e.g., 'xsd:string', 'xsd:decimal')", "example": "xsd:string"},
+                    "xbt_manifest_id": {"type": "integer",
+                                        "description": "Unique identifier for the parent XBT manifest (release-specific version)",
+                                        "example": 12345},
+                    "xbt_id": {"type": "integer",
+                               "description": "Unique identifier for the parent XBT (base entity ID, same across all releases)",
+                               "example": 6789},
+                    "guid": {"type": "string",
+                             "description": "Globally unique identifier within the release. 32-character hexadecimal identifier (lowercase, no hyphens)",
+                             "example": "a1b2c3d4e5f6789012345678901234ab"},
+                    "name": {"type": ["string", "null"],
+                             "description": "Human-readable name of the parent built-in type (e.g., 'string', 'decimal', 'anySimpleType')",
+                             "example": "string"},
+                    "builtIn_type": {"type": ["string", "null"],
+                                     "description": "Parent built-in type as it should appear in XML schema with namespace prefix (e.g., 'xsd:string', 'xsd:decimal')",
+                                     "example": "xsd:string"},
                     "library": {
                         "type": "object",
                         "description": "Library information",
                         "properties": {
-                            "library_id": {"type": "integer", "description": "Unique identifier for the library", "example": 1},
+                            "library_id": {"type": "integer", "description": "Unique identifier for the library",
+                                           "example": 1},
                             "name": {"type": "string", "description": "Library name", "example": "connectSpec"}
                         },
                         "required": ["library_id", "name"]
@@ -99,8 +121,10 @@ mcp = FastMCP("Score MCP Server - XBT Tools")
                         "type": "object",
                         "description": "Release information",
                         "properties": {
-                            "release_id": {"type": "integer", "description": "Unique identifier for the release", "example": 1},
-                            "release_num": {"type": ["string", "null"], "description": "Release number", "example": "10.6"},
+                            "release_id": {"type": "integer", "description": "Unique identifier for the release",
+                                           "example": 1},
+                            "release_num": {"type": ["string", "null"], "description": "Release number",
+                                            "example": "10.6"},
                             "state": {"type": "string", "description": "Release state", "example": "Published"}
                         },
                         "required": ["release_id", "release_num", "state"]
@@ -108,10 +132,18 @@ mcp = FastMCP("Score MCP Server - XBT Tools")
                 },
                 "required": ["xbt_manifest_id", "xbt_id", "guid", "library", "release"]
             },
-            "schema_definition": {"type": ["string", "null"], "description": "XML Schema Definition (XSD) schema definition string, if custom schema is defined. Typically None for standard built-in types.", "example": "<xs:simpleType name=\"string\">...</xs:simpleType>"},
-            "revision_doc": {"type": ["string", "null"], "description": "Revision documentation describing changes or updates to this XBT. Typically None for standard built-in types.", "example": "Updated to support new schema version"},
-            "state": {"type": ["integer", "null"], "description": "State of the XBT indicating its lifecycle state (e.g., 3 = Published). Common states: 1=WIP, 2=QA, 3=Published.", "example": 3},
-            "is_deprecated": {"type": "boolean", "description": "Whether the XBT is deprecated and should not be used in new implementations. Deprecated XBTs are retained for backward compatibility.", "example": False},
+            "schema_definition": {"type": ["string", "null"],
+                                  "description": "XML Schema Definition (XSD) schema definition string, if custom schema is defined. Typically None for standard built-in types.",
+                                  "example": "<xs:simpleType name=\"string\">...</xs:simpleType>"},
+            "revision_doc": {"type": ["string", "null"],
+                             "description": "Revision documentation describing changes or updates to this XBT. Typically None for standard built-in types.",
+                             "example": "Updated to support new schema version"},
+            "state": {"type": ["integer", "null"],
+                      "description": "State of the XBT indicating its lifecycle state (e.g., 3 = Published). Common states: 1=WIP, 2=QA, 3=Published.",
+                      "example": 3},
+            "is_deprecated": {"type": "boolean",
+                              "description": "Whether the XBT is deprecated and should not be used in new implementations. Deprecated XBTs are retained for backward compatibility.",
+                              "example": False},
             "library": {
                 "type": "object",
                 "description": "Library information",
@@ -137,7 +169,8 @@ mcp = FastMCP("Score MCP Server - XBT Tools")
                 "properties": {
                     "log_id": {"type": "integer", "description": "Unique identifier for the log", "example": 123},
                     "revision_num": {"type": "integer", "description": "Revision number", "example": 1},
-                    "revision_tracking_num": {"type": "integer", "description": "Revision tracking number", "example": 1}
+                    "revision_tracking_num": {"type": "integer", "description": "Revision tracking number",
+                                              "example": 1}
                 },
                 "required": ["log_id", "revision_num", "revision_tracking_num"]
             },
@@ -147,8 +180,10 @@ mcp = FastMCP("Score MCP Server - XBT Tools")
                 "properties": {
                     "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
                     "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-                    "username": {"type": "string", "description": "Display name of the user", "example": "Administrator"},
-                    "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]}
+                    "username": {"type": "string", "description": "Display name of the user",
+                                 "example": "Administrator"},
+                    "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]},
+                              "description": "List of roles assigned to the user", "example": ["Admin"]}
                 },
                 "required": ["user_id", "login_id", "username", "roles"]
             },
@@ -160,14 +195,21 @@ mcp = FastMCP("Score MCP Server - XBT Tools")
                         "type": "object",
                         "description": "User who created the XBT",
                         "properties": {
-                            "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
-                            "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-                            "username": {"type": "string", "description": "Display name of the user", "example": "Administrator"},
-                            "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]}
+                            "user_id": {"type": "integer", "description": "Unique identifier for the user",
+                                        "example": 1},
+                            "login_id": {"type": "string", "description": "User's login identifier",
+                                         "example": "admin"},
+                            "username": {"type": "string", "description": "Display name of the user",
+                                         "example": "Administrator"},
+                            "roles": {"type": "array",
+                                      "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]},
+                                      "description": "List of roles assigned to the user", "example": ["Admin"]}
                         },
                         "required": ["user_id", "login_id", "username", "roles"]
                     },
-                    "when": {"type": "string", "format": "date-time", "description": "Creation timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)", "example": "2024-01-15T10:30:00Z"}
+                    "when": {"type": "string", "format": "date-time",
+                             "description": "Creation timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)",
+                             "example": "2024-01-15T10:30:00Z"}
                 },
                 "required": ["who", "when"]
             },
@@ -179,26 +221,34 @@ mcp = FastMCP("Score MCP Server - XBT Tools")
                         "type": "object",
                         "description": "User who last updated the XBT",
                         "properties": {
-                            "user_id": {"type": "integer", "description": "Unique identifier for the user", "example": 1},
-                            "login_id": {"type": "string", "description": "User's login identifier", "example": "admin"},
-                            "username": {"type": "string", "description": "Display name of the user", "example": "Administrator"},
-                            "roles": {"type": "array", "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]}, "description": "List of roles assigned to the user", "example": ["Admin"]}
+                            "user_id": {"type": "integer", "description": "Unique identifier for the user",
+                                        "example": 1},
+                            "login_id": {"type": "string", "description": "User's login identifier",
+                                         "example": "admin"},
+                            "username": {"type": "string", "description": "Display name of the user",
+                                         "example": "Administrator"},
+                            "roles": {"type": "array",
+                                      "items": {"type": "string", "enum": ["Admin", "Developer", "End-User"]},
+                                      "description": "List of roles assigned to the user", "example": ["Admin"]}
                         },
                         "required": ["user_id", "login_id", "username", "roles"]
                     },
-                    "when": {"type": "string", "format": "date-time", "description": "Last update timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)", "example": "2024-01-20T14:45:00Z"}
+                    "when": {"type": "string", "format": "date-time",
+                             "description": "Last update timestamp in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)",
+                             "example": "2024-01-20T14:45:00Z"}
                 },
                 "required": ["who", "when"]
             }
         },
-        "required": ["xbt_manifest_id", "xbt_id", "guid", "is_deprecated", "library", "release", "owner", "created", "last_updated"]
+        "required": ["xbt_manifest_id", "xbt_id", "guid", "is_deprecated", "library", "release", "owner", "created",
+                     "last_updated"]
     }
 )
 async def get_xbt(
-    xbt_manifest_id: Annotated[int, Field(
-        gt=0,
-        description="Unique numeric identifier of the XBT manifest to retrieve."
-    )]
+        xbt_manifest_id: Annotated[int, Field(
+            gt=0,
+            description="Unique numeric identifier of the XBT manifest to retrieve."
+        )]
 ) -> GetXbtResponse:
     """
     Get a specific XBT (XML Built-in Type) by its manifest ID.
@@ -265,99 +315,18 @@ async def get_xbt(
         >>> print(f"OpenAPI mapping: {result.openapi30_map}")
     """
     logger.info(f"Retrieving XBT with manifest ID: {xbt_manifest_id}")
-    
+
     # Validate authentication and database connection
     app_user, engine = _validate_auth_and_db()
-    
+
     # Get XBT manifest using service
     try:
         xbt_service = XbtService()
-        xbt_manifest = xbt_service.get_xbt_by_manifest_id(xbt_manifest_id)
-        
-        logger.debug(f"Found XBT manifest: xbt_id={xbt_manifest.xbt_id}, release_id={xbt_manifest.release_id}")
-        
-        xbt = xbt_manifest.xbt
-        
-        # Create library info from release
-        library_info = LibraryInfo(
-            library_id=xbt_manifest.release.library_id,
-            name=xbt_manifest.release.library.name
-        )
-        
-        # Create release info from manifest
-        release_info = ReleaseInfo(
-            release_id=xbt_manifest.release_id,
-            release_num=xbt_manifest.release.release_num,
-            state=xbt_manifest.release.state
-        )
-        
-        # Create log info from manifest
-        log_info = None
-        if xbt_manifest.log:
-            log_info = LogInfo(
-                log_id=xbt_manifest.log.log_id,
-                revision_num=xbt_manifest.log.revision_num,
-                revision_tracking_num=xbt_manifest.log.revision_tracking_num
-            )
-        
-        # Create subtype_of_xbt info if available
-        subtype_of_xbt_info = None
-        if xbt.subtype_of_xbt_id and xbt.subtype_of_xbt:
-            # Get the subtype XBT manifest for the same release
-            subtype_xbt_manifest = xbt_service.get_subtype_xbt_manifest(
-                xbt.subtype_of_xbt_id,
-                xbt_manifest.release_id
-            )
-            
-            if subtype_xbt_manifest:
-                subtype_library_info = LibraryInfo(
-                    library_id=subtype_xbt_manifest.release.library_id,
-                    name=subtype_xbt_manifest.release.library.name
-                )
-                subtype_release_info = ReleaseInfo(
-                    release_id=subtype_xbt_manifest.release_id,
-                    release_num=subtype_xbt_manifest.release.release_num,
-                    state=subtype_xbt_manifest.release.state
-                )
-                subtype_of_xbt_info = SubtypeOfXbtInfo(
-                    xbt_manifest_id=subtype_xbt_manifest.xbt_manifest_id,
-                    xbt_id=subtype_xbt_manifest.xbt_id,
-                    guid=xbt.subtype_of_xbt.guid,
-                    name=xbt.subtype_of_xbt.name,
-                    builtIn_type=xbt.subtype_of_xbt.builtIn_type,
-                    library=subtype_library_info,
-                    release=subtype_release_info
-                )
-        
-        logger.info(f"Successfully retrieved XBT: xbt_id={xbt.xbt_id}, name={xbt.name}")
-        
-        return GetXbtResponse(
-            xbt_manifest_id=xbt_manifest.xbt_manifest_id,
-            xbt_id=xbt.xbt_id,
-            guid=xbt.guid,
-            name=xbt.name,
-            builtIn_type=xbt.builtIn_type,
-            jbt_draft05_map=xbt.jbt_draft05_map,
-            openapi30_map=xbt.openapi30_map,
-            avro_map=xbt.avro_map,
-            subtype_of_xbt=subtype_of_xbt_info,
-            schema_definition=xbt.schema_definition,
-            revision_doc=xbt.revision_doc,
-            state=xbt.state,
-            is_deprecated=xbt.is_deprecated,
-            library=library_info,
-            release=release_info,
-            log=log_info,
-            owner=_create_user_info(xbt.owner),
-            created=WhoAndWhen(
-                who=_create_user_info(xbt.creator),
-                when=xbt.creation_timestamp
-            ),
-            last_updated=WhoAndWhen(
-                who=_create_user_info(xbt.last_updater),
-                when=xbt.last_update_timestamp
-            )
-        )
+        xbt = xbt_service.get_xbt_by_manifest_id(xbt_manifest_id)
+
+        logger.debug(f"Found XBT manifest: xbt_id={xbt.xbt_id}, release_id={xbt.release.release_id}")
+
+        return GetXbtResponse(**xbt.model_dump())
     except ToolError:
         raise
     except HTTPException as e:
@@ -374,4 +343,3 @@ async def get_xbt(
         logger.error(f"Unexpected error retrieving XBT", e)
         raise ToolError(
             f"An unexpected error occurred while retrieving the XBT: {str(e)}. Please contact your system administrator.") from e
-

@@ -15,7 +15,11 @@ from sqlmodel import select, func
 
 from databases.models import Release
 from services.cache import cache
-from services.models.common import Sort, PaginationParams, DateRangeParams, Page
+from services.common import create_user_info
+from services.models.common import Sort, PaginationParams, DateRangeParams, WhoAndWhen, PaginationResponse
+from services.models.library import LibrarySummary
+from services.models.namespace import NamespaceSummary
+from services.models.release import ReleaseDto
 from services.transaction import transaction, db_exec
 
 # Configure logging
@@ -107,7 +111,7 @@ class ReleaseService:
 
     @cache(key_prefix="release.get_release")
     @transaction(read_only=True)
-    def get_release(self, release_id: int) -> Release:
+    def get_release(self, release_id: int) -> ReleaseDto:
         """
         Get a release by ID.
         
@@ -139,7 +143,7 @@ class ReleaseService:
                 detail=f"Release with ID {release_id} not found"
             )
 
-        return release
+        return self._create_release_result(release)
 
     @cache(key_prefix="release.get_releases")
     @transaction(read_only=True)
@@ -147,7 +151,7 @@ class ReleaseService:
                      library_id: int = None, release_num: str = None, state: str = None,
                      created_on_params: DateRangeParams = None, last_updated_on_params: DateRangeParams = None,
                      pagination: PaginationParams = PaginationParams(offset=0, limit=10),
-                     sort_list: list[Sort] = None) -> Page:
+                     sort_list: list[Sort] = None) -> PaginationResponse[ReleaseDto]:
         """
         Get releases with optional filtering and pagination.
         
@@ -161,7 +165,7 @@ class ReleaseService:
             state: Filter by state (optional)
         
         Returns:
-            Page: Paginated response containing releases and pagination metadata
+            PaginationResponse: Paginated response containing releases and pagination metadata
             
         Note: Releases with release_num='Working' are automatically excluded from results.
         """
@@ -181,7 +185,7 @@ class ReleaseService:
 
         # Apply filters
         query = self._apply_filters(query, library_id, release_num, state,
-                                   created_on_params, last_updated_on_params)
+                                    created_on_params, last_updated_on_params)
 
         # Get total count
         count_query = select(func.count()).select_from(query.subquery())
@@ -197,16 +201,16 @@ class ReleaseService:
         releases = db_exec(query).all()
 
         # Create Page object
-        return Page(
-            total=total_count,
+        return PaginationResponse(
+            total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=list(releases)
+            items=[self._create_release_result(release) for release in releases]
         )
 
     def _apply_filters(self, query, library_id: int = None, release_num: str = None,
-                      state: str = None, created_on_params: DateRangeParams = None,
-                      last_updated_on_params: DateRangeParams = None):
+                       state: str = None, created_on_params: DateRangeParams = None,
+                       last_updated_on_params: DateRangeParams = None):
         """
         Apply filters to a query for releases.
         
@@ -229,7 +233,7 @@ class ReleaseService:
 
         if state:
             query = query.where(Release.state == state)
-        
+
         # Always exclude releases with release_num = 'Working'
         query = query.where(Release.release_num != 'Working')
 
@@ -271,6 +275,48 @@ class ReleaseService:
 
         return query
 
+    def _create_release_result(self, release) -> ReleaseDto:
+        """
+        Create a release result from a Release model instance.
+
+        Args:
+            release: Release model instance
+
+        Returns:
+            GetReleaseResponse: Formatted release result
+        """
+        # Create library info
+        library_info = LibrarySummary(
+            library_id=release.library_id,
+            name=release.library.name if release.library else None
+        )
+
+        # Create namespace info if available
+        namespace_info = None
+        if release.namespace:
+            namespace_info = NamespaceSummary(
+                namespace_id=release.namespace.namespace_id,
+                prefix=release.namespace.prefix,
+                uri=release.namespace.uri
+            )
+
+        # Create user info for creator and last_updater, handling None values
+        creator_info = create_user_info(release.creator) if release.creator else None
+        last_updater_info = create_user_info(release.last_updater) if release.last_updater else None
+
+        return ReleaseDto(
+            release_id=release.release_id,
+            library=library_info,
+            guid=release.guid,
+            release_num=release.release_num,
+            release_note=release.release_note,
+            release_license=release.release_license,
+            namespace=namespace_info,
+            state=release.state,
+            created=WhoAndWhen(who=creator_info, when=release.creation_timestamp),
+            last_updated=WhoAndWhen(who=last_updater_info, when=release.last_update_timestamp)
+        )
+
     @cache(key_prefix="release.get_dependent_releases")
     @transaction(read_only=True)
     def get_dependent_releases(self, release_id: int) -> list[int]:
@@ -288,32 +334,32 @@ class ReleaseService:
             list[int]: List of release IDs that the given release depends on (recursively)
         """
         from databases.models import ReleaseDep
-        
+
         # Use a set to avoid duplicates and track processed releases to prevent circular dependencies
         all_dependent_releases = set()
         processed_releases = set()  # Track processed releases to prevent infinite loops
         releases_to_process = [release_id]
-        
+
         # Recursively find all dependencies
         while releases_to_process:
             current_release_id = releases_to_process.pop(0)
-            
+
             # Skip if we've already processed this release (prevents circular dependencies)
             if current_release_id in processed_releases:
                 continue
-            
+
             processed_releases.add(current_release_id)
-            
+
             # Get direct dependencies of the current release
             direct_dependencies = db_exec(
                 select(ReleaseDep.depend_on_release_id)
                 .where(ReleaseDep.release_id == current_release_id)
             ).all()
-            
+
             # Add new dependencies to the set and queue for further processing
             for dep_release_id in direct_dependencies:
                 if dep_release_id not in all_dependent_releases and dep_release_id not in processed_releases:
                     all_dependent_releases.add(dep_release_id)
                     releases_to_process.append(dep_release_id)
-        
+
         return list(all_dependent_releases)
