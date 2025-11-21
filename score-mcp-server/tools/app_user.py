@@ -380,7 +380,7 @@ async def who_am_i() -> GetUserResponse:
 
         # Create response with current user information using existing helper
         logger.debug(f"Preparing user information for {app_user.login_id}")
-        user = user_service.create_user_result(app_user)
+        user = user_service.create_user_dto(app_user)
         logger.info(f"Retrieved user information for {app_user.login_id}")
         return GetUserResponse(**user.model_dump())
     except Exception as e:

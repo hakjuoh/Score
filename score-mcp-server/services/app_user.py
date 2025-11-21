@@ -156,7 +156,7 @@ class AppUserService:
             total_items=total_count,
             offset=pagination.offset,
             limit=pagination.limit,
-            items=[self.create_user_result(user) for user in users]
+            items=[self.create_user_dto(user) for user in users]
         )
         logger.debug(f"Prepared page with {len(result.items)} users")
         return result
@@ -198,7 +198,7 @@ class AppUserService:
 
         return query
 
-    def create_user_result(self, user) -> UserDto:
+    def create_user_dto(self, user: AppUser) -> UserDto:
         """
         Create a user result from an AppUser model instance.
 

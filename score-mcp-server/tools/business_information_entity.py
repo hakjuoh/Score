@@ -4308,6 +4308,10 @@ async def update_top_level_asbiep(
             default=None,
             description="Business term to indicate what the BIE is called in a particular business context. If not provided, biz_term will not be updated."
         )],
+        definition: Annotated[str | None, Field(
+            default=None,
+            description="Definition to override the ASCCP definition. If not provided, definition will not be updated."
+        )],
         remark: Annotated[str | None, Field(
             default=None,
             description="Context-specific usage remarks about the BIE. If not provided, remark will not be updated."
@@ -4336,6 +4340,7 @@ async def update_top_level_asbiep(
     - deprecated_reason: Reason for deprecation (required if deprecating)
     - deprecated_remark: Additional deprecation remarks (optional)
     - biz_term: Business term to indicate what the BIE is called in a particular business context
+    - definition: Definition of the ASBIEP
     - remark: Context-specific usage remarks about the BIE
     - display_name: Display name of the ASBIEP
 
@@ -4351,6 +4356,7 @@ async def update_top_level_asbiep(
         deprecated_reason (str | None, optional): Reason for deprecation. Required if is_deprecated is True.
         deprecated_remark (str | None, optional): Additional deprecation remarks.
         biz_term (str | None, optional): New business term. If not provided, biz_term will not be updated.
+        definition (str | None, optional): New definition. If no provided, definition will not be updated.
         remark (str | None, optional): New remark. If not provided, remark will not be updated.
         display_name (str | None, optional): New display name. If not provided, display_name will not be updated.
 
@@ -4442,6 +4448,7 @@ async def update_top_level_asbiep(
             status=status,
             display_name=display_name,
             biz_term=biz_term,
+            definition=definition,
             remark=remark,
             is_deprecated=is_deprecated,
             deprecated_reason=deprecated_reason,

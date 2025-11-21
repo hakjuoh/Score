@@ -5,7 +5,7 @@ description = "A Model Context Protocol (MCP) server that provides programmatic 
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastmcp>=2.13.0",
+    "fastmcp>=2.13.1",
     "aiohttp>=3.8.0",
     "sqlmodel>=0.0.27",
     "mariadb>=1.1.14",

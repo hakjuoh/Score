@@ -380,7 +380,9 @@ class CoreComponentService:
         from sqlmodel import func
         conditions = [release_id_col.in_(all_release_ids)]
         if den:
-            conditions.append(func.lower(den_col).like(func.lower(f"%{den}%")))
+            words = [w.strip() for w in den.split() if w.strip()]
+            for word in words:
+                conditions.append(func.lower(den_col).like(func.lower(f"%{word}%")))
         if tag:
             conditions.append(func.lower(Tag.name).like(func.lower(f"%{tag}%")))
         if created_on_params:

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 from sqlalchemy.orm import selectinload
-from sqlmodel import select, func, or_, text
+from sqlmodel import select, func, or_, text, and_
 
 from databases.models import (
     AppUser, TopLevelAsbiep, Asbiep, BizCtxAssignment, Abie, BizCtx, Release, AsccpManifest, Asccp, \
@@ -215,6 +215,7 @@ class BusinessInformationEntityService:
         """
         return (
             select(TopLevelAsbiep)
+            .join(Release, TopLevelAsbiep.release_id == Release.release_id)
             .join(Asbiep, TopLevelAsbiep.asbiep_id == Asbiep.asbiep_id)
             .join(AsccpManifest, Asbiep.based_asccp_manifest_id == AsccpManifest.asccp_manifest_id)
             .join(Asccp, AsccpManifest.asccp_id == Asccp.asccp_id)
@@ -255,20 +256,26 @@ class BusinessInformationEntityService:
         """
         # Apply library_id filter if provided
         if library_id:
-            query = query.where(AsccpManifest.library_id == library_id)
+            query = query.where(Release.library_id == library_id)
 
         # Apply release_id_list filter if provided
         if release_id_list and len(release_id_list) > 0:
             query = query.where(TopLevelAsbiep.release_id.in_(release_id_list))
 
         if den:
-            # Use OR clause to match either den field or display_name field
-            query = query.where(
+            words = [w.strip() for w in den.split() if w.strip()]
+
+            # For each word, build:  (den LIKE %word% OR display_name LIKE %word%)
+            word_conditions = [
                 or_(
-                    AsccpManifest.den.ilike(f"%{den}%"),
-                    Asbiep.display_name.ilike(f"%{den}%")
+                    AsccpManifest.den.ilike(f"%{word}%"),
+                    Asbiep.display_name.ilike(f"%{word}%")
                 )
-            )
+                for word in words
+            ]
+
+            # All words must match somewhere → AND all the OR conditions
+            query = query.where(and_(*word_conditions))
 
         if version:
             query = query.where(TopLevelAsbiep.version.ilike(f"%{version}%"))
@@ -1083,7 +1090,9 @@ class BusinessInformationEntityService:
     def update_top_level_asbiep(self, top_level_asbiep_id: int,
                                 version: str | None = None, status: str | None = None,
                                 display_name: str | None = None,
-                                biz_term: str | None = None, remark: str | None = None,
+                                biz_term: str | None = None,
+                                definition: str | None = None,
+                                remark: str | None = None,
                                 is_deprecated: bool | None = None, deprecated_reason: str | None = None,
                                 deprecated_remark: str | None = None) -> list[str]:
         """
@@ -1094,6 +1103,7 @@ class BusinessInformationEntityService:
         - status: Usage status (e.g., 'Prototype', 'Test', 'Production')
         - display_name: Display name of the ASBIEP
         - biz_term: Business term to indicate what the BIE is called in a particular business context
+        - definition: Definition of the ASBIEP.
         - remark: Context-specific usage remarks about the BIE
         - is_deprecated: Whether the BIE is deprecated
         - deprecated_reason: Reason for deprecation (required if deprecating)
@@ -1109,6 +1119,7 @@ class BusinessInformationEntityService:
             status: New status (optional)
             display_name: New display name (optional)
             biz_term: New business term (optional)
+            definition: New definition (optional)
             remark: New remark (optional)
             is_deprecated: New deprecation status (optional)
             deprecated_reason: Reason for deprecation (required if deprecating)
@@ -1182,11 +1193,12 @@ class BusinessInformationEntityService:
 
         # Update ASBIEP properties if any are provided
         asbiep_updated_fields = []
-        if any(field is not None for field in [biz_term, remark, display_name]):
+        if any(field is not None for field in [biz_term, definition, remark, display_name]):
             asbiep_updated_fields = self.update_asbiep_properties(
                 top_level_asbiep_id=top_level_asbiep_id,
                 display_name=display_name,
                 biz_term=biz_term,
+                definition=definition,
                 remark=remark
             )
 
@@ -1452,7 +1464,9 @@ class BusinessInformationEntityService:
 
     @transaction(read_only=False)
     def update_asbiep_properties(self, top_level_asbiep_id: int,
-                                 display_name: str | None = None, biz_term: str | None = None,
+                                 display_name: str | None = None,
+                                 biz_term: str | None = None,
+                                 definition: str | None = None,
                                  remark: str | None = None) -> list[str]:
         """
         Update ASBIEP properties (biz_term, remark, display_name) for a business information entity.
@@ -1460,6 +1474,7 @@ class BusinessInformationEntityService:
         This method allows updating specific ASBIEP fields including:
         - display_name: Display name of the ASBIEP
         - biz_term: Business term to indicate what the BIE is called in a particular business context
+        - definition: Definition of the ASBIEP
         - remark: Context-specific usage remarks about the BIE
         
         Permission Requirements:
@@ -1470,6 +1485,7 @@ class BusinessInformationEntityService:
             top_level_asbiep_id: The top-level ASBIEP ID to update
             display_name: New display name (optional)
             biz_term: New business term (optional)
+            definition: New definition (optional)
             remark: New remark (optional)
             
         Returns:
@@ -1521,6 +1537,11 @@ class BusinessInformationEntityService:
         if biz_term is not None:
             asbiep.biz_term = biz_term
             updated_fields.append("biz_term")
+
+        # Update definition if provided
+        if definition is not None:
+            asbiep.definition = definition
+            updated_fields.append("definition")
 
         # Update remark if provided
         if remark is not None:

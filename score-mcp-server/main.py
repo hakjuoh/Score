@@ -4,9 +4,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastmcp import FastMCP
-from fastmcp.server.auth.providers.github import GitHubProvider
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
+
+from tools.utils import parse_bool_env
 
 # Load .env file from working directory first (before configuring logging)
 # This ensures LOG_LEVEL and other environment variables are available
@@ -70,19 +71,6 @@ auth = create_auth_provider()
 # Create database lifespan for startup connectivity check
 mcp_lifespan = create_database_lifespan(engine, database_url)
 
-# Parse stateless_http setting from environment
-# stateless_http=True is required to avoid "Bad Request: No valid session ID provided" errors
-# when running in Docker containers. Without this parameter, FastMCP expects session management
-# which causes issues with HTTP transport in containerized environments.
-# See: https://github.com/modelcontextprotocol/python-sdk/issues/808
-# If CORS is enabled, stateless_http will be automatically set to True.
-def parse_bool_env(var_name: str, default: bool = False) -> bool:
-    """Parse boolean from environment variable."""
-    value = os.getenv(var_name)
-    if value is None:
-        return default
-    return value.lower() in ("true", "1", "yes", "on")
-
 # Check if CORS is enabled
 cors_enabled = parse_bool_env("CORS_ENABLED", False)
 
@@ -93,10 +81,16 @@ if cors_enabled:
     stateless_http = True
     logger.info("CORS is enabled, setting stateless_http=True (required)")
 else:
+    # Parse stateless_http setting from environment
+    # stateless_http=True is required to avoid "Bad Request: No valid session ID provided" errors
+    # when running in Docker containers. Without this parameter, FastMCP expects session management
+    # which causes issues with HTTP transport in containerized environments.
+    # See: https://github.com/modelcontextprotocol/python-sdk/issues/808
+    # If CORS is enabled, stateless_http will be automatically set to True.
     stateless_http = parse_bool_env("STATELESS_HTTP", False)
     logger.info(f"stateless_http={stateless_http} (from STATELESS_HTTP env var)")
 
-mcp = FastMCP("Score MCP Server", auth=auth, 
+mcp = FastMCP("Score MCP Server", auth=auth,
               tool_serializer=lambda res: res.model_dump_json(exclude_none=True),
               stateless_http=stateless_http)
 
@@ -193,6 +187,12 @@ app = mcp.http_app(path="/mcp", middleware=custom_middleware)
 
 if __name__ == "__main__":
     # Get host and port from environment variables with defaults
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8000"))
-    mcp.run(transport='http', host=host, port=port)
+    transport = os.getenv('TRANSPORT', 'http')
+    if transport == "http":
+        host = os.getenv("HOST", "0.0.0.0")
+        port = int(os.getenv("PORT", "8000"))
+        mcp.run(transport='http', host=host, port=port)
+    elif transport == "stdio":
+        mcp.run(transport='stdio')
+    else:
+        raise ValueError("'transport' must be one of 'http' or 'stdio'.")

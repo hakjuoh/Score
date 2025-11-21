@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 
 from fastmcp.exceptions import ToolError
@@ -116,3 +117,11 @@ def str_to_int(value: int | str | None) -> int | None:
                 f"Please provide a valid integer string (e.g., '0', '1', '-1')."
             )
     return value
+
+
+def parse_bool_env(var_name: str, default: bool = False) -> bool:
+    """Parse boolean from environment variable."""
+    value = os.getenv(var_name)
+    if value is None:
+        return default
+    return str_to_bool(value)
