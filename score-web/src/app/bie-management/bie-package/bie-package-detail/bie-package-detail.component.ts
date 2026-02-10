@@ -5,7 +5,7 @@ import {ActivatedRoute, Router} from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {hashCode} from 'src/app/common/utility';
 import {SelectionModel} from '@angular/cdk/collections';
-import {finalize} from 'rxjs/operators';
+import {catchError, finalize, map} from 'rxjs/operators';
 import {saveAs} from 'file-saver';
 import {MatDialog, MatDialogConfig} from '@angular/material/dialog';
 import {MatMultiSort, MatMultiSortTableDataSource, TableData} from 'ngx-mat-multi-sort';
@@ -13,10 +13,10 @@ import {AuthService} from '../../../authentication/auth.service';
 import {ConfirmDialogService} from '../../../common/confirm-dialog/confirm-dialog.service';
 import {WebPageInfoService} from '../../../basis/basis.service';
 import {PageRequest} from '../../../basis/basis';
-import {BieListInBiePackageRequest, BiePackage, BiePackageDetails} from '../domain/bie-package';
+import {BieListInBiePackageRequest, BiePackageDetails} from '../domain/bie-package';
 import {BieListEntry} from '../../bie-list/domain/bie-list';
 import {BiePackageService} from '../domain/bie-package.service';
-import {BiePackageAddBieDialogComponent} from '../bie-package-add-bie-dialog/bie-package-add-bie-dialog.component';
+import {BiePackageBieDialogComponent} from '../bie-package-add-bie-dialog/bie-package-bie-dialog.component';
 import {
   PreferencesInfo,
   TableColumnsInfo,
@@ -24,7 +24,7 @@ import {
 } from '../../../settings-management/settings-preferences/domain/preferences';
 import {ScoreTableColumnResizeDirective} from '../../../common/score-table-column-resize/score-table-column-resize.directive';
 import {SettingsPreferencesService} from '../../../settings-management/settings-preferences/domain/settings-preferences.service';
-import {forkJoin} from 'rxjs';
+import {forkJoin, of} from 'rxjs';
 
 @Component({
   selector: 'score-bie-package-detail',
@@ -332,13 +332,14 @@ export class BiePackageDetailComponent implements OnInit {
     }
   }
 
-  openDialog($event: any) {
+  openAddDialog($event: any) {
     $event.preventDefault();
     $event.stopPropagation();
 
     const dialogConfig = new MatDialogConfig();
 
     dialogConfig.data = this.table.dataSource.data;
+    dialogConfig.data.action = 'Add';
     dialogConfig.data.biePackage = this.biePackage;
     dialogConfig.data.webPageInfo = this.webPageInfo;
     dialogConfig.width = '100%';
@@ -348,7 +349,7 @@ export class BiePackageDetailComponent implements OnInit {
     dialogConfig.autoFocus = false;
 
     this.loading = true;
-    const dialogRef = this.dialog.open(BiePackageAddBieDialogComponent, dialogConfig);
+    const dialogRef = this.dialog.open(BiePackageBieDialogComponent, dialogConfig);
     dialogRef.afterClosed().subscribe(topLevelAsbiepIdList => {
       if (!topLevelAsbiepIdList) {
         this.loading = false;
@@ -357,6 +358,52 @@ export class BiePackageDetailComponent implements OnInit {
 
       this.biePackageService.addBieToBiePackage(this.biePackage.biePackageId, ...topLevelAsbiepIdList).subscribe(_ => {
         this.snackBar.open('Added', '', {
+          duration: 3000,
+        });
+
+        this.selection.clear();
+        this.loadBieListInBiePackage();
+
+        this.loading = false;
+      }, err => {
+        this.loading = false;
+        throw err;
+      });
+    }, err => {
+      this.loading = false;
+      throw err;
+    });
+  }
+
+  openReplaceDialog($event: any, selected: BieListEntry) {
+    $event.preventDefault();
+    $event.stopPropagation();
+
+    const dialogConfig = new MatDialogConfig();
+
+    dialogConfig.data = this.table.dataSource.data;
+    dialogConfig.data.action = 'Replace';
+    dialogConfig.data.den = selected.den;
+    dialogConfig.data.excludeTopLevelAsbiepIds = [selected.topLevelAsbiepId];
+    dialogConfig.data.biePackage = this.biePackage;
+    dialogConfig.data.webPageInfo = this.webPageInfo;
+    dialogConfig.width = '100%';
+    dialogConfig.maxWidth = '100%';
+    dialogConfig.height = '100%';
+    dialogConfig.maxHeight = '100%';
+    dialogConfig.autoFocus = false;
+
+    this.loading = true;
+    const dialogRef = this.dialog.open(BiePackageBieDialogComponent, dialogConfig);
+    dialogRef.afterClosed().subscribe(topLevelAsbiepIdList => {
+      if (!topLevelAsbiepIdList) {
+        this.loading = false;
+        return;
+      }
+
+      this.biePackageService.replaceBieInBiePackage(this.biePackage.biePackageId,
+          selected.topLevelAsbiepId, topLevelAsbiepIdList[0]).subscribe(_ => {
+        this.snackBar.open('Replaced', '', {
           duration: 3000,
         });
 
@@ -392,15 +439,53 @@ export class BiePackageDetailComponent implements OnInit {
 
   removeBieInBiePackage() {
     const bieLists = this.selection.selected;
-    this.biePackageService.deleteBieInBiePackage(
-        this.biePackage.biePackageId, ...bieLists.map(e => e.topLevelAsbiepId)).subscribe(_ => {
-      this.snackBar.open('Removed', '', {
-        duration: 3000,
-      });
 
-      this.selection.clear();
-      this.loadBieListInBiePackage();
-    });
+    const removeBieAction = () => {
+      this.biePackageService.deleteBieInBiePackage(
+          this.biePackage.biePackageId, ...bieLists.map(e => e.topLevelAsbiepId)).subscribe(_ => {
+        this.snackBar.open('Removed', '', {
+          duration: 3000,
+        });
+
+        this.selection.clear();
+        this.loadBieListInBiePackage();
+      });
+    };
+
+    if (!!this.biePackage.prev) {
+
+      // Create an array of observables for each BIE
+      const observables = bieLists.map(bie =>
+          this.biePackageService.exists(this.biePackage.prev.biePackageId, bie.topLevelAsbiepId).pipe(
+              map(_ => bie), // if exists, keep bie; else null
+              catchError(() => of(null))          // handle errors gracefully
+          )
+      );
+
+      // Run all observables in parallel
+      forkJoin(observables).subscribe(results => {
+        // Filter out nulls (non-existing BIEs)
+        const exists = results.filter(bie => bie !== null);
+
+        if (exists.length > 0) {
+          const dialogConfig = this.confirmDialogService.newConfig();
+          dialogConfig.data.header = 'Remove BIE' + (exists.length > 1 ? 's' : '') + ' in the previous version?';
+          dialogConfig.data.content = [
+            'Are you sure you want to remove BIE' + (exists.length > 1 ? 's' : '') + ' in the previous version?'
+          ];
+          dialogConfig.data.action = 'Remove anyway';
+
+          this.confirmDialogService.open(dialogConfig).afterClosed()
+              .subscribe(result => {
+                if (result) {
+                  removeBieAction();
+                }
+              });
+        } else {
+          removeBieAction();
+        }
+      });
+    }
   }
 
   generate() {
@@ -433,6 +518,16 @@ export class BiePackageDetailComponent implements OnInit {
     return (matches[1] || 'untitled').replace(/\"/gi, '').trim();
   }
 
+  getManifest(): any {
+    this.loading = true;
+    this.biePackageService.getManifest(this.biePackage.biePackageId).subscribe(resp => {
+      this.loading = false;
+      console.log(resp);
+    }, err => {
+      this.loading = false;
+    });
+  }
+
   isChanged(): boolean {
     if (!this.biePackage) {
       return false;
@@ -440,7 +535,7 @@ export class BiePackageDetailComponent implements OnInit {
     return this.hashCode !== hashCode(this.biePackage);
   }
 
-  isDisabled(biePackage: BiePackage) {
+  isDisabled(biePackage: BiePackageDetails) {
     return (this.disabled) ||
       (biePackage.name === undefined || biePackage.name === '') ||
       (biePackage.versionId === undefined || biePackage.versionId === '') ||
@@ -510,6 +605,34 @@ export class BiePackageDetailComponent implements OnInit {
           });
         }
       });
+  }
+
+  makeNewRevision() {
+    const dialogConfig = this.confirmDialogService.newConfig();
+    dialogConfig.data.header = 'Revise this BIE Package?';
+    dialogConfig.data.content = ['Are you sure you want to revise this BIE Package?'];
+    dialogConfig.data.action = 'Revise';
+
+    this.confirmDialogService.open(dialogConfig).afterClosed()
+        .subscribe(result => {
+          if (!result) {
+            this.loading = false;
+            return;
+          }
+
+          this.loading = true;
+          this.biePackageService.makeNewRevision(this.biePackage.biePackageId).subscribe(resp => {
+            this.snackBar.open('Revised', '', {
+              duration: 3000,
+            });
+
+            this.router.navigateByUrl('/bie_package/' + resp.biePackageId);
+            this.loading = false;
+          }, err => {
+            this.loading = false;
+            throw err;
+          });
+        });
   }
 
 }

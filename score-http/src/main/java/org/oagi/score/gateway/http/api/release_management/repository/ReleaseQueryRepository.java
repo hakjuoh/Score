@@ -39,6 +39,8 @@ public interface ReleaseQueryRepository {
 
     List<ReleaseSummaryRecord> getReleaseSummaryList(LibraryId libraryId);
 
+    List<ReleaseSummaryRecord> getReleaseSummaryList(Collection<ReleaseId> releaseIdSet);
+
     List<ReleaseSummaryRecord> getReleaseSummaryList(LibraryId libraryId, Collection<ReleaseState> releaseStateSet);
 
     List<ReleaseSummaryRecord> getDependentReleaseSummaryList(ReleaseId releaseId);

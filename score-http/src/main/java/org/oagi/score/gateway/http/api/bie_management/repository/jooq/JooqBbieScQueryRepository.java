@@ -146,8 +146,8 @@ public class JooqBbieScQueryRepository extends JooqBaseRepository implements Bbi
                                 new ValueConstraint(record.get(BBIE_SC.DEFAULT_VALUE), record.get(BBIE_SC.FIXED_VALUE)) : null,
                         (record.get(BBIE_SC.FACET_MIN_LENGTH) != null || record.get(BBIE_SC.FACET_MAX_LENGTH) != null || record.get(BBIE_SC.FACET_PATTERN) != null) ?
                                 new Facet(
-                                        record.get(BBIE_SC.FACET_MIN_LENGTH).toBigInteger(),
-                                        record.get(BBIE_SC.FACET_MAX_LENGTH).toBigInteger(),
+                                        (record.get(BBIE_SC.FACET_MIN_LENGTH) != null) ? record.get(BBIE_SC.FACET_MIN_LENGTH).toBigInteger() : null,
+                                        (record.get(BBIE_SC.FACET_MAX_LENGTH) != null) ? record.get(BBIE_SC.FACET_MAX_LENGTH).toBigInteger() : null,
                                         record.get(BBIE_SC.FACET_PATTERN)) : null,
                         record.get(BBIE_SC.DEFINITION),
                         record.get(BBIE_SC.REMARK),
@@ -267,8 +267,8 @@ public class JooqBbieScQueryRepository extends JooqBaseRepository implements Bbi
                                 new ValueConstraint(record.get(BBIE_SC.DEFAULT_VALUE), record.get(BBIE_SC.FIXED_VALUE)) : null,
                         (record.get(BBIE_SC.FACET_MIN_LENGTH) != null || record.get(BBIE_SC.FACET_MAX_LENGTH) != null || record.get(BBIE_SC.FACET_PATTERN) != null) ?
                                 new Facet(
-                                        record.get(BBIE_SC.FACET_MIN_LENGTH).toBigInteger(),
-                                        record.get(BBIE_SC.FACET_MAX_LENGTH).toBigInteger(),
+                                        (record.get(BBIE_SC.FACET_MIN_LENGTH) != null) ? record.get(BBIE_SC.FACET_MIN_LENGTH).toBigInteger() : null,
+                                        (record.get(BBIE_SC.FACET_MAX_LENGTH) != null) ? record.get(BBIE_SC.FACET_MAX_LENGTH).toBigInteger() : null,
                                         record.get(BBIE_SC.FACET_PATTERN)) : null,
                         record.get(BBIE_SC.DEFINITION),
                         record.get(BBIE_SC.REMARK),

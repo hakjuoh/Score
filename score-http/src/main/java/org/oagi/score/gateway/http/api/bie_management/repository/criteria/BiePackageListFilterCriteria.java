@@ -1,7 +1,7 @@
 package org.oagi.score.gateway.http.api.bie_management.repository.criteria;
 
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageId;
 import org.oagi.score.gateway.http.api.bie_management.model.BieState;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageId;
 import org.oagi.score.gateway.http.api.library_management.model.LibraryId;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseId;
 import org.oagi.score.gateway.http.common.model.DateRangeCriteria;

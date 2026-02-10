@@ -31,11 +31,9 @@ import org.oagi.score.gateway.http.api.code_list_management.model.CodeListManife
 import org.oagi.score.gateway.http.api.info_management.model.SummaryCc;
 import org.oagi.score.gateway.http.api.info_management.model.SummaryCcExt;
 import org.oagi.score.gateway.http.api.library_management.model.LibraryId;
-import org.oagi.score.gateway.http.api.library_management.model.LibrarySummaryRecord;
 import org.oagi.score.gateway.http.api.log_management.model.LogId;
 import org.oagi.score.gateway.http.api.log_management.model.LogSummaryRecord;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseId;
-import org.oagi.score.gateway.http.api.release_management.model.ReleaseState;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseSummaryRecord;
 import org.oagi.score.gateway.http.api.release_management.repository.ReleaseQueryRepository;
 import org.oagi.score.gateway.http.api.tag_management.model.TagSummaryRecord;
@@ -44,7 +42,6 @@ import org.oagi.score.gateway.http.common.filter.ContainsFilterBuilder;
 import org.oagi.score.gateway.http.common.model.*;
 import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Tables;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AccManifestRecord;
 
 import java.math.BigInteger;

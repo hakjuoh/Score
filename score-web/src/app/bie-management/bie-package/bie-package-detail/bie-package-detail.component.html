@@ -23,6 +23,11 @@
               [disabled]="loading">
         Move to Production
       </button>
+      <button mat-raised-button class="ml-2" color="warn" (click)="makeNewRevision()"
+              *ngIf="biePackage.state === 'Production'"
+              [disabled]="loading">
+        Revise
+      </button>
       <button mat-raised-button class="ml-2" color="warn" (click)="discard()"
               *ngIf="biePackage.state === 'WIP' && (biePackage.access === 'CanEdit' || isAdmin)">
         Discard
@@ -81,10 +86,15 @@
       <mat-toolbar class="bg-white p-0" style="box-shadow: none;">
         <span class="title">BIE List</span>
         <div style="padding: 8px 12px 8px 24px;">
-          <button mat-raised-button class="mr-2" (click)="openDialog($event)" color="primary"
+          <button mat-raised-button class="mr-2" (click)="openAddDialog($event)" color="primary"
                   *ngIf="biePackage.state === 'WIP' && biePackage.access === 'CanEdit'">
             <mat-icon>add</mat-icon>
             Add
+          </button>
+          <button mat-raised-button class="mr-2" (click)="openReplaceDialog($event, this.selection.selected[0])" color="accent"
+                  *ngIf="biePackage.state === 'WIP' && biePackage.access === 'CanEdit' && !!biePackage.prev && this.selection.selected.length === 1">
+            <mat-icon>update</mat-icon>
+            Replace
           </button>
           <button mat-raised-button class="mr-2" (click)="removeBieInBiePackage()"
                   [hidden]="table.dataSource.data.length == 0"
@@ -94,7 +104,7 @@
             <mat-icon>delete</mat-icon>
             Remove
           </button>
-          <button mat-raised-button color="primary" (click)="generate()"
+          <button mat-raised-button class="mr-2" color="primary" (click)="generate()"
                   [hidden]="table.dataSource.data.length == 0">
             Generate
           </button>

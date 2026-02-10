@@ -10,6 +10,7 @@ import org.oagi.score.gateway.http.api.xbt_management.model.XbtSummaryRecord;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class BDTSimpleType extends AbstractBDTSimple {
@@ -26,10 +27,13 @@ public class BDTSimpleType extends AbstractBDTSimple {
 
     private CcDocument ccDocument;
 
+    private  Function<DtSummaryRecord, String> nameResolver;
+
     public BDTSimpleType(DtSummaryRecord dataType,
                          DtSummaryRecord baseDataType,
-                         boolean isDefaultBDT, CcDocument ccDocument) {
-        this(dataType, baseDataType, isDefaultBDT, null, null, ccDocument);
+                         boolean isDefaultBDT, CcDocument ccDocument,
+                         Function<DtSummaryRecord, String> nameResolver) {
+        this(dataType, baseDataType, isDefaultBDT, null, null, ccDocument, nameResolver);
     }
 
     public BDTSimpleType(DtSummaryRecord dataType,
@@ -37,7 +41,8 @@ public class BDTSimpleType extends AbstractBDTSimple {
                          boolean isDefaultBDT,
                          List<DtAwdPriSummaryRecord> dtAwdPriRecordList,
                          List<XbtSummaryRecord> xbtList,
-                         CcDocument ccDocument) {
+                         CcDocument ccDocument,
+                         Function<DtSummaryRecord, String> nameResolver) {
         super(ccDocument);
 
         this.dataType = dataType;
@@ -46,6 +51,7 @@ public class BDTSimpleType extends AbstractBDTSimple {
         this.dtAwdPriRecordList = (dtAwdPriRecordList != null) ? dtAwdPriRecordList : Collections.emptyList();
         this.xbtList = (xbtList != null) ? xbtList : Collections.emptyList();
         this.ccDocument = ccDocument;
+        this.nameResolver = nameResolver;
     }
 
     public DtManifestId getBdtManifestId() {
@@ -73,7 +79,7 @@ public class BDTSimpleType extends AbstractBDTSimple {
     }
 
     public String getName() {
-        return ModelUtils.getTypeName(dataType);
+        return nameResolver.apply(dataType);
     }
 
     public String getGuid() {
@@ -81,7 +87,7 @@ public class BDTSimpleType extends AbstractBDTSimple {
     }
 
     public String getBaseDTName() {
-        return ModelUtils.getTypeName(baseDataType);
+        return nameResolver.apply(baseDataType);
     }
 
     public NamespaceId getNamespaceId() {

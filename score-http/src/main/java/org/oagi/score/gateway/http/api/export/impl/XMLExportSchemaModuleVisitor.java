@@ -50,6 +50,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.oagi.score.gateway.http.api.cc_management.model.acc.OagisComponentType.Extension;
+import static org.oagi.score.gateway.http.api.export.model.ConnectSpecNameResolvers.*;
 import static org.oagi.score.gateway.http.common.util.StringUtils.hasLength;
 import static org.springframework.beans.factory.config.BeanDefinition.SCOPE_PROTOTYPE;
 
@@ -165,10 +166,10 @@ public class XMLExportSchemaModuleVisitor {
         Element simpleTypeElement = new Element("simpleType", XSD_NS);
         rootElement.addContent(simpleTypeElement);
 
-        simpleTypeElement.setAttribute("name", agencyId.getTypeName());
+        String agencyIdName = agencyId.getName();
+        simpleTypeElement.setAttribute("name", agencyIdName + "ContentType");
         simpleTypeElement.setAttribute("id", ID_ATTIBUTE_PREFIX + agencyId.getGuid());
 
-        String agencyIdName = agencyId.getName().replaceAll(" ", "").replace("Identifier", "ID");
         Element unionElement = new Element("union", XSD_NS);
         String agencyIdTypeName = attachNamespacePrefixIfExists(
                 agencyIdName + "ContentEnumerationType", agencyId.getNamespaceId());
@@ -509,7 +510,7 @@ public class XMLExportSchemaModuleVisitor {
         }
         CodeListSummaryRecord codeList = ccDocument.getCodeList(
                 dtAwdPriList.get(0).codeListManifestId());
-        String codeListName = codeList.name().replaceAll(" ", "").replace("Identifier", "ID");
+        String codeListName = codeListNameResolver.apply(codeList);
         return attachNamespacePrefixIfExists(codeListName, codeList.namespaceId());
     }
 
@@ -524,7 +525,7 @@ public class XMLExportSchemaModuleVisitor {
 
         AgencyIdListSummaryRecord agencyIdList = ccDocument.getAgencyIdList(
                 dtAwdPriList.get(0).agencyIdListManifestId());
-        String agencyIdListName = agencyIdList.name().replaceAll(" ", "").replace("Identifier", "ID");
+        String agencyIdListName = agencyIdListNameResolver.apply(agencyIdList);
         return attachNamespacePrefixIfExists(agencyIdListName, agencyIdList.namespaceId());
     }
 
@@ -1095,7 +1096,7 @@ public class XMLExportSchemaModuleVisitor {
 
                     attributeElement.setAttribute("name", Utility.toLowerCamelCase(bccp.propertyTerm()));
                     attributeElement.setAttribute("type", attachNamespacePrefixIfExists(
-                            ModelUtils.getTypeName(dt), dt.namespaceId()));
+                            dtNameResolver.apply(dt), dt.namespaceId()));
 
                     int useInt = bcc.cardinality().min() * 2 + bcc.cardinality().max();
                     String useVal = getUseAttributeValue(useInt);

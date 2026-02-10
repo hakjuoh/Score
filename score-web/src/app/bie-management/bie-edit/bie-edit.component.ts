@@ -17,7 +17,7 @@ import {
 } from '../bie-edit/domain/bie-edit-node';
 import {
   AbieFlatNode, AsbieDetail, AsbiepDetail, AsbiepDetails,
-  AsbiepFlatNode,
+  AsbiepFlatNode, AsbiepSupportDoc,
   BbieDetail,
   BbiepFlatNode,
   BbieScDetail,
@@ -70,6 +70,9 @@ import {CcNodeService} from '../../cc-management/domain/core-component-node.serv
   styleUrls: ['./bie-edit.component.css']
 })
 export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
+
+  BROWSER_SCHEMES = ['http:', 'https:', 'ftp:', 'file:', 'data:'];
+  EXTERNAL_SCHEMES = ['mailto:', 'tel:', 'sms:', 'geo:', 'magnet:'];
 
   faRecycle = faRecycle;
   faSitemap = faSitemap;
@@ -589,6 +592,31 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
     return this.rootNode && this.rootNode.access || 'Unprepared';
   }
 
+  isClickableUrl(url: string): boolean {
+    if (!url) {
+      return false;
+    }
+    try {
+      const scheme = new URL(url).protocol;
+      return [...this.BROWSER_SCHEMES, ...this.EXTERNAL_SCHEMES].includes(scheme);
+    } catch {
+      return false;
+    }
+  }
+
+  openLink(url: string) {
+    if (!this.isClickableUrl(url)) {
+      return;
+    }
+
+    const scheme = new URL(url).protocol;
+    if (this.BROWSER_SCHEMES.includes(scheme)) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else if (this.EXTERNAL_SCHEMES.includes(scheme)) {
+      window.location.href = url;
+    }
+  }
+
   get canEdit(): boolean {
     return this.state === 'WIP' && this.access === 'CanEdit';
   }
@@ -817,6 +845,20 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
     });
   }
 
+  addAsbiepSupportDoc(asbiepDetail: AsbiepDetail) {
+    asbiepDetail.supportDocList.push(new AsbiepSupportDoc());
+  }
+
+  removeAsbiepSupportDoc(asbiepDetail: AsbiepDetail, supportDoc: AsbiepSupportDoc) {
+    const index = asbiepDetail.supportDocList.indexOf(supportDoc);
+    if (index !== -1) {
+      asbiepDetail.supportDocList.splice(index, 1);
+    }
+    if (asbiepDetail.supportDocList?.length === 0) {
+      this.addAsbiepSupportDoc(asbiepDetail);
+    }
+  }
+
   reloadTree(node: BieFlatNode) {
     let selectedNodeHashPath;
     if (this.selectedNode) {
@@ -858,6 +900,10 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
             }
           }
         }
+
+        // Recover the state of 'Hide Cardinality' and 'Hide Unused' properties.
+        this.dataSource.hideCardinality = loadBooleanProperty(this.auth.getUserToken(), this.HIDE_CARDINALITY_PROPERTY_KEY, false);
+        this.dataSource.hideUnused = loadBooleanProperty(this.auth.getUserToken(), this.HIDE_UNUSED_PROPERTY_KEY, false);
 
         this.loading = false;
       };

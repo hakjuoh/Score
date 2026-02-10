@@ -8,7 +8,6 @@ import org.jdom2.output.XMLOutputter;
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListSummaryRecord;
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListValueSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.BIE;
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.Facet;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.abie.AbieSummaryRecord;
@@ -17,6 +16,7 @@ import org.oagi.score.gateway.http.api.bie_management.model.asbiep.AsbiepSummary
 import org.oagi.score.gateway.http.api.bie_management.model.bbie.BbieSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.bbie_sc.BbieScSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.bbiep.BbiepSummaryRecord;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.expression.GenerateExpressionOption;
 import org.oagi.score.gateway.http.api.cc_management.model.CcType;
 import org.oagi.score.gateway.http.api.cc_management.model.CoreComponent;
@@ -751,8 +751,8 @@ public class BieXMLGenerateExpression implements BieGenerateExpression, Initiali
             element.setAttribute("maxOccurs", "unbounded");
         else
             element.setAttribute("maxOccurs", String.valueOf(asbie.cardinality().max()));
-        if (asbie.nillable())
-            element.setAttribute("nillable", String.valueOf(asbie.nillable()));
+        if (asbie.nillable() != null && asbie.nillable())
+            element.setAttribute("nillable", "true");
 
         if (option.isBieGuid()) {
             element.setAttribute("id", ID_ATTRIBUTE_PREFIX + asbie.getGuid());
@@ -868,8 +868,8 @@ public class BieXMLGenerateExpression implements BieGenerateExpression, Initiali
             element.setAttribute("maxOccurs", "unbounded");
         else
             element.setAttribute("maxOccurs", String.valueOf(asbie.cardinality().max()));
-        if (asbie.nillable())
-            element.setAttribute("nillable", String.valueOf(asbie.nillable()));
+        if (asbie.nillable() != null && asbie.nillable())
+            element.setAttribute("nillable", "true");
 
         while (!parent.getName().equals("sequence") && !parent.getName().equals("choice")) {
             parent = parent.getParentElement();
@@ -901,7 +901,7 @@ public class BieXMLGenerateExpression implements BieGenerateExpression, Initiali
             eNode.setAttribute("id", ID_ATTRIBUTE_PREFIX + bbie.getGuid());
         }
 
-        if (bbie.nillable()) {
+        if (bbie.nillable() != null && bbie.nillable()) {
             eNode.setAttribute("nillable", "true");
         }
         if (bbie.valueConstraint() != null) {
@@ -917,8 +917,8 @@ public class BieXMLGenerateExpression implements BieGenerateExpression, Initiali
             eNode.setAttribute("maxOccurs", "unbounded");
         else
             eNode.setAttribute("maxOccurs", String.valueOf(bbie.cardinality().max()));
-        if (bbie.nillable())
-            eNode.setAttribute("nillable", String.valueOf(bbie.nillable()));
+        if (bbie.nillable() != null && bbie.nillable())
+            eNode.setAttribute("nillable", "true");
 
         setDocumentation(eNode, bbie);
 

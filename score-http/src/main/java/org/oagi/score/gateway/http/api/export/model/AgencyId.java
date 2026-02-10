@@ -6,18 +6,23 @@ import org.oagi.score.gateway.http.api.namespace_management.model.NamespaceId;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.function.Function;
 
 public class AgencyId implements Component {
 
     private AgencyIdListSummaryRecord agencyIdList;
 
-    public AgencyId(AgencyIdListSummaryRecord agencyIdList) {
+    private Function<AgencyIdListSummaryRecord, String> nameResolver;
+
+    public AgencyId(AgencyIdListSummaryRecord agencyIdList,
+                    Function<AgencyIdListSummaryRecord, String> nameResolver) {
         this.agencyIdList = agencyIdList;
+        this.nameResolver = nameResolver;
     }
 
     @Override
     public String getName() {
-        return agencyIdList.name();
+        return nameResolver.apply(agencyIdList);
     }
 
     @Override
@@ -31,7 +36,7 @@ public class AgencyId implements Component {
 
     @Override
     public String getTypeName() {
-        return agencyIdList.name().replaceAll(" ", "").replace("Identifier", "ID") + "ContentType";
+        return getName() + "ContentType";
     }
 
     public int getMinLengthOfValues() {

@@ -1,7 +1,7 @@
 package org.oagi.score.gateway.http.api.external.service;
 
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageId;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageId;
 import org.oagi.score.gateway.http.api.external.repository.ExternalBieRepository;
 import org.oagi.score.gateway.http.common.model.Guid;
 import org.springframework.beans.factory.annotation.Autowired;

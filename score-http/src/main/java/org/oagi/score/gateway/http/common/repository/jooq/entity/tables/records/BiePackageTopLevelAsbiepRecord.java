@@ -77,12 +77,32 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
     }
 
     /**
+     * Setter for
+     * <code>oagi.bie_package_top_level_asbiep.prev_top_level_asbiep_id</code>.
+     * A foreign key referring to the previous version of the Top-Level ASBIEP
+     * record, if any. Used to track version history within the BIE package.
+     */
+    public void setPrevTopLevelAsbiepId(ULong value) {
+        set(3, value);
+    }
+
+    /**
+     * Getter for
+     * <code>oagi.bie_package_top_level_asbiep.prev_top_level_asbiep_id</code>.
+     * A foreign key referring to the previous version of the Top-Level ASBIEP
+     * record, if any. Used to track version history within the BIE package.
+     */
+    public ULong getPrevTopLevelAsbiepId() {
+        return (ULong) get(3);
+    }
+
+    /**
      * Setter for <code>oagi.bie_package_top_level_asbiep.created_by</code>. A
      * foreign key referring to the user who adds the record into the BIE
      * package.
      */
     public void setCreatedBy(ULong value) {
-        set(3, value);
+        set(4, value);
     }
 
     /**
@@ -91,7 +111,7 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
      * package.
      */
     public ULong getCreatedBy() {
-        return (ULong) get(3);
+        return (ULong) get(4);
     }
 
     /**
@@ -100,7 +120,7 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
      * Timestamp when this record was first created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
-        set(4, value);
+        set(5, value);
     }
 
     /**
@@ -109,7 +129,7 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
      * Timestamp when this record was first created.
      */
     public LocalDateTime getCreationTimestamp() {
-        return (LocalDateTime) get(4);
+        return (LocalDateTime) get(5);
     }
 
     // -------------------------------------------------------------------------
@@ -135,12 +155,13 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
     /**
      * Create a detached, initialised BiePackageTopLevelAsbiepRecord
      */
-    public BiePackageTopLevelAsbiepRecord(ULong biePackageTopLevelAsbiepId, ULong biePackageId, ULong topLevelAsbiepId, ULong createdBy, LocalDateTime creationTimestamp) {
+    public BiePackageTopLevelAsbiepRecord(ULong biePackageTopLevelAsbiepId, ULong biePackageId, ULong topLevelAsbiepId, ULong prevTopLevelAsbiepId, ULong createdBy, LocalDateTime creationTimestamp) {
         super(BiePackageTopLevelAsbiep.BIE_PACKAGE_TOP_LEVEL_ASBIEP);
 
         setBiePackageTopLevelAsbiepId(biePackageTopLevelAsbiepId);
         setBiePackageId(biePackageId);
         setTopLevelAsbiepId(topLevelAsbiepId);
+        setPrevTopLevelAsbiepId(prevTopLevelAsbiepId);
         setCreatedBy(createdBy);
         setCreationTimestamp(creationTimestamp);
         resetTouchedOnNotNull();

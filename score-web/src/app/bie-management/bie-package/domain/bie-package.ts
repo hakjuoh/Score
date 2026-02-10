@@ -43,6 +43,7 @@ export class BiePackageDetails {
   releases: ReleaseSummary[];
   state: string;
   access: string;
+  prev: BiePackageSummary;
   source: BiePackageSummary;
   owner: ScoreUser;
   created: WhoAndWhen;
@@ -71,6 +72,44 @@ export class BiePackage {
   sourceBiePackageVersionName: string;
   sourceAction: string;
   sourceTimestamp: Date;
+}
+
+export class ReviseBiePackageResponse {
+  biePackageId: number;
+  prevBiePackageId: number;
+}
+
+export class BiePackageManifest {
+  biePackage: BiePackageMetadata;
+}
+
+export class BiePackageMetadata {
+  name: string;
+  versionId: string;
+  versionName: string;
+  priorPackageVersionId: string;
+  newBiesFromPriorPackageVersion: boolean;
+  removedBiesFromPriorPackageVersion: boolean;
+  changedBiesFromPriorPackageVersion: boolean;
+  connectSpecMajorVersion: string;
+  bieManifest: BieManifest;
+}
+
+export class BieManifest {
+  bie: BieMetadata[];
+}
+
+export class BieMetadata {
+  uuid: string;
+  versionId: string;
+  priorVersionUuidInPackage: string;
+  den: string;
+  propertyTerm: string;
+  notInPriorPackageVersion: boolean;
+  addedElementsFromPriorPackageVersion: boolean;
+  removedElementsFromPriorPackageVersion: boolean;
+  valueDomainChangeFromPriorPackageVersion: boolean;
+  addedElementsReplaceExtensionFromPriorPackageVersion: boolean;
 }
 
 export class BiePackageListRequest {

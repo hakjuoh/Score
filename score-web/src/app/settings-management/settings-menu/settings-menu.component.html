@@ -21,7 +21,7 @@
         </div>
       </a>
       <mat-list-item class="nav-item {{ active === 'ApplicationSettings' ? 'active' : '' }}"
-        routerLink="/settings/application_settings" [disabled]="!isAdmin">
+                     [routerLink]="isAdmin ? '/settings/application_settings' : null" [disabled]="!isAdmin">
         <div class="d-flex">
           <mat-icon mat-list-icon>developer_mode</mat-icon>
           <div mat-line style="padding-left: 10px; align-content: center;">

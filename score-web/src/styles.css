@@ -311,6 +311,14 @@ div.mat-form-field-wrapper div.mat-form-field-infix mat-icon.datepicker-cancel {
   cursor: pointer;
 }
 
+/* Hide the subscript wrapper when the field has 'no-subscript' */
+.mat-mdc-form-field.no-subscript .mat-mdc-form-field-subscript-wrapper {
+  display: none;
+  height: 0;
+  margin: 0;
+  padding: 0;
+}
+
 span.cc-type, span.cc-state, span.bie-state {
   font-size: 13px;
   padding: .30em 4px;

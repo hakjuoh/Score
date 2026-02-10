@@ -92,6 +92,7 @@ public class BieCopyService implements InitializingBean {
     private EventListenerContainer eventListenerContainer;
 
     private final String INTERESTED_EVENT_NAME = "bieCopyRequestEvent";
+    private BieCommandService bieCommandService;
 
     @Override
     public void afterPropertiesSet() throws Exception {
@@ -597,6 +598,10 @@ public class BieCopyService implements InitializingBean {
             toAsbiepToAsbieMap.getOrDefault(previousVal, Collections.emptyList()).stream().forEach(asbie -> {
                 asbie.setToAsbiepId(nextVal);
             });
+
+            // Issue #1669
+            repositoryFactory.asbiepCommandRepository(requester)
+                            .copyAsbiepSupportingDocumentation(previousVal, nextVal);
         }
 
         private void fireChangeEvent(BbiepId previousVal, BbiepId nextVal) {

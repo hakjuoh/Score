@@ -1,6 +1,6 @@
 package org.oagi.score.gateway.http.api.bie_management.repository.criteria;
 
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageId;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageId;
 import org.oagi.score.gateway.http.common.model.DateRangeCriteria;
 
 import java.util.Collection;

@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.bie_management.model;
+package org.oagi.score.gateway.http.api.bie_management.model.bie_package;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import org.oagi.score.gateway.http.common.model.Id;

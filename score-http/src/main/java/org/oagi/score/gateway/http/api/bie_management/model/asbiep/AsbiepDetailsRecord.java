@@ -9,6 +9,9 @@ import org.oagi.score.gateway.http.api.cc_management.model.asccp.AsccpSummaryRec
 import org.oagi.score.gateway.http.common.model.Guid;
 import org.oagi.score.gateway.http.common.model.WhoAndWhen;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public record AsbiepDetailsRecord(
         AsbiepId asbiepId,
         Guid guid,
@@ -20,6 +23,7 @@ public record AsbiepDetailsRecord(
         @Nullable String remark,
         @Nullable String bizTerm,
         @Nullable String displayName,
+        @Nullable List<AsbiepSupportDocRecord> supportDocList,
         TopLevelAsbiepSummaryRecord ownerTopLevelAsbiep,
 
         UserSummaryRecord owner,
@@ -45,6 +49,7 @@ public record AsbiepDetailsRecord(
         private String remark;
         private String bizTerm;
         private String displayName;
+        private List<AsbiepSupportDocRecord> supportDocList = new ArrayList<>();
         private TopLevelAsbiepSummaryRecord ownerTopLevelAsbiep;
         private UserSummaryRecord owner;
         private WhoAndWhen created;
@@ -103,6 +108,11 @@ public record AsbiepDetailsRecord(
             return this;
         }
 
+        public Builder supportDocList(List<AsbiepSupportDocRecord> supportDocList) {
+            this.supportDocList = supportDocList;
+            return this;
+        }
+
         public Builder ownerTopLevelAsbiep(TopLevelAsbiepSummaryRecord ownerTopLevelAsbiep) {
             this.ownerTopLevelAsbiep = ownerTopLevelAsbiep;
             return this;
@@ -135,6 +145,7 @@ public record AsbiepDetailsRecord(
                     remark,
                     bizTerm,
                     displayName,
+                    supportDocList,
                     ownerTopLevelAsbiep,
                     owner,
                     created,

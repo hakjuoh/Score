@@ -24,6 +24,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbie;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsbieBizterm;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbiep;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsbiepSupportDoc;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Ascc;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsccBizterm;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsccManifest;
@@ -220,6 +221,11 @@ public class Oagi extends SchemaImpl {
      * of an ASCCP.
      */
     public final Asbiep ASBIEP = Asbiep.ASBIEP;
+
+    /**
+     * Table storing supporting documentations linked to ASBIEP records.
+     */
+    public final AsbiepSupportDoc ASBIEP_SUPPORT_DOC = AsbiepSupportDoc.ASBIEP_SUPPORT_DOC;
 
     /**
      * An ASCC represents a relationship/association between two ACCs through an
@@ -805,6 +811,7 @@ public class Oagi extends SchemaImpl {
             Asbie.ASBIE,
             AsbieBizterm.ASBIE_BIZTERM,
             Asbiep.ASBIEP,
+            AsbiepSupportDoc.ASBIEP_SUPPORT_DOC,
             Ascc.ASCC,
             AsccBizterm.ASCC_BIZTERM,
             AsccManifest.ASCC_MANIFEST,

@@ -8,9 +8,7 @@ import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.bie_management.model.BieState;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
 import org.oagi.score.gateway.http.api.bie_management.model.abie.AbieId;
-import org.oagi.score.gateway.http.api.bie_management.model.asbiep.AsbiepDetailsRecord;
-import org.oagi.score.gateway.http.api.bie_management.model.asbiep.AsbiepId;
-import org.oagi.score.gateway.http.api.bie_management.model.asbiep.AsbiepSummaryRecord;
+import org.oagi.score.gateway.http.api.bie_management.model.asbiep.*;
 import org.oagi.score.gateway.http.api.bie_management.repository.AsbiepQueryRepository;
 import org.oagi.score.gateway.http.api.cc_management.model.asccp.AsccpManifestId;
 import org.oagi.score.gateway.http.common.model.Guid;
@@ -24,8 +22,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.jooq.impl.DSL.and;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.ASBIEP;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.TOP_LEVEL_ASBIEP;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.*;
 import static org.springframework.util.StringUtils.hasLength;
 
 public class JooqAsbiepQueryRepository extends JooqBaseRepository implements AsbiepQueryRepository {
@@ -186,6 +183,7 @@ public class JooqAsbiepQueryRepository extends JooqBaseRepository implements Asb
                         record.get(ASBIEP.REMARK),
                         record.get(ASBIEP.BIZ_TERM),
                         record.get(ASBIEP.DISPLAY_NAME),
+                        getAsbiepSupportingDocumentationList(asbiepId),
                         topLevelAsbiepQuery.getTopLevelAsbiepSummary(ownerTopLevelAsbiepId),
 
                         fetchOwnerSummary(record),
@@ -197,6 +195,40 @@ public class JooqAsbiepQueryRepository extends JooqBaseRepository implements Asb
                                 fetchUpdaterSummary(record),
                                 toDate(record.get(ASBIEP.LAST_UPDATE_TIMESTAMP))
                         ));
+            };
+        }
+    }
+
+    @Override
+    public List<AsbiepSupportDocRecord> getAsbiepSupportingDocumentationList(AsbiepId asbiepId) {
+        if (asbiepId == null) {
+            return Collections.emptyList();
+        }
+
+        var queryBuilder = new GetAsbiepSupportingDocumentationQueryBuilder();
+        return queryBuilder.select()
+                .where(ASBIEP_SUPPORT_DOC.ASBIEP_ID.eq(valueOf(asbiepId)))
+                .fetch(queryBuilder.mapper());
+    }
+
+    private class GetAsbiepSupportingDocumentationQueryBuilder {
+
+        SelectJoinStep<? extends org.jooq.Record> select() {
+            return dslContext().select(ASBIEP_SUPPORT_DOC.ASBIEP_SUPPORT_DOC_ID,
+                            ASBIEP_SUPPORT_DOC.ASBIEP_ID,
+                            ASBIEP_SUPPORT_DOC.CONTENT,
+                            ASBIEP_SUPPORT_DOC.DESCRIPTION)
+                    .from(ASBIEP_SUPPORT_DOC);
+        }
+
+        private RecordMapper<Record, AsbiepSupportDocRecord> mapper() {
+            return record -> {
+                AsbiepSupportDocId asbiepSupportDocId = new AsbiepSupportDocId(record.get(ASBIEP_SUPPORT_DOC.ASBIEP_SUPPORT_DOC_ID).toBigInteger());
+                AsbiepId asbiepId = new AsbiepId(record.get(ASBIEP_SUPPORT_DOC.ASBIEP_ID).toBigInteger());
+                return new AsbiepSupportDocRecord(asbiepSupportDocId,
+                        asbiepId,
+                        record.get(ASBIEP_SUPPORT_DOC.CONTENT),
+                        record.get(ASBIEP_SUPPORT_DOC.DESCRIPTION));
             };
         }
     }

@@ -31,12 +31,7 @@ import org.oagi.score.gateway.http.api.release_management.model.ReleaseListEntry
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseState;
 import org.oagi.score.gateway.http.api.release_management.repository.criteria.ReleaseListFilterCriteria;
 import org.oagi.score.gateway.http.api.release_management.service.ReleaseQueryService;
-import org.oagi.score.gateway.http.common.model.DateRangeCriteria;
-import org.oagi.score.gateway.http.common.model.ExportStandaloneSchemaResponse;
-import org.oagi.score.gateway.http.common.model.PageRequest;
-import org.oagi.score.gateway.http.common.model.PageResponse;
-import org.oagi.score.gateway.http.common.model.ResultAndCount;
-import org.oagi.score.gateway.http.common.model.ScoreUser;
+import org.oagi.score.gateway.http.common.model.*;
 import org.oagi.score.gateway.http.common.util.DeleteOnCloseFileSystemResource;
 import org.oagi.score.gateway.http.configuration.security.SessionService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,11 +42,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.AuthenticatedPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.math.BigInteger;
 import java.security.KeyManagementException;

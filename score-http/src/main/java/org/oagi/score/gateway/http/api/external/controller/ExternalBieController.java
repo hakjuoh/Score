@@ -1,25 +1,13 @@
 package org.oagi.score.gateway.http.api.external.controller;
 
-import static java.util.stream.Collectors.toSet;
-import static org.oagi.score.gateway.http.common.util.ControllerUtils.pageRequest;
-import static org.oagi.score.gateway.http.common.util.Utility.separate;
-import static org.springframework.util.StringUtils.hasLength;
-
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
+import io.swagger.v3.oas.annotations.Parameter;
 import org.jooq.exception.IOException;
 import org.oagi.score.gateway.http.api.application_management.service.ApplicationConfigurationService;
 import org.oagi.score.gateway.http.api.bie_management.model.BieListEntryRecord;
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageId;
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageListEntryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.BieState;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageId;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageListEntryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.expression.BieGenerateExpressionResult;
 import org.oagi.score.gateway.http.api.bie_management.model.expression.GenerateExpressionOption;
 import org.oagi.score.gateway.http.api.bie_management.repository.criteria.BieListFilterCriteria;
@@ -34,12 +22,7 @@ import org.oagi.score.gateway.http.api.external.service.ExternalBieService;
 import org.oagi.score.gateway.http.api.external.service.ExternalComponentsService;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseId;
 import org.oagi.score.gateway.http.api.tenant_management.service.TenantQueryService;
-import org.oagi.score.gateway.http.common.model.AccessPrivilege;
-import org.oagi.score.gateway.http.common.model.DateRangeCriteria;
-import org.oagi.score.gateway.http.common.model.Guid;
-import org.oagi.score.gateway.http.common.model.PageRequest;
-import org.oagi.score.gateway.http.common.model.PageResponse;
-import org.oagi.score.gateway.http.common.model.ScoreUser;
+import org.oagi.score.gateway.http.common.model.*;
 import org.oagi.score.gateway.http.configuration.security.SessionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
@@ -47,14 +30,16 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import io.swagger.v3.oas.annotations.Parameter;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.util.*;
+
+import static java.util.stream.Collectors.toSet;
+import static org.oagi.score.gateway.http.common.util.ControllerUtils.pageRequest;
+import static org.oagi.score.gateway.http.common.util.Utility.separate;
+import static org.springframework.util.StringUtils.hasLength;
 
 @RestController
 public class ExternalBieController {
@@ -311,7 +296,7 @@ public class ExternalBieController {
                                         StringUtils.hasLength(lastUpdatedOn) ? DateRangeCriteria.create(lastUpdatedOn)
                                                         : null);
 
-                        var resultAndCount = bieQueryService.getBieList(
+                        var resultAndCount = biePackageQueryService.getBieListInBiePackage(
                                         sessionService.getScoreSystemUser(), filterCriteria, pageRequest);
 
                         response.setList(resultAndCount.result());

@@ -4,7 +4,6 @@ import org.oagi.score.gateway.http.api.bie_management.model.BieListEntryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.repository.criteria.BieListFilterCriteria;
-import org.oagi.score.gateway.http.api.bie_management.repository.criteria.BieListInBiePackageFilterCriteria;
 import org.oagi.score.gateway.http.common.model.PageRequest;
 import org.oagi.score.gateway.http.common.model.ResultAndCount;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -27,13 +26,6 @@ public class BieQueryService {
 
     public ResultAndCount<BieListEntryRecord> getBieList(
             ScoreUser requester, BieListFilterCriteria filterCriteria, PageRequest pageRequest) {
-
-        var bieQuery = repositoryFactory.bieQueryRepository(requester);
-        return bieQuery.getBieList(filterCriteria, pageRequest);
-    }
-
-    public ResultAndCount<BieListEntryRecord> getBieList(
-            ScoreUser requester, BieListInBiePackageFilterCriteria filterCriteria, PageRequest pageRequest) {
 
         var bieQuery = repositoryFactory.bieQueryRepository(requester);
         return bieQuery.getBieList(filterCriteria, pageRequest);

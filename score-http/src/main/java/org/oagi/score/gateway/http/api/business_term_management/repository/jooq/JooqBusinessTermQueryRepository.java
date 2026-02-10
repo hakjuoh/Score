@@ -13,11 +13,6 @@ import org.oagi.score.gateway.http.api.business_term_management.repository.Busin
 import org.oagi.score.gateway.http.api.business_term_management.repository.criteria.AsbieBbieListFilterCriteria;
 import org.oagi.score.gateway.http.api.business_term_management.repository.criteria.AssignedBusinessTermListFilterCriteria;
 import org.oagi.score.gateway.http.api.business_term_management.repository.criteria.BusinessTermListFilterCriteria;
-import org.oagi.score.gateway.http.api.library_management.model.LibraryId;
-import org.oagi.score.gateway.http.api.library_management.model.LibrarySummaryRecord;
-import org.oagi.score.gateway.http.api.release_management.model.ReleaseId;
-import org.oagi.score.gateway.http.api.release_management.model.ReleaseState;
-import org.oagi.score.gateway.http.api.release_management.model.ReleaseSummaryRecord;
 import org.oagi.score.gateway.http.common.filter.ContainsFilterBuilder;
 import org.oagi.score.gateway.http.common.model.*;
 import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;

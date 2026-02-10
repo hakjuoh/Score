@@ -2,8 +2,8 @@ package org.oagi.score.gateway.http.api.bie_management.controller;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.oagi.score.gateway.http.api.bie_management.controller.payload.*;
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageId;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageId;
 import org.oagi.score.gateway.http.api.bie_management.service.BiePackageCommandService;
 import org.oagi.score.gateway.http.api.mail.controller.payload.SendMailRequest;
 import org.oagi.score.gateway.http.api.mail.service.MailService;
@@ -100,6 +100,16 @@ public class BiePackageCommandController {
         }
     }
 
+    @PatchMapping(value = "/{biePackageId:[\\d]+}/revise")
+    public ReviseBiePackageResponse amendBiePackage(
+            @AuthenticationPrincipal AuthenticatedPrincipal user,
+            @PathVariable("biePackageId") BiePackageId biePackageId) {
+
+        return new ReviseBiePackageResponse(
+                biePackageCommandService.revise(sessionService.asScoreUser(user), biePackageId),
+                biePackageId);
+    }
+
     @PostMapping(value = "/{biePackageId:[\\d]+}/bies")
     public ResponseEntity addBieToBiePackage(
             @AuthenticationPrincipal AuthenticatedPrincipal user,
@@ -113,6 +123,20 @@ public class BiePackageCommandController {
         return ResponseEntity.accepted().build();
     }
 
+    @PatchMapping(value = "/{biePackageId:[\\d]+}/bies/{prevTopLevelAsbiepId:[\\d]+}/amend/{topLevelAsbiepId:[\\d]+}")
+    public ResponseEntity replaceBieInBiePackage(
+            @AuthenticationPrincipal AuthenticatedPrincipal user,
+            @PathVariable("biePackageId") BiePackageId biePackageId,
+            @PathVariable("prevTopLevelAsbiepId") TopLevelAsbiepId prevTopLevelAsbiepId,
+            @PathVariable("topLevelAsbiepId") TopLevelAsbiepId topLevelAsbiepId) throws ScoreDataAccessException {
+
+        biePackageCommandService.replaceBieInBiePackage(
+                sessionService.asScoreUser(user), biePackageId, prevTopLevelAsbiepId, topLevelAsbiepId
+        );
+
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping(value = "/{biePackageId:[\\d]+}/bies/{topLevelAsbiepId:\\d+}")
     public ResponseEntity deleteBieInBiePackage(
             @AuthenticationPrincipal AuthenticatedPrincipal user,
@@ -124,7 +148,6 @@ public class BiePackageCommandController {
         );
 
         return ResponseEntity.noContent().build();
-
     }
 
     @DeleteMapping(value = "/{biePackageId:[\\d]+}/bies")
@@ -140,4 +163,14 @@ public class BiePackageCommandController {
         return ResponseEntity.noContent().build();
     }
 
+//    @RequestMapping(value = "/{biePackageId:\\d+}/uplifting", method = RequestMethod.POST)
+//    public ResponseEntity upliftBiePackage(@AuthenticationPrincipal AuthenticatedPrincipal user,
+//                                           @PathVariable("biePackageId") BiePackageId biePackageId,
+//                                           @RequestBody UpliftBiePackageRequest request) throws ScoreDataAccessException {
+//        request.setRequester(sessionService.asScoreUser(user));
+//        request.setBiePackageId(biePackageId);
+//
+//        biePackageCommandService.upliftBiePackage(request);
+//        return ResponseEntity.noContent().build();
+//    }
 }

@@ -1,7 +1,6 @@
 package org.oagi.score.gateway.http.api.log_management.service;
 
 import org.jooq.DSLContext;
-import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.account_management.model.UserSummaryRecord;
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListSummaryRecord;
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListValueSummaryRecord;
@@ -15,7 +14,6 @@ import org.oagi.score.gateway.http.api.namespace_management.model.NamespaceSumma
 import org.oagi.score.gateway.http.api.xbt_management.model.XbtSummaryRecord;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.XbtRecord;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -23,7 +21,6 @@ import java.util.Map;
 
 import static org.oagi.score.gateway.http.api.account_management.model.AppUserAuthority.DEVELOPER_GRANTED_AUTHORITY;
 import static org.oagi.score.gateway.http.api.account_management.model.AppUserAuthority.END_USER_GRANTED_AUTHORITY;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.XBT;
 
 public class LogSnapshotResolver {
 

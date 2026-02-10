@@ -78,8 +78,6 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
         return repositoryFactory.bieQueryRepository(requester);
     }
 
-    ;
-
     @Autowired
     private ApplicationContext applicationContext;
 
@@ -555,7 +553,7 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
         int maxVal = asbie.cardinality().max();
         // Issue #562
         boolean isArray = (maxVal < 0 || maxVal > 1);
-        boolean isNillable = asbie.nillable();
+        boolean isNillable = (asbie.nillable() != null) ? asbie.nillable() : false;
 
         boolean reused = !asbie.ownerTopLevelAsbiepId().equals(asbiep.ownerTopLevelAsbiepId());
         if (reused) {
@@ -595,7 +593,7 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
         }
 
         // Issue #1298
-        if (asbie.deprecated()) {
+        if (asbie.deprecated() != null && asbie.deprecated()) {
             properties.put("deprecated", true);
         }
 
@@ -918,7 +916,7 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
         int maxVal = bbie.cardinality().max();
         // Issue #562
         boolean isArray = (maxVal < 0 || maxVal > 1);
-        boolean isNillable = bbie.nillable();
+        boolean isNillable = (bbie.nillable() != null) ? bbie.nillable() : false;
 
         String name = convertIdentifierToId(camelCase(bccp.propertyTerm()));
 
@@ -965,8 +963,8 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
         List<BbieScSummaryRecord> bbieScList = generationContext.queryBBIESCs(bbie)
                 .stream().filter(e -> e.cardinality().max() != 0).collect(Collectors.toList());
         if (bbieScList.isEmpty()) {
-            if (ref == null && isFriendly()) {
-                Map<String, Object> content = toProperties(xbt);
+            if (ref == null) {
+                Map<String, Object> content = applyFacet(toProperties(xbt), bbie.facet());
                 properties.putAll(content);
             } else {
                 properties.put("$ref", ref);
@@ -979,13 +977,13 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
             properties.put("properties", new LinkedHashMap<String, Object>());
 
             Map<String, Object> contentProperties = new LinkedHashMap();
-            if (ref == null && isFriendly()) {
-                Map<String, Object> content = toProperties(xbt);
+            if (ref == null) {
+                Map<String, Object> content = applyFacet(toProperties(xbt), bbie.facet());
                 contentProperties.putAll(content);
             } else {
                 contentProperties.put("$ref", ref);
             }
-            for (String key : Arrays.asList("enum", "default", "example")) {
+            for (String key : Arrays.asList("description", "enum", "default", "example")) {
                 if (properties.containsKey(key)) {
                     contentProperties.put(key, properties.remove(key));
                 }
@@ -1001,7 +999,7 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
         }
 
         // Issue #1298
-        if (bbie.deprecated()) {
+        if (bbie.deprecated() != null && bbie.deprecated()) {
             properties.put("deprecated", true);
         }
 
@@ -1114,14 +1112,9 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
             if (agencyIdList != null) {
                 ref = fillSchemas(schemas, agencyIdList);
             } else {
-                XbtSummaryRecord xbt = getXbt(bbie, bdt);
-                if (hasAnyValuesInFacets(bbie.facet())) {
-                    ref = fillSchemas(schemas, xbt, bbie.facet(), "type_" + bbie.getGuid());
-                } else if (!isFriendly()) {
-                    ref = fillSchemas(schemas, xbt);
-                } else {
-                    ref = null;
-                }
+                // Issue #1633
+                // Primitive types shouldn't be expressed in the 'schema' content.
+                return null;
             }
         }
 
@@ -1136,6 +1129,27 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
         } else {
             return generationContext.getXbt(bbieSc.primitiveRestriction().xbtManifestId());
         }
+    }
+
+    private Map<String, Object> applyFacet(Map<String, Object> content, Facet facet) {
+        if (facet != null) {
+            String type = (String) content.get("type");
+            boolean isTypeString = "string".equals(type);
+
+            if (isTypeString && facet.minLength() != null) {
+                content.put("minLength", facet.minLength().longValue());
+            }
+            if (isTypeString && facet.maxLength() != null) {
+                content.put("maxLength", facet.maxLength().longValue());
+            }
+            if (isTypeString && StringUtils.hasLength(facet.pattern())) {
+                // Override 'pattern' and 'format' properties
+                content.remove("pattern");
+                content.remove("format");
+                content.put("pattern", facet.pattern());
+            }
+        }
+        return content;
     }
 
     private void fillProperties(Map<String, Object> parent,
@@ -1195,18 +1209,14 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
             if (agencyIdList != null) {
                 ref = fillSchemas(schemas, agencyIdList);
             } else {
-                if (hasAnyValuesInFacets(bbieSc.facet())) {
-                    ref = fillSchemas(schemas, xbt, bbieSc.facet(), "type_" + bbieSc.getGuid());
-                } else if (!isFriendly()) {
-                    ref = fillSchemas(schemas, xbt);
-                } else {
-                    ref = null;
-                }
+                // Issue #1633
+                // Primitive types shouldn't be expressed in the 'schema' content.
+                ref = null;
             }
         }
 
-        if (ref == null && isFriendly()) {
-            Map<String, Object> content = toProperties(xbt);
+        if (ref == null) {
+            Map<String, Object> content = applyFacet(toProperties(xbt), bbieSc.facet());
             properties.putAll(content);
         } else {
             properties.put("$ref", ref);
@@ -1214,7 +1224,7 @@ public class BieOpenAPIGenerateExpression implements BieGenerateExpression, Init
         properties = allOf(properties);
 
         // Issue #1298
-        if (bbieSc.deprecated()) {
+        if (bbieSc.deprecated() != null && bbieSc.deprecated()) {
             properties.put("deprecated", true);
         }
 

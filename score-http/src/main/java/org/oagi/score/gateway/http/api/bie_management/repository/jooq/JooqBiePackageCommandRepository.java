@@ -1,20 +1,24 @@
 package org.oagi.score.gateway.http.api.bie_management.repository.jooq;
 
+import jakarta.annotation.Nullable;
 import org.jooq.DSLContext;
 import org.jooq.UpdateSetFirstStep;
 import org.jooq.UpdateSetMoreStep;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageId;
 import org.oagi.score.gateway.http.api.bie_management.model.BieState;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageDetailsRecord;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageId;
 import org.oagi.score.gateway.http.api.bie_management.repository.BiePackageCommandRepository;
 import org.oagi.score.gateway.http.api.library_management.model.LibraryId;
+import org.oagi.score.gateway.http.common.model.Guid;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.BiePackageRecord;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.BiePackageTopLevelAsbiepRecord;
+import org.springframework.dao.EmptyResultDataAccessException;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -37,6 +41,7 @@ public class JooqBiePackageCommandRepository extends JooqBaseRepository implemen
 
         BiePackageRecord biePackageRecord = new BiePackageRecord();
 
+        biePackageRecord.setGuid(Guid.create().value());
         biePackageRecord.setLibraryId(valueOf(libraryId));
         biePackageRecord.setName(name);
         biePackageRecord.setVersionId(versionId);
@@ -56,6 +61,46 @@ public class JooqBiePackageCommandRepository extends JooqBaseRepository implemen
                         .returning(BIE_PACKAGE.BIE_PACKAGE_ID)
                         .fetchOne().getBiePackageId().toBigInteger()
         );
+    }
+
+    @Override
+    public BiePackageId revise(BiePackageId biePackageId, String versionId) {
+
+        var query = repositoryFactory().biePackageQueryRepository(requester());
+
+        BiePackageDetailsRecord biePackageDetails = query.getBiePackageDetails(biePackageId);
+        if (biePackageDetails == null) {
+            throw new EmptyResultDataAccessException(1);
+        }
+
+        BiePackageRecord biePackageRecord = new BiePackageRecord();
+
+        biePackageRecord.setGuid(Guid.create().value());
+        biePackageRecord.setLibraryId(valueOf(biePackageDetails.libraryId()));
+        biePackageRecord.setName(biePackageDetails.name());
+        biePackageRecord.setVersionId(versionId);
+        biePackageRecord.setVersionName(biePackageDetails.versionName());
+        biePackageRecord.setDescription(biePackageDetails.description());
+        biePackageRecord.setState(BieState.WIP.name());
+        biePackageRecord.setPrevBiePackageId(valueOf(biePackageId));
+        biePackageRecord.setOwnerUserId(valueOf(requester().userId()));
+        biePackageRecord.setCreatedBy(valueOf(requester().userId()));
+        biePackageRecord.setLastUpdatedBy(valueOf(requester().userId()));
+        LocalDateTime timestamp = LocalDateTime.now();
+        biePackageRecord.setCreationTimestamp(timestamp);
+        biePackageRecord.setLastUpdateTimestamp(timestamp);
+
+        BiePackageId revisedBiePackageId = new BiePackageId(
+                dslContext().insertInto(BIE_PACKAGE)
+                        .set(biePackageRecord)
+                        .returning(BIE_PACKAGE.BIE_PACKAGE_ID)
+                        .fetchOne().getBiePackageId().toBigInteger()
+        );
+
+        addBieToBiePackage(revisedBiePackageId,
+                query.getTopLevelAsbiepIdListInBiePackage(biePackageId));
+
+        return revisedBiePackageId;
     }
 
     @Override
@@ -126,6 +171,7 @@ public class JooqBiePackageCommandRepository extends JooqBaseRepository implemen
 
         BiePackageRecord copiedBiePackageRecord = biePackageRecord.copy();
         copiedBiePackageRecord.setBiePackageId(null);
+        copiedBiePackageRecord.setGuid(Guid.create().value());
         copiedBiePackageRecord.setState(BieState.WIP.name());
         ULong requesterUserId = valueOf(requester().userId());
         copiedBiePackageRecord.setOwnerUserId(requesterUserId);
@@ -197,18 +243,40 @@ public class JooqBiePackageCommandRepository extends JooqBaseRepository implemen
         }
 
         for (TopLevelAsbiepId topLevelAsbiepId : topLevelAsbiepIdList) {
-            BiePackageTopLevelAsbiepRecord record = new BiePackageTopLevelAsbiepRecord();
-            record.setBiePackageId(valueOf(biePackageId));
-            record.setTopLevelAsbiepId(valueOf(topLevelAsbiepId));
-            record.setCreatedBy(valueOf(requester().userId()));
-            record.setCreationTimestamp(LocalDateTime.now());
-            dslContext().insertInto(BIE_PACKAGE_TOP_LEVEL_ASBIEP)
-                    .set(record)
-                    .onDuplicateKeyUpdate()
-                    .set(BIE_PACKAGE_TOP_LEVEL_ASBIEP.BIE_PACKAGE_ID, valueOf(biePackageId))
-                    .set(BIE_PACKAGE_TOP_LEVEL_ASBIEP.TOP_LEVEL_ASBIEP_ID, valueOf(topLevelAsbiepId))
-                    .execute();
+            addBiePackageTopLevelAsbiep(biePackageId, topLevelAsbiepId, null);
         }
+    }
+
+    private void addBiePackageTopLevelAsbiep(BiePackageId biePackageId,
+                                             TopLevelAsbiepId topLevelAsbiepId,
+                                             @Nullable TopLevelAsbiepId prevTopLevelAsbiepId) {
+        BiePackageTopLevelAsbiepRecord record = new BiePackageTopLevelAsbiepRecord();
+        record.setBiePackageId(valueOf(biePackageId));
+        record.setTopLevelAsbiepId(valueOf(topLevelAsbiepId));
+        if (prevTopLevelAsbiepId != null) {
+            record.setPrevTopLevelAsbiepId(valueOf(prevTopLevelAsbiepId));
+        }
+        record.setCreatedBy(valueOf(requester().userId()));
+        record.setCreationTimestamp(LocalDateTime.now());
+
+        var q = dslContext().insertInto(BIE_PACKAGE_TOP_LEVEL_ASBIEP)
+                .set(record)
+                .onDuplicateKeyUpdate()
+                .set(BIE_PACKAGE_TOP_LEVEL_ASBIEP.BIE_PACKAGE_ID, valueOf(biePackageId))
+                .set(BIE_PACKAGE_TOP_LEVEL_ASBIEP.TOP_LEVEL_ASBIEP_ID, valueOf(topLevelAsbiepId));
+        if (prevTopLevelAsbiepId != null) {
+            q = q.set(BIE_PACKAGE_TOP_LEVEL_ASBIEP.PREV_TOP_LEVEL_ASBIEP_ID, valueOf(prevTopLevelAsbiepId));
+        }
+        q.execute();
+    }
+
+    @Override
+    public void replaceBieInBiePackage(BiePackageId biePackageId, TopLevelAsbiepId prevTopLevelAsbiepId, TopLevelAsbiepId topLevelAsbiepId) {
+        if (prevTopLevelAsbiepId == null || topLevelAsbiepId == null) {
+            return;
+        }
+
+        addBiePackageTopLevelAsbiep(biePackageId, topLevelAsbiepId, prevTopLevelAsbiepId);
     }
 
     @Override

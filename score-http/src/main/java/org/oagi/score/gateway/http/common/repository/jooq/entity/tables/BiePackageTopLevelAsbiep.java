@@ -82,6 +82,14 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
     public final TableField<BiePackageTopLevelAsbiepRecord, ULong> TOP_LEVEL_ASBIEP_ID = createField(DSL.name("top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the TOP_LEVEL_ASBIEP_ID which has linked to the BIE package. The release ID of this record must be the same to the BIE package's release ID.");
 
     /**
+     * The column
+     * <code>oagi.bie_package_top_level_asbiep.prev_top_level_asbiep_id</code>.
+     * A foreign key referring to the previous version of the Top-Level ASBIEP
+     * record, if any. Used to track version history within the BIE package.
+     */
+    public final TableField<BiePackageTopLevelAsbiepRecord, ULong> PREV_TOP_LEVEL_ASBIEP_ID = createField(DSL.name("prev_top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A foreign key referring to the previous version of the Top-Level ASBIEP record, if any. Used to track version history within the BIE package.");
+
+    /**
      * The column <code>oagi.bie_package_top_level_asbiep.created_by</code>. A
      * foreign key referring to the user who adds the record into the BIE
      * package.
@@ -176,7 +184,7 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
 
     @Override
     public List<ForeignKey<BiePackageTopLevelAsbiepRecord, ?>> getReferences() {
-        return Arrays.asList(Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_BIE_PACKAGE_ID_FK, Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_TOP_LEVEL_ASBIEP_ID_FK);
+        return Arrays.asList(Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_BIE_PACKAGE_ID_FK, Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_PREV_TOP_LEVEL_ASBIEP_ID_FK, Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_TOP_LEVEL_ASBIEP_ID_FK);
     }
 
     private transient BiePackagePath _biePackage;
@@ -191,17 +199,33 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
         return _biePackage;
     }
 
-    private transient TopLevelAsbiepPath _topLevelAsbiep;
+    private transient TopLevelAsbiepPath _biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk;
 
     /**
      * Get the implicit join path to the <code>oagi.top_level_asbiep</code>
-     * table.
+     * table, via the
+     * <code>bie_package_top_level_asbiep_prev_top_level_asbiep_id_fk</code>
+     * key.
      */
-    public TopLevelAsbiepPath topLevelAsbiep() {
-        if (_topLevelAsbiep == null)
-            _topLevelAsbiep = new TopLevelAsbiepPath(this, Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_TOP_LEVEL_ASBIEP_ID_FK, null);
+    public TopLevelAsbiepPath biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk() {
+        if (_biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk == null)
+            _biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk = new TopLevelAsbiepPath(this, Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_PREV_TOP_LEVEL_ASBIEP_ID_FK, null);
 
-        return _topLevelAsbiep;
+        return _biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk;
+    }
+
+    private transient TopLevelAsbiepPath _biePackageTopLevelAsbiepTopLevelAsbiepIdFk;
+
+    /**
+     * Get the implicit join path to the <code>oagi.top_level_asbiep</code>
+     * table, via the
+     * <code>bie_package_top_level_asbiep_top_level_asbiep_id_fk</code> key.
+     */
+    public TopLevelAsbiepPath biePackageTopLevelAsbiepTopLevelAsbiepIdFk() {
+        if (_biePackageTopLevelAsbiepTopLevelAsbiepIdFk == null)
+            _biePackageTopLevelAsbiepTopLevelAsbiepIdFk = new TopLevelAsbiepPath(this, Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_TOP_LEVEL_ASBIEP_ID_FK, null);
+
+        return _biePackageTopLevelAsbiepTopLevelAsbiepIdFk;
     }
 
     @Override

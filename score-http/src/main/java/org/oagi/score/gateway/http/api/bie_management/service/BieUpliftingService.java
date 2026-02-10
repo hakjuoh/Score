@@ -887,6 +887,12 @@ public class BieUpliftingService {
             targetTopLevelAsbiepId = command(requester)
                     .createBie(createBieRequest)
                     .getTopLevelAsbiepId();
+
+            // Issue #1659
+            for (Map.Entry<AsbiepId, WrappedAsbiep> asbiepEntry : this.asbiepMap.entrySet()) {
+                repositoryFactory.asbiepCommandRepository(requester)
+                        .copyAsbiepSupportingDocumentation(asbiepEntry.getKey(), asbiepEntry.getValue().getAsbiep().getAsbiepId());
+            }
         }
 
         @Override
@@ -996,8 +1002,6 @@ public class BieUpliftingService {
                     newWrappedAsbieList.add(upliftingAsbie);
                     this.toAsbiepToAsbieMap.put(asbie.getToAsbiepId(), newWrappedAsbieList);
                 }
-
-
             }
         }
 
@@ -1121,7 +1125,6 @@ public class BieUpliftingService {
                     upliftingAsbieList.forEach(upliftingAsbie -> {
                         upliftingAsbie.setToAsbiep(upliftingAsbiep);
                     });
-
                 }
                 this.asbiepMap.put(asbiep.getAsbiepId(), upliftingAsbiep);
                 this.roleOfAbieToAsbiepMap.put(asbiep.getRoleOfAbieId(), upliftingAsbiep);

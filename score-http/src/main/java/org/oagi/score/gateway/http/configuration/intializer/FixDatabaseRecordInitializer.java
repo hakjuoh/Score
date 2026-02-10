@@ -5,6 +5,7 @@ import org.apache.commons.logging.LogFactory;
 import org.jooq.DSLContext;
 import org.jooq.Record2;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.model.Guid;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.configuration.security.SessionService;
 import org.springframework.beans.factory.InitializingBean;
@@ -13,7 +14,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-import static org.jooq.impl.DSL.and;
+import static org.jooq.impl.DSL.*;
 import static org.oagi.score.gateway.http.api.application_management.service.ApplicationConfigurationService.NAVBAR_BRAND_CONFIG_PARAM_NAME;
 import static org.oagi.score.gateway.http.common.model.ScoreUser.SYSTEM_USER_ID;
 import static org.oagi.score.gateway.http.common.model.ScoreUser.SYSTEM_USER_LOGIN_ID;
@@ -38,6 +39,7 @@ public class FixDatabaseRecordInitializer implements InitializingBean {
         upsertSystemUser();
         issue1476();
         issue1602();
+        fillMissingPackageGuids();
         changeValueColumnInConfigurationTable(); // this is a temporal execution.
         insertDefaultBrandSVG();
         addDeprecationColumnsInTopLevelAsbiep();
@@ -65,6 +67,22 @@ public class FixDatabaseRecordInitializer implements InitializingBean {
                 .set(APP_USER.APP_USER_ID, ULong.valueOf(SYSTEM_USER_ID))
                 .where(APP_USER.LOGIN_ID.eq(SYSTEM_USER_LOGIN_ID))
                 .execute();
+    }
+
+    private void fillMissingPackageGuids() {
+        List<ULong> biePackageIdsMissingGuid = dslContext.select(BIE_PACKAGE.BIE_PACKAGE_ID)
+                .from(BIE_PACKAGE)
+                .where(or(
+                        BIE_PACKAGE.GUID.isNull(),
+                        length(BIE_PACKAGE.GUID).eq(0)
+                ))
+                .fetchInto(ULong.class);
+        for (ULong biePackageId : biePackageIdsMissingGuid) {
+            dslContext.update(BIE_PACKAGE)
+                    .set(BIE_PACKAGE.GUID, Guid.create().value())
+                    .where(BIE_PACKAGE.BIE_PACKAGE_ID.eq(biePackageId))
+                    .execute();
+        }
     }
 
     private void issue1602() {

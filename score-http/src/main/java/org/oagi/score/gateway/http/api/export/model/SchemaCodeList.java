@@ -1,13 +1,17 @@
 package org.oagi.score.gateway.http.api.export.model;
 
 import org.oagi.score.gateway.http.api.code_list_management.model.CodeListManifestId;
+import org.oagi.score.gateway.http.api.code_list_management.model.CodeListSummaryRecord;
 import org.oagi.score.gateway.http.api.namespace_management.model.NamespaceId;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Function;
 
 public class SchemaCodeList {
+
+    private CodeListSummaryRecord codeList;
 
     private CodeListManifestId codeListManifestId;
 
@@ -23,9 +27,15 @@ public class SchemaCodeList {
 
     private NamespaceId namespaceId;
 
-    public SchemaCodeList(CodeListManifestId codeListManifestId, NamespaceId namespaceId) {
+    private Function<CodeListSummaryRecord, String> nameResolver;
+
+    public SchemaCodeList(CodeListSummaryRecord codeList,
+                          CodeListManifestId codeListManifestId, NamespaceId namespaceId,
+                          Function<CodeListSummaryRecord, String> nameResolver) {
+        this.codeList = codeList;
         this.codeListManifestId = codeListManifestId;
         this.namespaceId = namespaceId;
+        this.nameResolver = nameResolver;
     }
 
     public CodeListManifestId getCodeListManifestId() {
@@ -41,7 +51,7 @@ public class SchemaCodeList {
     }
 
     public String getName() {
-        return name.replaceAll(" ", "").replace("Identifier", "ID");
+        return nameResolver.apply(codeList);
     }
 
     public void setName(String name) {

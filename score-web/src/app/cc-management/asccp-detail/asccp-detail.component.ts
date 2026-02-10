@@ -357,6 +357,9 @@ export class AsccpDetailComponent implements OnInit {
       // Reset
       this.originalText = undefined;
 
+      // Recover the state of 'Hide Cardinality' property.
+      this.dataSource.hideCardinality = loadBooleanProperty(this.auth.getUserToken(), this.HIDE_CARDINALITY_PROPERTY_KEY, false);
+
       if (snackMsg) {
         this.snackBar.open(snackMsg, '', {duration: 3000});
       }

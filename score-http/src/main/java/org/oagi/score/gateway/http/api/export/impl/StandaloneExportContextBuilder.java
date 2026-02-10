@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static org.oagi.score.gateway.http.api.export.model.ConnectSpecNameResolvers.*;
 import static org.oagi.score.gateway.http.api.export.model.Namespace.newNamespace;
 import static org.oagi.score.gateway.http.common.ScoreConstants.ANY_ASCCP_DEN;
 
@@ -217,15 +218,15 @@ public class StandaloneExportContextBuilder implements SchemaModuleTraversal {
                         .collect(Collectors.toList());
                 bdtSimple = new BDTSimpleType(
                         dt, baseDataType, isDefaultBDT,
-                        dtAwdPriList, xbtList, ccDocument);
+                        dtAwdPriList, xbtList, ccDocument, dtNameResolver);
             } else {
                 bdtSimple = new BDTSimpleType(
-                        dt, baseDataType, isDefaultBDT, ccDocument);
+                        dt, baseDataType, isDefaultBDT, ccDocument, dtNameResolver);
             }
         } else {
             Map<DtScManifestId, DtScSummaryRecord> dtScMap = dtScList.stream()
                     .collect(Collectors.toMap(DtScSummaryRecord::dtScManifestId, Function.identity()));
-            bdtSimple = new BDTSimpleContent(dt, baseDataType, isDefaultBDT, dtScMap, ccDocument);
+            bdtSimple = new BDTSimpleContent(dt, baseDataType, isDefaultBDT, dtScMap, ccDocument, dtNameResolver);
             dtScList.forEach(dtSc -> {
                 List<DtScAwdPriSummaryRecord> dtScAwdPriList = ccDocument.getDtScAwdPriList(dtSc.dtScManifestId());
 
@@ -261,7 +262,7 @@ public class StandaloneExportContextBuilder implements SchemaModuleTraversal {
                                 schemaModule.addNamespace(agencyIdListSchemaModule.getNamespace());
                             }
 
-                            agencyIdListSchemaModule.addAgencyId(new AgencyId(agencyIdList));
+                            agencyIdListSchemaModule.addAgencyId(new AgencyId(agencyIdList, agencyIdListNameResolver));
                         });
             });
         }
@@ -301,7 +302,7 @@ public class StandaloneExportContextBuilder implements SchemaModuleTraversal {
                         schemaModule.addNamespace(agencyIdListSchemaModule.getNamespace());
                     }
 
-                    agencyIdListSchemaModule.addAgencyId(new AgencyId(agencyIdList));
+                    agencyIdListSchemaModule.addAgencyId(new AgencyId(agencyIdList, agencyIdListNameResolver));
                 });
     }
 
@@ -322,7 +323,7 @@ public class StandaloneExportContextBuilder implements SchemaModuleTraversal {
             addCodeList(parentSchemaModule, baseCodeList);
         }
 
-        SchemaCodeList schemaCodeList = new SchemaCodeList(codeList.codeListManifestId(), codeList.namespaceId());
+        SchemaCodeList schemaCodeList = new SchemaCodeList(codeList, codeList.codeListManifestId(), codeList.namespaceId(), codeListNameResolver);
         schemaCodeList.setGuid(codeList.guid().value());
         schemaCodeList.setName(codeList.name());
         schemaCodeList.setEnumTypeGuid(codeList.enumTypeGuid());

@@ -1065,6 +1065,7 @@ export class AsbiepDetails {
   remark: string;
   bizTerm: string;
   displayName: string;
+  supportDocList: AsbiepSupportDoc[];
   ownerTopLevelAsbiep: TopLevelAsbiepSummary;
 
   owner: ScoreUser;
@@ -1445,6 +1446,13 @@ export class AsbieDetail {
   }
 }
 
+export class AsbiepSupportDoc {
+  asbiepSupportDocId: number;
+  asbiepId: number;
+  content: string;
+  description: string;
+}
+
 export class AsbiepDetail {
   private _node: AbieFlatNode | AsbiepFlatNode;
 
@@ -1455,6 +1463,7 @@ export class AsbiepDetail {
   private _remark: string;
   private _bizTerm: string;
   private _definition: string;
+  private _supportDocList: AsbiepSupportDoc[] = [];
 
   constructor(node: AbieFlatNode | AsbiepFlatNode) {
     this._node = node;
@@ -1485,6 +1494,15 @@ export class AsbiepDetail {
   set definition(value: string) {
     this._definition = value;
     this._node.fireChangeEvent('definition', value);
+  }
+
+  get supportDocList(): AsbiepSupportDoc[] {
+    return this._supportDocList || [];
+  }
+
+  set supportDocList(value: AsbiepSupportDoc[]) {
+    this._supportDocList = value;
+    this._node.fireChangeEvent('supportDocList', value);
   }
 
   get displayName(): string {
@@ -1525,14 +1543,20 @@ export class AsbiepDetail {
       this.bizTerm = obj.bizTerm;
       this.definition = obj.definition;
       this.displayName = obj.displayName;
+      this.supportDocList = obj.supportDocList || [];
+
+      // Add an empty obj to display initial input fields.
+      if (this.supportDocList.length === 0) {
+        this.supportDocList.push(new AsbiepSupportDoc());
+      }
     }
   }
 
   get hashCode(): number {
     return hashCode4Array(
-      this.asbiepId, this.guid, this.roleOfAbieId,
-      this.remark, this.bizTerm, this.definition,
-      ((!!this.displayName && this.displayName !== this._node.name) ? this.displayName : undefined)
+        this.asbiepId, this.guid, this.roleOfAbieId,
+        this.remark, this.bizTerm, this.definition, this.supportDocList,
+        ((!!this.displayName && this.displayName !== this._node.name) ? this.displayName : undefined)
     );
   }
 
@@ -1543,6 +1567,7 @@ export class AsbiepDetail {
       roleOfAbieId: this.roleOfAbieId,
       remark: this.remark,
       bizTerm: this.bizTerm,
+      supportDocList: this.supportDocList,
       definition: this.definition,
       displayName: this.displayName,
       basedAsccpManifestId: this.basedAsccpManifestId,

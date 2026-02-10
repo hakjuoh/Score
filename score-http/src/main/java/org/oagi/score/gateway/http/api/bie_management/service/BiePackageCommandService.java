@@ -7,12 +7,17 @@ import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.bie_management.controller.payload.CreateBiePackageRequest;
 import org.oagi.score.gateway.http.api.bie_management.controller.payload.DiscardBiePackageRequest;
 import org.oagi.score.gateway.http.api.bie_management.controller.payload.UpdateBiePackageRequest;
-import org.oagi.score.gateway.http.api.bie_management.model.*;
+import org.oagi.score.gateway.http.api.bie_management.model.BieState;
+import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageDetailsRecord;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageId;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.repository.BiePackageCommandRepository;
 import org.oagi.score.gateway.http.api.bie_management.repository.BiePackageQueryRepository;
 import org.oagi.score.gateway.http.common.model.ScoreRole;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
+import org.oagi.score.gateway.http.common.util.SemanticVersion;
 import org.oagi.score.gateway.http.configuration.security.SessionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
@@ -21,7 +26,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import static org.oagi.score.gateway.http.api.bie_management.model.BieState.Production;
 import static org.oagi.score.gateway.http.api.bie_management.model.BieState.WIP;
 import static org.oagi.score.gateway.http.common.util.StringUtils.hasLength;
 
@@ -43,17 +51,21 @@ public class BiePackageCommandService {
     @Autowired
     private SessionService sessionService;
 
+    private String newVersionName() {
+        return RandomStringGenerator.builder()
+                .withinRange('0', 'z')
+                .filteredBy(CharacterPredicates.LETTERS, CharacterPredicates.DIGITS)
+                .build()
+                .generate(8);
+    }
+
     public BiePackageId create(ScoreUser requester, CreateBiePackageRequest request) {
 
         return command(requester).create(
                 request.libraryId(),
                 hasLength(request.name()) ? request.name() : "New BIE Package",
                 hasLength(request.versionId()) ? request.versionId() : "v1.0",
-                hasLength(request.versionName()) ? request.versionName() : RandomStringGenerator.builder()
-                        .withinRange('0', 'z')
-                        .filteredBy(CharacterPredicates.LETTERS, CharacterPredicates.DIGITS)
-                        .build()
-                        .generate(8),
+                hasLength(request.versionName()) ? request.versionName() : newVersionName(),
                 request.description());
     }
 
@@ -160,12 +172,64 @@ public class BiePackageCommandService {
                 biePackage.biePackageId(), targetUser.userId());
     }
 
+    public BiePackageId revise(ScoreUser requester, BiePackageId biePackageId) {
+
+        var query = query(requester);
+        BiePackageSummaryRecord biePackage = query.getBiePackageSummary(biePackageId);
+        if (biePackage == null) {
+            throw new IllegalArgumentException("No BIE Package with ID " + biePackageId);
+        }
+        if (Production != biePackage.state()) {
+            throw new IllegalArgumentException("Only the BIE package in 'Production' state can be revised.");
+        }
+
+        String versionId = biePackage.versionId();
+        while (true) {
+            versionId = newVersionId(versionId);
+            if (!query.hasDuplicateVersion(biePackageId, versionId)) {
+                break;
+            }
+        }
+
+        return command(requester).revise(biePackageId, versionId);
+    }
+
+    private String newVersionId(String versionId) {
+        try {
+            SemanticVersion semver = new SemanticVersion(versionId);
+            return semver.increment(false).toString();
+        } catch (IllegalArgumentException e) {
+            return addNumber(versionId);
+        }
+    }
+
+    private String addNumber(String versionId) {
+        Pattern pattern = Pattern.compile("^(.*?)(?:-(\\d+))?$");
+        Matcher matcher = pattern.matcher(versionId);
+        if (matcher.matches()) {
+            String base = matcher.group(1);
+            String numStr = matcher.group(2);
+            int next = (numStr != null) ? Integer.parseInt(numStr) + 1 : 1;
+            return base + "-" + next;
+        }
+        return versionId + "-1"; // fallback
+    }
+
     public void addBieToBiePackage(
             ScoreUser requester, BiePackageId biePackageId, Collection<TopLevelAsbiepId> topLevelAsbiepIdList) {
 
         BiePackageDetailsRecord biePackage = ensureBiePackageIsUpdatable(requester, biePackageId, true);
 
         command(requester).addBieToBiePackage(biePackage.biePackageId(), topLevelAsbiepIdList);
+    }
+
+    public void replaceBieInBiePackage(
+            ScoreUser requester, BiePackageId biePackageId,
+            TopLevelAsbiepId prevTopLevelAsbiepId, TopLevelAsbiepId topLevelAsbiepId) {
+
+        BiePackageDetailsRecord biePackage = ensureBiePackageIsUpdatable(requester, biePackageId, true);
+
+        command(requester).replaceBieInBiePackage(biePackage.biePackageId(), prevTopLevelAsbiepId, topLevelAsbiepId);
     }
 
     public void deleteBieInBiePackage(
@@ -175,4 +239,5 @@ public class BiePackageCommandService {
 
         command(requester).deleteBieInBiePackage(biePackage.biePackageId(), topLevelAsbiepIdList);
     }
+
 }

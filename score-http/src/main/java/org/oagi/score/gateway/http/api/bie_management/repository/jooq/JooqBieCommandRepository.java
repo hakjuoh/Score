@@ -65,6 +65,9 @@ public class JooqBieCommandRepository extends JooqBaseRepository implements BieC
 
         setForeignKeyChecks(false);
         try {
+            // Issue #1659
+            deleteAsbiepSupportDocList(topLevelAsbiepIdList);
+
             deleteAbieList(topLevelAsbiepIdList);
             deleteAsbieList(topLevelAsbiepIdList);
             deleteAsbiepList(topLevelAsbiepIdList);
@@ -129,6 +132,14 @@ public class JooqBieCommandRepository extends JooqBaseRepository implements BieC
     private void deleteBizCtxAssignmentList(Collection<TopLevelAsbiepId> topLevelAsbiepIdList) {
         dslContext().deleteFrom(BIZ_CTX_ASSIGNMENT)
                 .where(BIZ_CTX_ASSIGNMENT.TOP_LEVEL_ASBIEP_ID.in(valueOf(topLevelAsbiepIdList)))
+                .execute();
+    }
+
+    private void deleteAsbiepSupportDocList(Collection<TopLevelAsbiepId> topLevelAsbiepIdList) {
+        dslContext().deleteFrom(ASBIEP_SUPPORT_DOC
+                .join(ASBIEP).on(ASBIEP_SUPPORT_DOC.ASBIEP_ID.eq(ASBIEP.ASBIEP_ID))
+                .join(TOP_LEVEL_ASBIEP).on(ASBIEP.OWNER_TOP_LEVEL_ASBIEP_ID.eq(TOP_LEVEL_ASBIEP.TOP_LEVEL_ASBIEP_ID)))
+                .where(TOP_LEVEL_ASBIEP.TOP_LEVEL_ASBIEP_ID.in(valueOf(topLevelAsbiepIdList)))
                 .execute();
     }
 

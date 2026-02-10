@@ -4,6 +4,7 @@ import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
 import org.oagi.score.gateway.http.api.bie_management.model.asbiep.AsbiepDetailsRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.asbiep.AsbiepId;
 import org.oagi.score.gateway.http.api.bie_management.model.asbiep.AsbiepSummaryRecord;
+import org.oagi.score.gateway.http.api.bie_management.model.asbiep.AsbiepSupportDocRecord;
 
 import java.util.Collection;
 import java.util.List;
@@ -17,5 +18,7 @@ public interface AsbiepQueryRepository {
     AsbiepDetailsRecord getAsbiepDetails(AsbiepId asbiepId);
 
     AsbiepDetailsRecord getAsbiepDetails(TopLevelAsbiepId topLevelAsbiepId, String hashPath);
+
+    List<AsbiepSupportDocRecord> getAsbiepSupportingDocumentationList(AsbiepId asbiepId);
 
 }

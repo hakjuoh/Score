@@ -1,19 +1,19 @@
 import {ComponentFixture, fakeAsync, TestBed} from '@angular/core/testing';
-import {BiePackageAddBieDialogComponent} from './bie-package-add-bie-dialog.component';
+import {BiePackageBieDialogComponent} from './bie-package-bie-dialog.component';
 
 describe('BiePackageAddBieDialogComponent', () => {
-  let component: BiePackageAddBieDialogComponent;
-  let fixture: ComponentFixture<BiePackageAddBieDialogComponent>;
+  let component: BiePackageBieDialogComponent;
+  let fixture: ComponentFixture<BiePackageBieDialogComponent>;
 
   beforeEach(fakeAsync(() => {
     TestBed.configureTestingModule({
-      declarations: [BiePackageAddBieDialogComponent]
+      declarations: [BiePackageBieDialogComponent]
     })
         .compileComponents();
   }));
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(BiePackageAddBieDialogComponent);
+    fixture = TestBed.createComponent(BiePackageBieDialogComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

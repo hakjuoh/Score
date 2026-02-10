@@ -1,16 +1,13 @@
 package org.oagi.score.gateway.http.api.external.repository;
 
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageId;
+import org.jooq.DSLContext;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageId;
 import org.oagi.score.gateway.http.common.model.Guid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.ASBIEP;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.BIE_PACKAGE;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.LIBRARY;
-
-import org.jooq.DSLContext;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.*;
 
 @Repository
 public class ExternalBieRepository {

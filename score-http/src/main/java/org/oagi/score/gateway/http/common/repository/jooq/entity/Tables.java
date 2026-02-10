@@ -17,6 +17,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbie;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsbieBizterm;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbiep;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsbiepSupportDoc;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Ascc;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsccBizterm;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsccManifest;
@@ -206,6 +207,11 @@ public class Tables {
      * of an ASCCP.
      */
     public static final Asbiep ASBIEP = Asbiep.ASBIEP;
+
+    /**
+     * Table storing supporting documentations linked to ASBIEP records.
+     */
+    public static final AsbiepSupportDoc ASBIEP_SUPPORT_DOC = AsbiepSupportDoc.ASBIEP_SUPPORT_DOC;
 
     /**
      * An ASCC represents a relationship/association between two ACCs through an

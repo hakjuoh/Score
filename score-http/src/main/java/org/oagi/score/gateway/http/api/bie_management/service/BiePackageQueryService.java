@@ -1,24 +1,31 @@
 package org.oagi.score.gateway.http.api.bie_management.service;
 
-import org.oagi.score.gateway.http.api.bie_management.model.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.oagi.score.gateway.http.api.bie_management.model.BieListEntryRecord;
+import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
+import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepSummaryRecord;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.*;
 import org.oagi.score.gateway.http.api.bie_management.model.expression.BieGenerateExpressionResult;
 import org.oagi.score.gateway.http.api.bie_management.model.expression.GenerateExpressionOption;
 import org.oagi.score.gateway.http.api.bie_management.repository.BiePackageQueryRepository;
+import org.oagi.score.gateway.http.api.bie_management.repository.criteria.BieListInBiePackageFilterCriteria;
 import org.oagi.score.gateway.http.api.bie_management.repository.criteria.BiePackageListFilterCriteria;
 import org.oagi.score.gateway.http.common.model.PageRequest;
 import org.oagi.score.gateway.http.common.model.ResultAndCount;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
+import org.oagi.score.gateway.http.common.util.ScoreGuidUtils;
 import org.oagi.score.gateway.http.common.util.Zip;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +37,8 @@ public class BiePackageQueryService {
 
     @Autowired
     private BieGenerateService bieGenerateService;
+    @Autowired
+    private BiePackageManifestService biePackageManifestService;
 
     private BiePackageQueryRepository query(ScoreUser requester) {
         return repositoryFactory.biePackageQueryRepository(requester);
@@ -54,7 +63,8 @@ public class BiePackageQueryService {
 
     public BieGenerateExpressionResult generate(
             ScoreUser requester, BiePackageId biePackageId,
-            Collection<TopLevelAsbiepId> topLevelAsbiepIdList, String schemaExpression) throws IOException {
+            Collection<TopLevelAsbiepId> topLevelAsbiepIdList, String schemaExpression,
+            String pathDelimiter) throws IOException {
 
         var query = query(requester);
         BiePackageSummaryRecord biePackage = query.getBiePackageSummary(biePackageId);
@@ -80,34 +90,62 @@ public class BiePackageQueryService {
         option.setBiePackage(biePackage);
 
         Map<TopLevelAsbiepId, File> result = bieGenerateService.generateSchemaForEach(requester, topLevelAsbiepList, option);
-        return makeGenerateBiePackageResponse(biePackage, result);
+        BiePackageManifestResponse biePackageManifestResponse =
+                biePackageManifestService.getBiePackageManifest(requester, biePackageId, pathDelimiter);
+
+        return makeGenerateBiePackageResponse(biePackage, result, biePackageManifestResponse);
+    }
+
+    public File writeBiePackageManifestResponseToTempFile(BiePackageManifestResponse response) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        // Create temp file
+        File tempFile = File.createTempFile(ScoreGuidUtils.randomGuid(), null);
+        tempFile = new File(tempFile.getParentFile(), "manifest.json");
+        tempFile.deleteOnExit();
+
+        // Write JSON to file using BufferedOutputStream for efficiency
+        try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(tempFile))) {
+            objectMapper.writeValue(bos, response);
+            bos.flush(); // ensure all data is written
+        }
+
+        return tempFile;
     }
 
     private BieGenerateExpressionResult makeGenerateBiePackageResponse(
-            BiePackageSummaryRecord biePackage, Map<TopLevelAsbiepId, File> result) throws IOException {
-        File file;
-        if (result.size() == 1) {
-            file = result.values().iterator().next();
-        } else {
-            String filename = biePackage.versionName() + "-" + biePackage.versionId() + "-" + System.currentTimeMillis();
-            file = Zip.compression(result.values(), filename);
-        }
+            BiePackageSummaryRecord biePackage, Map<TopLevelAsbiepId, File> result, BiePackageManifestResponse biePackageManifestResponse) throws IOException {
 
-        String filename = file.getName();
-        String contentType;
-        if (filename.endsWith(".xsd")) {
-            contentType = "text/xml";
-        } else if (filename.endsWith(".json")) {
-            contentType = "application/json";
-        } else if (filename.endsWith(".zip")) {
-            contentType = "application/zip";
-        } else if (filename.endsWith(".yml")) {
-            contentType = "text/x-yaml";
-        } else {
-            contentType = "application/octet-stream";
-        }
+        File manifestFile = writeBiePackageManifestResponseToTempFile(biePackageManifestResponse);
+        List<File> files = new ArrayList<>(result.values());
+        files.add(manifestFile);
 
-        return new BieGenerateExpressionResult(filename, contentType, file);
+        String filename = String.join("-", Arrays.asList(
+                        biePackage.name(),
+                        biePackage.versionName(),
+                        biePackage.versionId(),
+                        Long.toString(System.currentTimeMillis()))
+                .stream()
+                .map(e -> e.replaceAll("\\s+", ""))                      // remove whitespace
+                .map(e -> e.replaceAll("[\\\\/:*?\"<>|]", ""))           // remove invalid filename char
+                .collect(Collectors.toList()));
+
+        File file = Zip.compression(files, filename);
+
+        String contentType = "application/zip";
+        return new BieGenerateExpressionResult(file.getName(), contentType, file);
     }
 
+    public ResultAndCount<BieListEntryRecord> getBieListInBiePackage(
+            ScoreUser requester, BieListInBiePackageFilterCriteria filterCriteria, PageRequest pageRequest) {
+
+        var biePackageQuery = repositoryFactory.biePackageQueryRepository(requester);
+        return biePackageQuery.getBieListInBiePackage(filterCriteria, pageRequest);
+    }
+
+    public boolean exists(ScoreUser requester, BiePackageId biePackageId, TopLevelAsbiepId topLevelAsbiepId) {
+        var biePackageQuery = repositoryFactory.biePackageQueryRepository(requester);
+        return biePackageQuery.exists(biePackageId, topLevelAsbiepId);
+    }
 }

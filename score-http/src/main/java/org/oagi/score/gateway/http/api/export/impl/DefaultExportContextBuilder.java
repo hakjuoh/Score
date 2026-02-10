@@ -38,6 +38,7 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static org.oagi.score.gateway.http.api.export.model.ConnectSpecNameResolvers.*;
 import static org.oagi.score.gateway.http.common.ScoreConstants.ANY_ASCCP_DEN;
 
 public class DefaultExportContextBuilder implements SchemaModuleTraversal {
@@ -108,7 +109,7 @@ public class DefaultExportContextBuilder implements SchemaModuleTraversal {
         for (ModuleCCID<AgencyIdListManifestId> moduleCCID : moduleCcDocument.getModuleAgencyIdList()) {
             SchemaModule schemaModule = moduleMap.get(moduleCCID.moduleId());
             AgencyIdListSummaryRecord agencyIdList = moduleCcDocument.getAgencyIdList(moduleCCID.manifestId());
-            schemaModule.addAgencyId(new AgencyId(agencyIdList));
+            schemaModule.addAgencyId(new AgencyId(agencyIdList, agencyIdListNameResolver));
         }
     }
 
@@ -118,7 +119,7 @@ public class DefaultExportContextBuilder implements SchemaModuleTraversal {
             SchemaModule schemaModule = moduleMap.get(moduleCCID.moduleId());
             CodeListSummaryRecord codeList = moduleCcDocument.getCodeList(moduleCCID.manifestId());
             SchemaCodeList schemaCodeList =
-                    new SchemaCodeList(codeList.codeListManifestId(), codeList.namespaceId());
+                    new SchemaCodeList(codeList, codeList.codeListManifestId(), codeList.namespaceId(), codeListNameResolver);
             schemaCodeList.setGuid(codeList.guid().value());
             schemaCodeList.setName(codeList.name());
             schemaCodeList.setEnumTypeGuid(codeList.enumTypeGuid());
@@ -187,7 +188,7 @@ public class DefaultExportContextBuilder implements SchemaModuleTraversal {
                             .filter(e -> e.xbtManifestId() != null)
                             .map(e -> moduleCcDocument.getXbt(e.xbtManifestId()))
                             .collect(Collectors.toList());
-                    bdtSimple = new BDTSimpleType(dt, basedDt, isDefaultBDT, dtAwdPriList, xbtList, moduleCcDocument);
+                    bdtSimple = new BDTSimpleType(dt, basedDt, isDefaultBDT, dtAwdPriList, xbtList, moduleCcDocument, dtNameResolver);
                     xbtList.forEach(xbt -> {
                         ModuleCCID<XbtManifestId> xbtModuleCCID = moduleCcDocument.getModuleXbt(xbt.xbtManifestId());
                         if (xbtModuleCCID != null) {
@@ -197,7 +198,7 @@ public class DefaultExportContextBuilder implements SchemaModuleTraversal {
                     });
                 } else {
                     bdtSimple = new BDTSimpleType(
-                            dt, basedDt, isDefaultBDT, moduleCcDocument);
+                            dt, basedDt, isDefaultBDT, moduleCcDocument, dtNameResolver);
                 }
             } else {
                 Map<DtScManifestId, DtScSummaryRecord> dtScMap = new HashMap();
@@ -205,7 +206,7 @@ public class DefaultExportContextBuilder implements SchemaModuleTraversal {
                     dtScMap.put(dtSc.dtScManifestId(), dtSc);
                 }
                 bdtSimple = new BDTSimpleContent(
-                        dt, basedDt, isDefaultBDT, dtScMap, moduleCcDocument);
+                        dt, basedDt, isDefaultBDT, dtScMap, moduleCcDocument, dtNameResolver);
                 dtScList.forEach(dtSc -> {
                     List<DtScAwdPriSummaryRecord> dtScAwdPriList =
                             moduleCcDocument.getDtScAwdPriList(dtSc.dtScManifestId());

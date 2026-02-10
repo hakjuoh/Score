@@ -29,7 +29,6 @@ import org.oagi.score.gateway.http.api.log_management.model.LogSummaryRecord;
 import org.oagi.score.gateway.http.api.namespace_management.model.NamespaceId;
 import org.oagi.score.gateway.http.api.namespace_management.model.NamespaceSummaryRecord;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseId;
-import org.oagi.score.gateway.http.api.release_management.model.ReleaseState;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseSummaryRecord;
 import org.oagi.score.gateway.http.api.release_management.repository.ReleaseQueryRepository;
 import org.oagi.score.gateway.http.common.model.AccessPrivilege;

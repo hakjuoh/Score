@@ -38,6 +38,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Abie.AbiePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbie.AsbiePath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsbiepSupportDoc.AsbiepSupportDocPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsccpManifest.AsccpManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.BieUsageRule.BieUsageRulePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.TopLevelAsbiep.TopLevelAsbiepPath;
@@ -333,6 +334,19 @@ public class Asbiep extends TableImpl<AsbiepRecord> {
             _asbie = new AsbiePath(this, null, Keys.ASBIE_TO_ASBIEP_ID_FK.getInverseKey());
 
         return _asbie;
+    }
+
+    private transient AsbiepSupportDocPath _asbiepSupportDoc;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.asbiep_support_doc</code> table
+     */
+    public AsbiepSupportDocPath asbiepSupportDoc() {
+        if (_asbiepSupportDoc == null)
+            _asbiepSupportDoc = new AsbiepSupportDocPath(this, null, Keys.ASBIEP_SUPPORT_DOC_ASBIEP_ID_FK.getInverseKey());
+
+        return _asbiepSupportDoc;
     }
 
     private transient BieUsageRulePath _bieUsageRule;

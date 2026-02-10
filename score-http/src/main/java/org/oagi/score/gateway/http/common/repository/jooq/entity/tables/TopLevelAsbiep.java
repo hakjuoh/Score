@@ -389,17 +389,32 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
         return _bbiep;
     }
 
-    private transient BiePackageTopLevelAsbiepPath _biePackageTopLevelAsbiep;
+    private transient BiePackageTopLevelAsbiepPath _biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk;
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oagi.bie_package_top_level_asbiep</code> table
+     * <code>oagi.bie_package_top_level_asbiep</code> table, via the
+     * <code>bie_package_top_level_asbiep_prev_top_level_asbiep_id_fk</code> key
      */
-    public BiePackageTopLevelAsbiepPath biePackageTopLevelAsbiep() {
-        if (_biePackageTopLevelAsbiep == null)
-            _biePackageTopLevelAsbiep = new BiePackageTopLevelAsbiepPath(this, null, Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_TOP_LEVEL_ASBIEP_ID_FK.getInverseKey());
+    public BiePackageTopLevelAsbiepPath biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk() {
+        if (_biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk == null)
+            _biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk = new BiePackageTopLevelAsbiepPath(this, null, Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_PREV_TOP_LEVEL_ASBIEP_ID_FK.getInverseKey());
 
-        return _biePackageTopLevelAsbiep;
+        return _biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk;
+    }
+
+    private transient BiePackageTopLevelAsbiepPath _biePackageTopLevelAsbiepTopLevelAsbiepIdFk;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.bie_package_top_level_asbiep</code> table, via the
+     * <code>bie_package_top_level_asbiep_top_level_asbiep_id_fk</code> key
+     */
+    public BiePackageTopLevelAsbiepPath biePackageTopLevelAsbiepTopLevelAsbiepIdFk() {
+        if (_biePackageTopLevelAsbiepTopLevelAsbiepIdFk == null)
+            _biePackageTopLevelAsbiepTopLevelAsbiepIdFk = new BiePackageTopLevelAsbiepPath(this, null, Keys.BIE_PACKAGE_TOP_LEVEL_ASBIEP_TOP_LEVEL_ASBIEP_ID_FK.getInverseKey());
+
+        return _biePackageTopLevelAsbiepTopLevelAsbiepIdFk;
     }
 
     private transient BieUserExtRevisionPath _bieUserExtRevision;

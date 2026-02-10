@@ -1,8 +1,8 @@
 package org.oagi.score.gateway.http.api.bie_management.model.expression;
 
 import lombok.Data;
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageSummaryRecord;
 import org.oagi.score.gateway.http.api.context_management.business_context.model.BusinessContextId;
 
 import java.util.Collections;

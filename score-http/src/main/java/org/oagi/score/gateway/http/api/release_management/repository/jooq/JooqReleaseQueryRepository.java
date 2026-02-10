@@ -13,7 +13,6 @@ import org.oagi.score.gateway.http.api.cc_management.model.bccp.BccpManifestId;
 import org.oagi.score.gateway.http.api.cc_management.model.dt.DtManifestId;
 import org.oagi.score.gateway.http.api.code_list_management.model.CodeListManifestId;
 import org.oagi.score.gateway.http.api.library_management.model.LibraryId;
-import org.oagi.score.gateway.http.api.library_management.repository.LibraryQueryRepository;
 import org.oagi.score.gateway.http.api.namespace_management.model.NamespaceId;
 import org.oagi.score.gateway.http.api.release_management.model.*;
 import org.oagi.score.gateway.http.api.release_management.repository.ReleaseQueryRepository;
@@ -76,6 +75,19 @@ public class JooqReleaseQueryRepository extends JooqBaseRepository implements Re
     @Override
     public List<ReleaseSummaryRecord> getReleaseSummaryList(LibraryId libraryId) {
         return getReleaseSummaryList(libraryId, null);
+    }
+
+    @Override
+    public List<ReleaseSummaryRecord> getReleaseSummaryList(Collection<ReleaseId> releaseIdSet) {
+        if (releaseIdSet == null || releaseIdSet.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        var queryBuilder = new GetReleaseSummaryListQueryBuilder();
+        return queryBuilder.select()
+                .where(RELEASE.RELEASE_ID.in(valueOf(releaseIdSet)))
+                .orderBy(RELEASE.RELEASE_ID.desc())
+                .fetch(queryBuilder.mapper());
     }
 
     @Override

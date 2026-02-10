@@ -148,8 +148,8 @@ public class JooqBbieQueryRepository extends JooqBaseRepository implements BbieQ
                                 new ValueConstraint(record.get(BBIE.DEFAULT_VALUE), record.get(BBIE.FIXED_VALUE)) : null,
                         (record.get(BBIE.FACET_MIN_LENGTH) != null || record.get(BBIE.FACET_MAX_LENGTH) != null || record.get(BBIE.FACET_PATTERN) != null) ?
                                 new Facet(
-                                        record.get(BBIE.FACET_MIN_LENGTH).toBigInteger(),
-                                        record.get(BBIE.FACET_MAX_LENGTH).toBigInteger(),
+                                        (record.get(BBIE.FACET_MIN_LENGTH) != null) ? record.get(BBIE.FACET_MIN_LENGTH).toBigInteger() : null,
+                                        (record.get(BBIE.FACET_MAX_LENGTH) != null) ? record.get(BBIE.FACET_MAX_LENGTH).toBigInteger() : null,
                                         record.get(BBIE.FACET_PATTERN)) : null,
                         record.get(BBIE.DEFINITION),
                         record.get(BBIE.REMARK),
@@ -270,8 +270,8 @@ public class JooqBbieQueryRepository extends JooqBaseRepository implements BbieQ
                                 new ValueConstraint(record.get(BBIE.DEFAULT_VALUE), record.get(BBIE.FIXED_VALUE)) : null,
                         (record.get(BBIE.FACET_MIN_LENGTH) != null || record.get(BBIE.FACET_MAX_LENGTH) != null || record.get(BBIE.FACET_PATTERN) != null) ?
                                 new Facet(
-                                        record.get(BBIE.FACET_MIN_LENGTH).toBigInteger(),
-                                        record.get(BBIE.FACET_MAX_LENGTH).toBigInteger(),
+                                        (record.get(BBIE.FACET_MIN_LENGTH) != null) ? record.get(BBIE.FACET_MIN_LENGTH).toBigInteger() : null,
+                                        (record.get(BBIE.FACET_MAX_LENGTH) != null) ? record.get(BBIE.FACET_MAX_LENGTH).toBigInteger() : null,
                                         record.get(BBIE.FACET_PATTERN)) : null,
                         record.get(BBIE.DEFINITION),
                         record.get(BBIE.REMARK),

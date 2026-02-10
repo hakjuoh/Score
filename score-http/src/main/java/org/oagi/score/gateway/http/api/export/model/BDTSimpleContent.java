@@ -10,6 +10,7 @@ import org.oagi.score.gateway.http.api.namespace_management.model.NamespaceId;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class BDTSimpleContent extends AbstractBDTSimple {
@@ -24,17 +25,21 @@ public class BDTSimpleContent extends AbstractBDTSimple {
 
     private CcDocument ccDocument;
 
+    private Function<DtSummaryRecord, String> nameResolver;
+
     public BDTSimpleContent(DtSummaryRecord dataType,
                             DtSummaryRecord baseDataType,
                             boolean isDefaultBDT,
                             Map<DtScManifestId, DtScSummaryRecord> dtScMap,
-                            CcDocument ccDocument) {
+                            CcDocument ccDocument,
+                            Function<DtSummaryRecord, String> nameResolver) {
         super(ccDocument);
 
         this.dataType = dataType;
         this.baseDataType = baseDataType;
         this.isDefaultBDT = isDefaultBDT;
         this.ccDocument = ccDocument;
+        this.nameResolver = nameResolver;
         this.dtScList = map(dtScMap);
     }
 
@@ -69,7 +74,7 @@ public class BDTSimpleContent extends AbstractBDTSimple {
     }
 
     public String getName() {
-        return ModelUtils.getTypeName(dataType);
+        return nameResolver.apply(dataType);
     }
 
     public String getGuid() {
@@ -77,7 +82,7 @@ public class BDTSimpleContent extends AbstractBDTSimple {
     }
 
     public String getBaseDTName() {
-        return ModelUtils.getTypeName(baseDataType);
+        return nameResolver.apply(baseDataType);
     }
 
     public NamespaceId getNamespaceId() {

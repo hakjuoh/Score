@@ -31,13 +31,13 @@ import {LibrarySummary} from '../../../library-management/domain/library';
 import {LibraryService} from '../../../library-management/domain/library.service';
 
 @Component({
-  selector: 'score-bie-package-add-bie-dialog',
-  templateUrl: './bie-package-add-bie-dialog.component.html',
-  styleUrls: ['./bie-package-add-bie-dialog.component.css']
+  selector: 'score-bie-package-bie-dialog',
+  templateUrl: './bie-package-bie-dialog.component.html',
+  styleUrls: ['./bie-package-bie-dialog.component.css']
 })
-export class BiePackageAddBieDialogComponent implements OnInit {
+export class BiePackageBieDialogComponent implements OnInit {
 
-  title = 'Add BIE';
+  action = 'Add';
   subtitle = 'Selected Top-Level ABIEs';
 
   get columns(): TableColumnsProperty[] {
@@ -225,8 +225,10 @@ export class BiePackageAddBieDialogComponent implements OnInit {
               private route: ActivatedRoute,
               public webPageInfo: WebPageInfoService,
               private preferencesService: SettingsPreferencesService,
-              public dialogRef: MatDialogRef<BiePackageAddBieDialogComponent>,
+              public dialogRef: MatDialogRef<BiePackageBieDialogComponent>,
               @Inject(MAT_DIALOG_DATA) public data: any) {
+
+    this.action = data?.action;
   }
 
   ngOnInit(): void {
@@ -235,7 +237,12 @@ export class BiePackageAddBieDialogComponent implements OnInit {
 
     this.request = new BieListRequest(this.route.snapshot.queryParamMap,
       new PageRequest(['lastUpdateTimestamp'], ['desc'], 0, 10));
-    this.request.states = ['Production'];
+    this.request.states = ['WIP', 'QA', 'Production'];
+    if (!!this.data?.den && !!this.data?.excludeTopLevelAsbiepIds) {
+      this.request.filters.den = this.data.den;
+      this.request.excludeTopLevelAsbiepIds = this.data.excludeTopLevelAsbiepIds;
+      this.selection = new SelectionModel<BieListEntry>(false, []);
+    }
 
     this.libraryService.getLibrarySummaryList().subscribe(libraries => {
       this.initLibraries(libraries);

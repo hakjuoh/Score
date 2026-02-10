@@ -1,21 +1,17 @@
 package org.oagi.score.gateway.http.api.external.service;
 
 import org.apache.commons.io.FileUtils;
-
 import org.oagi.score.gateway.http.api.cc_management.model.CcDocument;
 import org.oagi.score.gateway.http.api.cc_management.model.CcDocumentImpl;
 import org.oagi.score.gateway.http.api.cc_management.model.asccp.AsccpManifestId;
 import org.oagi.score.gateway.http.api.export.ExportContext;
 import org.oagi.score.gateway.http.api.export.impl.StandaloneExportContextBuilder;
 import org.oagi.score.gateway.http.api.export.impl.XMLExportSchemaModuleVisitor;
-import org.oagi.score.gateway.http.api.export.model.ASCCP;
 import org.oagi.score.gateway.http.api.export.model.SchemaModule;
-import org.oagi.score.gateway.http.api.external.model.AssociatedComponentType;
 import org.oagi.score.gateway.http.api.external.model.ExternalChildComponentRecord;
 import org.oagi.score.gateway.http.api.external.repository.ExternalComponentsRepository;
 import org.oagi.score.gateway.http.api.library_management.model.LibraryId;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseId;
-import org.oagi.score.gateway.http.api.release_management.model.ReleaseState;
 import org.oagi.score.gateway.http.common.model.ExportStandaloneSchemaResponse;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
@@ -25,8 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
-import java.sql.Timestamp;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 

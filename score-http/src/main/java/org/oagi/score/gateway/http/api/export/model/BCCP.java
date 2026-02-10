@@ -4,6 +4,8 @@ import org.oagi.score.gateway.http.api.cc_management.model.bccp.BccpSummaryRecor
 import org.oagi.score.gateway.http.api.cc_management.model.dt.DtSummaryRecord;
 import org.oagi.score.gateway.http.api.namespace_management.model.NamespaceId;
 
+import static org.oagi.score.gateway.http.api.export.model.ConnectSpecNameResolvers.dtNameResolver;
+
 public class BCCP implements Component {
 
     private BccpSummaryRecord bccp;
@@ -24,7 +26,7 @@ public class BCCP implements Component {
     }
 
     public String getTypeName() {
-        return ModelUtils.getTypeName(dt);
+        return dtNameResolver.apply(dt);
     }
 
     public boolean isNillable() {

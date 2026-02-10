@@ -3,12 +3,6 @@ package org.oagi.score.gateway.http.api.external.repository;
 import org.jooq.DSLContext;
 import org.jooq.Record1;
 import org.jooq.types.ULong;
-
-import static org.jooq.impl.DSL.field;
-import static org.jooq.impl.DSL.name;
-
-import java.sql.Timestamp;
-
 import org.oagi.score.gateway.http.api.cc_management.model.acc.OagisComponentType;
 import org.oagi.score.gateway.http.api.cc_management.model.asccp.AsccpManifestId;
 import org.oagi.score.gateway.http.api.external.model.AssociatedComponentType;
@@ -19,9 +13,14 @@ import org.oagi.score.gateway.http.api.release_management.model.ReleaseState;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
-import java.util.*;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.jooq.impl.DSL.field;
+import static org.jooq.impl.DSL.name;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.*;
 
 

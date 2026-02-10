@@ -15,7 +15,6 @@ import org.oagi.score.gateway.http.api.module_management.model.*;
 import org.oagi.score.gateway.http.api.module_management.repository.ModuleSetReleaseQueryRepository;
 import org.oagi.score.gateway.http.api.module_management.repository.criteria.ModuleSetReleaseListFilterCriteria;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseId;
-import org.oagi.score.gateway.http.api.release_management.model.ReleaseState;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseSummaryRecord;
 import org.oagi.score.gateway.http.api.xbt_management.model.XbtManifestId;
 import org.oagi.score.gateway.http.common.model.*;

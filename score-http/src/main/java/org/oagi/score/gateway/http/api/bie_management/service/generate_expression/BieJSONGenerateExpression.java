@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableMap;
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListSummaryRecord;
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListValueSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.BIE;
-import org.oagi.score.gateway.http.api.bie_management.model.BiePackageSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.Facet;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.abie.AbieSummaryRecord;
@@ -14,6 +13,7 @@ import org.oagi.score.gateway.http.api.bie_management.model.asbie.AsbieSummaryRe
 import org.oagi.score.gateway.http.api.bie_management.model.asbiep.AsbiepSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.bbie.BbieSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.bbie_sc.BbieScSummaryRecord;
+import org.oagi.score.gateway.http.api.bie_management.model.bie_package.BiePackageSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.expression.GenerateExpressionOption;
 import org.oagi.score.gateway.http.api.cc_management.model.acc.AccSummaryRecord;
 import org.oagi.score.gateway.http.api.cc_management.model.acc.OagisComponentType;
@@ -217,7 +217,7 @@ public class BieJSONGenerateExpression implements BieGenerateExpression, Initial
         int maxVal = asbie.cardinality().max();
         // Issue #562
         boolean isArray = (maxVal < 0 || maxVal > 1);
-        boolean isNillable = asbie.nillable();
+        boolean isNillable = (asbie.nillable() != null) ? asbie.nillable() : false;
 
         boolean reused = !asbie.ownerTopLevelAsbiepId().equals(asbiep.ownerTopLevelAsbiepId());
         if (reused) {
@@ -653,7 +653,7 @@ public class BieJSONGenerateExpression implements BieGenerateExpression, Initial
         int maxVal = bbie.cardinality().max();
         // Issue #562
         boolean isArray = (maxVal < 0 || maxVal > 1);
-        boolean isNillable = bbie.nillable();
+        boolean isNillable = (bbie.nillable() != null) ? bbie.nillable() : false;
 
         String name = convertIdentifierToId(camelCase(bccp.propertyTerm()));
 
@@ -713,7 +713,7 @@ public class BieJSONGenerateExpression implements BieGenerateExpression, Initial
                 }
             }
 
-            ((List<String>) properties.get("required")).add("definition");
+            ((List<String>) properties.get("required")).add("content");
             ((Map<String, Object>) properties.get("properties"))
                     .put("content", oneOf(allOf(contentProperties), isNillable));
 

@@ -8,10 +8,8 @@ import org.oagi.score.gateway.http.api.cc_management.model.blob_content.BlobCont
 import org.oagi.score.gateway.http.api.cc_management.model.blob_content.BlobContentManifestId;
 import org.oagi.score.gateway.http.api.cc_management.model.blob_content.BlobContentSummaryRecord;
 import org.oagi.score.gateway.http.api.cc_management.repository.BlobContentQueryRepository;
-import org.oagi.score.gateway.http.api.library_management.model.LibraryId;
 import org.oagi.score.gateway.http.api.library_management.model.LibrarySummaryRecord;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseId;
-import org.oagi.score.gateway.http.api.release_management.model.ReleaseState;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseSummaryRecord;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;
