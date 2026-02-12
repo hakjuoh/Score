@@ -989,7 +989,7 @@ public class DefaultBieEditTreeController implements BieEditTreeController {
 //                bieEditCodeLists.addAll(basedCodeLists2);
 //                Set<BieEditCodeList> set = new HashSet<BieEditCodeList>(bieEditCodeLists);
 //                bieEditCodeLists.clear();
-//                bieEditCodeLists.addAll(set); // remove dupplicate elements
+//                bieEditCodeLists.addAll(set); // remove duplicate elements
 //            }
 //        }
 //

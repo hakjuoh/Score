@@ -95,7 +95,7 @@ export class ComponentsController {
   @Get('releases')
   @ApiOperation({
     summary: 'Return metadata for all releases available in connectCenter (Score). '
-      + ' If no library is given, then releases will be for the library name specified in the default_library environment variable or if the environemnt variable is not set, '
+      + ' If no library is given, then releases will be for the library name specified in the default_library environment variable or if the environment variable is not set, '
       + ' then the default library will be connectSpec (OAGIS).'
   })
   @ApiProduces()
@@ -111,7 +111,7 @@ export class ComponentsController {
   @Get('releases/latest')
   @ApiOperation({
     summary: 'Return metadata for the latest release available in connectCenter (Score) for a given library.'
-      + ' If no library is given, then this release will be for the library name specified in the default_library environment variable or if the enivorment variable is not set, '
+      + ' If no library is given, then this release will be for the library name specified in the default_library environment variable or if the environment variable is not set, '
       + ' then the default library will be connectSpec (OAGIS).'
   })
   @ApiProduces()

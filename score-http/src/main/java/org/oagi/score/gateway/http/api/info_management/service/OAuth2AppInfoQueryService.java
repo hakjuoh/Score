@@ -42,8 +42,8 @@ public class OAuth2AppInfoQueryService {
                             authorizationRequestBaseUri + "/" + registrationId,
                             oauth2AppRecord.getProviderName(),
                             oauth2AppRecord.getDisplayProviderName(),
-                            oauth2AppRecord.getFontColor(),
-                            oauth2AppRecord.getBackgroundColor()
+                            oauth2AppRecord.getBackgroundColor(),
+                            oauth2AppRecord.getFontColor()
                     );
                 }).collect(Collectors.toList());
     }

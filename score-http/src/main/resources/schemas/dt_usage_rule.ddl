@@ -2,8 +2,8 @@ CREATE TABLE `dt_usage_rule`
 (
     `dt_usage_rule_id`       bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'Primary key of the table.',
     `assigned_usage_rule_id` bigint(20) unsigned NOT NULL COMMENT 'Foreign key to the USAGE_RULE table indicating the usage rule assigned to the DT content component or DT_SC.',
-    `target_dt_id`           bigint(20) unsigned DEFAULT NULL COMMENT 'Foreing key to the DT_ID for assigning a usage rule to the corresponding DT content component.',
-    `target_dt_sc_id`        bigint(20) unsigned DEFAULT NULL COMMENT 'Foreing key to the DT_SC_ID for assigning a usage rule to the corresponding DT_SC.',
+    `target_dt_id`           bigint(20) unsigned DEFAULT NULL COMMENT 'Foreign key to the DT_ID for assigning a usage rule to the corresponding DT content component.',
+    `target_dt_sc_id`        bigint(20) unsigned DEFAULT NULL COMMENT 'Foreign key to the DT_SC_ID for assigning a usage rule to the corresponding DT_SC.',
     PRIMARY KEY (`dt_usage_rule_id`),
     KEY                      `dt_usage_rule_assigned_usage_rule_id_fk` (`assigned_usage_rule_id`),
     KEY                      `dt_usage_rule_target_dt_id_fk` (`target_dt_id`),

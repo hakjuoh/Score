@@ -808,7 +808,7 @@ public class BieCreateFromExistingBieService implements InitializingBean {
         }
 
         private String getPath(String path) {
-            String seperator = sourceAsccpKey + ">";
+            String separator = sourceAsccpKey + ">";
             String[] tokens = path.split(sourceAsccpKey);
             if (tokens.length < 2) {
                 return sourceAsccpKey;
@@ -816,7 +816,7 @@ public class BieCreateFromExistingBieService implements InitializingBean {
                 if (path.endsWith(sourceAsccpKey)) {
                     return sourceAsccpKey;
                 }
-                return seperator + path.split(seperator)[1];
+                return separator + path.split(separator)[1];
             }
         }
 

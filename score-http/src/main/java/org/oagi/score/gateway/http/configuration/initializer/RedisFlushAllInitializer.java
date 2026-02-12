@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.configuration.intializer;
+package org.oagi.score.gateway.http.configuration.initializer;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;

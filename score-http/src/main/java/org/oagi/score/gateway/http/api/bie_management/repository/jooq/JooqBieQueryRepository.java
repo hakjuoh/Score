@@ -559,6 +559,9 @@ public class JooqBieQueryRepository extends JooqBaseRepository implements BieQue
                         BBIE.DEFINITION,
                         BBIE.REMARK,
                         BBIE.EXAMPLE,
+                        BBIE.FACET_MIN_LENGTH,
+                        BBIE.FACET_MAX_LENGTH,
+                        BBIE.FACET_PATTERN,
                         BBIE.OWNER_TOP_LEVEL_ASBIEP_ID)
                 .from(BBIE);
     }
@@ -589,6 +592,11 @@ public class JooqBieQueryRepository extends JooqBaseRepository implements BieQue
             bbie.setDefinition(record.get(BBIE.DEFINITION));
             bbie.setRemark(record.get(BBIE.REMARK));
             bbie.setExample(record.get(BBIE.EXAMPLE));
+            bbie.setFacetMinLength(
+                    (record.get(BBIE.FACET_MIN_LENGTH) != null) ? record.get(BBIE.FACET_MIN_LENGTH).toBigInteger() : null);
+            bbie.setFacetMaxLength(
+                    (record.get(BBIE.FACET_MAX_LENGTH) != null) ? record.get(BBIE.FACET_MAX_LENGTH).toBigInteger() : null);
+            bbie.setFacetPattern(record.get(BBIE.FACET_PATTERN));
             bbie.setOwnerTopLevelAsbiepId(new TopLevelAsbiepId(record.get(BBIE.OWNER_TOP_LEVEL_ASBIEP_ID).toBigInteger()));
             return bbie;
         };
@@ -679,6 +687,9 @@ public class JooqBieQueryRepository extends JooqBaseRepository implements BieQue
                         BBIE_SC.REMARK,
                         BBIE_SC.DISPLAY_NAME,
                         BBIE_SC.EXAMPLE,
+                        BBIE_SC.FACET_MIN_LENGTH,
+                        BBIE_SC.FACET_MAX_LENGTH,
+                        BBIE_SC.FACET_PATTERN,
                         BBIE_SC.OWNER_TOP_LEVEL_ASBIEP_ID)
                 .from(BBIE_SC);
     }
@@ -709,6 +720,11 @@ public class JooqBieQueryRepository extends JooqBaseRepository implements BieQue
             bbieSc.setRemark(record.get(BBIE_SC.REMARK));
             bbieSc.setDisplayName(record.get(BBIE_SC.DISPLAY_NAME));
             bbieSc.setExample(record.get(BBIE_SC.EXAMPLE));
+            bbieSc.setFacetMinLength(
+                    (record.get(BBIE_SC.FACET_MIN_LENGTH) != null) ? record.get(BBIE_SC.FACET_MIN_LENGTH).toBigInteger() : null);
+            bbieSc.setFacetMaxLength(
+                    (record.get(BBIE_SC.FACET_MAX_LENGTH) != null) ? record.get(BBIE_SC.FACET_MAX_LENGTH).toBigInteger() : null);
+            bbieSc.setFacetPattern(record.get(BBIE_SC.FACET_PATTERN));
             bbieSc.setOwnerTopLevelAsbiepId(new TopLevelAsbiepId(record.get(BBIE_SC.OWNER_TOP_LEVEL_ASBIEP_ID).toBigInteger()));
             return bbieSc;
         };

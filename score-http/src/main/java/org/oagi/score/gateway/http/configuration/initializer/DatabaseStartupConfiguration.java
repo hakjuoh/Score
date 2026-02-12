@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.configuration.intializer;
+package org.oagi.score.gateway.http.configuration.initializer;
 
 import org.jooq.DSLContext;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;

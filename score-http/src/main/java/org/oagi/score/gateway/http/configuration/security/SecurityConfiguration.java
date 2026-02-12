@@ -75,7 +75,7 @@ public class SecurityConfiguration {
     private String jwkSetUri;
 
     @Value("${resource-server.allowed-types}")
-    private String alowedTypes;
+    private String allowedTypes;
 
     @Bean
     public OAuth2AuthorizationRequestResolver oAuth2AuthorizationRequestResolver() {
@@ -154,9 +154,9 @@ public class SecurityConfiguration {
     )
             throws Exception {
         if (!applicationConfigurationService.isTenantEnabled(sessionService.getScoreSystemUser()) && StringUtils.hasText(jwkSetUri)) {
-            JOSEObjectTypeVerifier typeVerifier = StringUtils.hasLength(alowedTypes) ?
+            JOSEObjectTypeVerifier typeVerifier = StringUtils.hasLength(allowedTypes) ?
                     new DefaultJOSEObjectTypeVerifier<>(
-                            Arrays.stream(alowedTypes.split(","))
+                            Arrays.stream(allowedTypes.split(","))
                                     .map(e -> new JOSEObjectType(e.trim()))
                                     .collect(Collectors.toSet())
                     ) :

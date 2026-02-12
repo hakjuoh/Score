@@ -371,7 +371,7 @@ public class OpenAPIDocController {
         request.setSuppressRootIndicator(true);
         request.setTagName(assignBieForOasDoc.getTagName());
         String verbOption = assignBieForOasDoc.getVerb();
-        String resoureName = null;
+        String resourceName = null;
         GetOasDocRequest oasDocRequest = new GetOasDocRequest(requester);
         oasDocRequest.setOasDocId(assignBieForOasDoc.getOasDocId());
         GetOasDocResponse oasDocResponse = oasDocService.getOasDoc(requester, oasDocRequest);
@@ -392,14 +392,14 @@ public class OpenAPIDocController {
 
         boolean isArray = request.isMakeArrayIndicator();
         if (oasDocVersion != null) {
-            resoureName = "/" + businessContextName + "/" + oasDocVersion + "/" + ((isArray) ? bieForOasDocPropertyTermWithDash.toLowerCase() + "-list" :
+            resourceName = "/" + businessContextName + "/" + oasDocVersion + "/" + ((isArray) ? bieForOasDocPropertyTermWithDash.toLowerCase() + "-list" :
                     bieForOasDocPropertyTermWithDash.toLowerCase());
 
         } else {
-            resoureName = "/" + businessContextName + "/" + ((isArray) ? bieForOasDocPropertyTermWithDash.toLowerCase() + "-list" :
+            resourceName = "/" + businessContextName + "/" + ((isArray) ? bieForOasDocPropertyTermWithDash.toLowerCase() + "-list" :
                     bieForOasDocPropertyTermWithDash.toLowerCase());
         }
-        request.setPath(resoureName);
+        request.setPath(resourceName);
         request.setVerb(verbOption);
         SetOperationIdWithVerb setOperationIdWithVerb = new SetOperationIdWithVerb(verbOption, businessContextName, assignBieForOasDoc.getPropertyTerm(),
                 isArray);

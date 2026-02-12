@@ -158,7 +158,7 @@ public class ImportConstants {
                     "\n" +
                     "  - Addition of more Open Parties and Quantities from implementation feedback.\n" +
                     "  - Updates to the ConfirmBOD to make easier to use.\n" +
-                    "  - Addtion of DocumentReferences and Attachments for PartyMaster\n" +
+                    "  - Addition of DocumentReferences and Attachments for PartyMaster\n" +
                     "  - Support for UN/CEFACT Core Components 3.0.\n" +
                     "  - Support for UN/CEFACT XML Naming and Design Rules 3.0\n" +
                     "  - Support for UN/CEFACT Data Type Catalog 3.1\n" +
@@ -314,7 +314,7 @@ public class ImportConstants {
                     "\n" +
                     "  Changes to PartyMaster including CustomerPartyMaster and SupplierPartyMaster:\n" +
                     "  - Party profiles for tax, selling, organization, purchasing, payment and item.\n" +
-                    "  - PartyVerfication\n" +
+                    "  - PartyVerification\n" +
                     "\n" +
                     "  Change to Components:\n" +
                     "  - Addition of Invoice Adjustments, Payment Reference, Invoice Dispute.\n" +
