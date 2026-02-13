@@ -7,6 +7,7 @@ import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListSu
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListValueSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.BIE;
 import org.oagi.score.gateway.http.api.bie_management.model.Facet;
+import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.abie.AbieSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.asbie.AsbieSummaryRecord;
@@ -60,6 +61,7 @@ public class BieJSONGenerateExpression implements BieGenerateExpression, Initial
     private ObjectMapper mapper;
 
     private Map<String, Object> root;
+    private Map<TopLevelAsbiepId, String> reusedTopLevelAsbiepNameMap;
     private GenerateExpressionOption option;
     private ScoreUser requester;
 
@@ -77,6 +79,7 @@ public class BieJSONGenerateExpression implements BieGenerateExpression, Initial
         mapper.enable(SerializationFeature.INDENT_OUTPUT);
 
         root = null;
+        reusedTopLevelAsbiepNameMap = null;
     }
 
     @Override
@@ -145,6 +148,8 @@ public class BieJSONGenerateExpression implements BieGenerateExpression, Initial
                 root.put("properties", properties);
                 definitions = new LinkedHashMap();
                 root.put("definitions", definitions);
+
+                reusedTopLevelAsbiepNameMap = new LinkedHashMap<>();
             } else {
                 definitions = (Map<String, Object>) root.get("definitions");
             }
@@ -278,7 +283,7 @@ public class BieJSONGenerateExpression implements BieGenerateExpression, Initial
             // Issue #1483
             // make a global property for an array
             if (reused) {
-                properties = makeGlobalPropertyIfArray(definitions, name, properties);
+                properties = makeGlobalPropertyIfArray(definitions, resolveReusedSchemaName(definitions, asbiep), properties);
             }
         }
 
@@ -773,19 +778,39 @@ public class BieJSONGenerateExpression implements BieGenerateExpression, Initial
         return properties;
     }
 
-    private String getReference(Map<String, Object> definitions, AsbiepSummaryRecord asbiep,
+    private String getReference(Map<String, Object> definitions,
+                                AsbiepSummaryRecord asbiep,
                                 GenerationContext generationContext) {
-        AsccpSummaryRecord asccp = generationContext.queryBasedASCCP(asbiep);
-        String name = convertIdentifierToId(camelCase(asccp.propertyTerm()));
-        if (!definitions.containsKey(name)) {
+        String refNameOfTopLevelAsbiep = resolveReusedSchemaName(definitions, asbiep);
+        if (!definitions.containsKey(refNameOfTopLevelAsbiep)) {
             TopLevelAsbiepSummaryRecord refTopLevelAsbiep = generationContext.findTopLevelAsbiep(asbiep.ownerTopLevelAsbiepId());
             Map<String, Object> properties = new LinkedHashMap<>();
             properties.put("required", new ArrayList());
             fillProperties(properties, definitions, refTopLevelAsbiep, false, generationContext);
             suppressRootProperty(properties, false);
-            definitions.put(name, properties);
+            definitions.put(refNameOfTopLevelAsbiep, properties);
         }
-        return "#/definitions/" + name;
+        return "#/definitions/" + refNameOfTopLevelAsbiep;
+    }
+
+    private String resolveReusedSchemaName(Map<String, Object> definitions,
+                                           AsbiepSummaryRecord asbiep) {
+        AsccpSummaryRecord asccp = generationContext.queryBasedASCCP(asbiep);
+        String baseName = convertIdentifierToId(camelCase(asccp.propertyTerm()));
+        TopLevelAsbiepId ownerTopLevelAsbiepId = asbiep.ownerTopLevelAsbiepId();
+        String existing = reusedTopLevelAsbiepNameMap.get(ownerTopLevelAsbiepId);
+        if (StringUtils.hasLength(existing)) {
+            return existing;
+        }
+
+        String candidate = baseName;
+        int suffix = 1;
+        while (definitions.containsKey(candidate)) {
+            candidate = baseName + suffix++;
+        }
+
+        reusedTopLevelAsbiepNameMap.put(ownerTopLevelAsbiepId, candidate);
+        return candidate;
     }
 
     private String getReference(Map<String, Object> definitions, BbieSummaryRecord bbie, DtSummaryRecord bdt,

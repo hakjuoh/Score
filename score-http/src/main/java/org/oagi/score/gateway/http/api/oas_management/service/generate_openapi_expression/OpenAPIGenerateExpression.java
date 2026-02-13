@@ -8,6 +8,7 @@ import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListSu
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListValueSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.BIE;
 import org.oagi.score.gateway.http.api.bie_management.model.Facet;
+import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepId;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.abie.AbieSummaryRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.asbie.AsbieSummaryRecord;
@@ -73,6 +74,7 @@ public class OpenAPIGenerateExpression implements BieGenerateOpenApiExpression, 
 
     private Map<String, Object> root;
     private Map<String, Object> schemas = new LinkedHashMap<>();
+    private Map<TopLevelAsbiepId, String> reusedTopLevelAsbiepNameMap;
 
     public OpenAPIGenerateExpression(GenerationContext generationContext, OpenAPIGenerateExpressionOption option) {
         this.generationContext = generationContext;
@@ -103,6 +105,7 @@ public class OpenAPIGenerateExpression implements BieGenerateOpenApiExpression, 
 
         root = null;
         schemas = new LinkedHashMap<>();
+        reusedTopLevelAsbiepNameMap = null;
     }
 
     @Override
@@ -907,7 +910,7 @@ public class OpenAPIGenerateExpression implements BieGenerateOpenApiExpression, 
             // Issue #1483
             // make a global property for an array
             if (reused) {
-                properties = makeGlobalPropertyIfArray(schemas, name, properties);
+                properties = makeGlobalPropertyIfArray(schemas, resolveReusedSchemaName(asbiep), properties);
             }
         }
 
@@ -1412,9 +1415,7 @@ public class OpenAPIGenerateExpression implements BieGenerateOpenApiExpression, 
                                          String schemaName,
                                          boolean suppressRootProperty) {
         if (schemaName == null) {
-            AsccpSummaryRecord asccp = generationContext.queryBasedASCCP(asbiep);
-            String propertyName = convertIdentifierToId(camelCase(asccp.propertyTerm()));
-            schemaName = propertyName;
+            schemaName = resolveReusedSchemaName(asbiep);
         }
 
         TopLevelAsbiepSummaryRecord refTopLevelAsbiep = generationContext.findTopLevelAsbiep(asbiep.ownerTopLevelAsbiepId());
@@ -1444,6 +1445,30 @@ public class OpenAPIGenerateExpression implements BieGenerateOpenApiExpression, 
 
         String path = "#/components/schemas/" + schemaName;
         return new SchemaReference(schemaName, path, properties);
+    }
+
+    private String resolveReusedSchemaName(AsbiepSummaryRecord asbiep) {
+        if (reusedTopLevelAsbiepNameMap == null) {
+            reusedTopLevelAsbiepNameMap = new LinkedHashMap<>();
+        }
+
+        TopLevelAsbiepId ownerTopLevelAsbiepId = asbiep.ownerTopLevelAsbiepId();
+        String existing = reusedTopLevelAsbiepNameMap.get(ownerTopLevelAsbiepId);
+        if (StringUtils.hasLength(existing)) {
+            return existing;
+        }
+
+        AsccpSummaryRecord asccp = generationContext.queryBasedASCCP(asbiep);
+        String baseName = convertIdentifierToId(camelCase(asccp.propertyTerm()));
+
+        String candidate = baseName;
+        int suffix = 1;
+        while (schemas.containsKey(candidate)) {
+            candidate = baseName + suffix++;
+        }
+
+        reusedTopLevelAsbiepNameMap.put(ownerTopLevelAsbiepId, candidate);
+        return candidate;
     }
 
     private String getReference(Map<String, Object> schemas, BbieSummaryRecord bbie, DtSummaryRecord bdt,
