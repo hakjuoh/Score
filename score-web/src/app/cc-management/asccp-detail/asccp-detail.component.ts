@@ -969,7 +969,13 @@ export class AsccpDetailComponent implements OnInit {
     if (!node) {
       node = this.selectedNode;
     }
-    this.commentControl.toggleCommentSlide(type, node.detail);
+    if (!node.detail) {
+      this.dataSource.loadDetail(node, (detail: CcNodeInfo) => {
+        this.commentControl.toggleCommentSlide(type, detail);
+      });
+    } else {
+      this.commentControl.toggleCommentSlide(type, node.detail);
+    }
   }
 
   scrollToNode(node: CcFlatNode, delay?: number) {
