@@ -27,6 +27,7 @@ import {LibrarySummary} from '../../library-management/domain/library';
 import {LibraryService} from '../../library-management/domain/library.service';
 import {MatDialog, MatDialogConfig} from '@angular/material/dialog';
 import {ReleaseDiagramDialogComponent} from '../release-diagram-dialog/release-diagram-dialog.component';
+import {ReleaseImportDialogComponent} from '../release-import-dialog/release-import-dialog.component';
 
 @Component({
   standalone: false,
@@ -354,6 +355,91 @@ export class ReleaseListComponent implements OnInit {
 
   create() {
     this.router.navigateByUrl('/release/create');
+  }
+
+  importRelease() {
+    const dialogRef = this.dialog.open(ReleaseImportDialogComponent, {
+      width: '580px',
+      autoFocus: false
+    });
+
+    dialogRef.afterClosed().subscribe((file?: File | null) => {
+      if (file) {
+        this.checkImportReleaseFile(file);
+      }
+    });
+  }
+
+  private checkImportReleaseFile(file: File) {
+    this.loading = true;
+    this.service.checkImportRelease(this.toImportFormData(file)).pipe(
+      finalize(() => {
+        this.loading = false;
+      })
+    ).subscribe(response => {
+      if (response?.blocked) {
+        const dialogConfig = this.confirmDialogService.newConfig();
+        dialogConfig.data.header = 'Missing dependency';
+        dialogConfig.data.content = [
+          response.message || 'A dependent release must be imported before this release.'
+        ];
+
+        this.confirmDialogService.open(dialogConfig);
+        return;
+      }
+
+      if (response?.exists) {
+        const dialogConfig = this.confirmDialogService.newConfig();
+        dialogConfig.data.header = 'Overwrite existing release?';
+        dialogConfig.data.content = [
+          response.message || `${response.libraryName} ${response.releaseNum} release already exists.`,
+          'Do you want to overwrite the existing release data?'
+        ];
+        dialogConfig.data.action = 'Overwrite';
+
+        this.confirmDialogService.open(dialogConfig).afterClosed()
+          .subscribe(result => {
+            if (result) {
+              this.uploadReleaseFile(file, true);
+            }
+          });
+        return;
+      }
+
+      this.uploadReleaseFile(file, false);
+    }, error => {
+      const message = error?.error?.message || error?.error || 'Failed to check release import.';
+      this.snackBar.open(message, '', {
+        duration: 5000,
+      });
+    });
+  }
+
+  private uploadReleaseFile(file: File, overwrite = false) {
+    const formData = this.toImportFormData(file);
+
+    this.loading = true;
+    this.service.importRelease(formData, overwrite).pipe(
+      finalize(() => {
+        this.loading = false;
+      })
+    ).subscribe((response) => {
+      this.snackBar.open('Imported ' + response.releaseId, '', {
+        duration: 3000,
+      });
+      this.loadReleases();
+    }, error => {
+      const message = error?.error?.message || error?.error || 'Failed to import release.';
+      this.snackBar.open(message, '', {
+        duration: 5000,
+      });
+    });
+  }
+
+  private toImportFormData(file: File): FormData {
+    const formData = new FormData();
+    formData.append('file', file);
+    return formData;
   }
 
   createDraft(release: ReleaseSummary) {

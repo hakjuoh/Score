@@ -6,6 +6,7 @@ import org.oagi.score.gateway.http.common.model.PageRequest;
 import org.oagi.score.gateway.http.common.model.ResultAndCount;
 
 import java.util.List;
+import java.util.Set;
 
 public interface AccountQueryRepository {
 
@@ -14,7 +15,9 @@ public interface AccountQueryRepository {
 
     AccountDetailsRecord getAccountDetails(UserId appUserId);
 
-    AccountDetailsRecord getAccountDetailsByLoginId(String username);
+    AccountDetailsRecord getAccountDetailsByLoginId(String loginId);
+
+    List<AccountDetailsRecord> getAccountDetailsListByLoginIds(Set<String> loginIds);
 
     String getEncodedPassword(UserId userId);
 

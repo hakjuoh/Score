@@ -27,6 +27,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.math.BigInteger;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -85,6 +86,43 @@ public abstract class JooqBaseRepository {
 
     public final Date toDate(LocalDateTime localDateTime) {
         return Date.from(localDateTime.atZone(ZoneId.systemDefault()).toInstant());
+    }
+
+    public final String toTimestamp(LocalDateTime localDateTime) {
+        if (localDateTime == null) {
+            return null;
+        }
+        return localDateTime.atZone(ZoneId.systemDefault()).toInstant().toString();
+    }
+
+    public final BigInteger toBigInteger(Number value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigInteger bigInteger) {
+            return bigInteger;
+        }
+        if (value instanceof ULong unsignedLong) {
+            return unsignedLong.toBigInteger();
+        }
+        return BigInteger.valueOf(value.longValue());
+    }
+
+    public final LinkedHashMap<String, Object> payloadRowWithInternalId(Object internalId, Object... keyValuePairs) {
+        LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+        row.put("_internal_id", internalId);
+        for (int i = 0; i < keyValuePairs.length; i += 2) {
+            row.put((String) keyValuePairs[i], keyValuePairs[i + 1]);
+        }
+        return row;
+    }
+
+    public final LinkedHashMap<String, Object> payloadRow(Object... keyValuePairs) {
+        LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+        for (int i = 0; i < keyValuePairs.length; i += 2) {
+            row.put((String) keyValuePairs[i], keyValuePairs[i + 1]);
+        }
+        return row;
     }
 
     public final Stream<? extends Field<?>> creatorFields() {

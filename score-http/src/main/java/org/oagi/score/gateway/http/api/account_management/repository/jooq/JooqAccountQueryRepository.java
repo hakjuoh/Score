@@ -14,10 +14,8 @@ import org.oagi.score.gateway.http.common.model.Sort;
 import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 
-import java.util.ArrayList;
-import java.util.Collection;
+import java.util.*;
 import java.util.Comparator;
-import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.jooq.impl.DSL.and;
@@ -228,15 +226,27 @@ public class JooqAccountQueryRepository extends JooqBaseRepository implements Ac
     }
 
     @Override
-    public AccountDetailsRecord getAccountDetailsByLoginId(String username) {
-        if (!hasLength(username)) {
+    public AccountDetailsRecord getAccountDetailsByLoginId(String loginId) {
+        if (!hasLength(loginId)) {
             return null;
         }
 
         var queryBuilder = new GetAccountDetailsQueryBuilder();
         return queryBuilder.select()
-                .where(APP_USER.LOGIN_ID.eq(username))
+                .where(APP_USER.LOGIN_ID.eq(loginId))
                 .fetchOne(queryBuilder.mapper());
+    }
+
+    @Override
+    public List<AccountDetailsRecord> getAccountDetailsListByLoginIds(Set<String> loginIds) {
+        if (loginIds == null || loginIds.isEmpty()) {
+            return List.of();
+        }
+        var queryBuilder = new GetAccountDetailsQueryBuilder();
+        return queryBuilder.select()
+                .where(APP_USER.LOGIN_ID.in(loginIds))
+                .orderBy(APP_USER.LOGIN_ID.asc())
+                .fetch(queryBuilder.mapper());
     }
 
     private class GetAccountDetailsQueryBuilder {

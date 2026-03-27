@@ -64,8 +64,12 @@ import org.oagi.score.gateway.http.api.namespace_management.repository.jooq.Jooq
 import org.oagi.score.gateway.http.api.oas_management.repository.*;
 import org.oagi.score.gateway.http.api.oas_management.repository.jooq.*;
 import org.oagi.score.gateway.http.api.release_management.repository.ReleaseCommandRepository;
+import org.oagi.score.gateway.http.api.release_management.repository.ReleaseExportQueryRepository;
+import org.oagi.score.gateway.http.api.release_management.repository.ReleaseImportCommandRepository;
 import org.oagi.score.gateway.http.api.release_management.repository.ReleaseQueryRepository;
 import org.oagi.score.gateway.http.api.release_management.repository.jooq.JooqReleaseCommandRepository;
+import org.oagi.score.gateway.http.api.release_management.repository.jooq.JooqReleaseExportQueryRepository;
+import org.oagi.score.gateway.http.api.release_management.repository.jooq.JooqReleaseImportCommandRepository;
 import org.oagi.score.gateway.http.api.release_management.repository.jooq.JooqReleaseQueryRepository;
 import org.oagi.score.gateway.http.api.tag_management.repository.TagCommandRepository;
 import org.oagi.score.gateway.http.api.tag_management.repository.TagQueryRepository;
@@ -255,6 +259,14 @@ public class RepositoryFactory {
 
     public ReleaseQueryRepository releaseQueryRepository(ScoreUser requester) {
         return new JooqReleaseQueryRepository(dslContext, requester, this);
+    }
+
+    public ReleaseExportQueryRepository releaseExportQueryRepository(ScoreUser requester) {
+        return new JooqReleaseExportQueryRepository(dslContext, requester, this);
+    }
+
+    public ReleaseImportCommandRepository releaseImportCommandRepository(ScoreUser requester) {
+        return new JooqReleaseImportCommandRepository(dslContext, requester, this);
     }
 
     public LibraryCommandRepository libraryCommandRepository(ScoreUser requester) {

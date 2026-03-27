@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.oagi.score.gateway.http.api.library_management.model.LibraryId;
 import org.oagi.score.gateway.http.api.namespace_management.model.NamespaceId;
 import org.oagi.score.gateway.http.api.plantuml.service.PlantUmlService;
+import org.oagi.score.gateway.http.api.release_management.controller.payload.ExportReleaseResponse;
 import org.oagi.score.gateway.http.api.release_management.controller.payload.GenerateMigrationScriptResponse;
 import org.oagi.score.gateway.http.api.release_management.model.*;
 import org.oagi.score.gateway.http.api.release_management.repository.criteria.ReleaseListFilterCriteria;
@@ -252,6 +253,21 @@ public class ReleaseQueryController {
                 .contentType(MediaType.parseMediaType("application/zip"))
                 .contentLength(response.getFile().length())
                 .body(new DeleteOnCloseFileSystemResource(response.getFile()));
+    }
+
+    @GetMapping(value = "/{releaseId:[\\d]+}/export")
+    public ResponseEntity<DeleteOnCloseFileSystemResource> exportRelease(
+            @AuthenticationPrincipal AuthenticatedPrincipal user,
+            @PathVariable("releaseId") ReleaseId releaseId) throws Exception {
+
+        ExportReleaseResponse response =
+                releaseQueryService.exportRelease(sessionService.asScoreUser(user), releaseId);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + response.filename() + "\"")
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .contentLength(response.file().length())
+                .body(new DeleteOnCloseFileSystemResource(response.file()));
     }
 
     @GetMapping(value = "/{releaseId:[\\d]+}/plantuml")

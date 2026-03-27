@@ -197,6 +197,16 @@ export class ReleaseDetailComponent implements OnInit {
     });
   }
 
+  exportRelease() {
+    this.isLoading = true;
+    this.service.exportRelease(this.releaseDetail.releaseId).subscribe(resp => {
+      saveAsBlobResponse(resp);
+      this.isLoading = false;
+    }, err => {
+      this.isLoading = false;
+    });
+  }
+
   generateMigrationScript() {
     this.isLoading = true;
     this.service.generateMigrationScript(this.releaseDetail.releaseId).subscribe(resp => {

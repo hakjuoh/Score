@@ -6,6 +6,9 @@
         (libraryChange)="onLibraryChange($event)"/>
       <span class="flex-11-auto"></span>
       @if (userToken.roles.includes('developer')) {
+        <button mat-raised-button class="ms-2" (click)="importRelease()">
+          Import Release
+        </button>
         <button mat-raised-button class="ms-2" color="primary" routerLink="create">
           New Release
         </button>

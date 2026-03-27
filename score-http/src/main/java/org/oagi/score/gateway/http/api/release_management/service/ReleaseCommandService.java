@@ -1,5 +1,7 @@
 package org.oagi.score.gateway.http.api.release_management.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListManifestId;
 import org.oagi.score.gateway.http.api.agency_id_management.service.AgencyIdListCommandService;
@@ -13,7 +15,9 @@ import org.oagi.score.gateway.http.api.code_list_management.model.CodeListManife
 import org.oagi.score.gateway.http.api.code_list_management.service.CodeListCommandService;
 import org.oagi.score.gateway.http.api.module_management.model.ModuleSetReleaseSummaryRecord;
 import org.oagi.score.gateway.http.api.release_management.controller.payload.*;
+import org.oagi.score.gateway.http.api.release_management.model.ReleaseExport;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseId;
+import org.oagi.score.gateway.http.api.release_management.model.ReleaseImport;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseState;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseSummaryRecord;
 import org.oagi.score.gateway.http.api.release_management.model.event.ReleaseCleanupEvent;
@@ -36,12 +40,20 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import static org.oagi.score.gateway.http.api.cc_management.model.CcState.Candidate;
 import static org.oagi.score.gateway.http.api.cc_management.model.CcState.ReleaseDraft;
@@ -84,6 +96,9 @@ public class ReleaseCommandService implements InitializingBean {
 
     @Autowired
     private EventListenerContainer eventListenerContainer;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private final String RELEASE_CREATE_REQUEST_EVENT = "releaseCreateRequestEvent";
     private final String RELEASE_CLEANUP_EVENT = "releaseCleanupEvent";
@@ -198,6 +213,63 @@ public class ReleaseCommandService implements InitializingBean {
         for (ReleaseId releaseId : releaseIds) {
             discard(requester, releaseId);
         }
+    }
+
+    public ReleaseImport.Check checkImportRelease(ScoreUser requester, MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("'file' is required.");
+        }
+
+        ReleaseImport.Bundle bundle = readImportBundle(file, false);
+        var command = repositoryFactory.releaseImportCommandRepository(requester);
+        return command.checkImport(bundle);
+    }
+
+    public ReleaseId importRelease(ScoreUser requester, MultipartFile file, boolean overwrite) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("'file' is required.");
+        }
+
+        ReleaseImport.Bundle bundle = readImportBundle(file, overwrite);
+        var command = repositoryFactory.releaseImportCommandRepository(requester);
+        return command.importRelease(bundle);
+    }
+
+    private ReleaseImport.Bundle readImportBundle(MultipartFile file, boolean overwrite) throws IOException {
+        Map<String, byte[]> entries = new LinkedHashMap<>();
+        try (InputStream inputStream = file.getInputStream();
+             ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
+            ZipEntry entry;
+            while ((entry = zipInputStream.getNextEntry()) != null) {
+                if (!entry.isDirectory()) {
+                    entries.put(entry.getName(), zipInputStream.readAllBytes());
+                }
+                zipInputStream.closeEntry();
+            }
+        }
+
+        if (!entries.containsKey("metadata.json")) {
+            throw new IllegalArgumentException("metadata.json is missing.");
+        }
+
+        ReleaseExport.Metadata metadata = objectMapper.readValue(entries.get("metadata.json"), ReleaseExport.Metadata.class);
+        Map<String, List<Map<String, Object>>> payloadsByTable = new LinkedHashMap<>();
+        TypeReference<List<Map<String, Object>>> payloadType = new TypeReference<>() {
+        };
+
+        for (ReleaseExport.PayloadFile payloadFile : metadata.payloadFiles()) {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (String payloadFilename : payloadFile.files()) {
+                byte[] payload = entries.get(payloadFilename);
+                if (payload == null) {
+                    throw new IllegalArgumentException(payloadFilename + " is missing.");
+                }
+                rows.addAll(objectMapper.readValue(payload, payloadType));
+            }
+            payloadsByTable.put(payloadFile.table(), rows);
+        }
+
+        return new ReleaseImport.Bundle(metadata, payloadsByTable, overwrite);
     }
 
     public void transitState(ScoreUser requester,

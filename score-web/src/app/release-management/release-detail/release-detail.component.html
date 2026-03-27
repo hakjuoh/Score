@@ -89,6 +89,10 @@
               What's changed
             </button>
           }
+          <button mat-raised-button color="accent"
+            (click)="exportRelease()">
+            Export Release
+          </button>
           @if (releaseDetail.state === 'Published' && releaseDetail.latestRelease) {
             <button mat-raised-button color="accent"
               (click)="generateMigrationScript()">
@@ -104,6 +108,10 @@
     <div class="row action-group m-0">
       <div class="col-12 actions-wrap">
         <div class="actions">
+          <button mat-raised-button color="accent"
+            (click)="exportRelease()">
+            Export Release
+          </button>
           @if (releaseDetail.state === 'Draft' || releaseDetail.state === 'Published') {
             <button mat-raised-button color="info"
               (click)="openWhatsChangedDialog()">

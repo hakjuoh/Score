@@ -142,6 +142,22 @@ export class ReleaseService {
     });
   }
 
+  exportRelease(releaseId: number): Observable<HttpResponse<Blob>> {
+    return this.http.get('/api/releases/' + releaseId + '/export', {
+      observe: 'response',
+      responseType: 'blob'
+    });
+  }
+
+  checkImportRelease(formData: FormData): Observable<any> {
+    return this.http.post('/api/releases/import/check', formData);
+  }
+
+  importRelease(formData: FormData, overwrite = false): Observable<any> {
+    const params = new HttpParams().set('overwrite', String(overwrite));
+    return this.http.post('/api/releases/import', formData, {params});
+  }
+
   getPlantUml(releaseId: number, options: {}): Observable<any> {
     let params = new HttpParams();
     if (!!options) {

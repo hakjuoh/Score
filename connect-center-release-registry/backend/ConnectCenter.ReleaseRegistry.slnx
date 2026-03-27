@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ConnectCenter.ReleaseRegistry.Api/ConnectCenter.ReleaseRegistry.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ConnectCenter.ReleaseRegistry.Api.Tests/ConnectCenter.ReleaseRegistry.Api.Tests.csproj" />
+  </Folder>
+</Solution>

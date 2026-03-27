@@ -10,8 +10,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.AuthenticatedPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigInteger;
+import java.io.IOException;
 
 import static java.util.stream.Collectors.toSet;
 import static org.oagi.score.gateway.http.common.util.Utility.separate;
@@ -85,6 +87,29 @@ public class ReleaseCommandController {
                                                  @RequestBody ReleaseValidationRequest request) {
         request.setReleaseId(releaseId);
         return releaseCommandService.createDraft(sessionService.asScoreUser(user), request);
+    }
+
+    @Operation(summary = "Import a release package")
+    @PostMapping(value = "/import/check")
+    public ImportReleaseCheckResponse checkImportRelease(@AuthenticationPrincipal AuthenticatedPrincipal user,
+                                                         @RequestParam("file") MultipartFile file) throws IOException {
+        var result = releaseCommandService.checkImportRelease(sessionService.asScoreUser(user), file);
+        return new ImportReleaseCheckResponse(
+                result.blocked(),
+                result.exists(),
+                result.existingReleaseId(),
+                result.libraryName(),
+                result.releaseNum(),
+                result.message());
+    }
+
+    @Operation(summary = "Import a release package")
+    @PostMapping(value = "/import")
+    public ImportReleaseResponse importRelease(@AuthenticationPrincipal AuthenticatedPrincipal user,
+                                               @RequestParam("file") MultipartFile file,
+                                               @RequestParam(name = "overwrite", defaultValue = "false") boolean overwrite) throws IOException {
+        ReleaseId releaseId = releaseCommandService.importRelease(sessionService.asScoreUser(user), file, overwrite);
+        return new ImportReleaseResponse(releaseId, "success", "");
     }
 
 }

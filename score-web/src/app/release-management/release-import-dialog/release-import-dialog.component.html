@@ -1,0 +1,42 @@
+<div class="header d-flex align-items-center" mat-dialog-title>
+  <span>Import Release</span>
+  <span class="flex-11-auto"></span>
+  <button mat-icon-button [mat-dialog-close]="null">
+    <mat-icon>close</mat-icon>
+  </button>
+</div>
+
+<div class="content" mat-dialog-content>
+  <input #fileInput type="file" hidden accept=".zip,application/zip" (change)="onFileSelected($event)">
+
+  @if (!selectedFile) {
+    <div class="drop-zone"
+      [class.dragging]="dragging"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave($event)"
+      (drop)="onDrop($event)">
+      <mat-icon class="drop-zone-icon">upload_file</mat-icon>
+      <div class="drop-zone-title">Drag and drop a release export ZIP here</div>
+      <div class="drop-zone-subtitle">Import one release package at a time</div>
+      <button mat-stroked-button type="button" (click)="browse()">Browse File</button>
+    </div>
+  } @else {
+    <div class="selected-file d-flex align-items-center">
+      <div>
+        <div class="selected-file-label">Selected file</div>
+        <div class="selected-file-name">{{ selectedFile.name }}</div>
+        <div class="selected-file-size">{{ selectedFile.size | number }} bytes</div>
+      </div>
+      <span class="flex-11-auto"></span>
+      <button mat-button type="button" (click)="browse()">Replace</button>
+      <button mat-button type="button" (click)="clearFile()">Remove</button>
+    </div>
+  }
+</div>
+
+<div class="actions" mat-dialog-actions align="end">
+  <button mat-raised-button color="warn" class="cancel-button" [mat-dialog-close]="null">
+    Cancel
+  </button>
+  <button mat-flat-button color="primary" [disabled]="!selectedFile" (click)="submit()">Import</button>
+</div>

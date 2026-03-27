@@ -5,6 +5,10 @@ server:
     mime-types: text/html,text/css,application/javascript,application/json
 
 spring:
+  devtools:
+    restart:
+      enabled: true
+
   aop:
     proxy-target-class: true
 
@@ -42,6 +46,11 @@ spring:
 
   main:
     allow-circular-references: true
+
+  servlet:
+    multipart:
+      max-file-size: 256MB
+      max-request-size: 256MB
 
   ai:
     ollama:
