@@ -18,7 +18,8 @@ public class ScoreRedisCacheManager extends RedisCacheManager {
     public ScoreRedisCacheManager(RedisConnectionFactory connectionFactory,
                                   RedisCacheWriter cacheWriter,
                                   RedisCacheConfiguration defaultCacheConfiguration) {
-        super(cacheWriter, defaultCacheConfiguration, Collections.emptyMap(), true);
+        // Spring Data Redis 4 reordered this constructor to (writer, config, allowRuntimeCacheCreation, initialCaches) (#1750).
+        super(cacheWriter, defaultCacheConfiguration, true, Collections.emptyMap());
 
         this.connectionFactory = connectionFactory;
         this.cacheWriter = cacheWriter;

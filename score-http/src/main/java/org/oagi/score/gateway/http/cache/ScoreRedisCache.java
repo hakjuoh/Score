@@ -24,7 +24,8 @@ public class ScoreRedisCache extends RedisCache {
     protected Object lookup(Object key) {
         Object obj = super.lookup(key);
         if (obj != null) {
-            Duration ttl = getCacheConfiguration().getTtl();
+            // Spring Data Redis 4 removed RedisCacheConfiguration.getTtl() in favour of a TtlFunction (#1750).
+            Duration ttl = getCacheConfiguration().getTtlFunction().getTimeToLive(key, obj);
             if (shouldExpireWithin(ttl)) {
                 RedisConnection connection = connectionFactory.getConnection();
                 try {
