@@ -96,11 +96,6 @@
     </properties>
 
     <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-properties-migrator</artifactId>
-            <scope>runtime</scope>
-        </dependency>
         <!-- Jackson 2 stop-gap bridge (#1750): Spring Boot 4 defaults to Jackson 3 (tools.jackson).
              This keeps a Jackson 2 (com.fasterxml.jackson) ObjectMapper auto-configured and on the
              classpath for the code still on Jackson 2 (and Redisson's Jackson 2 codec). Paired with
