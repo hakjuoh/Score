@@ -216,8 +216,10 @@ public class ScoreRedisCacheWriter implements RedisCacheWriter {
         });
     }
 
+    // Spring Data Redis 4 renamed the abstract RedisCacheWriter methods: remove -> evict,
+    // clean -> clear (the old names remain as deprecated defaults) (#1750).
     @Override
-    public void remove(String name, byte[] key) {
+    public void evict(String name, byte[] key) {
 
         Assert.notNull(name, "Name must not be null");
         Assert.notNull(key, "Key must not be null");
@@ -227,7 +229,7 @@ public class ScoreRedisCacheWriter implements RedisCacheWriter {
     }
 
     @Override
-    public void clean(String name, byte[] pattern) {
+    public void clear(String name, byte[] pattern) {
 
         Assert.notNull(name, "Name must not be null");
         Assert.notNull(pattern, "Pattern must not be null");
