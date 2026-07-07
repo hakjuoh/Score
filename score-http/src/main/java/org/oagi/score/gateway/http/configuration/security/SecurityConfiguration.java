@@ -22,7 +22,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -134,14 +133,9 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    public WebSecurityCustomizer webSecurityCustomizer() {
-        return (web) -> web.ignoring().requestMatchers("/favicon.ico", "/resources/**", "/error", "/ws/**");
-    }
-
-    @Bean
     public AuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider authenticationProvider = new DaoAuthenticationProvider();
-        authenticationProvider.setUserDetailsService(userDetailsService);
+        // Spring Security 7 removed the no-arg constructor and setUserDetailsService(...) (#1750).
+        DaoAuthenticationProvider authenticationProvider = new DaoAuthenticationProvider(userDetailsService);
         authenticationProvider.setPasswordEncoder(passwordEncoder());
         return authenticationProvider;
     }
@@ -212,8 +206,11 @@ public class SecurityConfiguration {
                             });
                 })
                 .authorizeHttpRequests(requestMatcherRegistry -> {
+                    // Spring Security 7 discourages web.ignoring(); these static/handshake paths are
+                    // permitAll here so they still pass through the filter chain (#1750).
                     List<String> permitAllPaths = new ArrayList<>(
-                            Arrays.asList("/health", "/info/**", "/ws/**", "/oauth2/**", "/ai/**"));
+                            Arrays.asList("/favicon.ico", "/resources/**", "/error",
+                                    "/health", "/info/**", "/ws/**", "/oauth2/**", "/ai/**"));
                     // The GitHub OAuth callback and webhook are reached without a Score session, so they
                     // must be permitAll — but only when the integration is enabled (SCORE_GITHUB_ENABLED);
                     // otherwise the feature is off and these endpoints should not be exposed

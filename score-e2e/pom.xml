@@ -17,8 +17,10 @@
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <!-- Java 21 to match score-http after the Spring Boot 4 upgrade (#1750). -->
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.release>21</maven.compiler.release>
         <jOOQ.configuration.skip>true</jOOQ.configuration.skip>
 
         <db.url>jdbc:mariadb://localhost:3306/oagi</db.url>
@@ -39,7 +41,10 @@
         <awaitility.version>4.3.0</awaitility.version>
         <snakeyaml.version>2.6</snakeyaml.version>
         <mariadb-client.version>3.5.10</mariadb-client.version>
-        <hikariCP.version>6.3.3</hikariCP.version>
+        <!-- Match the HikariCP the Spring Boot 4.1 BOM resolves in score-http (#1750): the Boot 4.1
+             upgrade bumped it 6.3.3 → 7.0.2. HikariCP 7 requires Java 17+, satisfied by the Java 21
+             bump above. Keeps the e2e connection-pool library identical to the backend. -->
+        <hikariCP.version>7.0.2</hikariCP.version>
         <jOOQ.version>3.20.20</jOOQ.version>
         <json.version>20250517</json.version>
         <!-- Matches the score-http poi.version: e2e generates multi-worksheet .xlsx upload
@@ -185,6 +190,22 @@
 
     <build>
         <plugins>
+            <!-- Java 21 + explicit Lombok annotation processor path (#1750): newer JDKs/compiler
+                 plugins no longer reliably auto-discover Lombok on the classpath. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <!-- jOOQ -->
             <plugin>
                 <groupId>org.jooq</groupId>
