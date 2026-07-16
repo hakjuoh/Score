@@ -72,7 +72,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     /**
      * Setter for <code>oagi.bcc.cardinality_max</code>. Maximum cardinality of
      * the TO_BCCP_ID. The valid values are integer -1 and up. Specifically, -1
-     * means unbounded. 0 means prohibited or not to use.',
+     * means unbounded. 0 means prohibited or not to use.
      */
     public void setCardinalityMax(Integer value) {
         set(3, value);
@@ -81,7 +81,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     /**
      * Getter for <code>oagi.bcc.cardinality_max</code>. Maximum cardinality of
      * the TO_BCCP_ID. The valid values are integer -1 and up. Specifically, -1
-     * means unbounded. 0 means prohibited or not to use.',
+     * means unbounded. 0 means prohibited or not to use.
      */
     public Integer getCardinalityMax() {
         return (Integer) get(3);
@@ -93,7 +93,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
      * of the FROM_ACC_ID. 
      * 
      * Note that for the BCC history records, this column always points to the
-     * BCCP_ID of the current record of a BCCP.',
+     * BCCP_ID of the current record of a BCCP.
      */
     public void setToBccpId(ULong value) {
         set(4, value);
@@ -105,7 +105,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
      * of the FROM_ACC_ID. 
      * 
      * Note that for the BCC history records, this column always points to the
-     * BCCP_ID of the current record of a BCCP.',
+     * BCCP_ID of the current record of a BCCP.
      */
     public ULong getToBccpId() {
         return (ULong) get(4);

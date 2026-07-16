@@ -97,9 +97,10 @@ public class Bbie extends TableImpl<BbieRecord> {
     public final TableField<BbieRecord, ULong> BASED_BCC_MANIFEST_ID = createField(DSL.name("based_bcc_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The BASED_BCC_MANIFEST_ID column refers to the BCC_MANIFEST record, which this BBIE contextualizes.");
 
     /**
-     * The column <code>oagi.bbie.path</code>.
+     * The column <code>oagi.bbie.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
-    public final TableField<BbieRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "");
+    public final TableField<BbieRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The path of this node within the component graph; used together with HASH_PATH to locate the node.");
 
     /**
      * The column <code>oagi.bbie.hash_path</code>. hash_path generated from the
@@ -157,11 +158,11 @@ public class Bbie extends TableImpl<BbieRecord> {
     public final TableField<BbieRecord, Integer> CARDINALITY_MIN = createField(DSL.name("cardinality_min"), SQLDataType.INTEGER.nullable(false), this, "The minimum occurrence constraint for the BBIE. A valid value is a non-negative integer.");
 
     /**
-     * The column <code>oagi.bbie.cardinality_max</code>. Maximum occurence
+     * The column <code>oagi.bbie.cardinality_max</code>. Maximum occurrence
      * constraint of the TO_BBIEP_ID. A valid value is an integer from -1 and
      * up. Specifically, -1 means unbounded. 0 means prohibited or not to use.
      */
-    public final TableField<BbieRecord, Integer> CARDINALITY_MAX = createField(DSL.name("cardinality_max"), SQLDataType.INTEGER.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.INTEGER)), this, "Maximum occurence constraint of the TO_BBIEP_ID. A valid value is an integer from -1 and up. Specifically, -1 means unbounded. 0 means prohibited or not to use.");
+    public final TableField<BbieRecord, Integer> CARDINALITY_MAX = createField(DSL.name("cardinality_max"), SQLDataType.INTEGER.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.INTEGER)), this, "Maximum occurrence constraint of the TO_BBIEP_ID. A valid value is an integer from -1 and up. Specifically, -1 means unbounded. 0 means prohibited or not to use.");
 
     /**
      * The column <code>oagi.bbie.facet_min_length</code>. Defines the minimum
@@ -170,10 +171,10 @@ public class Bbie extends TableImpl<BbieRecord> {
     public final TableField<BbieRecord, ULong> FACET_MIN_LENGTH = createField(DSL.name("facet_min_length"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Defines the minimum number of units of length.");
 
     /**
-     * The column <code>oagi.bbie.facet_max_length</code>. Defines the minimum
+     * The column <code>oagi.bbie.facet_max_length</code>. Defines the maximum
      * number of units of length.
      */
-    public final TableField<BbieRecord, ULong> FACET_MAX_LENGTH = createField(DSL.name("facet_max_length"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Defines the minimum number of units of length.");
+    public final TableField<BbieRecord, ULong> FACET_MAX_LENGTH = createField(DSL.name("facet_max_length"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Defines the maximum number of units of length.");
 
     /**
      * The column <code>oagi.bbie.facet_pattern</code>. Defines a constraint on
@@ -190,10 +191,10 @@ public class Bbie extends TableImpl<BbieRecord> {
 
     /**
      * The column <code>oagi.bbie.is_nillable</code>. Indicate whether the field
-     * can have a null  This is corresponding to the nillable flag in the XML
+     * can have a null value. This corresponds to the nillable flag in the XML
      * schema.
      */
-    public final TableField<BbieRecord, Byte> IS_NILLABLE = createField(DSL.name("is_nillable"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicate whether the field can have a null  This is corresponding to the nillable flag in the XML schema.");
+    public final TableField<BbieRecord, Byte> IS_NILLABLE = createField(DSL.name("is_nillable"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicate whether the field can have a null value. This corresponds to the nillable flag in the XML schema.");
 
     /**
      * The column <code>oagi.bbie.fixed_value</code>. This column captures the
@@ -204,23 +205,23 @@ public class Bbie extends TableImpl<BbieRecord> {
 
     /**
      * The column <code>oagi.bbie.is_null</code>. This column indicates whether
-     * the field is fixed to NULL. IS_NULLl can be true only if the IS_NILLABLE
+     * the field is fixed to NULL. IS_NULL can be true only if the IS_NILLABLE
      * is true. If IS_NULL is true then the FIX_VALUE and DEFAULT_VALUE columns
      * cannot have a value.
      */
-    public final TableField<BbieRecord, Byte> IS_NULL = createField(DSL.name("is_null"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "This column indicates whether the field is fixed to NULL. IS_NULLl can be true only if the IS_NILLABLE is true. If IS_NULL is true then the FIX_VALUE and DEFAULT_VALUE columns cannot have a value.");
+    public final TableField<BbieRecord, Byte> IS_NULL = createField(DSL.name("is_null"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "This column indicates whether the field is fixed to NULL. IS_NULL can be true only if the IS_NILLABLE is true. If IS_NULL is true then the FIX_VALUE and DEFAULT_VALUE columns cannot have a value.");
 
     /**
      * The column <code>oagi.bbie.definition</code>. Description to override the
-     * BCC definition. If NULLl, it means that the definition should be
-     * inherited from the based BCC.
+     * BCC definition. If NULL, it means that the definition should be inherited
+     * from the based BCC.
      */
-    public final TableField<BbieRecord, String> DEFINITION = createField(DSL.name("definition"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Description to override the BCC definition. If NULLl, it means that the definition should be inherited from the based BCC.");
+    public final TableField<BbieRecord, String> DEFINITION = createField(DSL.name("definition"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Description to override the BCC definition. If NULL, it means that the definition should be inherited from the based BCC.");
 
     /**
-     * The column <code>oagi.bbie.example</code>.
+     * The column <code>oagi.bbie.example</code>. An example value for the BBIE.
      */
-    public final TableField<BbieRecord, String> EXAMPLE = createField(DSL.name("example"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "");
+    public final TableField<BbieRecord, String> EXAMPLE = createField(DSL.name("example"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "An example value for the BBIE.");
 
     /**
      * The column <code>oagi.bbie.remark</code>. This column allows the user to
@@ -245,9 +246,9 @@ public class Bbie extends TableImpl<BbieRecord> {
 
     /**
      * The column <code>oagi.bbie.last_updated_by</code>. A foreign key
-     * referring to the user who has last updated the ASBIE record. 
+     * referring to the user who has last updated the BBIE record.
      */
-    public final TableField<BbieRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the user who has last updated the ASBIE record. ");
+    public final TableField<BbieRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the user who has last updated the BBIE record.");
 
     /**
      * The column <code>oagi.bbie.creation_timestamp</code>. Timestamp when the
@@ -258,19 +259,20 @@ public class Bbie extends TableImpl<BbieRecord> {
 
     /**
      * The column <code>oagi.bbie.last_update_timestamp</code>. The timestamp
-     * when the ASBIE was last updated.
+     * when the BBIE was last updated.
      */
-    public final TableField<BbieRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the ASBIE was last updated.");
+    public final TableField<BbieRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the BBIE was last updated.");
 
     /**
-     * The column <code>oagi.bbie.seq_key</code>. This indicates the order of
-     * the associations among other siblings. The SEQ_KEY for BIEs is decimal in
-     * order to accomodate the removal of inheritance hierarchy and group. For
-     * example, children of the most abstract ACC will have SEQ_KEY = 1.1, 1.2,
-     * 1.3, and so on; and SEQ_KEY of the next abstraction level ACC will have
-     * SEQ_KEY = 2.1, 2.2, 2.3 and so on so forth.
+     * The column <code>oagi.bbie.seq_key</code>. DEPRECATED. Instead, use
+     * `seq_key` table. This indicates the order of the associations among other
+     * siblings. The SEQ_KEY for BIEs is decimal in order to accommodate the
+     * removal of inheritance hierarchy and group. For example, children of the
+     * most abstract ACC will have SEQ_KEY = 1.1, 1.2, 1.3, and so on; and
+     * SEQ_KEY of the next abstraction level ACC will have SEQ_KEY = 2.1, 2.2,
+     * 2.3 and so on so forth.
      */
-    public final TableField<BbieRecord, BigDecimal> SEQ_KEY = createField(DSL.name("seq_key"), SQLDataType.DECIMAL(10, 2).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.DECIMAL)), this, "This indicates the order of the associations among other siblings. The SEQ_KEY for BIEs is decimal in order to accomodate the removal of inheritance hierarchy and group. For example, children of the most abstract ACC will have SEQ_KEY = 1.1, 1.2, 1.3, and so on; and SEQ_KEY of the next abstraction level ACC will have SEQ_KEY = 2.1, 2.2, 2.3 and so on so forth.");
+    public final TableField<BbieRecord, BigDecimal> SEQ_KEY = createField(DSL.name("seq_key"), SQLDataType.DECIMAL(10, 2).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.DECIMAL)), this, "DEPRECATED. Instead, use `seq_key` table. This indicates the order of the associations among other siblings. The SEQ_KEY for BIEs is decimal in order to accommodate the removal of inheritance hierarchy and group. For example, children of the most abstract ACC will have SEQ_KEY = 1.1, 1.2, 1.3, and so on; and SEQ_KEY of the next abstraction level ACC will have SEQ_KEY = 2.1, 2.2, 2.3 and so on so forth.");
 
     /**
      * The column <code>oagi.bbie.is_used</code>. Flag to indicate whether the

@@ -57,7 +57,7 @@ public class DtUsageRuleRecord extends UpdatableRecordImpl<DtUsageRuleRecord> {
     }
 
     /**
-     * Setter for <code>oagi.dt_usage_rule.target_dt_id</code>. Foreing key to
+     * Setter for <code>oagi.dt_usage_rule.target_dt_id</code>. Foreign key to
      * the DT_ID for assigning a usage rule to the corresponding DT content
      * component.
      */
@@ -66,7 +66,7 @@ public class DtUsageRuleRecord extends UpdatableRecordImpl<DtUsageRuleRecord> {
     }
 
     /**
-     * Getter for <code>oagi.dt_usage_rule.target_dt_id</code>. Foreing key to
+     * Getter for <code>oagi.dt_usage_rule.target_dt_id</code>. Foreign key to
      * the DT_ID for assigning a usage rule to the corresponding DT content
      * component.
      */
@@ -75,7 +75,7 @@ public class DtUsageRuleRecord extends UpdatableRecordImpl<DtUsageRuleRecord> {
     }
 
     /**
-     * Setter for <code>oagi.dt_usage_rule.target_dt_sc_id</code>. Foreing key
+     * Setter for <code>oagi.dt_usage_rule.target_dt_sc_id</code>. Foreign key
      * to the DT_SC_ID for assigning a usage rule to the corresponding DT_SC.
      */
     public void setTargetDtScId(ULong value) {
@@ -83,7 +83,7 @@ public class DtUsageRuleRecord extends UpdatableRecordImpl<DtUsageRuleRecord> {
     }
 
     /**
-     * Getter for <code>oagi.dt_usage_rule.target_dt_sc_id</code>. Foreing key
+     * Getter for <code>oagi.dt_usage_rule.target_dt_sc_id</code>. Foreign key
      * to the DT_SC_ID for assigning a usage rule to the corresponding DT_SC.
      */
     public ULong getTargetDtScId() {

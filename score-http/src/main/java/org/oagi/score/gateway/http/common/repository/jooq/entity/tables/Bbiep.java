@@ -67,9 +67,9 @@ public class Bbiep extends TableImpl<BbiepRecord> {
 
     /**
      * The column <code>oagi.bbiep.bbiep_id</code>. A internal, primary database
-     * key of an BBIEP.
+     * key of a BBIEP.
      */
-    public final TableField<BbiepRecord, ULong> BBIEP_ID = createField(DSL.name("bbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "A internal, primary database key of an BBIEP.");
+    public final TableField<BbiepRecord, ULong> BBIEP_ID = createField(DSL.name("bbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "A internal, primary database key of a BBIEP.");
 
     /**
      * The column <code>oagi.bbiep.guid</code>. A globally unique identifier
@@ -85,9 +85,10 @@ public class Bbiep extends TableImpl<BbiepRecord> {
     public final TableField<BbiepRecord, ULong> BASED_BCCP_MANIFEST_ID = createField(DSL.name("based_bccp_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key pointing to the BCCP_MANIFEST record. It is the BCCP, which the BBIEP contextualizes.");
 
     /**
-     * The column <code>oagi.bbiep.path</code>.
+     * The column <code>oagi.bbiep.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
-    public final TableField<BbiepRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "");
+    public final TableField<BbiepRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The path of this node within the component graph; used together with HASH_PATH to locate the node.");
 
     /**
      * The column <code>oagi.bbiep.hash_path</code>. hash_path generated from
@@ -98,10 +99,10 @@ public class Bbiep extends TableImpl<BbiepRecord> {
 
     /**
      * The column <code>oagi.bbiep.definition</code>. Definition to override the
-     * BCCP's Definition. If NULLl, it means that the definition should be
+     * BCCP's Definition. If NULL, it means that the definition should be
      * inherited from the based CC.
      */
-    public final TableField<BbiepRecord, String> DEFINITION = createField(DSL.name("definition"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Definition to override the BCCP's Definition. If NULLl, it means that the definition should be inherited from the based CC.");
+    public final TableField<BbiepRecord, String> DEFINITION = createField(DSL.name("definition"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Definition to override the BCCP's Definition. If NULL, it means that the definition should be inherited from the based CC.");
 
     /**
      * The column <code>oagi.bbiep.remark</code>. This column allows the user to
@@ -133,9 +134,9 @@ public class Bbiep extends TableImpl<BbiepRecord> {
      * The column <code>oagi.bbiep.created_by</code>. A foreign key referring to
      * the user who creates the BBIEP. The creator of the BBIEP is also its
      * owner by default. BBIEPs created as children of another ABIE have the
-     * same CREATED_BY',
+     * same CREATED_BY.
      */
-    public final TableField<BbiepRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the user who creates the BBIEP. The creator of the BBIEP is also its owner by default. BBIEPs created as children of another ABIE have the same CREATED_BY',");
+    public final TableField<BbiepRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the user who creates the BBIEP. The creator of the BBIEP is also its owner by default. BBIEPs created as children of another ABIE have the same CREATED_BY.");
 
     /**
      * The column <code>oagi.bbiep.last_updated_by</code>. A foreign key
@@ -146,9 +147,9 @@ public class Bbiep extends TableImpl<BbiepRecord> {
     /**
      * The column <code>oagi.bbiep.creation_timestamp</code>. Timestamp when the
      * BBIEP record was first created. BBIEPs created as children of another
-     * ABIE have the same CREATION_TIMESTAMP,
+     * ABIE have the same CREATION_TIMESTAMP.
      */
-    public final TableField<BbiepRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Timestamp when the BBIEP record was first created. BBIEPs created as children of another ABIE have the same CREATION_TIMESTAMP,");
+    public final TableField<BbiepRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Timestamp when the BBIEP record was first created. BBIEPs created as children of another ABIE have the same CREATION_TIMESTAMP.");
 
     /**
      * The column <code>oagi.bbiep.last_update_timestamp</code>. The timestamp

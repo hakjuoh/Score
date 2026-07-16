@@ -87,9 +87,10 @@ public class Asbiep extends TableImpl<AsbiepRecord> {
     public final TableField<AsbiepRecord, ULong> BASED_ASCCP_MANIFEST_ID = createField(DSL.name("based_asccp_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key pointing to the ASCCP_MANIFEST record. It is the ASCCP, on which the ASBIEP contextualizes.");
 
     /**
-     * The column <code>oagi.asbiep.path</code>.
+     * The column <code>oagi.asbiep.path</code>. The path of this node within
+     * the component graph; used together with HASH_PATH to locate the node.
      */
-    public final TableField<AsbiepRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "");
+    public final TableField<AsbiepRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The path of this node within the component graph; used together with HASH_PATH to locate the node.");
 
     /**
      * The column <code>oagi.asbiep.hash_path</code>. hash_path generated from

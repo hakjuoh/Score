@@ -81,10 +81,10 @@ public class CodeListValue extends TableImpl<CodeListValueRecord> {
 
     /**
      * The column <code>oagi.code_list_value.code_list_id</code>. Foreign key to
-     * the CODE_LIST table. It indicates the code list this code value belonging
+     * the CODE_LIST table. It indicates the code list this code value belongs
      * to.
      */
-    public final TableField<CodeListValueRecord, ULong> CODE_LIST_ID = createField(DSL.name("code_list_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the CODE_LIST table. It indicates the code list this code value belonging to.");
+    public final TableField<CodeListValueRecord, ULong> CODE_LIST_ID = createField(DSL.name("code_list_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the CODE_LIST table. It indicates the code list this code value belongs to.");
 
     /**
      * The column <code>oagi.code_list_value.based_code_list_value_id</code>.
@@ -108,11 +108,11 @@ public class CodeListValue extends TableImpl<CodeListValueRecord> {
 
     /**
      * The column <code>oagi.code_list_value.definition</code>. Long description
-     * or explannation of the code list value, e.g., 'EA is a discrete quantity
+     * or explanation of the code list value, e.g., 'EA is a discrete quantity
      * for counting each unit of an item, such as, 2 shampoo bottles, 3 box of
      * cereals'.
      */
-    public final TableField<CodeListValueRecord, String> DEFINITION = createField(DSL.name("definition"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Long description or explannation of the code list value, e.g., 'EA is a discrete quantity for counting each unit of an item, such as, 2 shampoo bottles, 3 box of cereals'.");
+    public final TableField<CodeListValueRecord, String> DEFINITION = createField(DSL.name("definition"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Long description or explanation of the code list value, e.g., 'EA is a discrete quantity for counting each unit of an item, such as, 2 shampoo bottles, 3 box of cereals'.");
 
     /**
      * The column <code>oagi.code_list_value.definition_source</code>. This is
@@ -136,9 +136,10 @@ public class CodeListValue extends TableImpl<CodeListValueRecord> {
 
     /**
      * The column <code>oagi.code_list_value.created_by</code>. Foreign key to
-     * the APP_USER table. It indicates the user who created the code list.
+     * the APP_USER table. It indicates the user who created the code list
+     * value.
      */
-    public final TableField<CodeListValueRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It indicates the user who created the code list.");
+    public final TableField<CodeListValueRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It indicates the user who created the code list value.");
 
     /**
      * The column <code>oagi.code_list_value.owner_user_id</code>. Foreign key
@@ -153,21 +154,21 @@ public class CodeListValue extends TableImpl<CodeListValueRecord> {
     /**
      * The column <code>oagi.code_list_value.last_updated_by</code>. Foreign key
      * to the APP_USER table. It identifies the user who last updated the code
-     * list.
+     * list value.
      */
-    public final TableField<CodeListValueRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It identifies the user who last updated the code list.");
+    public final TableField<CodeListValueRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It identifies the user who last updated the code list value.");
 
     /**
      * The column <code>oagi.code_list_value.creation_timestamp</code>.
-     * Timestamp when the code list was created.
+     * Timestamp when the code list value was created.
      */
-    public final TableField<CodeListValueRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "Timestamp when the code list was created.");
+    public final TableField<CodeListValueRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "Timestamp when the code list value was created.");
 
     /**
      * The column <code>oagi.code_list_value.last_update_timestamp</code>.
-     * Timestamp when the code list was last updated.
+     * Timestamp when the code list value was last updated.
      */
-    public final TableField<CodeListValueRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "Timestamp when the code list was last updated.");
+    public final TableField<CodeListValueRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "Timestamp when the code list value was last updated.");
 
     /**
      * The column <code>oagi.code_list_value.prev_code_list_value_id</code>. A

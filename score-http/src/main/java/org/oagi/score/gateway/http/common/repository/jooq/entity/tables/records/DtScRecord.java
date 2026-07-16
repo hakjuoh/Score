@@ -136,7 +136,7 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
     }
 
     /**
-     * Setter for <code>oagi.dt_sc.owner_dt_id</code>. Foreigned key to the DT
+     * Setter for <code>oagi.dt_sc.owner_dt_id</code>. Foreign key to the DT
      * table indicating the data type, to which this supplementary component
      * belongs.
      */
@@ -145,7 +145,7 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
     }
 
     /**
-     * Getter for <code>oagi.dt_sc.owner_dt_id</code>. Foreigned key to the DT
+     * Getter for <code>oagi.dt_sc.owner_dt_id</code>. Foreign key to the DT
      * table indicating the data type, to which this supplementary component
      * belongs.
      */
@@ -156,7 +156,7 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
     /**
      * Setter for <code>oagi.dt_sc.cardinality_min</code>. The minimum
      * occurrence constraint associated with the supplementary component. The
-     * valid values zero or one.
+     * valid values are zero or one.
      */
     public void setCardinalityMin(Integer value) {
         set(8, value);
@@ -165,7 +165,7 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
     /**
      * Getter for <code>oagi.dt_sc.cardinality_min</code>. The minimum
      * occurrence constraint associated with the supplementary component. The
-     * valid values zero or one.
+     * valid values are zero or one.
      */
     public Integer getCardinalityMin() {
         return (Integer) get(8);
@@ -281,7 +281,8 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
 
     /**
      * Setter for <code>oagi.dt_sc.created_by</code>. Foreign key to the
-     * APP_USER table. It indicates the user who created the code list.
+     * APP_USER table. It indicates the user who created the supplementary
+     * component.
      */
     public void setCreatedBy(ULong value) {
         set(15, value);
@@ -289,7 +290,8 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
 
     /**
      * Getter for <code>oagi.dt_sc.created_by</code>. Foreign key to the
-     * APP_USER table. It indicates the user who created the code list.
+     * APP_USER table. It indicates the user who created the supplementary
+     * component.
      */
     public ULong getCreatedBy() {
         return (ULong) get(15);
@@ -321,7 +323,8 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
 
     /**
      * Setter for <code>oagi.dt_sc.last_updated_by</code>. Foreign key to the
-     * APP_USER table. It identifies the user who last updated the code list.
+     * APP_USER table. It identifies the user who last updated the supplementary
+     * component.
      */
     public void setLastUpdatedBy(ULong value) {
         set(17, value);
@@ -329,7 +332,8 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
 
     /**
      * Getter for <code>oagi.dt_sc.last_updated_by</code>. Foreign key to the
-     * APP_USER table. It identifies the user who last updated the code list.
+     * APP_USER table. It identifies the user who last updated the supplementary
+     * component.
      */
     public ULong getLastUpdatedBy() {
         return (ULong) get(17);
@@ -337,7 +341,7 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
 
     /**
      * Setter for <code>oagi.dt_sc.creation_timestamp</code>. Timestamp when the
-     * code list was created.
+     * supplementary component was created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(18, value);
@@ -345,7 +349,7 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
 
     /**
      * Getter for <code>oagi.dt_sc.creation_timestamp</code>. Timestamp when the
-     * code list was created.
+     * supplementary component was created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(18);
@@ -353,7 +357,7 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
 
     /**
      * Setter for <code>oagi.dt_sc.last_update_timestamp</code>. Timestamp when
-     * the code list was last updated.
+     * the supplementary component was last updated.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(19, value);
@@ -361,7 +365,7 @@ public class DtScRecord extends UpdatableRecordImpl<DtScRecord> {
 
     /**
      * Getter for <code>oagi.dt_sc.last_update_timestamp</code>. Timestamp when
-     * the code list was last updated.
+     * the supplementary component was last updated.
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(19);

@@ -1,9 +1,10 @@
 import {Injectable} from '@angular/core';
 import {HttpClient, HttpContext} from '@angular/common/http';
+import {IFrame} from '@stomp/stompjs';
 import {RxStomp, RxStompState} from '@stomp/rx-stomp';
 import {catchError, filter, map, of, Subscription, switchMap, take, timer} from 'rxjs';
 import {scoreRxStompConfig} from './score-rx-stomp-config';
-import {SUPPRESS_ERROR_ALERT} from '../authentication/auth.service';
+import {AuthService, SUPPRESS_ERROR_ALERT} from '../authentication/auth.service';
 
 interface GatewayHealthResponse {
   ready?: boolean;
@@ -17,7 +18,7 @@ export class RxStompService extends RxStomp {
   private connectionStateSubscription?: Subscription;
   private shouldReconnect = false;
 
-  public constructor (private http: HttpClient) {
+  public constructor (private http: HttpClient, private auth: AuthService) {
     super();
     this.connectionStateSubscription = this.connectionState$.subscribe(state => {
       if (state === RxStompState.OPEN) {
@@ -29,6 +30,7 @@ export class RxStompService extends RxStomp {
         this.startHealthPingLoop();
       }
     });
+    this.stompErrors$.subscribe(frame => this.handleStompError(frame));
   }
 
   override activate(): void {
@@ -72,10 +74,30 @@ export class RxStompService extends RxStomp {
       catchError(() => of(false))
     );
   }
+
+  private handleStompError(frame: IFrame): void {
+    if (this.auth.isLogoutInProgress() || !this.isAuthenticationStompError(frame)) {
+      return;
+    }
+    this.deactivate({force: true}).finally(() => {
+      this.auth.logout(window.location.pathname);
+    });
+  }
+
+  private isAuthenticationStompError(frame: IFrame): boolean {
+    const detail = `${frame.headers?.['message'] || ''} ${frame.body || ''}`.toLowerCase();
+    return detail.includes('authentication_failed') ||
+      detail.includes('signed-in user') ||
+      detail.includes('score user cannot be resolved') ||
+      detail.includes('no longer valid') ||
+      detail.includes('no longer exists') ||
+      detail.includes('authenticationcredentialsnotfoundexception') ||
+      detail.includes('disabledexception');
+  }
 }
 
-export function rxStompServiceFactory(http: HttpClient) {
-  const rxStomp = new RxStompService(http);
+export function rxStompServiceFactory(http: HttpClient, auth: AuthService) {
+  const rxStomp = new RxStompService(http, auth);
   rxStomp.configure(scoreRxStompConfig);
   rxStomp.activate();
   return rxStomp;

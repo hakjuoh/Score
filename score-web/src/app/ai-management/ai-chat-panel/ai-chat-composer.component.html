@@ -1,0 +1,78 @@
+@if (showCommandSuggestions) {
+  <div class="command-suggestions" role="listbox" aria-label="Assistant commands">
+    @for (command of commandSuggestions; track command.name; let i = $index) {
+      <button type="button"
+              role="option"
+              class="command-suggestion"
+              [class.active]="i === selectedCommandIndex"
+              [attr.aria-selected]="i === selectedCommandIndex"
+              (mousedown)="$event.preventDefault()"
+              (click)="commandSuggestionSelected.emit(command)">
+        <span class="command-name">{{ command.name }}</span>
+        <span class="command-description">{{ command.description }}</span>
+      </button>
+    }
+  </div>
+}
+
+<div class="command-row" [class.initial]="isInitialPrompt && !showCommandSuggestions">
+  <div class="command-box" [class.disabled]="blocked">
+    <mat-icon class="prompt-mark" aria-hidden="true">chevron_right</mat-icon>
+    <input #fileInput
+           class="attachment-input"
+           type="file"
+           multiple
+           [attr.accept]="attachmentAccept"
+           (change)="fileInputChanged.emit($event)">
+    <button class="attachment-button"
+            type="button"
+            aria-label="Attach files"
+            matTooltip="Attach files"
+           [disabled]="pending || blocked"
+            (click)="filePickerRequested.emit(fileInput)">
+      <mat-icon>attach_file</mat-icon>
+    </button>
+    <textarea #commandInput
+              rows="1"
+              aria-label="Message to connectCenter Assistant"
+              [ngModel]="prompt"
+              (ngModelChange)="updatePrompt($event)"
+              [disabled]="blocked"
+              (keydown)="keydownEvent.emit($event)"
+              [placeholder]="placeholder"></textarea>
+    @if (pending) {
+      <button class="composer-stop-button"
+              type="button"
+              aria-label="Stop active request"
+              [attr.aria-busy]="cancellationInProgress ? 'true' : null"
+              [attr.aria-disabled]="cancellationInProgress ? 'true' : null"
+              [matTooltip]="cancellationInProgress ? 'Cancellation in progress' : 'Stop request'"
+              (click)="!cancellationInProgress && stopRequested.emit()">
+        @if (cancellationInProgress && !cancellationDelayed) {
+          <mat-progress-spinner class="composer-cancellation-spinner"
+                                mode="indeterminate"
+                                [diameter]="16"
+                                aria-label="Cancelling active request">
+          </mat-progress-spinner>
+        } @else {
+          <mat-icon>stop_circle</mat-icon>
+        }
+      </button>
+    }
+  </div>
+  @if (pending && cancellationDelayed) {
+    <div class="cancellation-recovery" role="status" aria-live="polite">
+      <span>Cancellation delayed</span>
+      <button type="button"
+              class="cancellation-recovery-button"
+              (click)="cancellationRetryRequested.emit()">
+        Retry
+      </button>
+      <button type="button"
+              class="cancellation-recovery-button force"
+              (click)="forceSafeStopRequested.emit()">
+        Force safe stop
+      </button>
+    </div>
+  }
+</div>

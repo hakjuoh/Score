@@ -69,7 +69,7 @@ public class CtxSchemeValueRecord extends UpdatableRecordImpl<CtxSchemeValueReco
 
     /**
      * Setter for <code>oagi.ctx_scheme_value.meaning</code>. The description,
-     * explanatiion of the scheme value.
+     * explanation of the scheme value.
      */
     public void setMeaning(String value) {
         set(3, value);
@@ -77,7 +77,7 @@ public class CtxSchemeValueRecord extends UpdatableRecordImpl<CtxSchemeValueReco
 
     /**
      * Getter for <code>oagi.ctx_scheme_value.meaning</code>. The description,
-     * explanatiion of the scheme value.
+     * explanation of the scheme value.
      */
     public String getMeaning() {
         return (String) get(3);

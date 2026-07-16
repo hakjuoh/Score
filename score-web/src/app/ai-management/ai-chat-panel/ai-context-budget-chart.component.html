@@ -1,0 +1,35 @@
+<div class="context-budget-chart" [class.compact]="compact">
+  <div class="context-model-row">
+    <span>{{ data.usage.modelName }}</span>
+    <span class="context-measurement-kind">
+      {{ data.usage.estimated ? 'Estimated' : 'Provider-reported' }}
+    </span>
+  </div>
+
+  <div class="context-chart-layout">
+    <div class="context-pie"
+         role="img"
+         [attr.aria-label]="'Context input ' + data.usage.currentInputTokens
+           + ' tokens out of a ' + data.usage.contextWindow + ' token model window'"
+         [style.background]="pieBackground">
+    </div>
+
+    <div class="context-legend">
+      @for (slice of slices; track slice.label) {
+        <div class="context-legend-row">
+          <span class="context-legend-swatch" [style.background]="slice.color"></span>
+          <span class="context-legend-label">{{ slice.label }}</span>
+          <span class="context-legend-value">
+            {{ slice.tokens | number }} · {{ slice.percent | number:'1.0-1' }}%
+          </span>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="context-chart-summary">
+    {{ data.usage.currentInputTokens | number }} / {{ data.usage.safeInputLimit | number }} safe input tokens
+    <span>·</span>
+    {{ data.usage.contextWindow | number }} model window
+  </div>
+</div>

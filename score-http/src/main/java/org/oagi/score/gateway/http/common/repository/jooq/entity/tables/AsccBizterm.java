@@ -63,9 +63,9 @@ public class AsccBizterm extends TableImpl<AsccBiztermRecord> {
 
     /**
      * The column <code>oagi.ascc_bizterm.ascc_bizterm_id</code>. An internal,
-     * primary database key of an Business term.
+     * primary database key of an ascc_bizterm record.
      */
-    public final TableField<AsccBiztermRecord, ULong> ASCC_BIZTERM_ID = createField(DSL.name("ascc_bizterm_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of an Business term.");
+    public final TableField<AsccBiztermRecord, ULong> ASCC_BIZTERM_ID = createField(DSL.name("ascc_bizterm_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of an ascc_bizterm record.");
 
     /**
      * The column <code>oagi.ascc_bizterm.business_term_id</code>. An internal

@@ -88,15 +88,16 @@ public class Abie extends TableImpl<AbieRecord> {
 
     /**
      * The column <code>oagi.abie.based_acc_manifest_id</code>. A foreign key to
-     * the ACC_MANIFEST table refering to the ACC, on which the business context
-     * has been applied to derive this ABIE.
+     * the ACC_MANIFEST table referring to the ACC, on which the business
+     * context has been applied to derive this ABIE.
      */
-    public final TableField<AbieRecord, ULong> BASED_ACC_MANIFEST_ID = createField(DSL.name("based_acc_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key to the ACC_MANIFEST table refering to the ACC, on which the business context has been applied to derive this ABIE.");
+    public final TableField<AbieRecord, ULong> BASED_ACC_MANIFEST_ID = createField(DSL.name("based_acc_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key to the ACC_MANIFEST table referring to the ACC, on which the business context has been applied to derive this ABIE.");
 
     /**
-     * The column <code>oagi.abie.path</code>.
+     * The column <code>oagi.abie.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
-    public final TableField<AbieRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "");
+    public final TableField<AbieRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The path of this node within the component graph; used together with HASH_PATH to locate the node.");
 
     /**
      * The column <code>oagi.abie.hash_path</code>. hash_path generated from the

@@ -87,16 +87,16 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
     }
 
     /**
-     * Setter for <code>oagi.agency_id_list_value.definition</code>. The meaning
-     * of the value.
+     * Setter for <code>oagi.agency_id_list_value.definition</code>. Description
+     * of the agency identification list value.
      */
     public void setDefinition(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.agency_id_list_value.definition</code>. The meaning
-     * of the value.
+     * Getter for <code>oagi.agency_id_list_value.definition</code>. Description
+     * of the agency identification list value.
      */
     public String getDefinition() {
         return (String) get(4);
@@ -162,8 +162,8 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
 
     /**
      * Setter for <code>oagi.agency_id_list_value.is_deprecated</code>.
-     * Indicates whether the code list value is deprecated and should not be
-     * reused (i.e., no new reference to this record should be allowed).
+     * Indicates whether the agency id list value is deprecated and should not
+     * be reused (i.e., no new reference to this record should be allowed).
      */
     public void setIsDeprecated(Byte value) {
         set(8, value);
@@ -171,8 +171,8 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
 
     /**
      * Getter for <code>oagi.agency_id_list_value.is_deprecated</code>.
-     * Indicates whether the code list value is deprecated and should not be
-     * reused (i.e., no new reference to this record should be allowed).
+     * Indicates whether the agency id list value is deprecated and should not
+     * be reused (i.e., no new reference to this record should be allowed).
      */
     public Byte getIsDeprecated() {
         return (Byte) get(8);
@@ -234,7 +234,8 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
 
     /**
      * Setter for <code>oagi.agency_id_list_value.created_by</code>. Foreign key
-     * to the APP_USER table. It indicates the user who created the code list.
+     * to the APP_USER table. It indicates the user who created the agency ID
+     * list value.
      */
     public void setCreatedBy(ULong value) {
         set(12, value);
@@ -242,7 +243,8 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
 
     /**
      * Getter for <code>oagi.agency_id_list_value.created_by</code>. Foreign key
-     * to the APP_USER table. It indicates the user who created the code list.
+     * to the APP_USER table. It indicates the user who created the agency ID
+     * list value.
      */
     public ULong getCreatedBy() {
         return (ULong) get(12);
@@ -277,7 +279,7 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
     /**
      * Setter for <code>oagi.agency_id_list_value.last_updated_by</code>.
      * Foreign key to the APP_USER table. It identifies the user who last
-     * updated the code list.
+     * updated the agency ID list value.
      */
     public void setLastUpdatedBy(ULong value) {
         set(14, value);
@@ -286,7 +288,7 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
     /**
      * Getter for <code>oagi.agency_id_list_value.last_updated_by</code>.
      * Foreign key to the APP_USER table. It identifies the user who last
-     * updated the code list.
+     * updated the agency ID list value.
      */
     public ULong getLastUpdatedBy() {
         return (ULong) get(14);
@@ -294,7 +296,7 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
 
     /**
      * Setter for <code>oagi.agency_id_list_value.creation_timestamp</code>.
-     * Timestamp when the code list was created.
+     * Timestamp when the agency ID list value was created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(15, value);
@@ -302,7 +304,7 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
 
     /**
      * Getter for <code>oagi.agency_id_list_value.creation_timestamp</code>.
-     * Timestamp when the code list was created.
+     * Timestamp when the agency ID list value was created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(15);
@@ -310,7 +312,7 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
 
     /**
      * Setter for <code>oagi.agency_id_list_value.last_update_timestamp</code>.
-     * Timestamp when the code list was last updated.
+     * Timestamp when the agency ID list value was last updated.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(16, value);
@@ -318,7 +320,7 @@ public class AgencyIdListValueRecord extends UpdatableRecordImpl<AgencyIdListVal
 
     /**
      * Getter for <code>oagi.agency_id_list_value.last_update_timestamp</code>.
-     * Timestamp when the code list was last updated.
+     * Timestamp when the agency ID list value was last updated.
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(16);

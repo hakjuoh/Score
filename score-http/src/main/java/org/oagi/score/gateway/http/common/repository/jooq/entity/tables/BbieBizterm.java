@@ -70,9 +70,9 @@ public class BbieBizterm extends TableImpl<BbieBiztermRecord> {
 
     /**
      * The column <code>oagi.bbie_bizterm.bcc_bizterm_id</code>. An internal ID
-     * of the bbie_bizterm record.
+     * of the bcc_bizterm record.
      */
-    public final TableField<BbieBiztermRecord, ULong> BCC_BIZTERM_ID = createField(DSL.name("bcc_bizterm_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "An internal ID of the bbie_bizterm record.");
+    public final TableField<BbieBiztermRecord, ULong> BCC_BIZTERM_ID = createField(DSL.name("bcc_bizterm_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "An internal ID of the bcc_bizterm record.");
 
     /**
      * The column <code>oagi.bbie_bizterm.bbie_id</code>. An internal ID of the
@@ -95,9 +95,9 @@ public class BbieBizterm extends TableImpl<BbieBiztermRecord> {
     /**
      * The column <code>oagi.bbie_bizterm.created_by</code>. A foreign key
      * referring to the user who creates the bbie_bizterm record. The creator of
-     * the asbie_bizterm is also its owner by default.
+     * the bbie_bizterm is also its owner by default.
      */
-    public final TableField<BbieBiztermRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the user who creates the bbie_bizterm record. The creator of the asbie_bizterm is also its owner by default.");
+    public final TableField<BbieBiztermRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the user who creates the bbie_bizterm record. The creator of the bbie_bizterm is also its owner by default.");
 
     /**
      * The column <code>oagi.bbie_bizterm.last_updated_by</code>. A foreign key

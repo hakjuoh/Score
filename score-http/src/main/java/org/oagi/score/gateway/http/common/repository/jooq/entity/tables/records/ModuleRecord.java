@@ -70,16 +70,16 @@ public class ModuleRecord extends UpdatableRecordImpl<ModuleRecord> {
     }
 
     /**
-     * Setter for <code>oagi.module.type</code>. This is a type column for
-     * indicates module is FILE or DIRECTORY.
+     * Setter for <code>oagi.module.type</code>. This is a type column that
+     * indicates whether the module is FILE or DIRECTORY.
      */
     public void setType(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.module.type</code>. This is a type column for
-     * indicates module is FILE or DIRECTORY.
+     * Getter for <code>oagi.module.type</code>. This is a type column that
+     * indicates whether the module is FILE or DIRECTORY.
      */
     public String getType() {
         return (String) get(3);
@@ -100,7 +100,7 @@ public class ModuleRecord extends UpdatableRecordImpl<ModuleRecord> {
     }
 
     /**
-     * Setter for <code>oagi.module.name</code>. The is the filename of the
+     * Setter for <code>oagi.module.name</code>. This is the filename of the
      * module. The reason to not including the extension is that the extension
      * maybe dependent on the expression. For XML schema, '.xsd' maybe added; or
      * for JSON, '.json' maybe added as the file extension.
@@ -110,7 +110,7 @@ public class ModuleRecord extends UpdatableRecordImpl<ModuleRecord> {
     }
 
     /**
-     * Getter for <code>oagi.module.name</code>. The is the filename of the
+     * Getter for <code>oagi.module.name</code>. This is the filename of the
      * module. The reason to not including the extension is that the extension
      * maybe dependent on the expression. For XML schema, '.xsd' maybe added; or
      * for JSON, '.json' maybe added as the file extension.

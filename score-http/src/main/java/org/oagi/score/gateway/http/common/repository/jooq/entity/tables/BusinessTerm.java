@@ -59,10 +59,10 @@ public class BusinessTerm extends TableImpl<BusinessTermRecord> {
     }
 
     /**
-     * The column <code>oagi.business_term.business_term_id</code>. A internal,
-     * primary database key of an Business term.
+     * The column <code>oagi.business_term.business_term_id</code>. An internal,
+     * primary database key of a Business term.
      */
-    public final TableField<BusinessTermRecord, ULong> BUSINESS_TERM_ID = createField(DSL.name("business_term_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "A internal, primary database key of an Business term.");
+    public final TableField<BusinessTermRecord, ULong> BUSINESS_TERM_ID = createField(DSL.name("business_term_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of a Business term.");
 
     /**
      * The column <code>oagi.business_term.guid</code>. A globally unique

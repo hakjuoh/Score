@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.info_management.controller;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.oagi.score.gateway.http.api.ai_management.service.ChatService;
 import org.oagi.score.gateway.http.api.info_management.model.*;
 import org.oagi.score.gateway.http.api.info_management.service.*;
 import org.oagi.score.gateway.http.api.library_management.model.LibraryId;
@@ -40,6 +41,9 @@ public class InfoQueryController {
     @Autowired
     private WebPageInfoQueryService webPageInfoService;
 
+    @Autowired
+    private ChatService chatService;
+
     @GetMapping(value = "/products")
     public List<ProductInfoRecord> getProductInfos() {
         List<ProductInfoRecord> productInfos = new ArrayList();
@@ -57,6 +61,11 @@ public class InfoQueryController {
     @GetMapping(value = "/oauth2-providers")
     public List<OAuth2AppInfoRecord> getOAuth2AppList() {
         return oauth2AppInfoService.getOAuth2AppList(sessionService.getScoreSystemUser());
+    }
+
+    @GetMapping(value = "/ai-assistant")
+    public AiAssistantInfoRecord getAiAssistantInfo() {
+        return chatService.aiAssistantInfo();
     }
 
     @GetMapping(value = "/cc-summaries")

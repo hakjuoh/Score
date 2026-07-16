@@ -60,7 +60,7 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
 
     /**
      * Setter for <code>oagi.code_list_value.code_list_id</code>. Foreign key to
-     * the CODE_LIST table. It indicates the code list this code value belonging
+     * the CODE_LIST table. It indicates the code list this code value belongs
      * to.
      */
     public void setCodeListId(ULong value) {
@@ -69,7 +69,7 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
 
     /**
      * Getter for <code>oagi.code_list_value.code_list_id</code>. Foreign key to
-     * the CODE_LIST table. It indicates the code list this code value belonging
+     * the CODE_LIST table. It indicates the code list this code value belongs
      * to.
      */
     public ULong getCodeListId() {
@@ -130,7 +130,7 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
 
     /**
      * Setter for <code>oagi.code_list_value.definition</code>. Long description
-     * or explannation of the code list value, e.g., 'EA is a discrete quantity
+     * or explanation of the code list value, e.g., 'EA is a discrete quantity
      * for counting each unit of an item, such as, 2 shampoo bottles, 3 box of
      * cereals'.
      */
@@ -140,7 +140,7 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
 
     /**
      * Getter for <code>oagi.code_list_value.definition</code>. Long description
-     * or explannation of the code list value, e.g., 'EA is a discrete quantity
+     * or explanation of the code list value, e.g., 'EA is a discrete quantity
      * for counting each unit of an item, such as, 2 shampoo bottles, 3 box of
      * cereals'.
      */
@@ -202,7 +202,8 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
 
     /**
      * Setter for <code>oagi.code_list_value.created_by</code>. Foreign key to
-     * the APP_USER table. It indicates the user who created the code list.
+     * the APP_USER table. It indicates the user who created the code list
+     * value.
      */
     public void setCreatedBy(ULong value) {
         set(10, value);
@@ -210,7 +211,8 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
 
     /**
      * Getter for <code>oagi.code_list_value.created_by</code>. Foreign key to
-     * the APP_USER table. It indicates the user who created the code list.
+     * the APP_USER table. It indicates the user who created the code list
+     * value.
      */
     public ULong getCreatedBy() {
         return (ULong) get(10);
@@ -243,7 +245,7 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
     /**
      * Setter for <code>oagi.code_list_value.last_updated_by</code>. Foreign key
      * to the APP_USER table. It identifies the user who last updated the code
-     * list.
+     * list value.
      */
     public void setLastUpdatedBy(ULong value) {
         set(12, value);
@@ -252,7 +254,7 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
     /**
      * Getter for <code>oagi.code_list_value.last_updated_by</code>. Foreign key
      * to the APP_USER table. It identifies the user who last updated the code
-     * list.
+     * list value.
      */
     public ULong getLastUpdatedBy() {
         return (ULong) get(12);
@@ -260,7 +262,7 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
 
     /**
      * Setter for <code>oagi.code_list_value.creation_timestamp</code>.
-     * Timestamp when the code list was created.
+     * Timestamp when the code list value was created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(13, value);
@@ -268,7 +270,7 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
 
     /**
      * Getter for <code>oagi.code_list_value.creation_timestamp</code>.
-     * Timestamp when the code list was created.
+     * Timestamp when the code list value was created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(13);
@@ -276,7 +278,7 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
 
     /**
      * Setter for <code>oagi.code_list_value.last_update_timestamp</code>.
-     * Timestamp when the code list was last updated.
+     * Timestamp when the code list value was last updated.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(14, value);
@@ -284,7 +286,7 @@ public class CodeListValueRecord extends UpdatableRecordImpl<CodeListValueRecord
 
     /**
      * Getter for <code>oagi.code_list_value.last_update_timestamp</code>.
-     * Timestamp when the code list was last updated.
+     * Timestamp when the code list value was last updated.
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(14);

@@ -77,17 +77,17 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
     public final TableField<DtUsageRuleRecord, ULong> ASSIGNED_USAGE_RULE_ID = createField(DSL.name("assigned_usage_rule_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the USAGE_RULE table indicating the usage rule assigned to the DT content component or DT_SC.");
 
     /**
-     * The column <code>oagi.dt_usage_rule.target_dt_id</code>. Foreing key to
+     * The column <code>oagi.dt_usage_rule.target_dt_id</code>. Foreign key to
      * the DT_ID for assigning a usage rule to the corresponding DT content
      * component.
      */
-    public final TableField<DtUsageRuleRecord, ULong> TARGET_DT_ID = createField(DSL.name("target_dt_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreing key to the DT_ID for assigning a usage rule to the corresponding DT content component.");
+    public final TableField<DtUsageRuleRecord, ULong> TARGET_DT_ID = createField(DSL.name("target_dt_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the DT_ID for assigning a usage rule to the corresponding DT content component.");
 
     /**
-     * The column <code>oagi.dt_usage_rule.target_dt_sc_id</code>. Foreing key
+     * The column <code>oagi.dt_usage_rule.target_dt_sc_id</code>. Foreign key
      * to the DT_SC_ID for assigning a usage rule to the corresponding DT_SC.
      */
-    public final TableField<DtUsageRuleRecord, ULong> TARGET_DT_SC_ID = createField(DSL.name("target_dt_sc_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreing key to the DT_SC_ID for assigning a usage rule to the corresponding DT_SC.");
+    public final TableField<DtUsageRuleRecord, ULong> TARGET_DT_SC_ID = createField(DSL.name("target_dt_sc_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the DT_SC_ID for assigning a usage rule to the corresponding DT_SC.");
 
     private DtUsageRule(Name alias, Table<DtUsageRuleRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

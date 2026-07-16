@@ -38,7 +38,7 @@ public class UsageRuleRecord extends UpdatableRecordImpl<UsageRuleRecord> {
     }
 
     /**
-     * Setter for <code>oagi.usage_rule.name</code>. Short nmenomic name of the
+     * Setter for <code>oagi.usage_rule.name</code>. Short mnemonic name of the
      * usage rule.
      */
     public void setName(String value) {
@@ -46,7 +46,7 @@ public class UsageRuleRecord extends UpdatableRecordImpl<UsageRuleRecord> {
     }
 
     /**
-     * Getter for <code>oagi.usage_rule.name</code>. Short nmenomic name of the
+     * Getter for <code>oagi.usage_rule.name</code>. Short mnemonic name of the
      * usage rule.
      */
     public String getName() {

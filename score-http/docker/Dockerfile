@@ -14,10 +14,7 @@ ENV DB_HOST=localhost \
     REDIS_HOST=localhost \
     REDIS_PORT=6379
 
-RUN apt-get -y update
-RUN apt-get -y upgrade
-
-COPY mariadb-java-client-${MARIADB_CLIENT_VERSION}.jar /usr/local/tomcat/lib/mariadb-java-client-${MARIADB_CLIENT_VERSION}.jar
+COPY docker/mariadb-java-client-${MARIADB_CLIENT_VERSION}.jar /usr/local/tomcat/lib/mariadb-java-client-${MARIADB_CLIENT_VERSION}.jar
 
 RUN rm -rf /usr/local/tomcat/webapps/* && \
     chgrp -R 0 /usr/local/tomcat/ && \
@@ -27,7 +24,7 @@ USER 1001
 # NOTE (#1750): docker/web.xml is the stock Tomcat 10.1 conf/web.xml. The default/jsp servlet
 # and filter defaults differ on Tomcat 11 — regenerate this from the tomcat:11.0.x image (or drop
 # this COPY to use the container default) and validate on the modeldev instance before rollout.
-COPY web.xml /usr/local/tomcat/conf/web.xml
-COPY score-http.war /usr/local/tomcat/webapps/ROOT.war
+COPY docker/web.xml /usr/local/tomcat/conf/web.xml
+COPY docker/score-http.war /usr/local/tomcat/webapps/ROOT.war
 
 CMD ["catalina.sh", "run"]

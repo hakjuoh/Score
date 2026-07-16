@@ -210,7 +210,7 @@ public class SecurityConfiguration {
                     // permitAll here so they still pass through the filter chain (#1750).
                     List<String> permitAllPaths = new ArrayList<>(
                             Arrays.asList("/favicon.ico", "/resources/**", "/error",
-                                    "/health", "/info/**", "/ws/**", "/oauth2/**", "/ai/**"));
+                                    "/health", "/info/**", "/ws/**", "/oauth2/**", "/broker/**"));
                     // The GitHub OAuth callback and webhook are reached without a Score session, so they
                     // must be permitAll — but only when the integration is enabled (SCORE_GITHUB_ENABLED);
                     // otherwise the feature is off and these endpoints should not be exposed
