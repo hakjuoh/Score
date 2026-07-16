@@ -3,7 +3,6 @@ package org.oagi.score.gateway.http.configuration.initializer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -14,19 +13,22 @@ public class RedisFlushAllInitializer implements InitializingBean {
 
     private final Log logger = LogFactory.getLog(getClass());
 
-    @Autowired
-    private RedisTemplate redisTemplate;
+    private final RedisTemplate redisTemplate;
+    private final Environment environment;
 
-    @Autowired
-    private Environment environment;
+    public RedisFlushAllInitializer(RedisTemplate redisTemplate, Environment environment) {
+        this.redisTemplate = redisTemplate;
+        this.environment = environment;
+    }
 
     @Override
     public void afterPropertiesSet() throws Exception {
-        if (!environment.matchesProfiles("dev")) {
-            logger.info("Remove all keys from redis databases.");
-            try (RedisConnection connection = redisTemplate.getConnectionFactory().getConnection()) {
-                connection.serverCommands().flushAll();
-            }
+        if (!environment.getProperty("score.redis.flush-on-startup", Boolean.class, false)) {
+            return;
+        }
+        logger.warn("Removing all keys from Redis because score.redis.flush-on-startup is explicitly enabled.");
+        try (RedisConnection connection = redisTemplate.getConnectionFactory().getConnection()) {
+            connection.serverCommands().flushAll();
         }
     }
 

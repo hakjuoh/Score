@@ -6,5 +6,13 @@
       "^/api": ""
     }
   },
+  "/stomp": {
+    "target": "http://127.0.0.1:9000",
+    "secure": false,
+    "ws": true,
+    "pathRewrite": {
+      "^/stomp": "/ws"
+    }
+  },
   "logLevel": "debug"
 }

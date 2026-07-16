@@ -87,9 +87,9 @@ public class Bcc extends TableImpl<BccRecord> {
     /**
      * The column <code>oagi.bcc.cardinality_max</code>. Maximum cardinality of
      * the TO_BCCP_ID. The valid values are integer -1 and up. Specifically, -1
-     * means unbounded. 0 means prohibited or not to use.',
+     * means unbounded. 0 means prohibited or not to use.
      */
-    public final TableField<BccRecord, Integer> CARDINALITY_MAX = createField(DSL.name("cardinality_max"), SQLDataType.INTEGER.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.INTEGER)), this, "Maximum cardinality of the TO_BCCP_ID. The valid values are integer -1 and up. Specifically, -1 means unbounded. 0 means prohibited or not to use.',");
+    public final TableField<BccRecord, Integer> CARDINALITY_MAX = createField(DSL.name("cardinality_max"), SQLDataType.INTEGER.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.INTEGER)), this, "Maximum cardinality of the TO_BCCP_ID. The valid values are integer -1 and up. Specifically, -1 means unbounded. 0 means prohibited or not to use.");
 
     /**
      * The column <code>oagi.bcc.to_bccp_id</code>. TO_BCCP_ID is a foreign key
@@ -97,9 +97,9 @@ public class Bcc extends TableImpl<BccRecord> {
      * of the FROM_ACC_ID. 
      * 
      * Note that for the BCC history records, this column always points to the
-     * BCCP_ID of the current record of a BCCP.',
+     * BCCP_ID of the current record of a BCCP.
      */
-    public final TableField<BccRecord, ULong> TO_BCCP_ID = createField(DSL.name("to_bccp_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "TO_BCCP_ID is a foreign key to an BCCP table record. It is basically pointing to a child data element of the FROM_ACC_ID. \n\nNote that for the BCC history records, this column always points to the BCCP_ID of the current record of a BCCP.',");
+    public final TableField<BccRecord, ULong> TO_BCCP_ID = createField(DSL.name("to_bccp_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "TO_BCCP_ID is a foreign key to an BCCP table record. It is basically pointing to a child data element of the FROM_ACC_ID. \n\nNote that for the BCC history records, this column always points to the BCCP_ID of the current record of a BCCP.");
 
     /**
      * The column <code>oagi.bcc.from_acc_id</code>. FROM_ACC_ID is a foreign

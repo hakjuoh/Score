@@ -2,6 +2,7 @@ import {
   ModelBrowserAccNode,
   ModelBrowserAsccpNode,
   ModelBrowserBccpNode,
+  ModelBrowserNode,
   ModelBrowserNodeDatabase,
   ModelBrowserNodeDataSource
 } from './model-browser-node';
@@ -14,7 +15,7 @@ import {BieViewOrderEntry} from './bie-view-order';
  */
 
 /** A bare ACC view parent: expandable short-circuited, just enough of a graph node to derive a path. */
-function accParent(accManifestId: number, children: ModelBrowserAccNode[] = []): ModelBrowserAccNode {
+function accParent(accManifestId: number, children: ModelBrowserNode[] = []): ModelBrowserAccNode {
   const n = new ModelBrowserAccNode();
   n.name = 'Parent-' + accManifestId;
   n.level = 0;

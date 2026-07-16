@@ -39,7 +39,7 @@ public class BbieBiztermRecord extends UpdatableRecordImpl<BbieBiztermRecord> {
 
     /**
      * Setter for <code>oagi.bbie_bizterm.bcc_bizterm_id</code>. An internal ID
-     * of the bbie_bizterm record.
+     * of the bcc_bizterm record.
      */
     public void setBccBiztermId(ULong value) {
         set(1, value);
@@ -47,7 +47,7 @@ public class BbieBiztermRecord extends UpdatableRecordImpl<BbieBiztermRecord> {
 
     /**
      * Getter for <code>oagi.bbie_bizterm.bcc_bizterm_id</code>. An internal ID
-     * of the bbie_bizterm record.
+     * of the bcc_bizterm record.
      */
     public ULong getBccBiztermId() {
         return (ULong) get(1);
@@ -104,7 +104,7 @@ public class BbieBiztermRecord extends UpdatableRecordImpl<BbieBiztermRecord> {
     /**
      * Setter for <code>oagi.bbie_bizterm.created_by</code>. A foreign key
      * referring to the user who creates the bbie_bizterm record. The creator of
-     * the asbie_bizterm is also its owner by default.
+     * the bbie_bizterm is also its owner by default.
      */
     public void setCreatedBy(ULong value) {
         set(5, value);
@@ -113,7 +113,7 @@ public class BbieBiztermRecord extends UpdatableRecordImpl<BbieBiztermRecord> {
     /**
      * Getter for <code>oagi.bbie_bizterm.created_by</code>. A foreign key
      * referring to the user who creates the bbie_bizterm record. The creator of
-     * the asbie_bizterm is also its owner by default.
+     * the bbie_bizterm is also its owner by default.
      */
     public ULong getCreatedBy() {
         return (ULong) get(5);

@@ -285,6 +285,13 @@ mat-multi-sort-table-settings .table-settings-menu {
   border: 1px solid #333;
 }
 
+.cdk-global-overlay-wrapper:has(.mat-mdc-snack-bar-container) {
+  transform: translate(
+    var(--score-ai-chat-overlay-x, 0px),
+    var(--score-ai-chat-overlay-y, 0px)
+  );
+}
+
 .mat-icon.fa {
   height: 13px;
   width: 13px;

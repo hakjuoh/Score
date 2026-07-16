@@ -79,9 +79,9 @@ public class CtxSchemeValue extends TableImpl<CtxSchemeValueRecord> {
 
     /**
      * The column <code>oagi.ctx_scheme_value.meaning</code>. The description,
-     * explanatiion of the scheme value.
+     * explanation of the scheme value.
      */
-    public final TableField<CtxSchemeValueRecord, String> MEANING = createField(DSL.name("meaning"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The description, explanatiion of the scheme value.");
+    public final TableField<CtxSchemeValueRecord, String> MEANING = createField(DSL.name("meaning"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The description, explanation of the scheme value.");
 
     /**
      * The column <code>oagi.ctx_scheme_value.owner_ctx_scheme_id</code>.

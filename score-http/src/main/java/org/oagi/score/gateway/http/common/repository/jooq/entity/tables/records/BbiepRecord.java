@@ -23,7 +23,7 @@ public class BbiepRecord extends UpdatableRecordImpl<BbiepRecord> {
 
     /**
      * Setter for <code>oagi.bbiep.bbiep_id</code>. A internal, primary database
-     * key of an BBIEP.
+     * key of a BBIEP.
      */
     public void setBbiepId(ULong value) {
         set(0, value);
@@ -31,7 +31,7 @@ public class BbiepRecord extends UpdatableRecordImpl<BbiepRecord> {
 
     /**
      * Getter for <code>oagi.bbiep.bbiep_id</code>. A internal, primary database
-     * key of an BBIEP.
+     * key of a BBIEP.
      */
     public ULong getBbiepId() {
         return (ULong) get(0);
@@ -72,14 +72,16 @@ public class BbiepRecord extends UpdatableRecordImpl<BbiepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bbiep.path</code>.
+     * Setter for <code>oagi.bbiep.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
     public void setPath(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.bbiep.path</code>.
+     * Getter for <code>oagi.bbiep.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
     public String getPath() {
         return (String) get(3);
@@ -105,7 +107,7 @@ public class BbiepRecord extends UpdatableRecordImpl<BbiepRecord> {
 
     /**
      * Setter for <code>oagi.bbiep.definition</code>. Definition to override the
-     * BCCP's Definition. If NULLl, it means that the definition should be
+     * BCCP's Definition. If NULL, it means that the definition should be
      * inherited from the based CC.
      */
     public void setDefinition(String value) {
@@ -114,7 +116,7 @@ public class BbiepRecord extends UpdatableRecordImpl<BbiepRecord> {
 
     /**
      * Getter for <code>oagi.bbiep.definition</code>. Definition to override the
-     * BCCP's Definition. If NULLl, it means that the definition should be
+     * BCCP's Definition. If NULL, it means that the definition should be
      * inherited from the based CC.
      */
     public String getDefinition() {
@@ -189,7 +191,7 @@ public class BbiepRecord extends UpdatableRecordImpl<BbiepRecord> {
      * Setter for <code>oagi.bbiep.created_by</code>. A foreign key referring to
      * the user who creates the BBIEP. The creator of the BBIEP is also its
      * owner by default. BBIEPs created as children of another ABIE have the
-     * same CREATED_BY',
+     * same CREATED_BY.
      */
     public void setCreatedBy(ULong value) {
         set(9, value);
@@ -199,7 +201,7 @@ public class BbiepRecord extends UpdatableRecordImpl<BbiepRecord> {
      * Getter for <code>oagi.bbiep.created_by</code>. A foreign key referring to
      * the user who creates the BBIEP. The creator of the BBIEP is also its
      * owner by default. BBIEPs created as children of another ABIE have the
-     * same CREATED_BY',
+     * same CREATED_BY.
      */
     public ULong getCreatedBy() {
         return (ULong) get(9);
@@ -224,7 +226,7 @@ public class BbiepRecord extends UpdatableRecordImpl<BbiepRecord> {
     /**
      * Setter for <code>oagi.bbiep.creation_timestamp</code>. Timestamp when the
      * BBIEP record was first created. BBIEPs created as children of another
-     * ABIE have the same CREATION_TIMESTAMP,
+     * ABIE have the same CREATION_TIMESTAMP.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(11, value);
@@ -233,7 +235,7 @@ public class BbiepRecord extends UpdatableRecordImpl<BbiepRecord> {
     /**
      * Getter for <code>oagi.bbiep.creation_timestamp</code>. Timestamp when the
      * BBIEP record was first created. BBIEPs created as children of another
-     * ABIE have the same CREATION_TIMESTAMP,
+     * ABIE have the same CREATION_TIMESTAMP.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(11);

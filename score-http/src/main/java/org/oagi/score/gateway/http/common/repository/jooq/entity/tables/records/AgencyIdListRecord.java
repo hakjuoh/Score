@@ -56,7 +56,7 @@ public class AgencyIdListRecord extends UpdatableRecordImpl<AgencyIdListRecord> 
     /**
      * Setter for <code>oagi.agency_id_list.enum_type_guid</code>. This column
      * stores the GUID of the type containing the enumerated values. In OAGIS,
-     * most code lists and agnecy ID lists are defined by an XyzCodeContentType
+     * most code lists and agency ID lists are defined by an XyzCodeContentType
      * (or XyzAgencyIdentificationContentType) and XyzCodeEnumerationType (or
      * XyzAgencyIdentificationEnumerationContentType). However, some don't have
      * the enumeration type. When that is the case, this column is null.
@@ -68,7 +68,7 @@ public class AgencyIdListRecord extends UpdatableRecordImpl<AgencyIdListRecord> 
     /**
      * Getter for <code>oagi.agency_id_list.enum_type_guid</code>. This column
      * stores the GUID of the type containing the enumerated values. In OAGIS,
-     * most code lists and agnecy ID lists are defined by an XyzCodeContentType
+     * most code lists and agency ID lists are defined by an XyzCodeContentType
      * (or XyzAgencyIdentificationContentType) and XyzCodeEnumerationType (or
      * XyzAgencyIdentificationEnumerationContentType). However, some don't have
      * the enumeration type. When that is the case, this column is null.

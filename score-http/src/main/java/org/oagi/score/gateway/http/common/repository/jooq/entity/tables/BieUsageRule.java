@@ -108,10 +108,10 @@ public class BieUsageRule extends TableImpl<BieUsageRuleRecord> {
 
     /**
      * The column <code>oagi.bie_usage_rule.target_bbiep_id</code>. Foreign key
-     * to the BBIEP table indicating the ABIEP, to which the usage rule is
+     * to the BBIEP table indicating the BBIEP, to which the usage rule is
      * applied.
      */
-    public final TableField<BieUsageRuleRecord, ULong> TARGET_BBIEP_ID = createField(DSL.name("target_bbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the BBIEP table indicating the ABIEP, to which the usage rule is applied.");
+    public final TableField<BieUsageRuleRecord, ULong> TARGET_BBIEP_ID = createField(DSL.name("target_bbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the BBIEP table indicating the BBIEP, to which the usage rule is applied.");
 
     private BieUsageRule(Name alias, Table<BieUsageRuleRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

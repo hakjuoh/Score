@@ -194,12 +194,12 @@ public class Ascc extends TableImpl<AsccRecord> {
     /**
      * The column <code>oagi.ascc.state</code>. Deleted, WIP, Draft, QA,
      * Candidate, Production, Release Draft, Published. This the revision life
-     * cycle state of the BCC.
+     * cycle state of the ASCC.
      * 
      * State change can't be undone. But the history record can still keep the
      * records of when the state was changed.
      */
-    public final TableField<AsccRecord, String> STATE = createField(DSL.name("state"), SQLDataType.VARCHAR(20).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Deleted, WIP, Draft, QA, Candidate, Production, Release Draft, Published. This the revision life cycle state of the BCC.\n\nState change can't be undone. But the history record can still keep the records of when the state was changed.");
+    public final TableField<AsccRecord, String> STATE = createField(DSL.name("state"), SQLDataType.VARCHAR(20).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Deleted, WIP, Draft, QA, Candidate, Production, Release Draft, Published. This the revision life cycle state of the ASCC.\n\nState change can't be undone. But the history record can still keep the records of when the state was changed.");
 
     /**
      * The column <code>oagi.ascc.prev_ascc_id</code>. A self-foreign key to

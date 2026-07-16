@@ -111,18 +111,18 @@ public class DtSc extends TableImpl<DtScRecord> {
     public final TableField<DtScRecord, String> DEFINITION_SOURCE = createField(DSL.name("definition_source"), SQLDataType.VARCHAR(200).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "This is typically a URL identifying the source of the DEFINITION column.");
 
     /**
-     * The column <code>oagi.dt_sc.owner_dt_id</code>. Foreigned key to the DT
+     * The column <code>oagi.dt_sc.owner_dt_id</code>. Foreign key to the DT
      * table indicating the data type, to which this supplementary component
      * belongs.
      */
-    public final TableField<DtScRecord, ULong> OWNER_DT_ID = createField(DSL.name("owner_dt_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreigned key to the DT table indicating the data type, to which this supplementary component belongs.");
+    public final TableField<DtScRecord, ULong> OWNER_DT_ID = createField(DSL.name("owner_dt_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the DT table indicating the data type, to which this supplementary component belongs.");
 
     /**
      * The column <code>oagi.dt_sc.cardinality_min</code>. The minimum
      * occurrence constraint associated with the supplementary component. The
-     * valid values zero or one.
+     * valid values are zero or one.
      */
-    public final TableField<DtScRecord, Integer> CARDINALITY_MIN = createField(DSL.name("cardinality_min"), SQLDataType.INTEGER.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.INTEGER)), this, "The minimum occurrence constraint associated with the supplementary component. The valid values zero or one.");
+    public final TableField<DtScRecord, Integer> CARDINALITY_MIN = createField(DSL.name("cardinality_min"), SQLDataType.INTEGER.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.INTEGER)), this, "The minimum occurrence constraint associated with the supplementary component. The valid values are zero or one.");
 
     /**
      * The column <code>oagi.dt_sc.cardinality_max</code>. The maximum
@@ -168,9 +168,10 @@ public class DtSc extends TableImpl<DtScRecord> {
 
     /**
      * The column <code>oagi.dt_sc.created_by</code>. Foreign key to the
-     * APP_USER table. It indicates the user who created the code list.
+     * APP_USER table. It indicates the user who created the supplementary
+     * component.
      */
-    public final TableField<DtScRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It indicates the user who created the code list.");
+    public final TableField<DtScRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It indicates the user who created the supplementary component.");
 
     /**
      * The column <code>oagi.dt_sc.owner_user_id</code>. Foreign key to the
@@ -184,21 +185,22 @@ public class DtSc extends TableImpl<DtScRecord> {
 
     /**
      * The column <code>oagi.dt_sc.last_updated_by</code>. Foreign key to the
-     * APP_USER table. It identifies the user who last updated the code list.
+     * APP_USER table. It identifies the user who last updated the supplementary
+     * component.
      */
-    public final TableField<DtScRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It identifies the user who last updated the code list.");
+    public final TableField<DtScRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It identifies the user who last updated the supplementary component.");
 
     /**
      * The column <code>oagi.dt_sc.creation_timestamp</code>. Timestamp when the
-     * code list was created.
+     * supplementary component was created.
      */
-    public final TableField<DtScRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "Timestamp when the code list was created.");
+    public final TableField<DtScRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "Timestamp when the supplementary component was created.");
 
     /**
      * The column <code>oagi.dt_sc.last_update_timestamp</code>. Timestamp when
-     * the code list was last updated.
+     * the supplementary component was last updated.
      */
-    public final TableField<DtScRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "Timestamp when the code list was last updated.");
+    public final TableField<DtScRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "Timestamp when the supplementary component was last updated.");
 
     /**
      * The column <code>oagi.dt_sc.prev_dt_sc_id</code>. A self-foreign key to

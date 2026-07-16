@@ -136,8 +136,8 @@ public class CtxSchemeRecord extends UpdatableRecordImpl<CtxSchemeRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ctx_scheme.ctx_category_id</code>. This the foreign
-     * key to the CTX_CATEGORY table. It identifies the context category
+     * Setter for <code>oagi.ctx_scheme.ctx_category_id</code>. This is the
+     * foreign key to the CTX_CATEGORY table. It identifies the context category
      * associated with this context scheme.
      */
     public void setCtxCategoryId(ULong value) {
@@ -145,8 +145,8 @@ public class CtxSchemeRecord extends UpdatableRecordImpl<CtxSchemeRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ctx_scheme.ctx_category_id</code>. This the foreign
-     * key to the CTX_CATEGORY table. It identifies the context category
+     * Getter for <code>oagi.ctx_scheme.ctx_category_id</code>. This is the
+     * foreign key to the CTX_CATEGORY table. It identifies the context category
      * associated with this context scheme.
      */
     public ULong getCtxCategoryId() {

@@ -72,14 +72,16 @@ public class AsbiepRecord extends UpdatableRecordImpl<AsbiepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.asbiep.path</code>.
+     * Setter for <code>oagi.asbiep.path</code>. The path of this node within
+     * the component graph; used together with HASH_PATH to locate the node.
      */
     public void setPath(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.asbiep.path</code>.
+     * Getter for <code>oagi.asbiep.path</code>. The path of this node within
+     * the component graph; used together with HASH_PATH to locate the node.
      */
     public String getPath() {
         return (String) get(3);

@@ -8,6 +8,10 @@ spring:
   aop:
     proxy-target-class: true
 
+  mvc:
+    async:
+      request-timeout: 10m
+
   # Spring Boot 4 defaults to Jackson 3. Align the auto-configured mapper with Jackson 2
   # defaults during the migration (#1750); paired with the spring-boot-jackson2 bridge.
   jackson:
@@ -58,13 +62,31 @@ spring:
       base-url: ${OLLAMA_URL:http://localhost:11434}
       init:
         timeout: ${OLLAMA_TIMEOUT:20s}
-
+    mcp:
+      client:
+        # Requester-scoped broker JWTs require a fresh MCP client per chat turn.
+        # The connection remains in the framework's standard property namespace, while the
+        # generic starter lifecycle is disabled in favor of ConnectCenterMcpClientFactory.
+        enabled: false
+        streamable-http:
+          connections:
+            connect-center-mcp:
+              url: ${CONNECT_CENTER_MCP_URL:}
+              endpoint: ${CONNECT_CENTER_MCP_ENDPOINT:/mcp/}
+    chat:
+      client:
+        tool-search-advisor:
+          enabled: true
+          tool-index-type: regex
+          max-results: 10
 logging:
   level:
     org.springframework: INFO
     org.springframework.security: DEBUG
-    org.springframework.websocket: DEBUG
-    org.springframework.messaging: DEBUG
+    org.springframework.websocket: INFO
+    org.springframework.messaging: INFO
+    org.springframework.ai.mcp: INFO
+    io.modelcontextprotocol: INFO
     org.jooq: DEBUG
     org.oagi.score: DEBUG
 
@@ -86,6 +108,9 @@ springdoc:
     tags-sorter: alpha
 
 score:
+  redis:
+    # Destructive maintenance switch. Keep false for every multi-instance deployment.
+    flush-on-startup: ${SCORE_REDIS_FLUSH_ON_STARTUP:false}
   integration:
     github:
       enabled: ${SCORE_GITHUB_ENABLED:false}

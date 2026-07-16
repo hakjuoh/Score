@@ -91,7 +91,7 @@ public class BccpRecord extends UpdatableRecordImpl<BccpRecord> {
 
     /**
      * Setter for <code>oagi.bccp.bdt_id</code>. Foreign key pointing to the DT
-     * table indicating the data typye or data format of the BCCP. Only DT_ID
+     * table indicating the data type or data format of the BCCP. Only DT_ID
      * which DT_Type is BDT can be used.
      */
     public void setBdtId(ULong value) {
@@ -100,7 +100,7 @@ public class BccpRecord extends UpdatableRecordImpl<BccpRecord> {
 
     /**
      * Getter for <code>oagi.bccp.bdt_id</code>. Foreign key pointing to the DT
-     * table indicating the data typye or data format of the BCCP. Only DT_ID
+     * table indicating the data type or data format of the BCCP. Only DT_ID
      * which DT_Type is BDT can be used.
      */
     public ULong getBdtId() {

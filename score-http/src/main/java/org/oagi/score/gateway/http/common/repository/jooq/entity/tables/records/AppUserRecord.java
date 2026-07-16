@@ -127,7 +127,7 @@ public class AppUserRecord extends UpdatableRecordImpl<AppUserRecord> {
 
     /**
      * Setter for <code>oagi.app_user.email_verified_timestamp</code>. The
-     * timestamp when the email address has verified.
+     * timestamp when the email address has been verified.
      */
     public void setEmailVerifiedTimestamp(LocalDateTime value) {
         set(7, value);
@@ -135,21 +135,23 @@ public class AppUserRecord extends UpdatableRecordImpl<AppUserRecord> {
 
     /**
      * Getter for <code>oagi.app_user.email_verified_timestamp</code>. The
-     * timestamp when the email address has verified.
+     * timestamp when the email address has been verified.
      */
     public LocalDateTime getEmailVerifiedTimestamp() {
         return (LocalDateTime) get(7);
     }
 
     /**
-     * Setter for <code>oagi.app_user.is_developer</code>.
+     * Setter for <code>oagi.app_user.is_developer</code>. Indicator whether the
+     * user has a developer role or not.
      */
     public void setIsDeveloper(Byte value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.app_user.is_developer</code>.
+     * Getter for <code>oagi.app_user.is_developer</code>. Indicator whether the
+     * user has a developer role or not.
      */
     public Byte getIsDeveloper() {
         return (Byte) get(8);
@@ -172,14 +174,16 @@ public class AppUserRecord extends UpdatableRecordImpl<AppUserRecord> {
     }
 
     /**
-     * Setter for <code>oagi.app_user.is_enabled</code>.
+     * Setter for <code>oagi.app_user.is_enabled</code>. Indicator whether the
+     * user account is enabled or not.
      */
     public void setIsEnabled(Byte value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.app_user.is_enabled</code>.
+     * Getter for <code>oagi.app_user.is_enabled</code>. Indicator whether the
+     * user account is enabled or not.
      */
     public Byte getIsEnabled() {
         return (Byte) get(10);

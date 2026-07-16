@@ -23,16 +23,16 @@ public class TopLevelAsbiepRecord extends UpdatableRecordImpl<TopLevelAsbiepReco
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.top_level_asbiep.top_level_asbiep_id</code>. A
-     * internal, primary database key of an top-level ASBIEP.
+     * Setter for <code>oagi.top_level_asbiep.top_level_asbiep_id</code>. An
+     * internal, primary database key of a TOP_LEVEL_ASBIEP record.
      */
     public void setTopLevelAsbiepId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.top_level_asbiep.top_level_asbiep_id</code>. A
-     * internal, primary database key of an top-level ASBIEP.
+     * Getter for <code>oagi.top_level_asbiep.top_level_asbiep_id</code>. An
+     * internal, primary database key of a TOP_LEVEL_ASBIEP record.
      */
     public ULong getTopLevelAsbiepId() {
         return (ULong) get(0);
@@ -71,14 +71,24 @@ public class TopLevelAsbiepRecord extends UpdatableRecordImpl<TopLevelAsbiepReco
     }
 
     /**
-     * Setter for <code>oagi.top_level_asbiep.owner_user_id</code>.
+     * Setter for <code>oagi.top_level_asbiep.owner_user_id</code>. Foreign key
+     * to the APP_USER table. This is the user who owns the entity, is allowed
+     * to edit the entity, and who can transfer the ownership to another user.
+     *
+     * The ownership can change throughout the history, but undoing shouldn't
+     * rollback the ownership.
      */
     public void setOwnerUserId(ULong value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.top_level_asbiep.owner_user_id</code>.
+     * Getter for <code>oagi.top_level_asbiep.owner_user_id</code>. Foreign key
+     * to the APP_USER table. This is the user who owns the entity, is allowed
+     * to edit the entity, and who can transfer the ownership to another user.
+     *
+     * The ownership can change throughout the history, but undoing shouldn't
+     * rollback the ownership.
      */
     public ULong getOwnerUserId() {
         return (ULong) get(3);
@@ -86,7 +96,7 @@ public class TopLevelAsbiepRecord extends UpdatableRecordImpl<TopLevelAsbiepReco
 
     /**
      * Setter for <code>oagi.top_level_asbiep.last_update_timestamp</code>. The
-     * timestamp when among all related bie records was last updated.
+     * timestamp when any of the related BIE records was last updated.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(4, value);
@@ -94,7 +104,7 @@ public class TopLevelAsbiepRecord extends UpdatableRecordImpl<TopLevelAsbiepReco
 
     /**
      * Getter for <code>oagi.top_level_asbiep.last_update_timestamp</code>. The
-     * timestamp when among all related bie records was last updated.
+     * timestamp when any of the related BIE records was last updated.
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(4);
@@ -118,8 +128,8 @@ public class TopLevelAsbiepRecord extends UpdatableRecordImpl<TopLevelAsbiepReco
 
     /**
      * Setter for <code>oagi.top_level_asbiep.release_id</code>. Foreign key to
-     * the RELEASE table. It identifies the release, for which this module is
-     * associated.
+     * the RELEASE table. It identifies the release, for which this top-level
+     * ASBIEP is associated.
      */
     public void setReleaseId(ULong value) {
         set(6, value);
@@ -127,16 +137,16 @@ public class TopLevelAsbiepRecord extends UpdatableRecordImpl<TopLevelAsbiepReco
 
     /**
      * Getter for <code>oagi.top_level_asbiep.release_id</code>. Foreign key to
-     * the RELEASE table. It identifies the release, for which this module is
-     * associated.
+     * the RELEASE table. It identifies the release, for which this top-level
+     * ASBIEP is associated.
      */
     public ULong getReleaseId() {
         return (ULong) get(6);
     }
 
     /**
-     * Setter for <code>oagi.top_level_asbiep.version</code>. This column hold a
-     * version number assigned by the user. This column is only used by the
+     * Setter for <code>oagi.top_level_asbiep.version</code>. This column holds
+     * a version number assigned by the user. This column is only used by the
      * top-level ASBIEP. No format of version is enforced.
      */
     public void setVersion(String value) {
@@ -144,8 +154,8 @@ public class TopLevelAsbiepRecord extends UpdatableRecordImpl<TopLevelAsbiepReco
     }
 
     /**
-     * Getter for <code>oagi.top_level_asbiep.version</code>. This column hold a
-     * version number assigned by the user. This column is only used by the
+     * Getter for <code>oagi.top_level_asbiep.version</code>. This column holds
+     * a version number assigned by the user. This column is only used by the
      * top-level ASBIEP. No format of version is enforced.
      */
     public String getVersion() {
@@ -157,7 +167,7 @@ public class TopLevelAsbiepRecord extends UpdatableRecordImpl<TopLevelAsbiepReco
      * from the STATE column which is CRUD life cycle of an entity. The use case
      * for this is to allow the user to indicate the usage status of a top-level
      * ASBIEP (a profile BOD). An integration architect can use this column.
-     * Example values are ?Prototype?, ?Test?, and ?Production?. Only the
+     * Example values are 'Prototype', 'Test', and 'Production'. Only the
      * top-level ASBIEP can use this field.
      */
     public void setStatus(String value) {
@@ -169,7 +179,7 @@ public class TopLevelAsbiepRecord extends UpdatableRecordImpl<TopLevelAsbiepReco
      * from the STATE column which is CRUD life cycle of an entity. The use case
      * for this is to allow the user to indicate the usage status of a top-level
      * ASBIEP (a profile BOD). An integration architect can use this column.
-     * Example values are ?Prototype?, ?Test?, and ?Production?. Only the
+     * Example values are 'Prototype', 'Test', and 'Production'. Only the
      * top-level ASBIEP can use this field.
      */
     public String getStatus() {
@@ -177,14 +187,18 @@ public class TopLevelAsbiepRecord extends UpdatableRecordImpl<TopLevelAsbiepReco
     }
 
     /**
-     * Setter for <code>oagi.top_level_asbiep.state</code>.
+     * Setter for <code>oagi.top_level_asbiep.state</code>. The life cycle state
+     * of the top-level ASBIEP. Possible values are Initiating, WIP, QA, and
+     * Production.
      */
     public void setState(String value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.top_level_asbiep.state</code>.
+     * Getter for <code>oagi.top_level_asbiep.state</code>. The life cycle state
+     * of the top-level ASBIEP. Possible values are Initiating, WIP, QA, and
+     * Production.
      */
     public String getState() {
         return (String) get(9);

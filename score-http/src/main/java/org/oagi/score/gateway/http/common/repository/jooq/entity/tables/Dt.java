@@ -103,9 +103,10 @@ public class Dt extends TableImpl<DtRecord> {
     public final TableField<DtRecord, String> QUALIFIER = createField(DSL.name("qualifier"), SQLDataType.VARCHAR(100).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "This column shall be blank when the DT_TYPE is CDT. When the DT_TYPE is BDT, this is optional. If the column is not blank it is a qualified BDT. If blank then the row may be a default BDT or an unqualified BDT. Default BDT is OAGIS concrete implementation of the CDT, these are the DT with numbers in the name, e.g., CodeType_1E7368 (DEN is 'Code_1E7368. Type'). Default BDTs are almost like permutation of the CDT options into concrete data types. Unqualified BDT is a BDT that OAGIS model schema generally used for its canonical. A handful of default BDTs were selected; and each of them is wrapped with another type definition that has a simpler name such as CodeType and NormalizedString type - we call these \"unqualified BDTs\". ");
 
     /**
-     * The column <code>oagi.dt.representation_term</code>.
+     * The column <code>oagi.dt.representation_term</code>. This is the
+     * representation term assigned to the DT.
      */
-    public final TableField<DtRecord, String> REPRESENTATION_TERM = createField(DSL.name("representation_term"), SQLDataType.VARCHAR(100).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "");
+    public final TableField<DtRecord, String> REPRESENTATION_TERM = createField(DSL.name("representation_term"), SQLDataType.VARCHAR(100).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "This is the representation term assigned to the DT.");
 
     /**
      * The column <code>oagi.dt.six_digit_id</code>. The six number suffix comes

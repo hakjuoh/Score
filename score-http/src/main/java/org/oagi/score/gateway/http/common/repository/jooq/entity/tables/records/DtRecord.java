@@ -106,14 +106,16 @@ public class DtRecord extends UpdatableRecordImpl<DtRecord> {
     }
 
     /**
-     * Setter for <code>oagi.dt.representation_term</code>.
+     * Setter for <code>oagi.dt.representation_term</code>. This is the
+     * representation term assigned to the DT.
      */
     public void setRepresentationTerm(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.dt.representation_term</code>.
+     * Getter for <code>oagi.dt.representation_term</code>. This is the
+     * representation term assigned to the DT.
      */
     public String getRepresentationTerm() {
         return (String) get(4);

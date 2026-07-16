@@ -89,10 +89,10 @@ public class Module extends TableImpl<ModuleRecord> {
     public final TableField<ModuleRecord, ULong> PARENT_MODULE_ID = createField(DSL.name("parent_module_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "This indicates a parent module id. root module will be NULL.");
 
     /**
-     * The column <code>oagi.module.type</code>. This is a type column for
-     * indicates module is FILE or DIRECTORY.
+     * The column <code>oagi.module.type</code>. This is a type column that
+     * indicates whether the module is FILE or DIRECTORY.
      */
-    public final TableField<ModuleRecord, String> TYPE = createField(DSL.name("type"), SQLDataType.VARCHAR(45).nullable(false), this, "This is a type column for indicates module is FILE or DIRECTORY.");
+    public final TableField<ModuleRecord, String> TYPE = createField(DSL.name("type"), SQLDataType.VARCHAR(45).nullable(false), this, "This is a type column that indicates whether the module is FILE or DIRECTORY.");
 
     /**
      * The column <code>oagi.module.path</code>. Absolute path to the module.
@@ -100,12 +100,12 @@ public class Module extends TableImpl<ModuleRecord> {
     public final TableField<ModuleRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).nullable(false), this, "Absolute path to the module.");
 
     /**
-     * The column <code>oagi.module.name</code>. The is the filename of the
+     * The column <code>oagi.module.name</code>. This is the filename of the
      * module. The reason to not including the extension is that the extension
      * maybe dependent on the expression. For XML schema, '.xsd' maybe added; or
      * for JSON, '.json' maybe added as the file extension.
      */
-    public final TableField<ModuleRecord, String> NAME = createField(DSL.name("name"), SQLDataType.VARCHAR(100).nullable(false), this, "The is the filename of the module. The reason to not including the extension is that the extension maybe dependent on the expression. For XML schema, '.xsd' maybe added; or for JSON, '.json' maybe added as the file extension.");
+    public final TableField<ModuleRecord, String> NAME = createField(DSL.name("name"), SQLDataType.VARCHAR(100).nullable(false), this, "This is the filename of the module. The reason to not including the extension is that the extension maybe dependent on the expression. For XML schema, '.xsd' maybe added; or for JSON, '.json' maybe added as the file extension.");
 
     /**
      * The column <code>oagi.module.namespace_id</code>. Note that a release

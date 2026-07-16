@@ -99,10 +99,10 @@ public class Release extends TableImpl<ReleaseRecord> {
     public final TableField<ReleaseRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.CHAR(32).nullable(false), this, "A globally unique identifier (GUID).");
 
     /**
-     * The column <code>oagi.release.release_num</code>. Release number such has
+     * The column <code>oagi.release.release_num</code>. Release number such as
      * 10.0, 10.1, etc. 
      */
-    public final TableField<ReleaseRecord, String> RELEASE_NUM = createField(DSL.name("release_num"), SQLDataType.VARCHAR(45).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Release number such has 10.0, 10.1, etc. ");
+    public final TableField<ReleaseRecord, String> RELEASE_NUM = createField(DSL.name("release_num"), SQLDataType.VARCHAR(45).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Release number such as 10.0, 10.1, etc. ");
 
     /**
      * The column <code>oagi.release.release_note</code>. Description or note
@@ -128,9 +128,9 @@ public class Release extends TableImpl<ReleaseRecord> {
 
     /**
      * The column <code>oagi.release.created_by</code>. Foreign key to the
-     * APP_USER table identifying user who created the namespace.
+     * APP_USER table identifying the user who created the record.
      */
-    public final TableField<ReleaseRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table identifying user who created the namespace.");
+    public final TableField<ReleaseRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table identifying the user who created the record.");
 
     /**
      * The column <code>oagi.release.last_updated_by</code>. Foreign key to the

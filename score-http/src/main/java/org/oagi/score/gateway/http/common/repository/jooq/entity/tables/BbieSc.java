@@ -89,9 +89,10 @@ public class BbieSc extends TableImpl<BbieScRecord> {
     public final TableField<BbieScRecord, ULong> BASED_DT_SC_MANIFEST_ID = createField(DSL.name("based_dt_sc_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the DT_SC_MANIFEST table. This should correspond to the DT_SC of the BDT of the based BCC and BCCP.");
 
     /**
-     * The column <code>oagi.bbie_sc.path</code>.
+     * The column <code>oagi.bbie_sc.path</code>. The path of this node within
+     * the component graph; used together with HASH_PATH to locate the node.
      */
-    public final TableField<BbieScRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "");
+    public final TableField<BbieScRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The path of this node within the component graph; used together with HASH_PATH to locate the node.");
 
     /**
      * The column <code>oagi.bbie_sc.hash_path</code>. hash_path generated from
@@ -158,10 +159,10 @@ public class BbieSc extends TableImpl<BbieScRecord> {
     public final TableField<BbieScRecord, Integer> CARDINALITY_MIN = createField(DSL.name("cardinality_min"), SQLDataType.INTEGER.nullable(false), this, "The minimum occurrence constraint for the BBIE SC. A valid value is 0 or 1.");
 
     /**
-     * The column <code>oagi.bbie_sc.cardinality_max</code>. Maximum occurence
+     * The column <code>oagi.bbie_sc.cardinality_max</code>. Maximum occurrence
      * constraint of the BBIE SC. A valid value is 0 or 1.
      */
-    public final TableField<BbieScRecord, Integer> CARDINALITY_MAX = createField(DSL.name("cardinality_max"), SQLDataType.INTEGER.nullable(false), this, "Maximum occurence constraint of the BBIE SC. A valid value is 0 or 1.");
+    public final TableField<BbieScRecord, Integer> CARDINALITY_MAX = createField(DSL.name("cardinality_max"), SQLDataType.INTEGER.nullable(false), this, "Maximum occurrence constraint of the BBIE SC. A valid value is 0 or 1.");
 
     /**
      * The column <code>oagi.bbie_sc.facet_min_length</code>. Defines the
@@ -171,9 +172,9 @@ public class BbieSc extends TableImpl<BbieScRecord> {
 
     /**
      * The column <code>oagi.bbie_sc.facet_max_length</code>. Defines the
-     * minimum number of units of length.
+     * maximum number of units of length.
      */
-    public final TableField<BbieScRecord, ULong> FACET_MAX_LENGTH = createField(DSL.name("facet_max_length"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Defines the minimum number of units of length.");
+    public final TableField<BbieScRecord, ULong> FACET_MAX_LENGTH = createField(DSL.name("facet_max_length"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Defines the maximum number of units of length.");
 
     /**
      * The column <code>oagi.bbie_sc.facet_pattern</code>. Defines a constraint
@@ -203,9 +204,10 @@ public class BbieSc extends TableImpl<BbieScRecord> {
     public final TableField<BbieScRecord, String> DEFINITION = createField(DSL.name("definition"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Description to override the BDT SC definition. If NULL, it means that the definition should be inherited from the based BDT SC.");
 
     /**
-     * The column <code>oagi.bbie_sc.example</code>.
+     * The column <code>oagi.bbie_sc.example</code>. An example value for the
+     * BBIE SC.
      */
-    public final TableField<BbieScRecord, String> EXAMPLE = createField(DSL.name("example"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "");
+    public final TableField<BbieScRecord, String> EXAMPLE = createField(DSL.name("example"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "An example value for the BBIE SC.");
 
     /**
      * The column <code>oagi.bbie_sc.remark</code>. This column allows the user

@@ -73,14 +73,16 @@ public class AsbieRecord extends UpdatableRecordImpl<AsbieRecord> {
     }
 
     /**
-     * Setter for <code>oagi.asbie.path</code>.
+     * Setter for <code>oagi.asbie.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
     public void setPath(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.asbie.path</code>.
+     * Getter for <code>oagi.asbie.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
     public String getPath() {
         return (String) get(3);
@@ -167,7 +169,7 @@ public class AsbieRecord extends UpdatableRecordImpl<AsbieRecord> {
     }
 
     /**
-     * Setter for <code>oagi.asbie.cardinality_min</code>. Minimum occurence
+     * Setter for <code>oagi.asbie.cardinality_min</code>. Minimum occurrence
      * constraint of the TO_ASBIEP_ID. A valid value is a non-negative integer.
      */
     public void setCardinalityMin(Integer value) {
@@ -175,7 +177,7 @@ public class AsbieRecord extends UpdatableRecordImpl<AsbieRecord> {
     }
 
     /**
-     * Getter for <code>oagi.asbie.cardinality_min</code>. Minimum occurence
+     * Getter for <code>oagi.asbie.cardinality_min</code>. Minimum occurrence
      * constraint of the TO_ASBIEP_ID. A valid value is a non-negative integer.
      */
     public Integer getCardinalityMin() {
@@ -317,24 +319,26 @@ public class AsbieRecord extends UpdatableRecordImpl<AsbieRecord> {
     }
 
     /**
-     * Setter for <code>oagi.asbie.seq_key</code>. This indicates the order of
-     * the associations among other siblings. The SEQ_KEY for BIEs is decimal in
-     * order to accomodate the removal of inheritance hierarchy and group. For
-     * example, children of the most abstract ACC will have SEQ_KEY = 1.1, 1.2,
-     * 1.3, and so on; and SEQ_KEY of the next abstraction level ACC will have
-     * SEQ_KEY = 2.1, 2.2, 2.3 and so on so forth.
+     * Setter for <code>oagi.asbie.seq_key</code>. DEPRECATED. Instead, use
+     * `seq_key` table. This indicates the order of the associations among other
+     * siblings. The SEQ_KEY for BIEs is decimal in order to accommodate the
+     * removal of inheritance hierarchy and group. For example, children of the
+     * most abstract ACC will have SEQ_KEY = 1.1, 1.2, 1.3, and so on; and
+     * SEQ_KEY of the next abstraction level ACC will have SEQ_KEY = 2.1, 2.2,
+     * 2.3 and so on so forth.
      */
     public void setSeqKey(BigDecimal value) {
         set(16, value);
     }
 
     /**
-     * Getter for <code>oagi.asbie.seq_key</code>. This indicates the order of
-     * the associations among other siblings. The SEQ_KEY for BIEs is decimal in
-     * order to accomodate the removal of inheritance hierarchy and group. For
-     * example, children of the most abstract ACC will have SEQ_KEY = 1.1, 1.2,
-     * 1.3, and so on; and SEQ_KEY of the next abstraction level ACC will have
-     * SEQ_KEY = 2.1, 2.2, 2.3 and so on so forth.
+     * Getter for <code>oagi.asbie.seq_key</code>. DEPRECATED. Instead, use
+     * `seq_key` table. This indicates the order of the associations among other
+     * siblings. The SEQ_KEY for BIEs is decimal in order to accommodate the
+     * removal of inheritance hierarchy and group. For example, children of the
+     * most abstract ACC will have SEQ_KEY = 1.1, 1.2, 1.3, and so on; and
+     * SEQ_KEY of the next abstraction level ACC will have SEQ_KEY = 2.1, 2.2,
+     * 2.3 and so on so forth.
      */
     public BigDecimal getSeqKey() {
         return (BigDecimal) get(16);

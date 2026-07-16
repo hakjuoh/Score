@@ -23,7 +23,7 @@ public class AsccBiztermRecord extends UpdatableRecordImpl<AsccBiztermRecord> {
 
     /**
      * Setter for <code>oagi.ascc_bizterm.ascc_bizterm_id</code>. An internal,
-     * primary database key of an Business term.
+     * primary database key of an ascc_bizterm record.
      */
     public void setAsccBiztermId(ULong value) {
         set(0, value);
@@ -31,7 +31,7 @@ public class AsccBiztermRecord extends UpdatableRecordImpl<AsccBiztermRecord> {
 
     /**
      * Getter for <code>oagi.ascc_bizterm.ascc_bizterm_id</code>. An internal,
-     * primary database key of an Business term.
+     * primary database key of an ascc_bizterm record.
      */
     public ULong getAsccBiztermId() {
         return (ULong) get(0);

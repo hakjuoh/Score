@@ -1,0 +1,35 @@
+<div class="chat-history-panel">
+  @if (loading) {
+    <div class="chat-history-status" role="status" aria-live="polite">Loading history...</div>
+  } @else if (loadFailed) {
+    <div class="chat-history-status error" role="alert">
+      <span>Could not load history.</span>
+    </div>
+  }
+  @if (conversations.length > 0) {
+    <div class="chat-history-list">
+      @for (conversation of conversations; track conversation.conversationId) {
+        @let age = conversationAge(conversation);
+        <div class="history-action-row"
+             [class.active]="conversation.conversationId === activeConversationId">
+          <button class="history-action" type="button"
+                  [attr.aria-current]="conversation.conversationId === activeConversationId ? 'true' : null"
+                  (click)="conversationSelected.emit(conversation.conversationId)">
+            <span>{{ conversation.title }}</span>
+          </button>
+          @if (age) {
+            <span class="history-age">{{ age }}</span>
+          }
+          <button class="history-delete-button" type="button"
+                  [attr.aria-label]="'Delete conversation ' + conversation.title"
+                  matTooltip="Delete history"
+                  (click)="deleteConversation(conversation.conversationId, $event)">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+  } @else if (!loading && !loadFailed) {
+    <div class="chat-panel-empty">No history</div>
+  }
+</div>
