@@ -78,10 +78,10 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     }
 
     /**
-     * The column <code>oagi.top_level_asbiep.top_level_asbiep_id</code>. A
-     * internal, primary database key of an top-level ASBIEP.
+     * The column <code>oagi.top_level_asbiep.top_level_asbiep_id</code>. An
+     * internal, primary database key of a TOP_LEVEL_ASBIEP record.
      */
-    public final TableField<TopLevelAsbiepRecord, ULong> TOP_LEVEL_ASBIEP_ID = createField(DSL.name("top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "A internal, primary database key of an top-level ASBIEP.");
+    public final TableField<TopLevelAsbiepRecord, ULong> TOP_LEVEL_ASBIEP_ID = createField(DSL.name("top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of a TOP_LEVEL_ASBIEP record.");
 
     /**
      * The column <code>oagi.top_level_asbiep.based_top_level_asbiep_id</code>.
@@ -96,15 +96,20 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     public final TableField<TopLevelAsbiepRecord, ULong> ASBIEP_ID = createField(DSL.name("asbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the ASBIEP table pointing to a record which is a top-level ASBIEP.");
 
     /**
-     * The column <code>oagi.top_level_asbiep.owner_user_id</code>.
+     * The column <code>oagi.top_level_asbiep.owner_user_id</code>. Foreign key
+     * to the APP_USER table. This is the user who owns the entity, is allowed
+     * to edit the entity, and who can transfer the ownership to another user.
+     *
+     * The ownership can change throughout the history, but undoing shouldn't
+     * rollback the ownership.
      */
-    public final TableField<TopLevelAsbiepRecord, ULong> OWNER_USER_ID = createField(DSL.name("owner_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "");
+    public final TableField<TopLevelAsbiepRecord, ULong> OWNER_USER_ID = createField(DSL.name("owner_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. This is the user who owns the entity, is allowed to edit the entity, and who can transfer the ownership to another user.\n\nThe ownership can change throughout the history, but undoing shouldn't rollback the ownership.");
 
     /**
      * The column <code>oagi.top_level_asbiep.last_update_timestamp</code>. The
-     * timestamp when among all related bie records was last updated.
+     * timestamp when any of the related BIE records was last updated.
      */
-    public final TableField<TopLevelAsbiepRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "The timestamp when among all related bie records was last updated.");
+    public final TableField<TopLevelAsbiepRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "The timestamp when any of the related BIE records was last updated.");
 
     /**
      * The column <code>oagi.top_level_asbiep.last_updated_by</code>. A foreign
@@ -114,32 +119,34 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
 
     /**
      * The column <code>oagi.top_level_asbiep.release_id</code>. Foreign key to
-     * the RELEASE table. It identifies the release, for which this module is
-     * associated.
+     * the RELEASE table. It identifies the release, for which this top-level
+     * ASBIEP is associated.
      */
-    public final TableField<TopLevelAsbiepRecord, ULong> RELEASE_ID = createField(DSL.name("release_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the RELEASE table. It identifies the release, for which this module is associated.");
+    public final TableField<TopLevelAsbiepRecord, ULong> RELEASE_ID = createField(DSL.name("release_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the RELEASE table. It identifies the release, for which this top-level ASBIEP is associated.");
 
     /**
-     * The column <code>oagi.top_level_asbiep.version</code>. This column hold a
-     * version number assigned by the user. This column is only used by the
+     * The column <code>oagi.top_level_asbiep.version</code>. This column holds
+     * a version number assigned by the user. This column is only used by the
      * top-level ASBIEP. No format of version is enforced.
      */
-    public final TableField<TopLevelAsbiepRecord, String> VERSION = createField(DSL.name("version"), SQLDataType.VARCHAR(45).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "This column hold a version number assigned by the user. This column is only used by the top-level ASBIEP. No format of version is enforced.");
+    public final TableField<TopLevelAsbiepRecord, String> VERSION = createField(DSL.name("version"), SQLDataType.VARCHAR(45).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "This column holds a version number assigned by the user. This column is only used by the top-level ASBIEP. No format of version is enforced.");
 
     /**
      * The column <code>oagi.top_level_asbiep.status</code>. This is different
      * from the STATE column which is CRUD life cycle of an entity. The use case
      * for this is to allow the user to indicate the usage status of a top-level
      * ASBIEP (a profile BOD). An integration architect can use this column.
-     * Example values are ?Prototype?, ?Test?, and ?Production?. Only the
+     * Example values are 'Prototype', 'Test', and 'Production'. Only the
      * top-level ASBIEP can use this field.
      */
-    public final TableField<TopLevelAsbiepRecord, String> STATUS = createField(DSL.name("status"), SQLDataType.VARCHAR(45).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "This is different from the STATE column which is CRUD life cycle of an entity. The use case for this is to allow the user to indicate the usage status of a top-level ASBIEP (a profile BOD). An integration architect can use this column. Example values are ?Prototype?, ?Test?, and ?Production?. Only the top-level ASBIEP can use this field.");
+    public final TableField<TopLevelAsbiepRecord, String> STATUS = createField(DSL.name("status"), SQLDataType.VARCHAR(45).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "This is different from the STATE column which is CRUD life cycle of an entity. The use case for this is to allow the user to indicate the usage status of a top-level ASBIEP (a profile BOD). An integration architect can use this column. Example values are 'Prototype', 'Test', and 'Production'. Only the top-level ASBIEP can use this field.");
 
     /**
-     * The column <code>oagi.top_level_asbiep.state</code>.
+     * The column <code>oagi.top_level_asbiep.state</code>. The life cycle state
+     * of the top-level ASBIEP. Possible values are Initiating, WIP, QA, and
+     * Production.
      */
-    public final TableField<TopLevelAsbiepRecord, String> STATE = createField(DSL.name("state"), SQLDataType.VARCHAR(20).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "");
+    public final TableField<TopLevelAsbiepRecord, String> STATE = createField(DSL.name("state"), SQLDataType.VARCHAR(20).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "The life cycle state of the top-level ASBIEP. Possible values are Initiating, WIP, QA, and Production.");
 
     /**
      * The column <code>oagi.top_level_asbiep.inverse_mode</code>. If this is

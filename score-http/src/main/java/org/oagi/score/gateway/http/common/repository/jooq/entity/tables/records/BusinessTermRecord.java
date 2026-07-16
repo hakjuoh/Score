@@ -22,16 +22,16 @@ public class BusinessTermRecord extends UpdatableRecordImpl<BusinessTermRecord> 
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.business_term.business_term_id</code>. A internal,
-     * primary database key of an Business term.
+     * Setter for <code>oagi.business_term.business_term_id</code>. An internal,
+     * primary database key of a Business term.
      */
     public void setBusinessTermId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.business_term.business_term_id</code>. A internal,
-     * primary database key of an Business term.
+     * Getter for <code>oagi.business_term.business_term_id</code>. An internal,
+     * primary database key of a Business term.
      */
     public ULong getBusinessTermId() {
         return (ULong) get(0);

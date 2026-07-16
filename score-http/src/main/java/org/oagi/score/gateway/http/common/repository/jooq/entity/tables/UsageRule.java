@@ -67,10 +67,10 @@ public class UsageRule extends TableImpl<UsageRuleRecord> {
     public final TableField<UsageRuleRecord, ULong> USAGE_RULE_ID = createField(DSL.name("usage_rule_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Primary key of the usage rule.");
 
     /**
-     * The column <code>oagi.usage_rule.name</code>. Short nmenomic name of the
+     * The column <code>oagi.usage_rule.name</code>. Short mnemonic name of the
      * usage rule.
      */
-    public final TableField<UsageRuleRecord, String> NAME = createField(DSL.name("name"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Short nmenomic name of the usage rule.");
+    public final TableField<UsageRuleRecord, String> NAME = createField(DSL.name("name"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Short mnemonic name of the usage rule.");
 
     /**
      * The column <code>oagi.usage_rule.condition_type</code>. Condition type

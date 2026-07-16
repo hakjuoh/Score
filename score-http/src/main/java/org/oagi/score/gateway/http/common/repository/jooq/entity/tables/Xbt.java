@@ -85,9 +85,9 @@ public class Xbt extends TableImpl<XbtRecord> {
      * The column <code>oagi.xbt.builtIn_type</code>. Built-in type as it should
      * appear in the XML schema including the namespace prefix. Namespace prefix
      * for the XML schema namespace is assumed to be 'xsd' and a default prefix
-     * for the OAGIS built-int type.
+     * for the OAGIS built-in type.
      */
-    public final TableField<XbtRecord, String> BUILTIN_TYPE = createField(DSL.name("builtIn_type"), SQLDataType.VARCHAR(45).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Built-in type as it should appear in the XML schema including the namespace prefix. Namespace prefix for the XML schema namespace is assumed to be 'xsd' and a default prefix for the OAGIS built-int type.");
+    public final TableField<XbtRecord, String> BUILTIN_TYPE = createField(DSL.name("builtIn_type"), SQLDataType.VARCHAR(45).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Built-in type as it should appear in the XML schema including the namespace prefix. Namespace prefix for the XML schema namespace is assumed to be 'xsd' and a default prefix for the OAGIS built-in type.");
 
     /**
      * The column <code>oagi.xbt.jbt_draft05_map</code>. Mapping from XML

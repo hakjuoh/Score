@@ -7,6 +7,8 @@ import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.model.base.ScoreDataAccessException;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.AuthenticatedPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.session.Session;
@@ -49,11 +51,13 @@ public class SessionService {
     }
 
     public ScoreUser getScoreUserByUserId(UserId userId) {
-        return query().getScoreUser(userId);
+        ScoreUser user = query().getScoreUser(userId);
+        return requireActiveUser(user);
     }
 
     public ScoreUser getScoreUserByUsername(String username) {
-        return query().getScoreUserByUsername(username);
+        ScoreUser user = query().getScoreUserByUsername(username);
+        return requireActiveUser(user);
     }
 
     public ScoreUser getScoreSystemUser() {
@@ -68,11 +72,25 @@ public class SessionService {
         if (user == null) {
             throw new IllegalArgumentException("AuthenticatedPrincipal cannot be null");
         }
+        ScoreUser scoreUser;
         if (user instanceof OAuth2User) {
             String sub = ((OAuth2User) user).getAttribute("sub");
-            return query().getScoreUserByOidcSub(sub);
+            scoreUser = query().getScoreUserByOidcSub(sub);
+        } else if (user instanceof ScoreUserDetails scoreUserDetails && scoreUserDetails.getUserId() != null) {
+            scoreUser = query().getScoreUser(scoreUserDetails.getUserId());
         } else {
-            return query().getScoreUserByUsername(user.getName());
+            scoreUser = query().getScoreUserByUsername(user.getName());
         }
+        return requireActiveUser(scoreUser);
+    }
+
+    private ScoreUser requireActiveUser(ScoreUser user) {
+        if (user == null) {
+            throw new AuthenticationCredentialsNotFoundException("The signed-in user no longer exists or is disabled.");
+        }
+        if (user.roles().isEmpty()) {
+            throw new DisabledException("The signed-in user is disabled.");
+        }
+        return user;
     }
 }

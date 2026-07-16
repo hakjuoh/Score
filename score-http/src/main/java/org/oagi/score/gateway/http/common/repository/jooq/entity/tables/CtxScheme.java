@@ -106,11 +106,11 @@ public class CtxScheme extends TableImpl<CtxSchemeRecord> {
     public final TableField<CtxSchemeRecord, String> SCHEME_VERSION_ID = createField(DSL.name("scheme_version_id"), SQLDataType.VARCHAR(45).nullable(false), this, "Version number of the context scheme.");
 
     /**
-     * The column <code>oagi.ctx_scheme.ctx_category_id</code>. This the foreign
-     * key to the CTX_CATEGORY table. It identifies the context category
+     * The column <code>oagi.ctx_scheme.ctx_category_id</code>. This is the
+     * foreign key to the CTX_CATEGORY table. It identifies the context category
      * associated with this context scheme.
      */
-    public final TableField<CtxSchemeRecord, ULong> CTX_CATEGORY_ID = createField(DSL.name("ctx_category_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "This the foreign key to the CTX_CATEGORY table. It identifies the context category associated with this context scheme.");
+    public final TableField<CtxSchemeRecord, ULong> CTX_CATEGORY_ID = createField(DSL.name("ctx_category_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "This is the foreign key to the CTX_CATEGORY table. It identifies the context category associated with this context scheme.");
 
     /**
      * The column <code>oagi.ctx_scheme.code_list_id</code>. This is the foreign

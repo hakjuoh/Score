@@ -1,0 +1,180 @@
+@if (!state.isOpen) {
+  <button class="ai-chat-fab"
+          matTooltip="AI assistant"
+          aria-label="Open AI assistant"
+          type="button"
+          (click)="open($event)">
+    <mat-icon>smart_toy</mat-icon>
+  </button>
+}
+
+@if (state.isOpen) {
+  <aside class="ai-chat-panel"
+         [class.dock-right]="state.dock === 'right'"
+         [class.dock-left]="state.dock === 'left'"
+         [class.dock-bottom]="state.dock === 'bottom'"
+         [class.dock-top]="state.dock === 'top'"
+         [class.drag-active]="state.dragActive"
+         [ngStyle]="panelStyle"
+         (dragover)="onDragOver($event)"
+         (dragleave)="onDragLeave($event)"
+         (drop)="onDrop($event)"
+         (click)="onPanelClick($event)">
+    @if (state.dragActive) {
+      <div class="drag-overlay" aria-hidden="true">
+        <span>Drop files to attach</span>
+      </div>
+    }
+    <div class="resize-handle" (mousedown)="startResize($event)"></div>
+
+    <score-ai-chat-panel-header
+      [assistantBrand]="state.assistantBrand"
+      [dock]="state.dock"
+      (dockChanged)="setDock($event)"
+      (closeRequested)="close($event)">
+    </score-ai-chat-panel-header>
+
+    <score-ai-chat-panel-tabs
+      [idPrefix]="navigationId"
+      [activePanelTab]="state.activePanelTab"
+      [historyLoading]="state.conversationHistoryLoading"
+      (panelTabSelected)="setPanelTab($event)"
+      (newChatRequested)="startNewChat($event)"
+      (historyReloadRequested)="loadConversationHistory()">
+    </score-ai-chat-panel-tabs>
+
+    @if (state.activePanelTab === 'chat') {
+      <div class="chat-terminal-pane-frame"
+           role="tabpanel"
+           [id]="navigationId + '-panel-chat'"
+           [attr.aria-labelledby]="navigationId + '-tab-chat'">
+        <div #chatTerminalPane class="chat-terminal-pane" (scroll)="onChatPaneScroll()">
+          @if (state.restoringConversation && state.messages.length === 0) {
+            <div class="restore-conversation-spinner" aria-label="Restoring conversation">
+              <mat-progress-spinner mode="indeterminate" [diameter]="28"></mat-progress-spinner>
+            </div>
+          }
+          <score-ai-chat-message-list
+            [messages]="state.messages"
+            [attachments]="state.attachments"
+            [pending]="state.pending"
+            [isInitialPrompt]="isInitialPrompt"
+            [modelSettingsOpen]="state.modelSettingsOpen"
+            [runtimeSettingsOpen]="state.runtimeSettingsOpen"
+            [permissionSettingsOpen]="state.permissionSettingsOpen"
+            [availableModels]="state.availableModels"
+            [modelDraftName]="state.modelDraftName"
+            [modelDraftReasoningEffort]="state.modelDraftReasoningEffort"
+            [runtimeDraft]="state.runtimeDraft"
+            [runtimeDraftOptions]="state.runtimeDraftOptions"
+            [selectedModelName]="state.selectedModelName"
+            [selectedReasoningEffort]="state.selectedReasoningEffort"
+            [selectedRuntime]="state.selectedRuntime"
+            [permissionMode]="state.permissionMode"
+            [permissionDraft]="state.permissionDraft"
+            [modelChangePending]="state.modelChangePending"
+            [mutationInteraction]="mutationInteraction"
+            [elicitation]="state.elicitation"
+            [elicitationBusy]="state.elicitationBusy"
+            (attachmentRemoved)="removeAttachment($event)"
+            (modelDraftNameChange)="changeModelDraft($event)"
+            (modelDraftReasoningEffortChange)="state.modelDraftReasoningEffort = $event"
+            (modelSettingsApplied)="applyModelSettings()"
+            (modelSettingsCancelled)="closeModelSettings()"
+            (runtimeDraftChange)="changeRuntimeDraft($event)"
+            (runtimeDraftOptionChange)="state.setRuntimeDraftOption($event.name, $event.value)"
+            (runtimeSettingsApplied)="applyRuntimeSettings()"
+            (runtimeSettingsCancelled)="closeRuntimeSettings()"
+            (permissionDraftChange)="state.permissionDraft = $event"
+            (permissionSettingsApplied)="applyPermissionSettings()"
+            (permissionSettingsCancelled)="closePermissionSettings()"
+            (mutationApproved)="approveMutationInteraction()"
+            (mutationDenied)="denyMutationInteraction()"
+            (mutationChangeRequested)="requestMutationChange()"
+            (mutationRevoked)="revokeMutationInteraction()"
+            (mutationDismissed)="dismissMutationInteraction()"
+            (elicitationResponded)="respondToElicitation($event)"
+            (messageListClicked)="onMessageListClick($event)">
+          </score-ai-chat-message-list>
+          <score-ai-chat-composer
+            [prompt]="state.prompt"
+            [pending]="state.pending"
+            [blocked]="commandInputBlocked"
+            [cancellationInProgress]="cancellationInProgress"
+            [cancellationDelayed]="cancellationDelayed"
+            [isInitialPrompt]="isInitialPrompt"
+            [showCommandSuggestions]="showCommandSuggestions"
+            [commandSuggestions]="commandSuggestions"
+            [selectedCommandIndex]="state.selectedCommandIndex"
+            [placeholder]="composerPlaceholder"
+            (promptChange)="state.prompt = $event; onPromptChange()"
+            (keydownEvent)="onComposerKeydown($event)"
+            (commandSuggestionSelected)="applyCommandSuggestion($event)"
+            (fileInputChanged)="onFileInputChange($event)"
+            (filePickerRequested)="openFilePicker($event)"
+            (stopRequested)="cancelActiveRequest()"
+            (cancellationRetryRequested)="retryCancellation()"
+            (forceSafeStopRequested)="forceSafeStop()">
+          </score-ai-chat-composer>
+        </div>
+        @if (state.contextUsage; as usage) {
+          <div class="context-budget-status">
+            <div class="context-budget-summary">
+              <button type="button" class="context-budget-details-button"
+                      cdkOverlayOrigin #contextBudgetOrigin="cdkOverlayOrigin"
+                      aria-label="Show context budget details"
+                      [attr.aria-expanded]="contextBudgetHoverOpen"
+                      (mouseenter)="showContextBudgetHover()"
+                      (mouseleave)="closeContextBudgetHover()"
+                      (focus)="showContextBudgetHover()"
+                      (blur)="closeContextBudgetHover()"
+                      (click)="openContextBudgetDialog()">
+                {{ state.contextUsageLabel() }}
+              </button>
+              <button type="button" class="context-compact-button"
+                      [disabled]="state.pending || !state.conversationId"
+                      (click)="requestManualCompact()">Compact</button>
+            </div>
+          </div>
+          <ng-template cdkConnectedOverlay
+                       [cdkConnectedOverlayOrigin]="contextBudgetOrigin"
+                       [cdkConnectedOverlayOpen]="contextBudgetHoverOpen"
+                       [cdkConnectedOverlayPositions]="contextBudgetHoverPositions"
+                       [cdkConnectedOverlayHasBackdrop]="false"
+                       [cdkConnectedOverlayViewportMargin]="8"
+                       (detach)="contextBudgetHoverOpen = false">
+            @if (contextBudgetData(); as budgetData) {
+              <div class="context-budget-hover-card" role="tooltip"
+                   (mouseenter)="keepContextBudgetHoverOpen()"
+                   (mouseleave)="closeContextBudgetHover()">
+                <score-ai-context-budget-chart [budgetData]="budgetData" [compact]="true">
+                </score-ai-context-budget-chart>
+              </div>
+            }
+          </ng-template>
+        }
+        @if (state.showScrollToBottomButton) {
+          <button class="scroll-to-bottom-button"
+                  matTooltip="Scroll to bottom"
+                  aria-label="Scroll to bottom"
+                  type="button"
+                  (click)="scrollChatToBottom($event)">
+            <mat-icon>arrow_downward</mat-icon>
+          </button>
+        }
+      </div>
+    } @else {
+      <score-ai-chat-history-list
+        role="tabpanel"
+        [id]="navigationId + '-panel-history'"
+        [attr.aria-labelledby]="navigationId + '-tab-history'"
+        [conversations]="state.conversationHistory"
+        [activeConversationId]="state.conversationId"
+        [loading]="state.conversationHistoryLoading"
+        [loadFailed]="state.conversationHistoryLoadFailed"
+        (conversationSelected)="loadConversation($event)"
+        (conversationDeleted)="deleteConversation($event)">
+      </score-ai-chat-history-list>
+    }
+  </aside>
+}

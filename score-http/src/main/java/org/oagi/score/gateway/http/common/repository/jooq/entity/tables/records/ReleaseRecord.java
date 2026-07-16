@@ -71,7 +71,7 @@ public class ReleaseRecord extends UpdatableRecordImpl<ReleaseRecord> {
     }
 
     /**
-     * Setter for <code>oagi.release.release_num</code>. Release number such has
+     * Setter for <code>oagi.release.release_num</code>. Release number such as
      * 10.0, 10.1, etc. 
      */
     public void setReleaseNum(String value) {
@@ -79,7 +79,7 @@ public class ReleaseRecord extends UpdatableRecordImpl<ReleaseRecord> {
     }
 
     /**
-     * Getter for <code>oagi.release.release_num</code>. Release number such has
+     * Getter for <code>oagi.release.release_num</code>. Release number such as
      * 10.0, 10.1, etc. 
      */
     public String getReleaseNum() {
@@ -144,7 +144,7 @@ public class ReleaseRecord extends UpdatableRecordImpl<ReleaseRecord> {
 
     /**
      * Setter for <code>oagi.release.created_by</code>. Foreign key to the
-     * APP_USER table identifying user who created the namespace.
+     * APP_USER table identifying the user who created the record.
      */
     public void setCreatedBy(ULong value) {
         set(7, value);
@@ -152,7 +152,7 @@ public class ReleaseRecord extends UpdatableRecordImpl<ReleaseRecord> {
 
     /**
      * Getter for <code>oagi.release.created_by</code>. Foreign key to the
-     * APP_USER table identifying user who created the namespace.
+     * APP_USER table identifying the user who created the record.
      */
     public ULong getCreatedBy() {
         return (ULong) get(7);

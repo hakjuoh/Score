@@ -72,7 +72,7 @@ public class XbtRecord extends UpdatableRecordImpl<XbtRecord> {
      * Setter for <code>oagi.xbt.builtIn_type</code>. Built-in type as it should
      * appear in the XML schema including the namespace prefix. Namespace prefix
      * for the XML schema namespace is assumed to be 'xsd' and a default prefix
-     * for the OAGIS built-int type.
+     * for the OAGIS built-in type.
      */
     public void setBuiltinType(String value) {
         set(3, value);
@@ -82,7 +82,7 @@ public class XbtRecord extends UpdatableRecordImpl<XbtRecord> {
      * Getter for <code>oagi.xbt.builtIn_type</code>. Built-in type as it should
      * appear in the XML schema including the namespace prefix. Namespace prefix
      * for the XML schema namespace is assumed to be 'xsd' and a default prefix
-     * for the OAGIS built-int type.
+     * for the OAGIS built-in type.
      */
     public String getBuiltinType() {
         return (String) get(3);

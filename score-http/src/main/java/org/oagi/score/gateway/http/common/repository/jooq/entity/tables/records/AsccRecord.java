@@ -338,7 +338,7 @@ public class AsccRecord extends UpdatableRecordImpl<AsccRecord> {
     /**
      * Setter for <code>oagi.ascc.state</code>. Deleted, WIP, Draft, QA,
      * Candidate, Production, Release Draft, Published. This the revision life
-     * cycle state of the BCC.
+     * cycle state of the ASCC.
      * 
      * State change can't be undone. But the history record can still keep the
      * records of when the state was changed.
@@ -350,7 +350,7 @@ public class AsccRecord extends UpdatableRecordImpl<AsccRecord> {
     /**
      * Getter for <code>oagi.ascc.state</code>. Deleted, WIP, Draft, QA,
      * Candidate, Production, Release Draft, Published. This the revision life
-     * cycle state of the BCC.
+     * cycle state of the ASCC.
      * 
      * State change can't be undone. But the history record can still keep the
      * records of when the state was changed.

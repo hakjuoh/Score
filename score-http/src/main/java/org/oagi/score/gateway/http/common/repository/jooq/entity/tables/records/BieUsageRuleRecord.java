@@ -129,7 +129,7 @@ public class BieUsageRuleRecord extends UpdatableRecordImpl<BieUsageRuleRecord> 
 
     /**
      * Setter for <code>oagi.bie_usage_rule.target_bbiep_id</code>. Foreign key
-     * to the BBIEP table indicating the ABIEP, to which the usage rule is
+     * to the BBIEP table indicating the BBIEP, to which the usage rule is
      * applied.
      */
     public void setTargetBbiepId(ULong value) {
@@ -138,7 +138,7 @@ public class BieUsageRuleRecord extends UpdatableRecordImpl<BieUsageRuleRecord> 
 
     /**
      * Getter for <code>oagi.bie_usage_rule.target_bbiep_id</code>. Foreign key
-     * to the BBIEP table indicating the ABIEP, to which the usage rule is
+     * to the BBIEP table indicating the BBIEP, to which the usage rule is
      * applied.
      */
     public ULong getTargetBbiepId() {

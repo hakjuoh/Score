@@ -60,8 +60,8 @@ public class AbieRecord extends UpdatableRecordImpl<AbieRecord> {
 
     /**
      * Setter for <code>oagi.abie.based_acc_manifest_id</code>. A foreign key to
-     * the ACC_MANIFEST table refering to the ACC, on which the business context
-     * has been applied to derive this ABIE.
+     * the ACC_MANIFEST table referring to the ACC, on which the business
+     * context has been applied to derive this ABIE.
      */
     public void setBasedAccManifestId(ULong value) {
         set(2, value);
@@ -69,22 +69,24 @@ public class AbieRecord extends UpdatableRecordImpl<AbieRecord> {
 
     /**
      * Getter for <code>oagi.abie.based_acc_manifest_id</code>. A foreign key to
-     * the ACC_MANIFEST table refering to the ACC, on which the business context
-     * has been applied to derive this ABIE.
+     * the ACC_MANIFEST table referring to the ACC, on which the business
+     * context has been applied to derive this ABIE.
      */
     public ULong getBasedAccManifestId() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for <code>oagi.abie.path</code>.
+     * Setter for <code>oagi.abie.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
     public void setPath(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.abie.path</code>.
+     * Getter for <code>oagi.abie.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
     public String getPath() {
         return (String) get(3);

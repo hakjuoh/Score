@@ -74,14 +74,16 @@ public class BbieScRecord extends UpdatableRecordImpl<BbieScRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bbie_sc.path</code>.
+     * Setter for <code>oagi.bbie_sc.path</code>. The path of this node within
+     * the component graph; used together with HASH_PATH to locate the node.
      */
     public void setPath(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.bbie_sc.path</code>.
+     * Getter for <code>oagi.bbie_sc.path</code>. The path of this node within
+     * the component graph; used together with HASH_PATH to locate the node.
      */
     public String getPath() {
         return (String) get(3);
@@ -240,7 +242,7 @@ public class BbieScRecord extends UpdatableRecordImpl<BbieScRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bbie_sc.cardinality_max</code>. Maximum occurence
+     * Setter for <code>oagi.bbie_sc.cardinality_max</code>. Maximum occurrence
      * constraint of the BBIE SC. A valid value is 0 or 1.
      */
     public void setCardinalityMax(Integer value) {
@@ -248,7 +250,7 @@ public class BbieScRecord extends UpdatableRecordImpl<BbieScRecord> {
     }
 
     /**
-     * Getter for <code>oagi.bbie_sc.cardinality_max</code>. Maximum occurence
+     * Getter for <code>oagi.bbie_sc.cardinality_max</code>. Maximum occurrence
      * constraint of the BBIE SC. A valid value is 0 or 1.
      */
     public Integer getCardinalityMax() {
@@ -273,7 +275,7 @@ public class BbieScRecord extends UpdatableRecordImpl<BbieScRecord> {
 
     /**
      * Setter for <code>oagi.bbie_sc.facet_max_length</code>. Defines the
-     * minimum number of units of length.
+     * maximum number of units of length.
      */
     public void setFacetMaxLength(ULong value) {
         set(12, value);
@@ -281,7 +283,7 @@ public class BbieScRecord extends UpdatableRecordImpl<BbieScRecord> {
 
     /**
      * Getter for <code>oagi.bbie_sc.facet_max_length</code>. Defines the
-     * minimum number of units of length.
+     * maximum number of units of length.
      */
     public ULong getFacetMaxLength() {
         return (ULong) get(12);
@@ -358,14 +360,16 @@ public class BbieScRecord extends UpdatableRecordImpl<BbieScRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bbie_sc.example</code>.
+     * Setter for <code>oagi.bbie_sc.example</code>. An example value for the
+     * BBIE SC.
      */
     public void setExample(String value) {
         set(17, value);
     }
 
     /**
-     * Getter for <code>oagi.bbie_sc.example</code>.
+     * Getter for <code>oagi.bbie_sc.example</code>. An example value for the
+     * BBIE SC.
      */
     public String getExample() {
         return (String) get(17);

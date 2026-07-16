@@ -1,0 +1,380 @@
+<div class="message-list" (click)="messageListClicked.emit($event)">
+  <div class="terminal-flow">
+    @for (item of displayItems; track item.trackKey) {
+      @if (item.kind === 'turn') {
+        <div class="message-turn" [class.history-expanded]="isHistoryExpanded(item.userIndex)">
+          <ng-container [ngTemplateOutlet]="messageRow"
+                        [ngTemplateOutletContext]="{
+                          message: item.userMessage,
+                          userIndex: item.userIndex,
+                          historyCount: item.historyMessages.length
+                        }"></ng-container>
+
+          @if (isHistoryExpanded(item.userIndex)) {
+            <div class="message-history-panel">
+              @for (historyMessage of item.historyMessages; track $index) {
+                <ng-container [ngTemplateOutlet]="messageRow"
+                              [ngTemplateOutletContext]="{ message: historyMessage }"></ng-container>
+              }
+            </div>
+          }
+
+          <ng-container [ngTemplateOutlet]="messageRow"
+                        [ngTemplateOutletContext]="{ message: item.finalMessage }"></ng-container>
+
+          @for (trailingMessage of item.trailingMessages; track $index) {
+            <ng-container [ngTemplateOutlet]="messageRow"
+                          [ngTemplateOutletContext]="{ message: trailingMessage }"></ng-container>
+          }
+        </div>
+      } @else {
+        <ng-container [ngTemplateOutlet]="messageRow"
+                      [ngTemplateOutletContext]="{ message: item.message }"></ng-container>
+      }
+    }
+
+    <score-ai-chat-interaction-panel
+      [mutation]="mutationInteraction"
+      [elicitation]="elicitation"
+      [elicitationBusy]="elicitationBusy"
+      (mutationApproved)="mutationApproved.emit()"
+      (mutationDenied)="mutationDenied.emit()"
+      (mutationChangeRequested)="mutationChangeRequested.emit()"
+      (mutationRevoked)="mutationRevoked.emit()"
+      (mutationDismissed)="mutationDismissed.emit()"
+      (elicitationResponded)="elicitationResponded.emit($event)">
+    </score-ai-chat-interaction-panel>
+
+    @if (showRequestPendingIndicator) {
+      <div class="message-row progress request-pending-indicator"
+           role="status" aria-live="polite" aria-label="Request in progress">
+        <div class="message-bubble">
+          <span class="message-prefix progress-prefix">
+            <mat-progress-spinner class="message-progress-spinner"
+                                  mode="indeterminate"
+                                  [diameter]="12"></mat-progress-spinner>
+          </span>
+          <span class="message-text">Working</span>
+        </div>
+      </div>
+    }
+
+    @if (modelSettingsOpen) {
+      <div class="model-command-panel" role="group" aria-label="Assistant model settings">
+        <div class="model-command-title">
+          Select Model@if (modelDraftReasoningEfforts.length > 0) {<span> and Effort</span>}
+        </div>
+        <section class="model-command-section" aria-label="Model">
+          <h4>Model</h4>
+          <div class="model-command-options">
+            @for (model of availableModels; track model.name) {
+              <button type="button"
+                      class="model-command-option"
+                      [class.selected]="model.name === modelDraftName"
+                      [attr.aria-pressed]="model.name === modelDraftName"
+                      [disabled]="modelChangePending"
+                      (click)="modelDraftNameChange.emit(model.name)">
+                <span class="model-command-caret" aria-hidden="true">›</span>
+                <span class="model-command-option-content">
+                  <span class="model-command-option-name">
+                    {{ model.displayName }}
+                    @if (model.name === selectedModelName) {
+                      <span>(current)</span>
+                    } @else if (model.defaultModel) {
+                      <span>(default)</span>
+                    }
+                  </span>
+                  <span class="model-command-option-description">{{ model.description }}</span>
+                </span>
+              </button>
+            }
+          </div>
+        </section>
+        @if (modelDraftReasoningEfforts.length > 0) {
+          <section class="model-command-section" aria-label="Reasoning effort">
+            <h4>Reasoning effort</h4>
+            <div class="model-command-options">
+              @for (effort of modelDraftReasoningEfforts; track effort.name) {
+                <button type="button"
+                        class="model-command-option"
+                        [class.selected]="effort.name === modelDraftReasoningEffort"
+                        [attr.aria-pressed]="effort.name === modelDraftReasoningEffort"
+                        [disabled]="modelChangePending"
+                        (click)="modelDraftReasoningEffortChange.emit(effort.name)">
+                  <span class="model-command-caret" aria-hidden="true">›</span>
+                  <span class="model-command-option-content">
+                    <span class="model-command-option-name">
+                      {{ effort.displayName }}
+                      @if (modelDraftName === selectedModelName && effort.name === selectedReasoningEffort) {
+                        <span>(current)</span>
+                      } @else if (effort.name === modelDraft?.defaultReasoningEffort) {
+                        <span>(default)</span>
+                      }
+                    </span>
+                    <span class="model-command-option-description">{{ effort.description }}</span>
+                  </span>
+                </button>
+              }
+            </div>
+          </section>
+        }
+        <div class="model-command-actions">
+          <button type="button"
+                  [disabled]="modelChangePending"
+                  (click)="modelSettingsCancelled.emit()">Cancel</button>
+          <button type="button"
+                  class="primary"
+                  [disabled]="modelChangePending"
+                  (click)="modelSettingsApplied.emit()">
+            {{ modelChangePending ? 'Applying...' : 'Apply' }}
+          </button>
+        </div>
+      </div>
+    }
+
+    @if (runtimeSettingsOpen) {
+      <div class="model-command-panel" role="group" aria-label="Assistant runtime settings">
+        <div class="model-command-title">
+          Select Runtime@if (runtimeDraftSettings.length > 0) {<span> and Settings</span>}
+        </div>
+        <section class="model-command-section" aria-label="Runtime">
+          <h4>Runtime</h4>
+          <div class="model-command-options">
+            @for (runtime of runtimeOptions; track runtime.name) {
+              <button type="button"
+                      class="model-command-option"
+                      [class.selected]="runtime.name === runtimeDraft"
+                      [attr.aria-pressed]="runtime.name === runtimeDraft"
+                      [disabled]="modelChangePending"
+                      (click)="runtimeDraftChange.emit(runtime.name)">
+                <span class="model-command-caret" aria-hidden="true">›</span>
+                <span class="model-command-option-content">
+                  <span class="model-command-option-name">
+                    {{ runtime.displayName }}
+                    @if (runtime.name === selectedRuntime) {
+                      <span>(current)</span>
+                    } @else if (runtime.name === selectedModel?.defaultRuntime) {
+                      <span>(default)</span>
+                    }
+                  </span>
+                  <span class="model-command-option-description">{{ runtime.description }}</span>
+                </span>
+              </button>
+            }
+          </div>
+          @if (runtimeDraftSettings.length > 0) {
+            <div class="runtime-command-settings" aria-label="Runtime settings">
+              @for (setting of runtimeDraftSettings; track setting.name) {
+                <label class="runtime-command-setting">
+                  <span class="runtime-command-setting-label">{{ setting.displayName }}</span>
+                  @if (setting.type === 'select') {
+                    <select [value]="runtimeDraftTextOption(setting.name)"
+                            [disabled]="modelChangePending"
+                            (change)="changeRuntimeDraftOption(setting, $event)">
+                      @for (option of setting.options; track option.value) {
+                        <option [value]="option.value"
+                                [selected]="option.value === runtimeDraftTextOption(setting.name)">
+                          {{ option.displayName }}
+                        </option>
+                      }
+                    </select>
+                  } @else if (setting.type === 'number') {
+                    <input type="number"
+                           [value]="runtimeDraftTextOption(setting.name)"
+                           [attr.min]="setting.minimum"
+                           [attr.max]="setting.maximum"
+                           [attr.step]="setting.step"
+                           [disabled]="modelChangePending"
+                           (change)="changeRuntimeDraftOption(setting, $event)">
+                  } @else {
+                    <input type="checkbox"
+                           [checked]="runtimeDraftBooleanOption(setting.name)"
+                           [disabled]="modelChangePending"
+                           (change)="changeRuntimeDraftOption(setting, $event)">
+                  }
+                  @if (setting.description) {
+                    <span class="model-command-option-description">{{ setting.description }}</span>
+                  }
+                </label>
+              }
+            </div>
+          }
+        </section>
+        <div class="model-command-actions">
+          <button type="button"
+                  [disabled]="modelChangePending"
+                  (click)="runtimeSettingsCancelled.emit()">Cancel</button>
+          <button type="button"
+                  class="primary"
+                  [disabled]="modelChangePending"
+                  (click)="runtimeSettingsApplied.emit()">
+            {{ modelChangePending ? 'Applying...' : 'Apply' }}
+          </button>
+        </div>
+      </div>
+    }
+
+    @if (permissionSettingsOpen) {
+      <div class="model-command-panel" role="group" aria-label="Mutation permissions">
+        <div class="model-command-title">Update Model Permissions</div>
+        <section class="model-command-section" aria-label="Permission mode">
+          <div class="model-command-options">
+            @for (option of permissionOptions; track option.value; let i = $index) {
+              <button type="button"
+                      class="model-command-option"
+                      [class.selected]="option.value === permissionDraft"
+                      [attr.aria-pressed]="option.value === permissionDraft"
+                      (click)="permissionDraftChange.emit(option.value)">
+                <span class="model-command-caret" aria-hidden="true">›</span>
+                <span class="model-command-option-content">
+                  <span class="model-command-option-name">
+                    {{ i + 1 }}. {{ option.name }}
+                    @if (option.value === permissionMode) {<span>(current)</span>}
+                  </span>
+                  <span class="model-command-option-description">{{ option.description }}</span>
+                </span>
+              </button>
+            }
+          </div>
+        </section>
+        <div class="model-command-actions">
+          <button type="button" (click)="permissionSettingsCancelled.emit()">Cancel</button>
+          <button type="button" class="primary" (click)="permissionSettingsApplied.emit()">Apply</button>
+        </div>
+      </div>
+    }
+
+    @if (attachments.length > 0) {
+      <div class="attachment-list">
+        @for (attachment of attachments; track attachment.name + attachment.size; let i = $index) {
+          <span class="attachment-chip">
+            <mat-icon>attach_file</mat-icon>
+            <span>{{ attachment.name }}</span>
+            <button type="button"
+                    [attr.aria-label]="'Remove attachment ' + attachment.name"
+                    [disabled]="pending"
+                    (click)="attachmentRemoved.emit(i)">
+              <mat-icon>close</mat-icon>
+            </button>
+          </span>
+        }
+      </div>
+    }
+  </div>
+</div>
+
+<ng-template #messageRow
+             let-message="message"
+             let-userIndex="userIndex"
+             let-historyCount="historyCount">
+  <div class="message-row" [class.user]="message.role === 'user'"
+       [class.assistant]="message.role === 'assistant'"
+       [class.progress]="message.role === 'progress'"
+       [class.tool_group]="message.role === 'tool_group'"
+       [class.tool_call]="message.role === 'tool_call'"
+       [class.tool_failed]="message.role === 'tool_call' && message.toolStatus === 'failed'"
+       [class.error]="message.role === 'error'"
+       [class.debug]="message.role === 'debug'"
+       [class.formatting]="message.formatting"
+       [class.history-toggleable]="historyCount > 0">
+    <div class="message-bubble">
+      @if (message.role === 'assistant') {
+        <span class="message-prefix">•</span>
+        @if (message.formatting && message.formattingPreviousContent) {
+          <div class="formatted-swipe">
+            <markdown class="message-markdown markdown-body formatted-layer formatted-before"
+                      [data]="message.formattingPreviousContent"></markdown>
+            <markdown class="message-markdown markdown-body formatted-layer formatted-after"
+                      [data]="message.content"></markdown>
+          </div>
+        } @else {
+          <markdown class="message-markdown markdown-body" [data]="message.content"></markdown>
+        }
+      } @else if (message.role === 'user') {
+        @if (historyCount > 0) {
+          <button type="button"
+                  class="message-prefix message-history-toggle"
+                  [attr.aria-label]="isHistoryExpanded(userIndex) ? 'Collapse request history' : 'Expand request history'"
+                  [attr.aria-expanded]="isHistoryExpanded(userIndex)"
+                  (click)="toggleHistory(userIndex, $event)">
+            <mat-icon aria-hidden="true">{{ isHistoryExpanded(userIndex) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+          </button>
+        } @else {
+          <mat-icon class="message-prefix message-prefix-icon" aria-hidden="true">chevron_right</mat-icon>
+        }
+        <span class="message-text">{{ message.content }}</span>
+      } @else if (message.role === 'error') {
+        <span class="message-prefix">!</span>
+        <span class="message-text">{{ message.content }}</span>
+      } @else if (message.role === 'progress') {
+        @if (message.inProgress) {
+          <span class="message-prefix progress-prefix">
+            <mat-progress-spinner class="message-progress-spinner"
+                                  mode="indeterminate"
+                                  [diameter]="12"></mat-progress-spinner>
+          </span>
+        } @else {
+          <span class="message-prefix">*</span>
+        }
+        <span class="message-text">{{ message.content }}</span>
+      } @else if (message.role === 'tool_group') {
+        <span class="message-prefix progress-prefix">
+          @if (message.inProgress) {
+            <mat-progress-spinner class="message-progress-spinner"
+                                  mode="indeterminate"
+                                  [diameter]="12"></mat-progress-spinner>
+          } @else {
+            <mat-icon class="message-prefix-icon" aria-hidden="true">terminal</mat-icon>
+          }
+        </span>
+        <span class="message-text">{{ message.content }}</span>
+      } @else if (message.role === 'tool_call') {
+        <span class="tool-call-a11y-status" role="status" aria-live="polite" aria-atomic="true">
+          {{ toolCallStatusLabel(message) }}: {{ message.content }}
+        </span>
+        @if (hasToolDetail(message)) {
+          <details class="tool-call-disclosure">
+            <summary class="tool-call-summary">
+              <mat-icon class="tool-call-expand-icon" aria-hidden="true">chevron_right</mat-icon>
+              <span class="tool-call-status">
+                @if (message.inProgress) {
+                  <mat-progress-spinner class="message-progress-spinner"
+                                        mode="indeterminate"
+                                        [diameter]="12"></mat-progress-spinner>
+                } @else if (message.toolStatus === 'failed') {
+                  <mat-icon class="message-prefix-icon" aria-hidden="true">error_outline</mat-icon>
+                } @else if (message.toolStatus === 'completed') {
+                  <mat-icon class="message-prefix-icon" aria-hidden="true">check_circle_outline</mat-icon>
+                } @else {
+                  <mat-icon class="message-prefix-icon" aria-hidden="true">terminal</mat-icon>
+                }
+              </span>
+              <span class="message-text">{{ message.content }}</span>
+            </summary>
+            <pre class="tool-call-detail">{{ message.toolDetail }}</pre>
+          </details>
+        } @else {
+          <div class="tool-call-summary tool-call-summary-static">
+            <span class="tool-call-status">
+              @if (message.inProgress) {
+                <mat-progress-spinner class="message-progress-spinner"
+                                      mode="indeterminate"
+                                      [diameter]="12"></mat-progress-spinner>
+              } @else if (message.toolStatus === 'failed') {
+                <mat-icon class="message-prefix-icon" aria-hidden="true">error_outline</mat-icon>
+              } @else if (message.toolStatus === 'completed') {
+                <mat-icon class="message-prefix-icon" aria-hidden="true">check_circle_outline</mat-icon>
+              } @else {
+                <mat-icon class="message-prefix-icon" aria-hidden="true">terminal</mat-icon>
+              }
+            </span>
+            <span class="message-text">{{ message.content }}</span>
+          </div>
+        }
+      } @else {
+        <span class="message-prefix">*</span>
+        <span class="message-text">{{ message.content }}</span>
+      }
+    </div>
+  </div>
+</ng-template>

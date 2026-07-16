@@ -1,0 +1,39 @@
+:host {
+  display: block;
+  color: #27272a;
+}
+
+.context-dialog-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding-right: 8px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.context-dialog-title button {
+  flex: 0 0 auto;
+}
+
+.context-dialog-close {
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+}
+
+.context-dialog-close mat-icon {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+  line-height: 20px;
+}
+
+.context-dialog-content {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 18px;
+}

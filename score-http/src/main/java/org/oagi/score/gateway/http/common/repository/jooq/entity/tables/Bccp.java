@@ -94,10 +94,10 @@ public class Bccp extends TableImpl<BccpRecord> {
 
     /**
      * The column <code>oagi.bccp.bdt_id</code>. Foreign key pointing to the DT
-     * table indicating the data typye or data format of the BCCP. Only DT_ID
+     * table indicating the data type or data format of the BCCP. Only DT_ID
      * which DT_Type is BDT can be used.
      */
-    public final TableField<BccpRecord, ULong> BDT_ID = createField(DSL.name("bdt_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key pointing to the DT table indicating the data typye or data format of the BCCP. Only DT_ID which DT_Type is BDT can be used.");
+    public final TableField<BccpRecord, ULong> BDT_ID = createField(DSL.name("bdt_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key pointing to the DT table indicating the data type or data format of the BCCP. Only DT_ID which DT_Type is BDT can be used.");
 
     /**
      * The column <code>oagi.bccp.definition</code>. Description of the BCCP.

@@ -139,10 +139,11 @@ public class CodeList extends TableImpl<CodeListRecord> {
 
     /**
      * The column <code>oagi.code_list.extensible_indicator</code>. This is a
-     * flag to indicate whether the code list is final and shall not be further
-     * derived.
+     * flag to indicate whether the code list is extensible, i.e., whether
+     * additional code values may be added or the code list may be further
+     * derived. When false, the code list is final.
      */
-    public final TableField<CodeListRecord, Byte> EXTENSIBLE_INDICATOR = createField(DSL.name("extensible_indicator"), SQLDataType.TINYINT.nullable(false), this, "This is a flag to indicate whether the code list is final and shall not be further derived.");
+    public final TableField<CodeListRecord, Byte> EXTENSIBLE_INDICATOR = createField(DSL.name("extensible_indicator"), SQLDataType.TINYINT.nullable(false), this, "This is a flag to indicate whether the code list is extensible, i.e., whether additional code values may be added or the code list may be further derived. When false, the code list is final.");
 
     /**
      * The column <code>oagi.code_list.is_deprecated</code>. Indicates whether
@@ -167,7 +168,7 @@ public class CodeList extends TableImpl<CodeListRecord> {
      * The column <code>oagi.code_list.owner_user_id</code>. Foreign key to the
      * APP_USER table. This is the user who owns the entity, is allowed to edit
      * the entity, and who can transfer the ownership to another user.
-     * 
+     *
      * The ownership can change throughout the history, but undoing shouldn't
      * rollback the ownership.
      */
@@ -193,9 +194,14 @@ public class CodeList extends TableImpl<CodeListRecord> {
     public final TableField<CodeListRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Timestamp when the code list was last updated.");
 
     /**
-     * The column <code>oagi.code_list.state</code>.
+     * The column <code>oagi.code_list.state</code>. Deleted, WIP, Draft, QA,
+     * Candidate, Production, Release Draft, Published. This the revision life
+     * cycle state of the code list.
+     *
+     * State change can't be undone. But the history record can still keep the
+     * records of when the state was changed.
      */
-    public final TableField<CodeListRecord, String> STATE = createField(DSL.name("state"), SQLDataType.VARCHAR(20).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "");
+    public final TableField<CodeListRecord, String> STATE = createField(DSL.name("state"), SQLDataType.VARCHAR(20).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Deleted, WIP, Draft, QA, Candidate, Production, Release Draft, Published. This the revision life cycle state of the code list.\n\nState change can't be undone. But the history record can still keep the records of when the state was changed.");
 
     /**
      * The column <code>oagi.code_list.prev_code_list_id</code>. A self-foreign

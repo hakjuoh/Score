@@ -88,9 +88,10 @@ public class Asbie extends TableImpl<AsbieRecord> {
     public final TableField<AsbieRecord, ULong> BASED_ASCC_MANIFEST_ID = createField(DSL.name("based_ascc_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The BASED_ASCC_MANIFEST_ID column refers to the ASCC_MANIFEST record, which this ASBIE contextualizes.");
 
     /**
-     * The column <code>oagi.asbie.path</code>.
+     * The column <code>oagi.asbie.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
-    public final TableField<AsbieRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "");
+    public final TableField<AsbieRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The path of this node within the component graph; used together with HASH_PATH to locate the node.");
 
     /**
      * The column <code>oagi.asbie.hash_path</code>. hash_path generated from
@@ -125,10 +126,10 @@ public class Asbie extends TableImpl<AsbieRecord> {
     public final TableField<AsbieRecord, String> DEFINITION = createField(DSL.name("definition"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Definition to override the ASCC definition. If NULL, it means that the definition should be derived from the based CC on the UI, expression generation, and any API.");
 
     /**
-     * The column <code>oagi.asbie.cardinality_min</code>. Minimum occurence
+     * The column <code>oagi.asbie.cardinality_min</code>. Minimum occurrence
      * constraint of the TO_ASBIEP_ID. A valid value is a non-negative integer.
      */
-    public final TableField<AsbieRecord, Integer> CARDINALITY_MIN = createField(DSL.name("cardinality_min"), SQLDataType.INTEGER.nullable(false), this, "Minimum occurence constraint of the TO_ASBIEP_ID. A valid value is a non-negative integer.");
+    public final TableField<AsbieRecord, Integer> CARDINALITY_MIN = createField(DSL.name("cardinality_min"), SQLDataType.INTEGER.nullable(false), this, "Minimum occurrence constraint of the TO_ASBIEP_ID. A valid value is a non-negative integer.");
 
     /**
      * The column <code>oagi.asbie.cardinality_max</code>. Maximum occurrence
@@ -184,14 +185,15 @@ public class Asbie extends TableImpl<AsbieRecord> {
     public final TableField<AsbieRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the ASBIE was last updated.");
 
     /**
-     * The column <code>oagi.asbie.seq_key</code>. This indicates the order of
-     * the associations among other siblings. The SEQ_KEY for BIEs is decimal in
-     * order to accomodate the removal of inheritance hierarchy and group. For
-     * example, children of the most abstract ACC will have SEQ_KEY = 1.1, 1.2,
-     * 1.3, and so on; and SEQ_KEY of the next abstraction level ACC will have
-     * SEQ_KEY = 2.1, 2.2, 2.3 and so on so forth.
+     * The column <code>oagi.asbie.seq_key</code>. DEPRECATED. Instead, use
+     * `seq_key` table. This indicates the order of the associations among other
+     * siblings. The SEQ_KEY for BIEs is decimal in order to accommodate the
+     * removal of inheritance hierarchy and group. For example, children of the
+     * most abstract ACC will have SEQ_KEY = 1.1, 1.2, 1.3, and so on; and
+     * SEQ_KEY of the next abstraction level ACC will have SEQ_KEY = 2.1, 2.2,
+     * 2.3 and so on so forth.
      */
-    public final TableField<AsbieRecord, BigDecimal> SEQ_KEY = createField(DSL.name("seq_key"), SQLDataType.DECIMAL(10, 2).nullable(false), this, "This indicates the order of the associations among other siblings. The SEQ_KEY for BIEs is decimal in order to accomodate the removal of inheritance hierarchy and group. For example, children of the most abstract ACC will have SEQ_KEY = 1.1, 1.2, 1.3, and so on; and SEQ_KEY of the next abstraction level ACC will have SEQ_KEY = 2.1, 2.2, 2.3 and so on so forth.");
+    public final TableField<AsbieRecord, BigDecimal> SEQ_KEY = createField(DSL.name("seq_key"), SQLDataType.DECIMAL(10, 2).nullable(false), this, "DEPRECATED. Instead, use `seq_key` table. This indicates the order of the associations among other siblings. The SEQ_KEY for BIEs is decimal in order to accommodate the removal of inheritance hierarchy and group. For example, children of the most abstract ACC will have SEQ_KEY = 1.1, 1.2, 1.3, and so on; and SEQ_KEY of the next abstraction level ACC will have SEQ_KEY = 2.1, 2.2, 2.3 and so on so forth.");
 
     /**
      * The column <code>oagi.asbie.is_used</code>. Flag to indicate whether the

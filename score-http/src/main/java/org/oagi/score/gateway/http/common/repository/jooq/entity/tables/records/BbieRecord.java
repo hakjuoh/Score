@@ -78,14 +78,16 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bbie.path</code>.
+     * Setter for <code>oagi.bbie.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
     public void setPath(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.bbie.path</code>.
+     * Getter for <code>oagi.bbie.path</code>. The path of this node within the
+     * component graph; used together with HASH_PATH to locate the node.
      */
     public String getPath() {
         return (String) get(3);
@@ -230,7 +232,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bbie.cardinality_max</code>. Maximum occurence
+     * Setter for <code>oagi.bbie.cardinality_max</code>. Maximum occurrence
      * constraint of the TO_BBIEP_ID. A valid value is an integer from -1 and
      * up. Specifically, -1 means unbounded. 0 means prohibited or not to use.
      */
@@ -239,7 +241,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
     }
 
     /**
-     * Getter for <code>oagi.bbie.cardinality_max</code>. Maximum occurence
+     * Getter for <code>oagi.bbie.cardinality_max</code>. Maximum occurrence
      * constraint of the TO_BBIEP_ID. A valid value is an integer from -1 and
      * up. Specifically, -1 means unbounded. 0 means prohibited or not to use.
      */
@@ -264,7 +266,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bbie.facet_max_length</code>. Defines the minimum
+     * Setter for <code>oagi.bbie.facet_max_length</code>. Defines the maximum
      * number of units of length.
      */
     public void setFacetMaxLength(ULong value) {
@@ -272,7 +274,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
     }
 
     /**
-     * Getter for <code>oagi.bbie.facet_max_length</code>. Defines the minimum
+     * Getter for <code>oagi.bbie.facet_max_length</code>. Defines the maximum
      * number of units of length.
      */
     public ULong getFacetMaxLength() {
@@ -315,7 +317,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
 
     /**
      * Setter for <code>oagi.bbie.is_nillable</code>. Indicate whether the field
-     * can have a null  This is corresponding to the nillable flag in the XML
+     * can have a null value. This corresponds to the nillable flag in the XML
      * schema.
      */
     public void setIsNillable(Byte value) {
@@ -324,7 +326,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
 
     /**
      * Getter for <code>oagi.bbie.is_nillable</code>. Indicate whether the field
-     * can have a null  This is corresponding to the nillable flag in the XML
+     * can have a null value. This corresponds to the nillable flag in the XML
      * schema.
      */
     public Byte getIsNillable() {
@@ -351,7 +353,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
 
     /**
      * Setter for <code>oagi.bbie.is_null</code>. This column indicates whether
-     * the field is fixed to NULL. IS_NULLl can be true only if the IS_NILLABLE
+     * the field is fixed to NULL. IS_NULL can be true only if the IS_NILLABLE
      * is true. If IS_NULL is true then the FIX_VALUE and DEFAULT_VALUE columns
      * cannot have a value.
      */
@@ -361,7 +363,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
 
     /**
      * Getter for <code>oagi.bbie.is_null</code>. This column indicates whether
-     * the field is fixed to NULL. IS_NULLl can be true only if the IS_NILLABLE
+     * the field is fixed to NULL. IS_NULL can be true only if the IS_NILLABLE
      * is true. If IS_NULL is true then the FIX_VALUE and DEFAULT_VALUE columns
      * cannot have a value.
      */
@@ -371,8 +373,8 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
 
     /**
      * Setter for <code>oagi.bbie.definition</code>. Description to override the
-     * BCC definition. If NULLl, it means that the definition should be
-     * inherited from the based BCC.
+     * BCC definition. If NULL, it means that the definition should be inherited
+     * from the based BCC.
      */
     public void setDefinition(String value) {
         set(19, value);
@@ -380,22 +382,22 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
 
     /**
      * Getter for <code>oagi.bbie.definition</code>. Description to override the
-     * BCC definition. If NULLl, it means that the definition should be
-     * inherited from the based BCC.
+     * BCC definition. If NULL, it means that the definition should be inherited
+     * from the based BCC.
      */
     public String getDefinition() {
         return (String) get(19);
     }
 
     /**
-     * Setter for <code>oagi.bbie.example</code>.
+     * Setter for <code>oagi.bbie.example</code>. An example value for the BBIE.
      */
     public void setExample(String value) {
         set(20, value);
     }
 
     /**
-     * Getter for <code>oagi.bbie.example</code>.
+     * Getter for <code>oagi.bbie.example</code>. An example value for the BBIE.
      */
     public String getExample() {
         return (String) get(20);
@@ -453,7 +455,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
 
     /**
      * Setter for <code>oagi.bbie.last_updated_by</code>. A foreign key
-     * referring to the user who has last updated the ASBIE record. 
+     * referring to the user who has last updated the BBIE record.
      */
     public void setLastUpdatedBy(ULong value) {
         set(23, value);
@@ -461,7 +463,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
 
     /**
      * Getter for <code>oagi.bbie.last_updated_by</code>. A foreign key
-     * referring to the user who has last updated the ASBIE record. 
+     * referring to the user who has last updated the BBIE record.
      */
     public ULong getLastUpdatedBy() {
         return (ULong) get(23);
@@ -487,7 +489,7 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
 
     /**
      * Setter for <code>oagi.bbie.last_update_timestamp</code>. The timestamp
-     * when the ASBIE was last updated.
+     * when the BBIE was last updated.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(25, value);
@@ -495,31 +497,33 @@ public class BbieRecord extends UpdatableRecordImpl<BbieRecord> {
 
     /**
      * Getter for <code>oagi.bbie.last_update_timestamp</code>. The timestamp
-     * when the ASBIE was last updated.
+     * when the BBIE was last updated.
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(25);
     }
 
     /**
-     * Setter for <code>oagi.bbie.seq_key</code>. This indicates the order of
-     * the associations among other siblings. The SEQ_KEY for BIEs is decimal in
-     * order to accomodate the removal of inheritance hierarchy and group. For
-     * example, children of the most abstract ACC will have SEQ_KEY = 1.1, 1.2,
-     * 1.3, and so on; and SEQ_KEY of the next abstraction level ACC will have
-     * SEQ_KEY = 2.1, 2.2, 2.3 and so on so forth.
+     * Setter for <code>oagi.bbie.seq_key</code>. DEPRECATED. Instead, use
+     * `seq_key` table. This indicates the order of the associations among other
+     * siblings. The SEQ_KEY for BIEs is decimal in order to accommodate the
+     * removal of inheritance hierarchy and group. For example, children of the
+     * most abstract ACC will have SEQ_KEY = 1.1, 1.2, 1.3, and so on; and
+     * SEQ_KEY of the next abstraction level ACC will have SEQ_KEY = 2.1, 2.2,
+     * 2.3 and so on so forth.
      */
     public void setSeqKey(BigDecimal value) {
         set(26, value);
     }
 
     /**
-     * Getter for <code>oagi.bbie.seq_key</code>. This indicates the order of
-     * the associations among other siblings. The SEQ_KEY for BIEs is decimal in
-     * order to accomodate the removal of inheritance hierarchy and group. For
-     * example, children of the most abstract ACC will have SEQ_KEY = 1.1, 1.2,
-     * 1.3, and so on; and SEQ_KEY of the next abstraction level ACC will have
-     * SEQ_KEY = 2.1, 2.2, 2.3 and so on so forth.
+     * Getter for <code>oagi.bbie.seq_key</code>. DEPRECATED. Instead, use
+     * `seq_key` table. This indicates the order of the associations among other
+     * siblings. The SEQ_KEY for BIEs is decimal in order to accommodate the
+     * removal of inheritance hierarchy and group. For example, children of the
+     * most abstract ACC will have SEQ_KEY = 1.1, 1.2, 1.3, and so on; and
+     * SEQ_KEY of the next abstraction level ACC will have SEQ_KEY = 2.1, 2.2,
+     * 2.3 and so on so forth.
      */
     public BigDecimal getSeqKey() {
         return (BigDecimal) get(26);

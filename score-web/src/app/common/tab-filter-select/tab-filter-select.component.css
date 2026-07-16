@@ -1,0 +1,99 @@
+:host {
+  display: block;
+}
+
+mat-form-field {
+  width: 100%;
+}
+
+.additional-selection {
+  opacity: 0.75;
+}
+
+.tab-filter-header {
+  background: #fff;
+  position: relative;
+  z-index: 1;
+}
+
+.tab-filter-header::after {
+  background: rgba(0, 0, 0, 0.12);
+  bottom: 0;
+  content: '';
+  height: 1px;
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.tab-filter-search-option {
+  background: #fff;
+  height: 48px;
+  min-height: 48px;
+  overflow: visible;
+}
+
+.tab-filter-tabs {
+  background: #fff;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 4px 8px 6px;
+}
+
+.tab-filter-tab {
+  align-items: center;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  line-height: 32px;
+  padding: 0 18px 0 8px;
+  white-space: nowrap;
+}
+
+.tab-filter-tab.active {
+  background: rgba(0, 0, 0, 0.08);
+  font-weight: 500;
+}
+
+.tab-filter-tab-checkbox {
+  flex: 0 0 auto;
+}
+
+.tab-filter-tab-label {
+  overflow: visible;
+}
+
+.tab-filter-options {
+  max-height: 192px;
+  overflow-y: auto;
+}
+
+.tab-filter-hidden-options {
+  display: none;
+}
+
+::ng-deep .tab-filter-select-panel {
+  max-height: 320px !important;
+  min-width: 280px !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+::ng-deep .cdk-overlay-pane:has(.tab-filter-select-panel) {
+  min-width: 280px !important;
+  width: max-content !important;
+}
+
+::ng-deep .tab-filter-select-panel .mat-mdc-option.contains-mat-select-search {
+  margin-top: 0 !important;
+  position: relative !important;
+  top: 0 !important;
+}
+
+::ng-deep .tab-filter-select-panel .mat-mdc-option.contains-mat-select-search .mdc-list-item__primary-text {
+  overflow: visible;
+  width: 100%;
+}

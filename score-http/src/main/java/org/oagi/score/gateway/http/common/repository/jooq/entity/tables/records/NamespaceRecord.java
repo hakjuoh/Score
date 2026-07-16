@@ -107,8 +107,8 @@ public class NamespaceRecord extends UpdatableRecordImpl<NamespaceRecord> {
 
     /**
      * Setter for <code>oagi.namespace.is_std_nmsp</code>. This indicates
-     * whether the namespace is reserved for standard used (i.e., whether it is
-     * an OAGIS namespace). If it is true, then end users cannot user the
+     * whether the namespace is reserved for standard use (i.e., whether it is
+     * an OAGIS namespace). If it is true, then end users cannot use the
      * namespace for the end user CCs.
      */
     public void setIsStdNmsp(Byte value) {
@@ -117,8 +117,8 @@ public class NamespaceRecord extends UpdatableRecordImpl<NamespaceRecord> {
 
     /**
      * Getter for <code>oagi.namespace.is_std_nmsp</code>. This indicates
-     * whether the namespace is reserved for standard used (i.e., whether it is
-     * an OAGIS namespace). If it is true, then end users cannot user the
+     * whether the namespace is reserved for standard use (i.e., whether it is
+     * an OAGIS namespace). If it is true, then end users cannot use the
      * namespace for the end user CCs.
      */
     public Byte getIsStdNmsp() {

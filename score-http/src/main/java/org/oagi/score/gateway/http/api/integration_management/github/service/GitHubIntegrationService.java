@@ -7,6 +7,10 @@ import org.oagi.score.gateway.http.api.integration_management.github.config.GitH
 import org.oagi.score.gateway.http.api.integration_management.github.model.ProjectFieldOptions;
 import org.oagi.score.gateway.http.api.integration_management.github.model.IssueFetchResult;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
+import org.redisson.api.RBucket;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.redisson.client.codec.StringCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,10 +24,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -35,8 +41,8 @@ import static org.springframework.util.StringUtils.hasText;
  * keyed by the Score user id. A short-lived state -> {userId, returnUrl} mapping protects the
  * callback (CSRF) and carries the user across the redirect so the callback need not be authenticated.
  *
- * <p>This service owns the business rules and local state (token/scope/login + issue-ETag storage in
- * Redis, OAuth state, webhook HMAC, the in-process project-refs cache, board field selection and the
+ * <p>This service owns the business rules and shared state (token/scope/login + issue-ETag storage in
+ * Redis, OAuth state, webhook HMAC, the Redis project-refs cache, board field selection and the
  * anti-clobber guard); every actual call to GitHub is delegated to {@link GitHubApiClient}, so changing
  * how we talk to GitHub never touches this class.</p>
  */
@@ -54,28 +60,33 @@ public class GitHubIntegrationService {
     private static final String ISSUE_ETAG_KEY = NS + "issue-etag:";
     /** Cached issue ETags expire after this idle period so orphaned entries cannot accumulate. */
     private static final Duration ISSUE_ETAG_TTL = Duration.ofDays(30);
-    /** The Projects v2 project/field/option ids are stable; cache them in-process for this long. */
-    private static final long PROJECT_REFS_TTL_MILLIS = Duration.ofMinutes(30).toMillis();
+    private static final String PROJECT_REFS_KEY = NS + "project-refs:";
+    private static final String PROJECT_REFS_LOCK_KEY = NS + "project-refs-lock:";
+    /** The Projects v2 project/field/option ids are stable; cache them in Redis for this long. */
+    private static final Duration PROJECT_REFS_TTL = Duration.ofMinutes(30);
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
-
-    /** In-process cache of the resolved project node id / status field id / fieldOption option ids. */
-    private volatile CachedProjectRefs projectRefsCache;
-
-    @Autowired
-    private GitHubIntegrationProperties properties;
-
-    @Autowired
-    private ProjectFieldOptions projectFieldOptions;
+    private final GitHubIntegrationProperties properties;
+    private final ProjectFieldOptions projectFieldOptions;
+    private final GitHubApiClient gitHubApiClient;
+    private final RedisTemplate redisTemplate;
+    private final RedissonClient redissonClient;
+    private final ObjectMapper objectMapper;
 
     @Autowired
-    private GitHubApiClient gitHubApiClient;
-
-    @Autowired
-    private RedisTemplate redisTemplate;
-
-    @Autowired
-    private ObjectMapper objectMapper;
+    public GitHubIntegrationService(GitHubIntegrationProperties properties,
+                                    ProjectFieldOptions projectFieldOptions,
+                                    GitHubApiClient gitHubApiClient,
+                                    RedisTemplate redisTemplate,
+                                    RedissonClient redissonClient,
+                                    ObjectMapper objectMapper) {
+        this.properties = properties;
+        this.projectFieldOptions = projectFieldOptions;
+        this.gitHubApiClient = gitHubApiClient;
+        this.redisTemplate = redisTemplate;
+        this.redissonClient = redissonClient;
+        this.objectMapper = objectMapper;
+    }
 
     public boolean isEnabled() {
         return properties.isEnabled();
@@ -462,8 +473,8 @@ public class GitHubIntegrationService {
      * since the fieldOption is keyed by name throughout.) The state-change dialog
      * reads this to render the fieldOption-override dropdown. Best-effort: {@code null} when the user is not
      * connected / lacks the project scope, the project is not configured, or the field cannot be
-     * resolved. Cached in-process for 30 min (see {@link #resolveProjectRefs}), so the dialog's call is
-     * cheap after the first resolution.
+     * resolved. Cached in Redis for 30 min (see {@link #resolveProjectRefs}), so every application
+     * instance shares the first successful resolution.
      */
     public ProjectField getProjectField(ScoreUser user) {
         String token = getAccessToken(user);
@@ -551,23 +562,63 @@ public class GitHubIntegrationService {
         }
     }
 
-    /** Resolves the project node id, fieldOption field id/name, and fieldOption→option-id map, cached in-process. */
+    /** Resolves project/field/option ids through a shared Redis cache and coordinate-specific lock. */
     private ProjectRefs resolveProjectRefs(String token) {
-        CachedProjectRefs cached = projectRefsCache;
-        long now = System.currentTimeMillis();
-        if (cached != null && cached.expiresAt() > now
-                && cached.ownerType().equals(properties.getProjectOwnerType())
-                && cached.owner().equals(properties.getProjectOwner())
-                && cached.number() == properties.getProjectNumber()) {
-            return cached.refs();
+        String suffix = projectRefsCacheKeySuffix();
+        RBucket<String> cache = redissonClient.getBucket(PROJECT_REFS_KEY + suffix, StringCodec.INSTANCE);
+        ProjectRefs cached = readProjectRefs(cache);
+        if (cached != null) {
+            return cached;
         }
-        ProjectRefs refs = fetchProjectRefs(token);
-        if (refs != null) {
-            projectRefsCache = new CachedProjectRefs(properties.getProjectOwnerType(),
-                    properties.getProjectOwner(), properties.getProjectNumber(), refs,
-                    now + PROJECT_REFS_TTL_MILLIS);
+
+        RLock refreshLock = redissonClient.getLock(PROJECT_REFS_LOCK_KEY + suffix);
+        refreshLock.lock();
+        try {
+            cached = readProjectRefs(cache);
+            if (cached != null) {
+                return cached;
+            }
+            ProjectRefs refs = fetchProjectRefs(token);
+            if (refs != null) {
+                try {
+                    cache.set(objectMapper.writeValueAsString(refs), PROJECT_REFS_TTL);
+                } catch (Exception exception) {
+                    logger.warn("Could not cache resolved GitHub project references in Redis.", exception);
+                }
+            }
+            return refs;
+        } finally {
+            refreshLock.unlock();
         }
-        return refs;
+    }
+
+    private ProjectRefs readProjectRefs(RBucket<String> cache) {
+        String serialized = cache.get();
+        if (!hasText(serialized)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(serialized, ProjectRefs.class);
+        } catch (Exception exception) {
+            logger.warn("Ignoring an invalid GitHub project reference cache entry; it will be refreshed.",
+                    exception);
+            return null;
+        }
+    }
+
+    String projectRefsCacheKey() {
+        return PROJECT_REFS_KEY + projectRefsCacheKeySuffix();
+    }
+
+    private String projectRefsCacheKeySuffix() {
+        String identity = String.join("\n",
+                Objects.toString(properties.getProjectOwnerType(), ""),
+                Objects.toString(properties.getProjectOwner(), ""),
+                Integer.toString(properties.getProjectNumber()),
+                Objects.toString(properties.getProjectStatusFieldName(), ""),
+                String.join("\n", projectFieldOptions.fieldOptionNames().stream().sorted().toList()));
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(identity.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -695,9 +746,4 @@ public class GitHubIntegrationService {
                                       boolean projectWritable, List<IssueRepoAccess> items) {
     }
 
-    /** A {@link ProjectRefs} cached with the project coordinates it was resolved for and an expiry. The
-     *  owner TYPE (org vs user) is part of the key: a board can switch between an org and a user board
-     *  via {@code project-url} while keeping the same owner login + number, which resolves differently. */
-    private record CachedProjectRefs(String ownerType, String owner, int number, ProjectRefs refs, long expiresAt) {
-    }
 }

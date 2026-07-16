@@ -38,6 +38,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Acc.AccP
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifestTag.AccManifestTagPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdList.AgencyIdListPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue.AgencyIdListValuePath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppOauth2User.AppOauth2UserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbie.AsbiePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbiep.AsbiepPath;
@@ -180,14 +181,15 @@ public class AppUser extends TableImpl<AppUserRecord> {
 
     /**
      * The column <code>oagi.app_user.email_verified_timestamp</code>. The
-     * timestamp when the email address has verified.
+     * timestamp when the email address has been verified.
      */
-    public final TableField<AppUserRecord, LocalDateTime> EMAIL_VERIFIED_TIMESTAMP = createField(DSL.name("email_verified_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "The timestamp when the email address has verified.");
+    public final TableField<AppUserRecord, LocalDateTime> EMAIL_VERIFIED_TIMESTAMP = createField(DSL.name("email_verified_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "The timestamp when the email address has been verified.");
 
     /**
-     * The column <code>oagi.app_user.is_developer</code>.
+     * The column <code>oagi.app_user.is_developer</code>. Indicator whether the
+     * user has a developer role or not.
      */
-    public final TableField<AppUserRecord, Byte> IS_DEVELOPER = createField(DSL.name("is_developer"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "");
+    public final TableField<AppUserRecord, Byte> IS_DEVELOPER = createField(DSL.name("is_developer"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Indicator whether the user has a developer role or not.");
 
     /**
      * The column <code>oagi.app_user.is_admin</code>. Indicator whether the
@@ -196,9 +198,10 @@ public class AppUser extends TableImpl<AppUserRecord> {
     public final TableField<AppUserRecord, Byte> IS_ADMIN = createField(DSL.name("is_admin"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicator whether the user has an admin role or not.");
 
     /**
-     * The column <code>oagi.app_user.is_enabled</code>.
+     * The column <code>oagi.app_user.is_enabled</code>. Indicator whether the
+     * user account is enabled or not.
      */
-    public final TableField<AppUserRecord, Byte> IS_ENABLED = createField(DSL.name("is_enabled"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("1"), SQLDataType.TINYINT)), this, "");
+    public final TableField<AppUserRecord, Byte> IS_ENABLED = createField(DSL.name("is_enabled"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("1"), SQLDataType.TINYINT)), this, "Indicator whether the user account is enabled or not.");
 
     private AppUser(Name alias, Table<AppUserRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
@@ -442,6 +445,19 @@ public class AppUser extends TableImpl<AppUserRecord> {
             _agencyIdListValueOwnerUserIdFk = new AgencyIdListValuePath(this, null, Keys.AGENCY_ID_LIST_VALUE_OWNER_USER_ID_FK.getInverseKey());
 
         return _agencyIdListValueOwnerUserIdFk;
+    }
+
+    private transient AiChatConversationPath _aiChatConversation;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_chat_conversation</code> table
+     */
+    public AiChatConversationPath aiChatConversation() {
+        if (_aiChatConversation == null)
+            _aiChatConversation = new AiChatConversationPath(this, null, Keys.AI_CHAT_CONVERSATION_APP_USER_FK.getInverseKey());
+
+        return _aiChatConversation;
     }
 
     private transient AppOauth2UserPath _appOauth2User;

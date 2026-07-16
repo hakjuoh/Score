@@ -8,6 +8,14 @@ spring:
         - src/main/resources
       poll-interval: 2s
       quiet-period: 1s
+  ai:
+    mcp:
+      client:
+        streamable-http:
+          connections:
+            connect-center-mcp:
+              url: ${CONNECT_CENTER_MCP_URL:http://127.0.0.1:5555}
+              endpoint: ${CONNECT_CENTER_MCP_ENDPOINT:/mcp/}
 
 logging:
   level:
@@ -18,3 +26,270 @@ logging:
     org.springframework.messaging: DEBUG
     org.jooq: DEBUG
     org.oagi.score: DEBUG
+
+score:
+  ai:
+    providers:
+      azure-foundry:
+        type: anthropic
+        base-url: ${AZURE_FOUNDRY_BASE_URL:${ANTHROPIC_FOUNDRY_BASE_URL:}}
+        key: ${AZURE_FOUNDRY_API_KEY:${ANTHROPIC_FOUNDRY_API_KEY:}}
+      azure-openai:
+        type: azure-openai
+        base-url: ${AZURE_OPENAI_ENDPOINT:}
+        key: ${AZURE_OPENAI_API_KEY:}
+        api-version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
+    models:
+      # max-tokens is the maximum output-token budget for one model call. It may include
+      # provider-counted reasoning/thinking tokens and is not the context-window size.
+      # Anthropic requires max_tokens; when omitted, Spring AI falls back to 4096 instead
+      # of leaving it unlimited. GPT models intentionally omit it so the provider decides.
+      claude-fable-5:
+        display-name: Claude Fable 5
+        description: Frontier Claude model for complex reasoning and tool-driven work.
+        provider: azure-foundry
+        model: claude-fable-5
+        runtimes: [claude]
+        reasoning-effort: high
+        reasoning-efforts:
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: max
+            display-name: Max
+            description: Maximum reasoning depth for the most complex problems.
+        max-tokens: 16000
+        context-window: ${CLAUDE_FABLE_5_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 16000
+          auto-compact-threshold-tokens: ${CLAUDE_FABLE_5_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          # Azure Foundry support for Anthropic's compaction beta is deployment-dependent.
+          provider-compaction-enabled: false
+        adaptive-thinking: true
+        output-effort: high
+        cache-strategy: conversation-history
+        runtime-capabilities:
+          output-effort: true
+          temperature: false
+          thinking-modes: [adaptive]
+          default-thinking: adaptive
+      claude-opus-4_8:
+        display-name: Claude Opus 4.8
+        description: Most capable Claude model for advanced reasoning and complex agentic work.
+        provider: azure-foundry
+        model: claude-opus-4-8
+        runtimes: [claude]
+        reasoning-effort: high
+        reasoning-efforts:
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: max
+            display-name: Max
+            description: Maximum reasoning depth for the most complex problems.
+        max-tokens: 16000
+        context-window: ${CLAUDE_OPUS_4_8_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 16000
+          auto-compact-threshold-tokens: ${CLAUDE_OPUS_4_8_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: false
+        adaptive-thinking: true
+        output-effort: high
+        cache-strategy: conversation-history
+        runtime-capabilities:
+          output-effort: true
+          temperature: false
+          thinking-modes: [adaptive]
+          default-thinking: adaptive
+      claude-sonnet-5:
+        display-name: Claude Sonnet 5
+        description: Balanced Claude model for everyday reasoning and agentic work.
+        provider: azure-foundry
+        model: claude-sonnet-5
+        runtimes: [claude]
+        reasoning-effort: medium
+        reasoning-efforts:
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: max
+            display-name: Max
+            description: Maximum reasoning depth for the most complex problems.
+        max-tokens: 16000
+        context-window: ${CLAUDE_SONNET_5_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 16000
+          auto-compact-threshold-tokens: ${CLAUDE_SONNET_5_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: false
+        adaptive-thinking: true
+        output-effort: medium
+        cache-strategy: conversation-history
+        runtime-capabilities:
+          output-effort: true
+          temperature: false
+          thinking-modes: [adaptive, disabled]
+          default-thinking: adaptive
+      claude-haiku-4_5:
+        display-name: Claude Haiku 4.5
+        description: Fast and efficient Claude model for lightweight everyday tasks.
+        provider: azure-foundry
+        model: claude-haiku-4-5
+        runtimes: [claude]
+        reasoning-effort: default
+        reasoning-efforts:
+          - name: default
+            display-name: Default
+            description: Uses the model's built-in response behavior.
+        max-tokens: 16000
+        context-window: ${CLAUDE_HAIKU_4_5_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 16000
+          auto-compact-threshold-tokens: ${CLAUDE_HAIKU_4_5_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: false
+        thinking-budget-tokens: 4096
+        cache-strategy: conversation-history
+        runtime-capabilities:
+          output-effort: false
+          temperature: false
+          thinking-modes: [enabled, disabled]
+          default-thinking: disabled
+      gpt-5_6-sol:
+        display-name: GPT-5.6 SOL
+        description: Latest frontier agentic model for complex reasoning and tool-driven work.
+        provider: azure-openai
+        model: gpt-5.6-sol
+        runtimes: [openai]
+        reasoning-effort: medium
+        context-window: ${GPT_5_6_SOL_CONTEXT_WINDOW:200000}
+        context-budget:
+          # This reserve protects the context calculation but is not sent as max_output_tokens.
+          output-reserve-tokens: 32768
+          auto-compact-threshold-tokens: ${GPT_5_6_SOL_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: true
+        reasoning-efforts:
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: xhigh
+            display-name: Max
+            description: Maximum reasoning depth for the most complex problems.
+        runtime-capabilities:
+          reasoning-model: true
+          verbosity: true
+          temperature: false
+      gpt-5_6-terra:
+        display-name: GPT-5.6 Terra
+        description: Balanced agentic model for everyday reasoning and tool-driven work.
+        provider: azure-openai
+        model: gpt-5.6-terra
+        runtimes: [openai]
+        reasoning-effort: medium
+        context-window: ${GPT_5_6_TERRA_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 32768
+          auto-compact-threshold-tokens: ${GPT_5_6_TERRA_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: true
+        reasoning-efforts:
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: xhigh
+            display-name: Max
+            description: Maximum reasoning depth for the most complex problems.
+        runtime-capabilities:
+          reasoning-model: true
+          verbosity: true
+          temperature: false
+      gpt-5_6-luna:
+        display-name: GPT-5.6 Luna
+        description: Fast and affordable agentic model for lightweight everyday tasks.
+        provider: azure-openai
+        model: gpt-5.6-luna
+        runtimes: [openai]
+        reasoning-effort: low
+        context-window: ${GPT_5_6_LUNA_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 32768
+          auto-compact-threshold-tokens: ${GPT_5_6_LUNA_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: true
+        reasoning-efforts:
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: xhigh
+            display-name: Max
+            description: Maximum reasoning depth for the most complex problems.
+        runtime-capabilities:
+          reasoning-model: true
+          verbosity: true
+          temperature: false
+    model-name: claude-fable-5
+    request-timeout: ${SCORE_AI_REQUEST_TIMEOUT:10m}
+    assistant:
+      # For Docker, mount a file and set this to e.g. file:/config/connect-center-assistant-system-prompt.md.
+      system-prompt-resource: ${SCORE_AI_ASSISTANT_SYSTEM_PROMPT_RESOURCE:classpath:prompts/connect-center-assistant-system-prompt.md}
+    memory:
+      max-messages: ${SCORE_AI_MEMORY_MAX_MESSAGES:40}
+      retention: ${SCORE_AI_CONVERSATION_RETENTION:90d}
+      cleanup-interval: ${SCORE_AI_CONVERSATION_CLEANUP_INTERVAL:24h}
+    mcp:
+      connection-name: connect-center-mcp
+      request-timeout: ${SCORE_AI_MCP_REQUEST_TIMEOUT:60s}
+      initialization-timeout: ${SCORE_AI_MCP_INITIALIZATION_TIMEOUT:20s}
+      auth:
+        bearer-token: ${CONNECT_CENTER_MCP_BEARER_TOKEN:}
+        issuer-url: ${CONNECT_CENTER_MCP_ISSUER_URL:http://127.0.0.1:9000/broker}
+        audience: ${CONNECT_CENTER_MCP_AUDIENCE:connect-center-mcp}
+        algorithm: ${CONNECT_CENTER_MCP_JWT_ALGORITHM:ES256}
+        # The server raises shorter values to at least the model request timeout plus 60 seconds.
+        token-ttl-seconds: ${CONNECT_CENTER_MCP_TOKEN_TTL_SECONDS:300}

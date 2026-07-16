@@ -1,0 +1,11 @@
+<div class="context-dialog-title" mat-dialog-title>
+  <span>Context budget</span>
+  <button type="button" class="context-dialog-close" mat-icon-button mat-dialog-close
+          aria-label="Close context budget dialog">
+    <mat-icon>close</mat-icon>
+  </button>
+</div>
+
+<mat-dialog-content class="context-dialog-content">
+  <score-ai-context-budget-chart [budgetData]="data"></score-ai-context-budget-chart>
+</mat-dialog-content>

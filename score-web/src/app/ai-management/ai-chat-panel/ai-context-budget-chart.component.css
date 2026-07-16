@@ -1,0 +1,115 @@
+:host {
+  display: block;
+  min-width: 0;
+  color: #27272a;
+}
+
+.context-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  color: #52525b;
+  font: 12px/18px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.context-measurement-kind {
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: #f4f4f5;
+  color: #71717a;
+  white-space: nowrap;
+}
+
+.context-chart-layout {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.context-pie {
+  width: 132px;
+  height: 132px;
+  border: 1px solid rgba(63, 63, 70, 0.12);
+  border-radius: 50%;
+  box-sizing: border-box;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.context-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.context-legend-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 7px;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.context-legend-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.context-legend-label {
+  min-width: 0;
+  color: #3f3f46;
+}
+
+.context-legend-value {
+  grid-column: 2;
+  color: #71717a;
+  font: 10px/14px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: nowrap;
+}
+
+.context-chart-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 6px;
+  margin-top: 15px;
+  padding-top: 11px;
+  border-top: 1px solid #e4e4e7;
+  color: #52525b;
+  font: 11px/16px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.context-budget-chart.compact .context-model-row {
+  margin-bottom: 10px;
+}
+
+.context-budget-chart.compact .context-chart-layout {
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.context-budget-chart.compact .context-pie {
+  width: 108px;
+  height: 108px;
+}
+
+.context-budget-chart.compact .context-chart-summary {
+  margin-top: 11px;
+  padding-top: 8px;
+}
+
+@media (max-width: 430px) {
+  .context-chart-layout {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .context-legend {
+    width: 100%;
+  }
+}
