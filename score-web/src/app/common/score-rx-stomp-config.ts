@@ -17,6 +17,10 @@ export const scoreRxStompConfig: RxStompConfig = {
   heartbeatIncoming: 0, // Typical value 0 - disabled
   heartbeatOutgoing: 20000, // Typical value 20000 - every 20 seconds
 
+  // Let large STOMP frames pass through WebSocket intermediaries more reliably.
+  splitLargeFrames: true,
+  maxWebSocketChunkSize: 16 * 1024,
+
   // Reconnection is managed by RxStompService after the gateway health ping succeeds.
   reconnectDelay: 0,
 

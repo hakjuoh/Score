@@ -22,7 +22,7 @@ public class AsccBiztermRecord extends UpdatableRecordImpl<AsccBiztermRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>ascc_bizterm.ascc_bizterm_id</code>. An internal,
+     * Setter for <code>oagi.ascc_bizterm.ascc_bizterm_id</code>. An internal,
      * primary database key of an ascc_bizterm record.
      */
     public void setAsccBiztermId(ULong value) {
@@ -30,7 +30,7 @@ public class AsccBiztermRecord extends UpdatableRecordImpl<AsccBiztermRecord> {
     }
 
     /**
-     * Getter for <code>ascc_bizterm.ascc_bizterm_id</code>. An internal,
+     * Getter for <code>oagi.ascc_bizterm.ascc_bizterm_id</code>. An internal,
      * primary database key of an ascc_bizterm record.
      */
     public ULong getAsccBiztermId() {
@@ -38,23 +38,23 @@ public class AsccBiztermRecord extends UpdatableRecordImpl<AsccBiztermRecord> {
     }
 
     /**
-     * Setter for <code>ascc_bizterm.business_term_id</code>. An internal ID of
-     * the associated business term
+     * Setter for <code>oagi.ascc_bizterm.business_term_id</code>. An internal
+     * ID of the associated business term
      */
     public void setBusinessTermId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>ascc_bizterm.business_term_id</code>. An internal ID of
-     * the associated business term
+     * Getter for <code>oagi.ascc_bizterm.business_term_id</code>. An internal
+     * ID of the associated business term
      */
     public ULong getBusinessTermId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>ascc_bizterm.ascc_id</code>. An internal ID of the
+     * Setter for <code>oagi.ascc_bizterm.ascc_id</code>. An internal ID of the
      * associated ASCC
      */
     public void setAsccId(ULong value) {
@@ -62,7 +62,7 @@ public class AsccBiztermRecord extends UpdatableRecordImpl<AsccBiztermRecord> {
     }
 
     /**
-     * Getter for <code>ascc_bizterm.ascc_id</code>. An internal ID of the
+     * Getter for <code>oagi.ascc_bizterm.ascc_id</code>. An internal ID of the
      * associated ASCC
      */
     public ULong getAsccId() {
@@ -70,25 +70,25 @@ public class AsccBiztermRecord extends UpdatableRecordImpl<AsccBiztermRecord> {
     }
 
     /**
-     * Setter for <code>ascc_bizterm.created_by</code>. A foreign key referring
-     * to the user who creates the ascc_bizterm record. The creator of the
-     * ascc_bizterm is also its owner by default.
+     * Setter for <code>oagi.ascc_bizterm.created_by</code>. A foreign key
+     * referring to the user who creates the ascc_bizterm record. The creator of
+     * the ascc_bizterm is also its owner by default.
      */
     public void setCreatedBy(ULong value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>ascc_bizterm.created_by</code>. A foreign key referring
-     * to the user who creates the ascc_bizterm record. The creator of the
-     * ascc_bizterm is also its owner by default.
+     * Getter for <code>oagi.ascc_bizterm.created_by</code>. A foreign key
+     * referring to the user who creates the ascc_bizterm record. The creator of
+     * the ascc_bizterm is also its owner by default.
      */
     public ULong getCreatedBy() {
         return (ULong) get(3);
     }
 
     /**
-     * Setter for <code>ascc_bizterm.last_updated_by</code>. A foreign key
+     * Setter for <code>oagi.ascc_bizterm.last_updated_by</code>. A foreign key
      * referring to the last user who has updated the ascc_bizterm record. This
      * may be the user who is in the same group as the creator.
      */
@@ -97,7 +97,7 @@ public class AsccBiztermRecord extends UpdatableRecordImpl<AsccBiztermRecord> {
     }
 
     /**
-     * Getter for <code>ascc_bizterm.last_updated_by</code>. A foreign key
+     * Getter for <code>oagi.ascc_bizterm.last_updated_by</code>. A foreign key
      * referring to the last user who has updated the ascc_bizterm record. This
      * may be the user who is in the same group as the creator.
      */
@@ -106,32 +106,32 @@ public class AsccBiztermRecord extends UpdatableRecordImpl<AsccBiztermRecord> {
     }
 
     /**
-     * Setter for <code>ascc_bizterm.creation_timestamp</code>. Timestamp when
-     * the ascc_bizterm record was first created.
+     * Setter for <code>oagi.ascc_bizterm.creation_timestamp</code>. Timestamp
+     * when the ascc_bizterm record was first created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>ascc_bizterm.creation_timestamp</code>. Timestamp when
-     * the ascc_bizterm record was first created.
+     * Getter for <code>oagi.ascc_bizterm.creation_timestamp</code>. Timestamp
+     * when the ascc_bizterm record was first created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(5);
     }
 
     /**
-     * Setter for <code>ascc_bizterm.last_update_timestamp</code>. The timestamp
-     * when the ascc_bizterm was last updated.
+     * Setter for <code>oagi.ascc_bizterm.last_update_timestamp</code>. The
+     * timestamp when the ascc_bizterm was last updated.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>ascc_bizterm.last_update_timestamp</code>. The timestamp
-     * when the ascc_bizterm was last updated.
+     * Getter for <code>oagi.ascc_bizterm.last_update_timestamp</code>. The
+     * timestamp when the ascc_bizterm was last updated.
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(6);

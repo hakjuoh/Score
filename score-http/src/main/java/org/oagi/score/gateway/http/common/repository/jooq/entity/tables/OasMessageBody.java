@@ -22,20 +22,19 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasRequest.OasRequestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasResponse.OasResponsePath;
@@ -55,7 +54,7 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oas_message_body</code>
+     * The reference instance of <code>oagi.oas_message_body</code>
      */
     public static final OasMessageBody OAS_MESSAGE_BODY = new OasMessageBody();
 
@@ -68,37 +67,37 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
     }
 
     /**
-     * The column <code>oas_message_body.oas_message_body_id</code>. The primary
-     * key of the record.
+     * The column <code>oagi.oas_message_body.oas_message_body_id</code>. The
+     * primary key of the record.
      */
-    public final TableField<OasMessageBodyRecord, ULong> OAS_MESSAGE_BODY_ID = createField(DSL.name("oas_message_body_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the record.");
+    public final TableField<OasMessageBodyRecord, ULong> OAS_MESSAGE_BODY_ID = createField(DSL.name("oas_message_body_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_message_body.top_level_asbiep_id</code>. A reference
-     * of the ASBIEP record.
+     * The column <code>oagi.oas_message_body.top_level_asbiep_id</code>. A
+     * reference of the ASBIEP record.
      */
     public final TableField<OasMessageBodyRecord, ULong> TOP_LEVEL_ASBIEP_ID = createField(DSL.name("top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A reference of the ASBIEP record.");
 
     /**
-     * The column <code>oas_message_body.created_by</code>. The user who creates
-     * the record.
+     * The column <code>oagi.oas_message_body.created_by</code>. The user who
+     * creates the record.
      */
     public final TableField<OasMessageBodyRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who creates the record.");
 
     /**
-     * The column <code>oas_message_body.last_updated_by</code>. The user who
-     * last updates the record.
+     * The column <code>oagi.oas_message_body.last_updated_by</code>. The user
+     * who last updates the record.
      */
     public final TableField<OasMessageBodyRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who last updates the record.");
 
     /**
-     * The column <code>oas_message_body.creation_timestamp</code>. The
+     * The column <code>oagi.oas_message_body.creation_timestamp</code>. The
      * timestamp when the record is created.
      */
     public final TableField<OasMessageBodyRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is created.");
 
     /**
-     * The column <code>oas_message_body.last_update_timestamp</code>. The
+     * The column <code>oagi.oas_message_body.last_update_timestamp</code>. The
      * timestamp when the record is last updated.
      */
     public final TableField<OasMessageBodyRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is last updated.");
@@ -112,21 +111,21 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
     }
 
     /**
-     * Create an aliased <code>oas_message_body</code> table reference
+     * Create an aliased <code>oagi.oas_message_body</code> table reference
      */
     public OasMessageBody(String alias) {
         this(DSL.name(alias), OAS_MESSAGE_BODY);
     }
 
     /**
-     * Create an aliased <code>oas_message_body</code> table reference
+     * Create an aliased <code>oagi.oas_message_body</code> table reference
      */
     public OasMessageBody(Name alias) {
         this(alias, OAS_MESSAGE_BODY);
     }
 
     /**
-     * Create a <code>oas_message_body</code> table reference
+     * Create a <code>oagi.oas_message_body</code> table reference
      */
     public OasMessageBody() {
         this(DSL.name("oas_message_body"), null);
@@ -167,7 +166,7 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -193,8 +192,8 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
     private transient AppUserPath _oasMessageBodyCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_message_body_created_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_message_body_created_by_fk</code> key.
      */
     public AppUserPath oasMessageBodyCreatedByFk() {
         if (_oasMessageBodyCreatedByFk == null)
@@ -206,8 +205,8 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
     private transient AppUserPath _oasMessageBodyLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_message_body_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_message_body_last_updated_by_fk</code> key.
      */
     public AppUserPath oasMessageBodyLastUpdatedByFk() {
         if (_oasMessageBodyLastUpdatedByFk == null)
@@ -219,7 +218,8 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
     private transient TopLevelAsbiepPath _topLevelAsbiep;
 
     /**
-     * Get the implicit join path to the <code>top_level_asbiep</code> table.
+     * Get the implicit join path to the <code>oagi.top_level_asbiep</code>
+     * table.
      */
     public TopLevelAsbiepPath topLevelAsbiep() {
         if (_topLevelAsbiep == null)
@@ -231,7 +231,8 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
     private transient OasRequestPath _oasRequest;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_request</code> table
+     * Get the implicit to-many join path to the <code>oagi.oas_request</code>
+     * table
      */
     public OasRequestPath oasRequest() {
         if (_oasRequest == null)
@@ -243,7 +244,8 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
     private transient OasResponsePath _oasResponse;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_response</code> table
+     * Get the implicit to-many join path to the <code>oagi.oas_response</code>
+     * table
      */
     public OasResponsePath oasResponse() {
         if (_oasResponse == null)
@@ -296,7 +298,7 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
      */
     @Override
     public OasMessageBody where(Condition condition) {
-        return new OasMessageBody(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new OasMessageBody(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -363,7 +365,7 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasMessageBody whereExists(TableLike<?> select) {
+    public OasMessageBody whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -371,7 +373,7 @@ public class OasMessageBody extends TableImpl<OasMessageBodyRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasMessageBody whereNotExists(TableLike<?> select) {
+    public OasMessageBody whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

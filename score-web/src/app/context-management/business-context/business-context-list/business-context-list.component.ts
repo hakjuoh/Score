@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
 import {BusinessContextListEntry, BusinessContextListRequest} from '../domain/business-context';
 import {BusinessContextService} from '../domain/business-context.service';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
@@ -10,7 +10,7 @@ import {AccountListService} from '../../../account-management/domain/account-lis
 import {MatDatepicker} from '@angular/material/datepicker';
 import {PageRequest} from '../../../basis/basis';
 import {FormControl} from '@angular/forms';
-import {forkJoin, ReplaySubject} from 'rxjs';
+import {forkJoin, ReplaySubject, Subscription} from 'rxjs';
 import {initFilter} from '../../../common/utility';
 import {Location} from '@angular/common';
 import {ActivatedRoute, Router} from '@angular/router';
@@ -25,6 +25,7 @@ import {SettingsPreferencesService} from '../../../settings-management/settings-
 import {AuthService} from '../../../authentication/auth.service';
 import {ScoreTableColumnResizeDirective} from '../../../common/score-table-column-resize/score-table-column-resize.directive';
 import {SearchBarComponent} from '../../../common/search-bar/search-bar.component';
+import {AiDataChangeService} from '../../../ai-management/ai-chat-panel/domain/ai-data-change.service';
 
 @Component({
   standalone: false,
@@ -33,7 +34,7 @@ import {SearchBarComponent} from '../../../common/search-bar/search-bar.componen
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./business-context-list.component.css']
 })
-export class BusinessContextListComponent implements OnInit {
+export class BusinessContextListComponent implements OnInit, OnDestroy {
   private service = inject(BusinessContextService);
   private accountService = inject(AccountListService);
   private auth = inject(AuthService);
@@ -43,6 +44,7 @@ export class BusinessContextListComponent implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private snackBar = inject(MatSnackBar);
+  private aiDataChangeService = inject(AiDataChangeService);
 
 
   title = 'Business Context';
@@ -141,6 +143,7 @@ export class BusinessContextListComponent implements OnInit {
   filteredUpdaterIdList: ReplaySubject<string[]> = new ReplaySubject<string[]>(1);
   request: BusinessContextListRequest;
   preferencesInfo: PreferencesInfo;
+  private aiDataChangedSubscription?: Subscription;
 
   @ViewChild('dateStart', {static: true}) dateStart: MatDatepicker<any>;
   @ViewChild('dateEnd', {static: true}) dateEnd: MatDatepicker<any>;
@@ -186,6 +189,17 @@ export class BusinessContextListComponent implements OnInit {
 
       this.loadBusinessContextList(true);
     });
+
+    this.aiDataChangedSubscription = this.aiDataChangeService.dataChanged$.subscribe(event => {
+      if (event.resource === 'business-context') {
+        this.selection.clear();
+        this.loadBusinessContextList();
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.aiDataChangedSubscription?.unsubscribe();
   }
 
   onPageChange(event: PageEvent) {

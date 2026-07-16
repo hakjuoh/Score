@@ -1,0 +1,47 @@
+<section class="chat-management-panel" (click)="$event.stopPropagation()">
+  <div class="chat-panel-tabs" role="tablist" aria-label="AI chat navigation">
+    <button #chatTab type="button"
+            [id]="idPrefix + '-tab-chat'"
+            role="tab"
+            class="chat-panel-tab"
+            [class.active]="activePanelTab === 'chat'"
+            [attr.aria-selected]="activePanelTab === 'chat'"
+            [attr.aria-controls]="idPrefix + '-panel-chat'"
+            [attr.tabindex]="activePanelTab === 'chat' ? 0 : -1"
+            (keydown)="onTabKeydown('chat', $event)"
+            (click)="selectTab('chat', $event)">
+      <span>Chat</span>
+    </button>
+    <button #historyTab type="button"
+            [id]="idPrefix + '-tab-history'"
+            role="tab"
+            class="chat-panel-tab"
+            [class.active]="activePanelTab === 'history'"
+            [attr.aria-selected]="activePanelTab === 'history'"
+            [attr.aria-controls]="idPrefix + '-panel-history'"
+            [attr.tabindex]="activePanelTab === 'history' ? 0 : -1"
+            (keydown)="onTabKeydown('history', $event)"
+            (click)="selectTab('history', $event)">
+      <span>History</span>
+    </button>
+    <div class="chat-panel-spacer"></div>
+    @if (activePanelTab === 'chat') {
+      <button type="button"
+              class="chat-panel-icon-action"
+              aria-label="New chat"
+              matTooltip="New chat"
+              (click)="newChatRequested.emit($event)">
+        <mat-icon>chat_bubble_outline</mat-icon>
+      </button>
+    } @else {
+      <button class="chat-panel-icon-action" type="button"
+              aria-label="Reload history"
+              matTooltip="Reload history"
+              [disabled]="historyLoading"
+              [attr.aria-busy]="historyLoading ? 'true' : null"
+              (click)="historyReloadRequested.emit()">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    }
+  </div>
+</section>

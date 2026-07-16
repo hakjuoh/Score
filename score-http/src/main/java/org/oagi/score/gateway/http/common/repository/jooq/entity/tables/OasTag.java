@@ -21,19 +21,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasDoc.OasDocPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasDocTag.OasDocTagPath;
@@ -53,7 +52,7 @@ public class OasTag extends TableImpl<OasTagRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oas_tag</code>
+     * The reference instance of <code>oagi.oas_tag</code>
      */
     public static final OasTag OAS_TAG = new OasTag();
 
@@ -66,48 +65,48 @@ public class OasTag extends TableImpl<OasTagRecord> {
     }
 
     /**
-     * The column <code>oas_tag.oas_tag_id</code>. The primary key of the
+     * The column <code>oagi.oas_tag.oas_tag_id</code>. The primary key of the
      * record.
      */
-    public final TableField<OasTagRecord, ULong> OAS_TAG_ID = createField(DSL.name("oas_tag_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the record.");
+    public final TableField<OasTagRecord, ULong> OAS_TAG_ID = createField(DSL.name("oas_tag_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_tag.guid</code>. The GUID of the record.
+     * The column <code>oagi.oas_tag.guid</code>. The GUID of the record.
      */
     public final TableField<OasTagRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.VARCHAR(41).nullable(false), this, "The GUID of the record.");
 
     /**
-     * The column <code>oas_tag.name</code>. REQUIRED. The name of the tag.
+     * The column <code>oagi.oas_tag.name</code>. REQUIRED. The name of the tag.
      */
     public final TableField<OasTagRecord, String> NAME = createField(DSL.name("name"), SQLDataType.VARCHAR(200).nullable(false), this, "REQUIRED. The name of the tag.");
 
     /**
-     * The column <code>oas_tag.description</code>. A short description for the
-     * tag. CommonMark syntax MAY be used for rich text representation.
+     * The column <code>oagi.oas_tag.description</code>. A short description for
+     * the tag. CommonMark syntax MAY be used for rich text representation.
      */
     public final TableField<OasTagRecord, String> DESCRIPTION = createField(DSL.name("description"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "A short description for the tag. CommonMark syntax MAY be used for rich text representation.");
 
     /**
-     * The column <code>oas_tag.created_by</code>. The user who creates the
+     * The column <code>oagi.oas_tag.created_by</code>. The user who creates the
      * record.
      */
     public final TableField<OasTagRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who creates the record.");
 
     /**
-     * The column <code>oas_tag.last_updated_by</code>. The user who last
+     * The column <code>oagi.oas_tag.last_updated_by</code>. The user who last
      * updates the record.
      */
     public final TableField<OasTagRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who last updates the record.");
 
     /**
-     * The column <code>oas_tag.creation_timestamp</code>. The timestamp when
-     * the record is created.
+     * The column <code>oagi.oas_tag.creation_timestamp</code>. The timestamp
+     * when the record is created.
      */
     public final TableField<OasTagRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is created.");
 
     /**
-     * The column <code>oas_tag.last_update_timestamp</code>. The timestamp when
-     * the record is last updated.
+     * The column <code>oagi.oas_tag.last_update_timestamp</code>. The timestamp
+     * when the record is last updated.
      */
     public final TableField<OasTagRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is last updated.");
 
@@ -120,21 +119,21 @@ public class OasTag extends TableImpl<OasTagRecord> {
     }
 
     /**
-     * Create an aliased <code>oas_tag</code> table reference
+     * Create an aliased <code>oagi.oas_tag</code> table reference
      */
     public OasTag(String alias) {
         this(DSL.name(alias), OAS_TAG);
     }
 
     /**
-     * Create an aliased <code>oas_tag</code> table reference
+     * Create an aliased <code>oagi.oas_tag</code> table reference
      */
     public OasTag(Name alias) {
         this(alias, OAS_TAG);
     }
 
     /**
-     * Create a <code>oas_tag</code> table reference
+     * Create a <code>oagi.oas_tag</code> table reference
      */
     public OasTag() {
         this(DSL.name("oas_tag"), null);
@@ -175,7 +174,7 @@ public class OasTag extends TableImpl<OasTagRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -196,8 +195,8 @@ public class OasTag extends TableImpl<OasTagRecord> {
     private transient AppUserPath _oasTagCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_tag_created_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_tag_created_by_fk</code> key.
      */
     public AppUserPath oasTagCreatedByFk() {
         if (_oasTagCreatedByFk == null)
@@ -209,8 +208,8 @@ public class OasTag extends TableImpl<OasTagRecord> {
     private transient AppUserPath _oasTagLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_tag_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_tag_last_updated_by_fk</code> key.
      */
     public AppUserPath oasTagLastUpdatedByFk() {
         if (_oasTagLastUpdatedByFk == null)
@@ -222,7 +221,8 @@ public class OasTag extends TableImpl<OasTagRecord> {
     private transient OasDocTagPath _oasDocTag;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_doc_tag</code> table
+     * Get the implicit to-many join path to the <code>oagi.oas_doc_tag</code>
+     * table
      */
     public OasDocTagPath oasDocTag() {
         if (_oasDocTag == null)
@@ -234,8 +234,8 @@ public class OasTag extends TableImpl<OasTagRecord> {
     private transient OasResourceTagPath _oasResourceTag;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_resource_tag</code>
-     * table
+     * Get the implicit to-many join path to the
+     * <code>oagi.oas_resource_tag</code> table
      */
     public OasResourceTagPath oasResourceTag() {
         if (_oasResourceTag == null)
@@ -245,15 +245,16 @@ public class OasTag extends TableImpl<OasTagRecord> {
     }
 
     /**
-     * Get the implicit many-to-many join path to the <code>oas_doc</code> table
+     * Get the implicit many-to-many join path to the <code>oagi.oas_doc</code>
+     * table
      */
     public OasDocPath oasDoc() {
         return oasDocTag().oasDoc();
     }
 
     /**
-     * Get the implicit many-to-many join path to the <code>oas_operation</code>
-     * table
+     * Get the implicit many-to-many join path to the
+     * <code>oagi.oas_operation</code> table
      */
     public OasOperationPath oasOperation() {
         return oasResourceTag().oasOperation();
@@ -303,7 +304,7 @@ public class OasTag extends TableImpl<OasTagRecord> {
      */
     @Override
     public OasTag where(Condition condition) {
-        return new OasTag(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new OasTag(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -370,7 +371,7 @@ public class OasTag extends TableImpl<OasTagRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasTag whereExists(TableLike<?> select) {
+    public OasTag whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -378,7 +379,7 @@ public class OasTag extends TableImpl<OasTagRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasTag whereNotExists(TableLike<?> select) {
+    public OasTag whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

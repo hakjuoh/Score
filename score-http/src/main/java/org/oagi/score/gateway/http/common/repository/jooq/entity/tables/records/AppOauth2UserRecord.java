@@ -25,22 +25,24 @@ public class AppOauth2UserRecord extends UpdatableRecordImpl<AppOauth2UserRecord
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>app_oauth2_user.app_oauth2_user_id</code>. Primary key.
+     * Setter for <code>oagi.app_oauth2_user.app_oauth2_user_id</code>. Primary
+     * key.
      */
     public void setAppOauth2UserId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>app_oauth2_user.app_oauth2_user_id</code>. Primary key.
+     * Getter for <code>oagi.app_oauth2_user.app_oauth2_user_id</code>. Primary
+     * key.
      */
     public ULong getAppOauth2UserId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>app_oauth2_user.app_user_id</code>. A reference to the
-     * record in `app_user`. If it is not set, this is treated as a pending
+     * Setter for <code>oagi.app_oauth2_user.app_user_id</code>. A reference to
+     * the record in `app_user`. If it is not set, this is treated as a pending
      * record.
      */
     public void setAppUserId(ULong value) {
@@ -48,8 +50,8 @@ public class AppOauth2UserRecord extends UpdatableRecordImpl<AppOauth2UserRecord
     }
 
     /**
-     * Getter for <code>app_oauth2_user.app_user_id</code>. A reference to the
-     * record in `app_user`. If it is not set, this is treated as a pending
+     * Getter for <code>oagi.app_oauth2_user.app_user_id</code>. A reference to
+     * the record in `app_user`. If it is not set, this is treated as a pending
      * record.
      */
     public ULong getAppUserId() {
@@ -57,71 +59,71 @@ public class AppOauth2UserRecord extends UpdatableRecordImpl<AppOauth2UserRecord
     }
 
     /**
-     * Setter for <code>app_oauth2_user.oauth2_app_id</code>. A reference to the
-     * record in `oauth2_app`.
+     * Setter for <code>oagi.app_oauth2_user.oauth2_app_id</code>. A reference
+     * to the record in `oauth2_app`.
      */
     public void setOauth2AppId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>app_oauth2_user.oauth2_app_id</code>. A reference to the
-     * record in `oauth2_app`.
+     * Getter for <code>oagi.app_oauth2_user.oauth2_app_id</code>. A reference
+     * to the record in `oauth2_app`.
      */
     public ULong getOauth2AppId() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for <code>app_oauth2_user.sub</code>. `sub` claim defined in OIDC
-     * spec. This is a unique identifier of the subject in the provider.
+     * Setter for <code>oagi.app_oauth2_user.sub</code>. `sub` claim defined in
+     * OIDC spec. This is a unique identifier of the subject in the provider.
      */
     public void setSub(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>app_oauth2_user.sub</code>. `sub` claim defined in OIDC
-     * spec. This is a unique identifier of the subject in the provider.
+     * Getter for <code>oagi.app_oauth2_user.sub</code>. `sub` claim defined in
+     * OIDC spec. This is a unique identifier of the subject in the provider.
      */
     public String getSub() {
         return (String) get(3);
     }
 
     /**
-     * Setter for <code>app_oauth2_user.name</code>. `name` claim defined in
-     * OIDC spec.
+     * Setter for <code>oagi.app_oauth2_user.name</code>. `name` claim defined
+     * in OIDC spec.
      */
     public void setName(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>app_oauth2_user.name</code>. `name` claim defined in
-     * OIDC spec.
+     * Getter for <code>oagi.app_oauth2_user.name</code>. `name` claim defined
+     * in OIDC spec.
      */
     public String getName() {
         return (String) get(4);
     }
 
     /**
-     * Setter for <code>app_oauth2_user.email</code>. `email` claim defined in
-     * OIDC spec.
+     * Setter for <code>oagi.app_oauth2_user.email</code>. `email` claim defined
+     * in OIDC spec.
      */
     public void setEmail(String value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>app_oauth2_user.email</code>. `email` claim defined in
-     * OIDC spec.
+     * Getter for <code>oagi.app_oauth2_user.email</code>. `email` claim defined
+     * in OIDC spec.
      */
     public String getEmail() {
         return (String) get(5);
     }
 
     /**
-     * Setter for <code>app_oauth2_user.nickname</code>. `nickname` claim
+     * Setter for <code>oagi.app_oauth2_user.nickname</code>. `nickname` claim
      * defined in OIDC spec.
      */
     public void setNickname(String value) {
@@ -129,7 +131,7 @@ public class AppOauth2UserRecord extends UpdatableRecordImpl<AppOauth2UserRecord
     }
 
     /**
-     * Getter for <code>app_oauth2_user.nickname</code>. `nickname` claim
+     * Getter for <code>oagi.app_oauth2_user.nickname</code>. `nickname` claim
      * defined in OIDC spec.
      */
     public String getNickname() {
@@ -137,7 +139,7 @@ public class AppOauth2UserRecord extends UpdatableRecordImpl<AppOauth2UserRecord
     }
 
     /**
-     * Setter for <code>app_oauth2_user.preferred_username</code>.
+     * Setter for <code>oagi.app_oauth2_user.preferred_username</code>.
      * `preferred_username` claim defined in OIDC spec.
      */
     public void setPreferredUsername(String value) {
@@ -145,7 +147,7 @@ public class AppOauth2UserRecord extends UpdatableRecordImpl<AppOauth2UserRecord
     }
 
     /**
-     * Getter for <code>app_oauth2_user.preferred_username</code>.
+     * Getter for <code>oagi.app_oauth2_user.preferred_username</code>.
      * `preferred_username` claim defined in OIDC spec.
      */
     public String getPreferredUsername() {
@@ -153,7 +155,7 @@ public class AppOauth2UserRecord extends UpdatableRecordImpl<AppOauth2UserRecord
     }
 
     /**
-     * Setter for <code>app_oauth2_user.phone_number</code>. `phone_number`
+     * Setter for <code>oagi.app_oauth2_user.phone_number</code>. `phone_number`
      * claim defined in OIDC spec.
      */
     public void setPhoneNumber(String value) {
@@ -161,7 +163,7 @@ public class AppOauth2UserRecord extends UpdatableRecordImpl<AppOauth2UserRecord
     }
 
     /**
-     * Getter for <code>app_oauth2_user.phone_number</code>. `phone_number`
+     * Getter for <code>oagi.app_oauth2_user.phone_number</code>. `phone_number`
      * claim defined in OIDC spec.
      */
     public String getPhoneNumber() {
@@ -169,16 +171,16 @@ public class AppOauth2UserRecord extends UpdatableRecordImpl<AppOauth2UserRecord
     }
 
     /**
-     * Setter for <code>app_oauth2_user.creation_timestamp</code>. Timestamp
-     * when this record is created.
+     * Setter for <code>oagi.app_oauth2_user.creation_timestamp</code>.
+     * Timestamp when this record is created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>app_oauth2_user.creation_timestamp</code>. Timestamp
-     * when this record is created.
+     * Getter for <code>oagi.app_oauth2_user.creation_timestamp</code>.
+     * Timestamp when this record is created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(9);

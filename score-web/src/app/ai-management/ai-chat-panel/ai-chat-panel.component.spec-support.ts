@@ -1,0 +1,363 @@
+import {DestroyRef} from '@angular/core';
+import {HttpErrorResponse, HttpHeaders} from '@angular/common/http';
+import {TestBed} from '@angular/core/testing';
+import {DomSanitizer} from '@angular/platform-browser';
+import {MatDialog} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {NEVER, Subject, Subscription, of, throwError} from 'rxjs';
+import {AuthService} from '../../authentication/auth.service';
+import {WebPageInfoService} from '../../basis/basis.service';
+import {ConfirmDialogService} from '../../common/confirm-dialog/confirm-dialog.service';
+import {
+  AI_CHAT_LAST_CONVERSATION_STORAGE_KEY_PREFIX,
+  AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY,
+  AiChatPanelComponent
+} from './ai-chat-panel.component';
+import {AiContextBudgetDialogComponent} from './ai-context-budget-dialog.component';
+import {AiChatApiService} from './domain/ai-chat-api.service';
+import {AiChatAttachmentQueueService} from './domain/ai-chat-attachment-queue.service';
+import {AiChatAttachmentService} from './domain/ai-chat-attachment.service';
+import {AiChatCancellationService} from './domain/ai-chat-cancellation.service';
+import {AiChatCommandService} from './domain/ai-chat-command.service';
+import {AiChatContextService} from './domain/ai-chat-context.service';
+import {AiConfirmedMutationRequestCoordinator} from './domain/ai-confirmed-mutation-request-coordinator';
+import {AiConversationRestoreService} from './domain/ai-conversation-restore.service';
+import {AiChatNavigationService} from './domain/ai-chat-navigation.service';
+import {AiChatPanelLayoutService} from './domain/ai-chat-panel-layout.service';
+import {AiChatMessageTrackerService} from './domain/ai-chat-message-tracker.service';
+import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.service';
+import {AiChatSettingsService} from './domain/ai-chat-settings.service';
+import {AiChatTransportService} from './domain/ai-chat-transport.service';
+import {AiMutationInteractionService} from './domain/ai-mutation-interaction.service';
+import {
+  AiCancellationResponse,
+  AiPublicExecutionRequestStatus
+} from './domain/ai-chat-panel.model';
+
+export {
+  AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY,
+  HttpErrorResponse,
+  HttpHeaders,
+  NEVER,
+  Subject,
+  Subscription,
+  of,
+  throwError,
+  AiContextBudgetDialogComponent,
+  AiChatCommandService,
+  AiConversationRestoreService
+};
+export {
+  CANCELLATION_ADMISSION_RETRY_MS,
+  CANCELLATION_ACK_TIMEOUT_MS,
+  CANCELLATION_TERMINAL_TIMEOUT_MS,
+  COMPLETED_PAYLOAD_WAIT_MS,
+  MUTATION_CONFIRMATION_DECISION_TIMEOUT_MS,
+  REQUEST_STATUS_WATCHDOG_MS
+} from './domain/ai-chat-panel.constants';
+export type {
+  AiCancellationResponse,
+  AiChatConversationDetails,
+  AiChatConversationSummary,
+  AiChatRestResponse,
+  AiPublicExecutionRequestStatus
+} from './domain/ai-chat-panel.model';
+
+export interface AiChatPanelApiMock {
+  sendChat: ReturnType<typeof vi.fn>;
+  cancelRequest: ReturnType<typeof vi.fn>;
+  getRequestStatus: ReturnType<typeof vi.fn>;
+  getActiveRequest: ReturnType<typeof vi.fn>;
+  getConversationHistory: ReturnType<typeof vi.fn>;
+  getAvailableModels: ReturnType<typeof vi.fn>;
+  updateConversationModel: ReturnType<typeof vi.fn>;
+  getConversation: ReturnType<typeof vi.fn>;
+  deleteConversation: ReturnType<typeof vi.fn>;
+  decideMutationConfirmation: ReturnType<typeof vi.fn>;
+}
+
+export let component: AiChatPanelComponent;
+export let api: AiChatPanelApiMock;
+export let cancellationService: AiChatCancellationService;
+export let attachmentService: {
+  userMessageContent: ReturnType<typeof vi.fn>;
+  attachmentMediaType: ReturnType<typeof vi.fn>;
+  isSupportedAttachment: ReturnType<typeof vi.fn>;
+  readAttachment: ReturnType<typeof vi.fn>;
+};
+export let navigation: {handleDataChanged: ReturnType<typeof vi.fn>};
+export let transport: {
+  watch: ReturnType<typeof vi.fn>;
+  publish: ReturnType<typeof vi.fn>;
+  publishWhenConnected: ReturnType<typeof vi.fn>;
+  cancelReconnect: ReturnType<typeof vi.fn>;
+};
+export let snackBar: {open: ReturnType<typeof vi.fn>};
+export let dialog: {open: ReturnType<typeof vi.fn>};
+export let confirmDialog: {
+  newConfig: ReturnType<typeof vi.fn>;
+  open: ReturnType<typeof vi.fn>;
+};
+
+const defaultTestUsername = 'test_eu';
+let currentUsername = defaultTestUsername;
+let destroyCallbacks: Set<() => void>;
+
+export function setupAiChatPanelSpec(): void {
+  currentUsername = defaultTestUsername;
+  localStorage.removeItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY);
+  localStorage.removeItem(lastConversationStorageKey());
+  api = {
+    sendChat: vi.fn(() => NEVER),
+    cancelRequest: vi.fn(() => NEVER),
+    getRequestStatus: vi.fn(() => NEVER),
+    getActiveRequest: vi.fn(() => of(null)),
+    getConversationHistory: vi.fn(() => of([])),
+    getAvailableModels: vi.fn(() => of([
+      {name: 'claude-fable-5', displayName: 'Claude Fable 5', description: 'Claude model.',
+        provider: 'azure-foundry', defaultModel: true, defaultRuntime: 'default', runtimes: [
+          {name: 'default', displayName: 'Default', description: 'Default runtime.', settings: []},
+          {name: 'claude', displayName: 'Claude', description: 'Claude runtime.', settings: [
+            {name: 'permissionMode', displayName: 'Permission mode', description: 'Controls tool approval.',
+              type: 'select', defaultValue: 'default', options: [
+                {value: 'default', displayName: 'Default'}, {value: 'auto', displayName: 'Auto'}
+              ], minimum: null, maximum: null, step: null},
+            {name: 'maxTurns', displayName: 'Maximum turns', description: 'Limits agent turns.',
+              type: 'number', defaultValue: 20, options: [], minimum: 1, maximum: 100, step: 1},
+            {name: 'verbose', displayName: 'Verbose', description: 'Shows verbose output.',
+              type: 'boolean', defaultValue: false, options: [], minimum: null, maximum: null, step: null}
+          ]}
+        ], defaultReasoningEffort: 'high', reasoningEfforts: [
+          {name: 'low', displayName: 'Low', description: 'Fast responses.'},
+          {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'},
+          {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
+        ]},
+      {name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
+        provider: 'azure-openai', defaultModel: false, defaultRuntime: 'default', runtimes: [
+          {name: 'default', displayName: 'Default', description: 'Default runtime.', settings: []},
+          {name: 'openai', displayName: 'OpenAI', description: 'OpenAI runtime.', settings: []}
+        ], defaultReasoningEffort: 'medium', reasoningEfforts: [
+          {name: 'low', displayName: 'Low', description: 'Fast responses.'},
+          {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'},
+          {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
+        ]}
+    ])),
+    updateConversationModel: vi.fn(() => NEVER),
+    getConversation: vi.fn(() => NEVER),
+    deleteConversation: vi.fn(() => of({deleted: true})),
+    decideMutationConfirmation: vi.fn(() => NEVER)
+  };
+  snackBar = {open: vi.fn()};
+  dialog = {open: vi.fn()};
+  confirmDialog = {
+    newConfig: vi.fn(() => ({data: {}})),
+    open: vi.fn(() => ({afterClosed: () => of(false)}))
+  };
+  destroyCallbacks = new Set();
+  transport = {
+    watch: vi.fn(() => NEVER),
+    publish: vi.fn(),
+    publishWhenConnected: vi.fn(),
+    cancelReconnect: vi.fn()
+  };
+  navigation = {handleDataChanged: vi.fn()};
+  attachmentService = {
+    userMessageContent: vi.fn((prompt: string) => prompt),
+    attachmentMediaType: vi.fn(() => 'text/plain'),
+    isSupportedAttachment: vi.fn(() => true),
+    readAttachment: vi.fn()
+  };
+  TestBed.configureTestingModule({
+    providers: [
+      {provide: AiChatApiService, useValue: api},
+      AiChatAttachmentQueueService,
+      {provide: AiChatAttachmentService, useValue: attachmentService},
+      {provide: AiChatCommandService, useValue: {decide: () => ({kind: 'none'}), suggestions: () => []}},
+      AiConfirmedMutationRequestCoordinator,
+      {provide: AiChatContextService, useValue: {
+        nextContextUpdate: () => ({includesRouteRegistry: false})
+      }},
+      {provide: AiConversationRestoreService, useValue: {
+        reset: vi.fn(), cancel: vi.fn(), expectAttempt: vi.fn(),
+        isRestoreEvent: () => false, isLegacyRestoreAdmission: () => false,
+        projectStoredMessage: (message: any) => ({role: message.role, content: message.content})
+      }},
+      {provide: AiChatNavigationService, useValue: navigation},
+      {provide: AiChatPanelLayoutService, useValue: {
+        clearMainPanelInset: vi.fn(), updateMainPanelInset: vi.fn()
+      }},
+      AiChatMessageTrackerService,
+      AiMutationInteractionService,
+      AiChatPanelViewportService,
+      AiChatSettingsService,
+      {provide: AiChatTransportService, useValue: transport},
+      {provide: DomSanitizer, useValue: {bypassSecurityTrustHtml: (value: string) => value}},
+      {provide: WebPageInfoService, useValue: {brand: undefined}},
+      {provide: AuthService, useValue: {getUserToken: () => ({username: currentUsername})}},
+      {provide: DestroyRef, useValue: {
+        onDestroy: (callback: () => void) => {
+          destroyCallbacks.add(callback);
+          return () => destroyCallbacks.delete(callback);
+        }
+      }},
+      {provide: MatSnackBar, useValue: snackBar},
+      {provide: MatDialog, useValue: dialog},
+      {provide: ConfirmDialogService, useValue: confirmDialog}
+    ]
+  });
+  component = TestBed.runInInjectionContext(() => new AiChatPanelComponent());
+  (component as any).destroyRef = {
+    onDestroy: (callback: () => void) => {
+      destroyCallbacks.add(callback);
+      return () => destroyCallbacks.delete(callback);
+    }
+  };
+  cancellationService = TestBed.inject(AiChatCancellationService);
+  vi.spyOn(cancellationService as any, 'createCancellationRequestId').mockReturnValue('cancel-1');
+  vi.spyOn(component as any, 'createRequestId').mockReturnValue('request-1');
+}
+
+export function teardownAiChatPanelSpec(): void {
+  destroyComponent();
+  localStorage.removeItem(lastConversationStorageKey());
+  localStorage.removeItem(lastConversationStorageKey(defaultTestUsername));
+  vi.useRealTimers();
+}
+
+export function setCurrentUsername(username: string): void {
+  currentUsername = username;
+}
+
+export function cancellationResponse(): AiCancellationResponse {
+  return {
+    requestId: 'request-1',
+    conversationId: 'conversation-1',
+    generation: 7,
+    cancellationRequestId: 'cancel-1',
+    effectiveCancellationRequestId: 'cancel-1',
+    disposition: 'ACKNOWLEDGED',
+    status: 'CANCELLING',
+    acknowledged: true,
+    terminal: false,
+    lifecycleEventSequence: 3
+  };
+}
+
+export function startMutationConfirmation(status: 'REQUESTED' | 'APPROVED' = 'REQUESTED'): void {
+  component.state.conversationId = 'conversation-1';
+  component.state.prompt = 'Create the same item again';
+  component.send();
+  transport.publishWhenConnected.mock.calls[0][0].publish();
+  sendMutationConfirmationNotice({metadata: {
+    confirmationRequestId: 'confirmation-1',
+    status,
+    expiresAt: '2099-07-15T00:00:00Z',
+    toolName: 'create_business_context',
+    argumentsSummary: '{"name":"Example"}'
+  }});
+}
+
+export function sendMutationConfirmationNotice(override: Record<string, unknown> = {}): void {
+  (component as any).handleSocketEvent({
+    ...mutationConfirmationEvent('request-1'),
+    ...override
+  });
+}
+
+export function mutationConfirmationEvent(requestId: string): any {
+  return {
+    requestId,
+    conversationId: 'conversation-1',
+    type: 'system',
+    subtype: 'mutation_confirmation_required',
+    message: 'A data-changing action requires explicit approval.',
+    continuationRequired: false,
+    progress: [],
+    ids: [],
+    turnId: requestId,
+    sequence: 4,
+    visibility: 'visible',
+    content: 'A data-changing action requires explicit approval.',
+    metadata: {
+      confirmationRequestId: 'confirmation-1',
+      status: 'REQUESTED',
+      expiresAt: '2099-07-15T00:00:00Z',
+      toolName: 'create_business_context',
+      argumentsSummary: '{"name":"Example"}'
+    }
+  };
+}
+
+export function finishMutationConfirmationRequest(): void {
+  (component as any).handleSocketEvent({
+    requestId: 'request-1',
+    conversationId: 'conversation-1',
+    type: 'assistant_final',
+    content: 'The original action already completed.'
+  });
+}
+
+export function storageText(storage: Storage): string {
+  const values: string[] = [];
+  for (let index = 0; index < storage.length; index++) {
+    const key = storage.key(index);
+    if (key) {
+      values.push(key, storage.getItem(key) || '');
+    }
+  }
+  return values.join('\n');
+}
+
+export function lastConversationStorageKey(username = currentUsername): string {
+  return `${AI_CHAT_LAST_CONVERSATION_STORAGE_KEY_PREFIX}:${encodeURIComponent(username)}`;
+}
+
+export function consumedDecisionResponse() {
+  return {
+    confirmationRequestId: 'confirmation-1',
+    conversationId: 'conversation-1',
+    status: 'CONSUMED',
+    disposition: 'CONSUMED',
+    expiresAt: '2099-07-15T00:00:00Z',
+    approvedAt: '2099-07-14T00:30:00Z',
+    consumedAt: '2099-07-14T01:00:00Z'
+  };
+}
+
+export function destroyComponent(): void {
+  component.ngOnDestroy();
+  const callbacks = [...destroyCallbacks];
+  destroyCallbacks.clear();
+  callbacks.forEach(callback => callback());
+}
+
+export function completedCancellationResponse(): AiCancellationResponse {
+  return {
+    ...cancellationResponse(),
+    disposition: 'ALREADY_TERMINAL',
+    status: 'COMPLETED',
+    acknowledged: false,
+    terminal: true,
+    lifecycleEventSequence: 4,
+    terminalAt: '2026-07-14T13:00:04Z'
+  };
+}
+
+export function publicStatus(
+  status: AiPublicExecutionRequestStatus['status']
+): AiPublicExecutionRequestStatus {
+  return {
+    conversationId: 'conversation-1',
+    requestId: 'request-1',
+    generation: 7,
+    status,
+    deadline: '2026-07-14T13:05:00Z',
+    retryCount: 0,
+    createdAt: '2026-07-14T13:00:00Z',
+    updatedAt: '2026-07-14T13:00:05Z',
+    cancellationRequestId: 'cancel-1',
+    cancellationAcknowledgedAt: '2026-07-14T13:00:01Z',
+    lastEventSequence: 4,
+    version: 2
+  };
+}

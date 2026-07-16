@@ -30,11 +30,21 @@ import {LibraryManagementModule} from './library-management/library-management.m
 import {MessageManagementModule} from './message-management/message-management.module';
 import {BusinessTermManagementModule} from './business-term-management/business-term-management.module';
 import {SettingsManagementModule} from './settings-management/settings-management.module';
+import {MaterialModule} from './material.module';
+import {ConfirmDialogModule} from './common/confirm-dialog/confirm-dialog.module';
 
 import {SCORE_WEBAPP_ROUTES} from './basis/routes';
 import {WebPageInfoService} from './basis/basis.service';
 import {MailService} from './common/score-mail.service';
 import {AppTitleStrategy} from './common/app-title.strategy';
+import {AiChatPanelComponent} from './ai-management/ai-chat-panel/ai-chat-panel.component';
+import {AiChatPanelHeaderComponent} from './ai-management/ai-chat-panel/ai-chat-panel-header.component';
+import {AiChatPanelTabsComponent} from './ai-management/ai-chat-panel/ai-chat-panel-tabs.component';
+import {AiChatMessageListComponent} from './ai-management/ai-chat-panel/ai-chat-message-list.component';
+import {AiChatComposerComponent} from './ai-management/ai-chat-panel/ai-chat-composer.component';
+import {AiChatHistoryListComponent} from './ai-management/ai-chat-panel/ai-chat-history-list.component';
+import {AiChatInteractionPanelComponent} from './ai-management/ai-chat-panel/ai-chat-interaction-panel.component';
+import {AiContextBudgetChartComponent} from './ai-management/ai-chat-panel/ai-context-budget-chart.component';
 
 const httpInterceptorsProviders = [
   {provide: HTTP_INTERCEPTORS, useClass: XhrInterceptor, multi: true},
@@ -81,10 +91,20 @@ class ShouldReuseRouteFalseRouteReuseStrategy extends BaseRouteReuseStrategy {
     LibraryManagementModule,
     MessageManagementModule,
     BusinessTermManagementModule,
-    FontAwesomeModule
+    MaterialModule,
+    ConfirmDialogModule,
+    FontAwesomeModule,
+    AiContextBudgetChartComponent
   ],
   declarations: [
-    ScoreWebComponent
+    ScoreWebComponent,
+    AiChatPanelComponent,
+    AiChatPanelHeaderComponent,
+    AiChatPanelTabsComponent,
+    AiChatMessageListComponent,
+    AiChatInteractionPanelComponent,
+    AiChatComposerComponent,
+    AiChatHistoryListComponent
   ],
   providers: [
     provideTranslateService({
@@ -103,11 +123,11 @@ class ShouldReuseRouteFalseRouteReuseStrategy extends BaseRouteReuseStrategy {
     WebPageInfoService,
     MailService,
     httpInterceptorsProviders,
-    {
-      provide: RxStompService,
-      useFactory: rxStompServiceFactory,
-      deps: [HttpClient]
-    }
+	    {
+	      provide: RxStompService,
+	      useFactory: rxStompServiceFactory,
+	      deps: [HttpClient, AuthService]
+	    }
   ],
   bootstrap: [
     ScoreWebComponent

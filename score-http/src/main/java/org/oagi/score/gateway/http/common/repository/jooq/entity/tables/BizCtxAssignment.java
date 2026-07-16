@@ -21,20 +21,19 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.BizCtx.BizCtxPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.TopLevelAsbiep.TopLevelAsbiepPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.BizCtxAssignmentRecord;
@@ -51,7 +50,7 @@ public class BizCtxAssignment extends TableImpl<BizCtxAssignmentRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>biz_ctx_assignment</code>
+     * The reference instance of <code>oagi.biz_ctx_assignment</code>
      */
     public static final BizCtxAssignment BIZ_CTX_ASSIGNMENT = new BizCtxAssignment();
 
@@ -64,20 +63,20 @@ public class BizCtxAssignment extends TableImpl<BizCtxAssignmentRecord> {
     }
 
     /**
-     * The column <code>biz_ctx_assignment.biz_ctx_assignment_id</code>. An
+     * The column <code>oagi.biz_ctx_assignment.biz_ctx_assignment_id</code>. An
      * internal, primary database key of a BIZ_CTX_ASSIGNMENT record.
      */
-    public final TableField<BizCtxAssignmentRecord, ULong> BIZ_CTX_ASSIGNMENT_ID = createField(DSL.name("biz_ctx_assignment_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "An internal, primary database key of a BIZ_CTX_ASSIGNMENT record.");
+    public final TableField<BizCtxAssignmentRecord, ULong> BIZ_CTX_ASSIGNMENT_ID = createField(DSL.name("biz_ctx_assignment_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of a BIZ_CTX_ASSIGNMENT record.");
 
     /**
-     * The column <code>biz_ctx_assignment.biz_ctx_id</code>. Foreign key to the
-     * biz_ctx table.
+     * The column <code>oagi.biz_ctx_assignment.biz_ctx_id</code>. Foreign key
+     * to the biz_ctx table.
      */
     public final TableField<BizCtxAssignmentRecord, ULong> BIZ_CTX_ID = createField(DSL.name("biz_ctx_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the biz_ctx table.");
 
     /**
-     * The column <code>biz_ctx_assignment.top_level_asbiep_id</code>. This is a
-     * foreign key to the top-level ASBIEP.
+     * The column <code>oagi.biz_ctx_assignment.top_level_asbiep_id</code>. This
+     * is a foreign key to the top-level ASBIEP.
      */
     public final TableField<BizCtxAssignmentRecord, ULong> TOP_LEVEL_ASBIEP_ID = createField(DSL.name("top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "This is a foreign key to the top-level ASBIEP.");
 
@@ -90,21 +89,21 @@ public class BizCtxAssignment extends TableImpl<BizCtxAssignmentRecord> {
     }
 
     /**
-     * Create an aliased <code>biz_ctx_assignment</code> table reference
+     * Create an aliased <code>oagi.biz_ctx_assignment</code> table reference
      */
     public BizCtxAssignment(String alias) {
         this(DSL.name(alias), BIZ_CTX_ASSIGNMENT);
     }
 
     /**
-     * Create an aliased <code>biz_ctx_assignment</code> table reference
+     * Create an aliased <code>oagi.biz_ctx_assignment</code> table reference
      */
     public BizCtxAssignment(Name alias) {
         this(alias, BIZ_CTX_ASSIGNMENT);
     }
 
     /**
-     * Create a <code>biz_ctx_assignment</code> table reference
+     * Create a <code>oagi.biz_ctx_assignment</code> table reference
      */
     public BizCtxAssignment() {
         this(DSL.name("biz_ctx_assignment"), null);
@@ -145,7 +144,7 @@ public class BizCtxAssignment extends TableImpl<BizCtxAssignmentRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -176,7 +175,7 @@ public class BizCtxAssignment extends TableImpl<BizCtxAssignmentRecord> {
     private transient BizCtxPath _bizCtx;
 
     /**
-     * Get the implicit join path to the <code>biz_ctx</code> table.
+     * Get the implicit join path to the <code>oagi.biz_ctx</code> table.
      */
     public BizCtxPath bizCtx() {
         if (_bizCtx == null)
@@ -188,7 +187,8 @@ public class BizCtxAssignment extends TableImpl<BizCtxAssignmentRecord> {
     private transient TopLevelAsbiepPath _topLevelAsbiep;
 
     /**
-     * Get the implicit join path to the <code>top_level_asbiep</code> table.
+     * Get the implicit join path to the <code>oagi.top_level_asbiep</code>
+     * table.
      */
     public TopLevelAsbiepPath topLevelAsbiep() {
         if (_topLevelAsbiep == null)
@@ -241,7 +241,7 @@ public class BizCtxAssignment extends TableImpl<BizCtxAssignmentRecord> {
      */
     @Override
     public BizCtxAssignment where(Condition condition) {
-        return new BizCtxAssignment(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new BizCtxAssignment(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -308,7 +308,7 @@ public class BizCtxAssignment extends TableImpl<BizCtxAssignmentRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public BizCtxAssignment whereExists(TableLike<?> select) {
+    public BizCtxAssignment whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -316,7 +316,7 @@ public class BizCtxAssignment extends TableImpl<BizCtxAssignmentRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public BizCtxAssignment whereNotExists(TableLike<?> select) {
+    public BizCtxAssignment whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

@@ -20,19 +20,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasHttpHeader.OasHttpHeaderPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasResponse.OasResponsePath;
@@ -49,7 +48,7 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oas_response_headers</code>
+     * The reference instance of <code>oagi.oas_response_headers</code>
      */
     public static final OasResponseHeaders OAS_RESPONSE_HEADERS = new OasResponseHeaders();
 
@@ -62,38 +61,38 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
     }
 
     /**
-     * The column <code>oas_response_headers.oas_response_id</code>. The primary
-     * key of the record.
+     * The column <code>oagi.oas_response_headers.oas_response_id</code>. The
+     * primary key of the record.
      */
     public final TableField<OasResponseHeadersRecord, ULong> OAS_RESPONSE_ID = createField(DSL.name("oas_response_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_response_headers.oas_http_header_id</code>. The
+     * The column <code>oagi.oas_response_headers.oas_http_header_id</code>. The
      * primary key of the record.
      */
     public final TableField<OasResponseHeadersRecord, ULong> OAS_HTTP_HEADER_ID = createField(DSL.name("oas_http_header_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_response_headers.created_by</code>. The user who
-     * creates the record.
+     * The column <code>oagi.oas_response_headers.created_by</code>. The user
+     * who creates the record.
      */
     public final TableField<OasResponseHeadersRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who creates the record.");
 
     /**
-     * The column <code>oas_response_headers.last_updated_by</code>. The user
-     * who last updates the record.
+     * The column <code>oagi.oas_response_headers.last_updated_by</code>. The
+     * user who last updates the record.
      */
     public final TableField<OasResponseHeadersRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who last updates the record.");
 
     /**
-     * The column <code>oas_response_headers.creation_timestamp</code>. The
+     * The column <code>oagi.oas_response_headers.creation_timestamp</code>. The
      * timestamp when the record is created.
      */
     public final TableField<OasResponseHeadersRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is created.");
 
     /**
-     * The column <code>oas_response_headers.last_update_timestamp</code>. The
-     * timestamp when the record is last updated.
+     * The column <code>oagi.oas_response_headers.last_update_timestamp</code>.
+     * The timestamp when the record is last updated.
      */
     public final TableField<OasResponseHeadersRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is last updated.");
 
@@ -106,21 +105,21 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
     }
 
     /**
-     * Create an aliased <code>oas_response_headers</code> table reference
+     * Create an aliased <code>oagi.oas_response_headers</code> table reference
      */
     public OasResponseHeaders(String alias) {
         this(DSL.name(alias), OAS_RESPONSE_HEADERS);
     }
 
     /**
-     * Create an aliased <code>oas_response_headers</code> table reference
+     * Create an aliased <code>oagi.oas_response_headers</code> table reference
      */
     public OasResponseHeaders(Name alias) {
         this(alias, OAS_RESPONSE_HEADERS);
     }
 
     /**
-     * Create a <code>oas_response_headers</code> table reference
+     * Create a <code>oagi.oas_response_headers</code> table reference
      */
     public OasResponseHeaders() {
         this(DSL.name("oas_response_headers"), null);
@@ -161,7 +160,7 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -177,8 +176,8 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
     private transient AppUserPath _oasResponseHeadersCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_response_headers_created_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_response_headers_created_by_fk</code> key.
      */
     public AppUserPath oasResponseHeadersCreatedByFk() {
         if (_oasResponseHeadersCreatedByFk == null)
@@ -190,8 +189,8 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
     private transient AppUserPath _oasResponseHeadersLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_response_headers_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_response_headers_last_updated_by_fk</code> key.
      */
     public AppUserPath oasResponseHeadersLastUpdatedByFk() {
         if (_oasResponseHeadersLastUpdatedByFk == null)
@@ -203,7 +202,8 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
     private transient OasHttpHeaderPath _oasHttpHeader;
 
     /**
-     * Get the implicit join path to the <code>oas_http_header</code> table.
+     * Get the implicit join path to the <code>oagi.oas_http_header</code>
+     * table.
      */
     public OasHttpHeaderPath oasHttpHeader() {
         if (_oasHttpHeader == null)
@@ -215,7 +215,7 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
     private transient OasResponsePath _oasResponse;
 
     /**
-     * Get the implicit join path to the <code>oas_response</code> table.
+     * Get the implicit join path to the <code>oagi.oas_response</code> table.
      */
     public OasResponsePath oasResponse() {
         if (_oasResponse == null)
@@ -268,7 +268,7 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
      */
     @Override
     public OasResponseHeaders where(Condition condition) {
-        return new OasResponseHeaders(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new OasResponseHeaders(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -335,7 +335,7 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasResponseHeaders whereExists(TableLike<?> select) {
+    public OasResponseHeaders whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -343,7 +343,7 @@ public class OasResponseHeaders extends TableImpl<OasResponseHeadersRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasResponseHeaders whereNotExists(TableLike<?> select) {
+    public OasResponseHeaders whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

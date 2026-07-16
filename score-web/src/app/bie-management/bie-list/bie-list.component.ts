@@ -41,6 +41,7 @@ import {LibraryService} from '../../library-management/domain/library.service';
 import {BieDiagramDialogComponent} from '../bie-diagram-dialog/bie-diagram-dialog.component';
 import {BieStateTransitionFlowService} from '../domain/bie-state-transition-flow.service';
 import {StateDependencySelection} from '../domain/state-dependency-target';
+import {TabFilterSelectTab} from '../../common/tab-filter-select/tab-filter-select.component';
 
 @Component({
   standalone: false,
@@ -203,15 +204,19 @@ export class BieListComponent implements OnInit {
   loading = false;
 
   loginIdList: string[] = [];
+  ownerFilterTabs: TabFilterSelectTab[] = [
+    {id: 'owned', label: 'Owned by'},
+    {id: 'notOwned', label: 'Not owned by', valuePrefix: '!', selectedLabelPrefix: 'Not '}
+  ];
+  updaterFilterTabs: TabFilterSelectTab[] = [
+    {id: 'updated', label: 'Updated by'},
+    {id: 'notUpdated', label: 'Not updated by', valuePrefix: '!', selectedLabelPrefix: 'Not '}
+  ];
   releases: ReleaseSummary[] = [];
   libraries: LibrarySummary[] = [];
   mappedLibraries: {library: LibrarySummary, selected: boolean}[] = [];
   releaseListFilterCtrl: FormControl = new FormControl();
-  loginIdListFilterCtrl: FormControl = new FormControl();
-  updaterIdListFilterCtrl: FormControl = new FormControl();
   filteredReleaseList: ReplaySubject<ReleaseSummary[]> = new ReplaySubject<ReleaseSummary[]>(1);
-  filteredLoginIdList: ReplaySubject<string[]> = new ReplaySubject<string[]>(1);
-  filteredUpdaterIdList: ReplaySubject<string[]> = new ReplaySubject<string[]>(1);
   states: string[] = ['WIP', 'QA', 'Production'];
   request: BieListRequest;
   preferencesInfo: PreferencesInfo;
@@ -260,15 +265,25 @@ export class BieListComponent implements OnInit {
       ]).subscribe(([loginIds, releases, preferencesInfo]) => {
         this.preferencesInfo = preferencesInfo;
 
-        this.loginIdList.push(...loginIds);
-        initFilter(this.loginIdListFilterCtrl, this.filteredLoginIdList, this.loginIdList);
-        initFilter(this.updaterIdListFilterCtrl, this.filteredUpdaterIdList, this.loginIdList);
+        this.loginIdList = this.loginIdOptions(loginIds);
 
         this.initReleases(releases);
 
         this.loadBieList(true);
       });
     });
+  }
+
+  private loginIdOptions(loginIds: string[]): string[] {
+    const options = [...loginIds];
+    [
+      ...this.request.ownerLoginIdList,
+      ...this.request.updaterLoginIdList
+    ]
+      .map(loginId => loginId?.startsWith('!') ? loginId.substring(1) : loginId)
+      .filter(loginId => !!loginId && !options.includes(loginId))
+      .forEach(loginId => options.push(loginId));
+    return options;
   }
 
   get username(): string {

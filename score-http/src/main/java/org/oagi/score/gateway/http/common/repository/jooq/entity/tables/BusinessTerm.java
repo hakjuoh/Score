@@ -19,19 +19,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsccBizterm.AsccBiztermPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.BccBizterm.BccBiztermPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.BusinessTermRecord;
@@ -47,7 +46,7 @@ public class BusinessTerm extends TableImpl<BusinessTermRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>business_term</code>
+     * The reference instance of <code>oagi.business_term</code>
      */
     public static final BusinessTerm BUSINESS_TERM = new BusinessTerm();
 
@@ -60,70 +59,70 @@ public class BusinessTerm extends TableImpl<BusinessTermRecord> {
     }
 
     /**
-     * The column <code>business_term.business_term_id</code>. An internal,
+     * The column <code>oagi.business_term.business_term_id</code>. An internal,
      * primary database key of a Business term.
      */
-    public final TableField<BusinessTermRecord, ULong> BUSINESS_TERM_ID = createField(DSL.name("business_term_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "An internal, primary database key of a Business term.");
+    public final TableField<BusinessTermRecord, ULong> BUSINESS_TERM_ID = createField(DSL.name("business_term_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of a Business term.");
 
     /**
-     * The column <code>business_term.guid</code>. A globally unique identifier
-     * (GUID).
+     * The column <code>oagi.business_term.guid</code>. A globally unique
+     * identifier (GUID).
      */
     public final TableField<BusinessTermRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.CHAR(32).nullable(false), this, "A globally unique identifier (GUID).");
 
     /**
-     * The column <code>business_term.business_term</code>. A main name of the
-     * business term
+     * The column <code>oagi.business_term.business_term</code>. A main name of
+     * the business term
      */
     public final TableField<BusinessTermRecord, String> BUSINESS_TERM_ = createField(DSL.name("business_term"), SQLDataType.VARCHAR(255).nullable(false), this, "A main name of the business term");
 
     /**
-     * The column <code>business_term.definition</code>. Definition of the
+     * The column <code>oagi.business_term.definition</code>. Definition of the
      * business term.
      */
     public final TableField<BusinessTermRecord, String> DEFINITION = createField(DSL.name("definition"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Definition of the business term.");
 
     /**
-     * The column <code>business_term.created_by</code>. A foreign key referring
-     * to the user who creates the business term. The creator of the business
-     * term is also its owner by default.
+     * The column <code>oagi.business_term.created_by</code>. A foreign key
+     * referring to the user who creates the business term. The creator of the
+     * business term is also its owner by default.
      */
     public final TableField<BusinessTermRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the user who creates the business term. The creator of the business term is also its owner by default.");
 
     /**
-     * The column <code>business_term.last_updated_by</code>. A foreign key
+     * The column <code>oagi.business_term.last_updated_by</code>. A foreign key
      * referring to the last user who has updated the business term record. This
      * may be the user who is in the same group as the creator.
      */
     public final TableField<BusinessTermRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the last user who has updated the business term record. This may be the user who is in the same group as the creator.");
 
     /**
-     * The column <code>business_term.creation_timestamp</code>. Timestamp when
-     * the business term record was first created.
+     * The column <code>oagi.business_term.creation_timestamp</code>. Timestamp
+     * when the business term record was first created.
      */
     public final TableField<BusinessTermRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Timestamp when the business term record was first created.");
 
     /**
-     * The column <code>business_term.last_update_timestamp</code>. The
+     * The column <code>oagi.business_term.last_update_timestamp</code>. The
      * timestamp when the business term was last updated.
      */
     public final TableField<BusinessTermRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the business term was last updated.");
 
     /**
-     * The column <code>business_term.external_ref_uri</code>. TODO: Definition
-     * is missing.
+     * The column <code>oagi.business_term.external_ref_uri</code>. TODO:
+     * Definition is missing.
      */
     public final TableField<BusinessTermRecord, String> EXTERNAL_REF_URI = createField(DSL.name("external_ref_uri"), SQLDataType.CLOB(65535).nullable(false), this, "TODO: Definition is missing.");
 
     /**
-     * The column <code>business_term.external_ref_id</code>. TODO: Definition
-     * is missing.
+     * The column <code>oagi.business_term.external_ref_id</code>. TODO:
+     * Definition is missing.
      */
     public final TableField<BusinessTermRecord, String> EXTERNAL_REF_ID = createField(DSL.name("external_ref_id"), SQLDataType.VARCHAR(100).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "TODO: Definition is missing.");
 
     /**
-     * The column <code>business_term.comment</code>. Comment of the business
-     * term.
+     * The column <code>oagi.business_term.comment</code>. Comment of the
+     * business term.
      */
     public final TableField<BusinessTermRecord, String> COMMENT = createField(DSL.name("comment"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Comment of the business term.");
 
@@ -136,21 +135,21 @@ public class BusinessTerm extends TableImpl<BusinessTermRecord> {
     }
 
     /**
-     * Create an aliased <code>business_term</code> table reference
+     * Create an aliased <code>oagi.business_term</code> table reference
      */
     public BusinessTerm(String alias) {
         this(DSL.name(alias), BUSINESS_TERM);
     }
 
     /**
-     * Create an aliased <code>business_term</code> table reference
+     * Create an aliased <code>oagi.business_term</code> table reference
      */
     public BusinessTerm(Name alias) {
         this(alias, BUSINESS_TERM);
     }
 
     /**
-     * Create a <code>business_term</code> table reference
+     * Create a <code>oagi.business_term</code> table reference
      */
     public BusinessTerm() {
         this(DSL.name("business_term"), null);
@@ -191,7 +190,7 @@ public class BusinessTerm extends TableImpl<BusinessTermRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -207,7 +206,8 @@ public class BusinessTerm extends TableImpl<BusinessTermRecord> {
     private transient AsccBiztermPath _asccBizterm;
 
     /**
-     * Get the implicit to-many join path to the <code>ascc_bizterm</code> table
+     * Get the implicit to-many join path to the <code>oagi.ascc_bizterm</code>
+     * table
      */
     public AsccBiztermPath asccBizterm() {
         if (_asccBizterm == null)
@@ -219,7 +219,8 @@ public class BusinessTerm extends TableImpl<BusinessTermRecord> {
     private transient BccBiztermPath _bccBizterm;
 
     /**
-     * Get the implicit to-many join path to the <code>bcc_bizterm</code> table
+     * Get the implicit to-many join path to the <code>oagi.bcc_bizterm</code>
+     * table
      */
     public BccBiztermPath bccBizterm() {
         if (_bccBizterm == null)
@@ -272,7 +273,7 @@ public class BusinessTerm extends TableImpl<BusinessTermRecord> {
      */
     @Override
     public BusinessTerm where(Condition condition) {
-        return new BusinessTerm(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new BusinessTerm(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -339,7 +340,7 @@ public class BusinessTerm extends TableImpl<BusinessTermRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public BusinessTerm whereExists(TableLike<?> select) {
+    public BusinessTerm whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -347,7 +348,7 @@ public class BusinessTerm extends TableImpl<BusinessTermRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public BusinessTerm whereNotExists(TableLike<?> select) {
+    public BusinessTerm whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

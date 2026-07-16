@@ -21,20 +21,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdList.AgencyIdListPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue.AgencyIdListValuePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValueManifest.AgencyIdListValueManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasHttpHeader.OasHttpHeaderPath;
@@ -50,7 +50,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>agency_id_list_value</code>
+     * The reference instance of <code>oagi.agency_id_list_value</code>
      */
     public static final AgencyIdListValue AGENCY_ID_LIST_VALUE = new AgencyIdListValue();
 
@@ -63,96 +63,99 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     }
 
     /**
-     * The column <code>agency_id_list_value.agency_id_list_value_id</code>.
-     * Primary key column.
+     * The column
+     * <code>oagi.agency_id_list_value.agency_id_list_value_id</code>. Primary
+     * key column.
      */
-    public final TableField<AgencyIdListValueRecord, ULong> AGENCY_ID_LIST_VALUE_ID = createField(DSL.name("agency_id_list_value_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "Primary key column.");
+    public final TableField<AgencyIdListValueRecord, ULong> AGENCY_ID_LIST_VALUE_ID = createField(DSL.name("agency_id_list_value_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Primary key column.");
 
     /**
-     * The column <code>agency_id_list_value.guid</code>. A globally unique
+     * The column <code>oagi.agency_id_list_value.guid</code>. A globally unique
      * identifier (GUID).
      */
     public final TableField<AgencyIdListValueRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.CHAR(32).nullable(false), this, "A globally unique identifier (GUID).");
 
     /**
-     * The column <code>agency_id_list_value.value</code>. A value in the agency
-     * identification list.
+     * The column <code>oagi.agency_id_list_value.value</code>. A value in the
+     * agency identification list.
      */
     public final TableField<AgencyIdListValueRecord, String> VALUE = createField(DSL.name("value"), SQLDataType.VARCHAR(150).nullable(false), this, "A value in the agency identification list.");
 
     /**
-     * The column <code>agency_id_list_value.name</code>. Descriptive or short
-     * name of the value.
+     * The column <code>oagi.agency_id_list_value.name</code>. Descriptive or
+     * short name of the value.
      */
     public final TableField<AgencyIdListValueRecord, String> NAME = createField(DSL.name("name"), SQLDataType.VARCHAR(150).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Descriptive or short name of the value.");
 
     /**
-     * The column <code>agency_id_list_value.definition</code>. Description of
-     * the agency identification list value.
+     * The column <code>oagi.agency_id_list_value.definition</code>. Description
+     * of the agency identification list value.
      */
     public final TableField<AgencyIdListValueRecord, String> DEFINITION = createField(DSL.name("definition"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Description of the agency identification list value.");
 
     /**
-     * The column <code>agency_id_list_value.definition_source</code>. This is
-     * typically a URL which indicates the source of the agency id list value
+     * The column <code>oagi.agency_id_list_value.definition_source</code>. This
+     * is typically a URL which indicates the source of the agency id list value
      * DEFINITION.
      */
     public final TableField<AgencyIdListValueRecord, String> DEFINITION_SOURCE = createField(DSL.name("definition_source"), SQLDataType.VARCHAR(100).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "This is typically a URL which indicates the source of the agency id list value DEFINITION.");
 
     /**
-     * The column <code>agency_id_list_value.owner_list_id</code>. Foreign key
-     * to the agency identification list in the AGENCY_ID_LIST table this value
-     * belongs to.
+     * The column <code>oagi.agency_id_list_value.owner_list_id</code>. Foreign
+     * key to the agency identification list in the AGENCY_ID_LIST table this
+     * value belongs to.
      */
     public final TableField<AgencyIdListValueRecord, ULong> OWNER_LIST_ID = createField(DSL.name("owner_list_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the agency identification list in the AGENCY_ID_LIST table this value belongs to.");
 
     /**
      * The column
-     * <code>agency_id_list_value.based_agency_id_list_value_id</code>. Foreign
-     * key to the AGENCY_ID_LIST_VALUE table itself. This column is used when
-     * the AGENCY_ID_LIST_VALUE is derived from the based AGENCY_ID_LIST_VALUE.
+     * <code>oagi.agency_id_list_value.based_agency_id_list_value_id</code>.
+     * Foreign key to the AGENCY_ID_LIST_VALUE table itself. This column is used
+     * when the AGENCY_ID_LIST_VALUE is derived from the based
+     * AGENCY_ID_LIST_VALUE.
      */
     public final TableField<AgencyIdListValueRecord, ULong> BASED_AGENCY_ID_LIST_VALUE_ID = createField(DSL.name("based_agency_id_list_value_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the AGENCY_ID_LIST_VALUE table itself. This column is used when the AGENCY_ID_LIST_VALUE is derived from the based AGENCY_ID_LIST_VALUE.");
 
     /**
-     * The column <code>agency_id_list_value.is_deprecated</code>. Indicates
-     * whether the agency id list value is deprecated and should not be reused
-     * (i.e., no new reference to this record should be allowed).
+     * The column <code>oagi.agency_id_list_value.is_deprecated</code>.
+     * Indicates whether the agency id list value is deprecated and should not
+     * be reused (i.e., no new reference to this record should be allowed).
      */
     public final TableField<AgencyIdListValueRecord, Byte> IS_DEPRECATED = createField(DSL.name("is_deprecated"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicates whether the agency id list value is deprecated and should not be reused (i.e., no new reference to this record should be allowed).");
 
     /**
-     * The column <code>agency_id_list_value.is_developer_default</code>.
+     * The column <code>oagi.agency_id_list_value.is_developer_default</code>.
      * Indicates whether this agency ID list value can be used as the default
      * for components referenced by developers.
      */
     public final TableField<AgencyIdListValueRecord, Byte> IS_DEVELOPER_DEFAULT = createField(DSL.name("is_developer_default"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicates whether this agency ID list value can be used as the default for components referenced by developers.");
 
     /**
-     * The column <code>agency_id_list_value.is_user_default</code>. Indicates
-     * whether this agency ID list value can be used as the default for
-     * components referenced by users.
+     * The column <code>oagi.agency_id_list_value.is_user_default</code>.
+     * Indicates whether this agency ID list value can be used as the default
+     * for components referenced by users.
      */
     public final TableField<AgencyIdListValueRecord, Byte> IS_USER_DEFAULT = createField(DSL.name("is_user_default"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicates whether this agency ID list value can be used as the default for components referenced by users.");
 
     /**
      * The column
-     * <code>agency_id_list_value.replacement_agency_id_list_value_id</code>.
+     * <code>oagi.agency_id_list_value.replacement_agency_id_list_value_id</code>.
      * This refers to a replacement if the record is deprecated.
      */
     public final TableField<AgencyIdListValueRecord, ULong> REPLACEMENT_AGENCY_ID_LIST_VALUE_ID = createField(DSL.name("replacement_agency_id_list_value_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "This refers to a replacement if the record is deprecated.");
 
     /**
-     * The column <code>agency_id_list_value.created_by</code>. Foreign key to
-     * the APP_USER table. It indicates the user who created the agency ID list
-     * value.
+     * The column <code>oagi.agency_id_list_value.created_by</code>. Foreign key
+     * to the APP_USER table. It indicates the user who created the agency ID
+     * list value.
      */
     public final TableField<AgencyIdListValueRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It indicates the user who created the agency ID list value.");
 
     /**
-     * The column <code>agency_id_list_value.owner_user_id</code>. Foreign key
-     * to the APP_USER table. This is the user who owns the entity, is allowed
-     * to edit the entity, and who can transfer the ownership to another user.
+     * The column <code>oagi.agency_id_list_value.owner_user_id</code>. Foreign
+     * key to the APP_USER table. This is the user who owns the entity, is
+     * allowed to edit the entity, and who can transfer the ownership to another
+     * user.
      * 
      * The ownership can change throughout the history, but undoing shouldn't
      * rollback the ownership.
@@ -160,34 +163,34 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     public final TableField<AgencyIdListValueRecord, ULong> OWNER_USER_ID = createField(DSL.name("owner_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. This is the user who owns the entity, is allowed to edit the entity, and who can transfer the ownership to another user.\n\nThe ownership can change throughout the history, but undoing shouldn't rollback the ownership.");
 
     /**
-     * The column <code>agency_id_list_value.last_updated_by</code>. Foreign key
-     * to the APP_USER table. It identifies the user who last updated the agency
-     * ID list value.
+     * The column <code>oagi.agency_id_list_value.last_updated_by</code>.
+     * Foreign key to the APP_USER table. It identifies the user who last
+     * updated the agency ID list value.
      */
     public final TableField<AgencyIdListValueRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It identifies the user who last updated the agency ID list value.");
 
     /**
-     * The column <code>agency_id_list_value.creation_timestamp</code>.
+     * The column <code>oagi.agency_id_list_value.creation_timestamp</code>.
      * Timestamp when the agency ID list value was created.
      */
     public final TableField<AgencyIdListValueRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "Timestamp when the agency ID list value was created.");
 
     /**
-     * The column <code>agency_id_list_value.last_update_timestamp</code>.
+     * The column <code>oagi.agency_id_list_value.last_update_timestamp</code>.
      * Timestamp when the agency ID list value was last updated.
      */
     public final TableField<AgencyIdListValueRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "Timestamp when the agency ID list value was last updated.");
 
     /**
      * The column
-     * <code>agency_id_list_value.prev_agency_id_list_value_id</code>. A
+     * <code>oagi.agency_id_list_value.prev_agency_id_list_value_id</code>. A
      * self-foreign key to indicate the previous history record.
      */
     public final TableField<AgencyIdListValueRecord, ULong> PREV_AGENCY_ID_LIST_VALUE_ID = createField(DSL.name("prev_agency_id_list_value_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A self-foreign key to indicate the previous history record.");
 
     /**
      * The column
-     * <code>agency_id_list_value.next_agency_id_list_value_id</code>. A
+     * <code>oagi.agency_id_list_value.next_agency_id_list_value_id</code>. A
      * self-foreign key to indicate the next history record.
      */
     public final TableField<AgencyIdListValueRecord, ULong> NEXT_AGENCY_ID_LIST_VALUE_ID = createField(DSL.name("next_agency_id_list_value_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A self-foreign key to indicate the next history record.");
@@ -201,21 +204,21 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     }
 
     /**
-     * Create an aliased <code>agency_id_list_value</code> table reference
+     * Create an aliased <code>oagi.agency_id_list_value</code> table reference
      */
     public AgencyIdListValue(String alias) {
         this(DSL.name(alias), AGENCY_ID_LIST_VALUE);
     }
 
     /**
-     * Create an aliased <code>agency_id_list_value</code> table reference
+     * Create an aliased <code>oagi.agency_id_list_value</code> table reference
      */
     public AgencyIdListValue(Name alias) {
         this(alias, AGENCY_ID_LIST_VALUE);
     }
 
     /**
-     * Create a <code>agency_id_list_value</code> table reference
+     * Create a <code>oagi.agency_id_list_value</code> table reference
      */
     public AgencyIdListValue() {
         this(DSL.name("agency_id_list_value"), null);
@@ -256,7 +259,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -277,7 +280,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     private transient AgencyIdListValuePath _agencyIdListValueBasedAgencyIdListValueIdFk;
 
     /**
-     * Get the implicit join path to the <code>agency_id_list_value</code>
+     * Get the implicit join path to the <code>oagi.agency_id_list_value</code>
      * table, via the
      * <code>agency_id_list_value_based_agency_id_list_value_id_fk</code> key.
      */
@@ -291,8 +294,8 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     private transient AppUserPath _agencyIdListValueCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>agency_id_list_value_created_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>agency_id_list_value_created_by_fk</code> key.
      */
     public AppUserPath agencyIdListValueCreatedByFk() {
         if (_agencyIdListValueCreatedByFk == null)
@@ -304,8 +307,8 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     private transient AppUserPath _agencyIdListValueLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>agency_id_list_value_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>agency_id_list_value_last_updated_by_fk</code> key.
      */
     public AppUserPath agencyIdListValueLastUpdatedByFk() {
         if (_agencyIdListValueLastUpdatedByFk == null)
@@ -317,7 +320,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     private transient AgencyIdListValuePath _agencyIdListValueNextAgencyIdListValueIdFk;
 
     /**
-     * Get the implicit join path to the <code>agency_id_list_value</code>
+     * Get the implicit join path to the <code>oagi.agency_id_list_value</code>
      * table, via the
      * <code>agency_id_list_value_next_agency_id_list_value_id_fk</code> key.
      */
@@ -331,7 +334,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     private transient AgencyIdListPath _agencyIdList;
 
     /**
-     * Get the implicit join path to the <code>agency_id_list</code> table.
+     * Get the implicit join path to the <code>oagi.agency_id_list</code> table.
      */
     public AgencyIdListPath agencyIdList() {
         if (_agencyIdList == null)
@@ -343,8 +346,8 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     private transient AppUserPath _agencyIdListValueOwnerUserIdFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>agency_id_list_value_owner_user_id_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>agency_id_list_value_owner_user_id_fk</code> key.
      */
     public AppUserPath agencyIdListValueOwnerUserIdFk() {
         if (_agencyIdListValueOwnerUserIdFk == null)
@@ -356,7 +359,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     private transient AgencyIdListValuePath _agencyIdListValuePrevAgencyIdListValueIdFk;
 
     /**
-     * Get the implicit join path to the <code>agency_id_list_value</code>
+     * Get the implicit join path to the <code>oagi.agency_id_list_value</code>
      * table, via the
      * <code>agency_id_list_value_prev_agency_id_list_value_id_fk</code> key.
      */
@@ -370,7 +373,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     private transient AgencyIdListValuePath _agencyIdListValueReplacementAgencyIdListValueIdFk;
 
     /**
-     * Get the implicit join path to the <code>agency_id_list_value</code>
+     * Get the implicit join path to the <code>oagi.agency_id_list_value</code>
      * table, via the
      * <code>agency_id_list_value_replacement_agency_id_list_value_id_fk</code>
      * key.
@@ -386,7 +389,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>agency_id_list_value_manifest</code> table
+     * <code>oagi.agency_id_list_value_manifest</code> table
      */
     public AgencyIdListValueManifestPath agencyIdListValueManifest() {
         if (_agencyIdListValueManifest == null)
@@ -398,8 +401,8 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
     private transient OasHttpHeaderPath _oasHttpHeader;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_http_header</code>
-     * table
+     * Get the implicit to-many join path to the
+     * <code>oagi.oas_http_header</code> table
      */
     public OasHttpHeaderPath oasHttpHeader() {
         if (_oasHttpHeader == null)
@@ -452,7 +455,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
      */
     @Override
     public AgencyIdListValue where(Condition condition) {
-        return new AgencyIdListValue(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new AgencyIdListValue(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -519,7 +522,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AgencyIdListValue whereExists(TableLike<?> select) {
+    public AgencyIdListValue whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -527,7 +530,7 @@ public class AgencyIdListValue extends TableImpl<AgencyIdListValueRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AgencyIdListValue whereNotExists(TableLike<?> select) {
+    public AgencyIdListValue whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

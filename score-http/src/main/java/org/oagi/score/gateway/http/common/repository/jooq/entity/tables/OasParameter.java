@@ -21,19 +21,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasHttpHeader.OasHttpHeaderPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasParameterLink.OasParameterLinkPath;
@@ -54,7 +53,7 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oas_parameter</code>
+     * The reference instance of <code>oagi.oas_parameter</code>
      */
     public static final OasParameter OAS_PARAMETER = new OasParameter();
 
@@ -67,19 +66,19 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
     }
 
     /**
-     * The column <code>oas_parameter.oas_parameter_id</code>. The primary key
-     * of the record.
+     * The column <code>oagi.oas_parameter.oas_parameter_id</code>. The primary
+     * key of the record.
      */
-    public final TableField<OasParameterRecord, ULong> OAS_PARAMETER_ID = createField(DSL.name("oas_parameter_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the record.");
+    public final TableField<OasParameterRecord, ULong> OAS_PARAMETER_ID = createField(DSL.name("oas_parameter_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_parameter.guid</code>. The GUID of the record.
+     * The column <code>oagi.oas_parameter.guid</code>. The GUID of the record.
      */
     public final TableField<OasParameterRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.VARCHAR(41).nullable(false), this, "The GUID of the record.");
 
     /**
-     * The column <code>oas_parameter.name</code>. REQUIRED. The name of the
-     * parameter. Parameter names are case sensitive.
+     * The column <code>oagi.oas_parameter.name</code>. REQUIRED. The name of
+     * the parameter. Parameter names are case sensitive.
      * If in is "path", the name field MUST correspond to a template expression
      * occurring within the path field in the Paths Object. See Path Templating
      * for further information.
@@ -91,74 +90,74 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
     public final TableField<OasParameterRecord, String> NAME = createField(DSL.name("name"), SQLDataType.VARCHAR(200).nullable(false), this, "REQUIRED. The name of the parameter. Parameter names are case sensitive.\nIf in is \"path\", the name field MUST correspond to a template expression occurring within the path field in the Paths Object. See Path Templating for further information.\nIf in is \"header\" and the name field is \"Accept\", \"Content-Type\" or \"Authorization\", the parameter definition SHALL be ignored.\nFor all other cases, the name corresponds to the parameter name used by the in property.");
 
     /**
-     * The column <code>oas_parameter.in</code>. REQUIRED. The location of the
-     * parameter. Possible values are "query", "header", "path" or "cookie".
+     * The column <code>oagi.oas_parameter.in</code>. REQUIRED. The location of
+     * the parameter. Possible values are "query", "header", "path" or "cookie".
      */
     public final TableField<OasParameterRecord, String> IN = createField(DSL.name("in"), SQLDataType.VARCHAR(100).nullable(false), this, "REQUIRED. The location of the parameter. Possible values are \"query\", \"header\", \"path\" or \"cookie\".");
 
     /**
-     * The column <code>oas_parameter.required</code>. Determines whether this
-     * parameter is mandatory. If the parameter location is "path", this
+     * The column <code>oagi.oas_parameter.required</code>. Determines whether
+     * this parameter is mandatory. If the parameter location is "path", this
      * property is REQUIRED and its value MUST be true. Otherwise, the property
      * MAY be included and its default value is false.
      */
     public final TableField<OasParameterRecord, Byte> REQUIRED = createField(DSL.name("required"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Determines whether this parameter is mandatory. If the parameter location is \"path\", this property is REQUIRED and its value MUST be true. Otherwise, the property MAY be included and its default value is false.");
 
     /**
-     * The column <code>oas_parameter.description</code>. A brief description of
-     * the parameter. This could contain examples of use. CommonMark syntax MAY
-     * be used for rich text representation.
+     * The column <code>oagi.oas_parameter.description</code>. A brief
+     * description of the parameter. This could contain examples of use.
+     * CommonMark syntax MAY be used for rich text representation.
      */
     public final TableField<OasParameterRecord, String> DESCRIPTION = createField(DSL.name("description"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "A brief description of the parameter. This could contain examples of use. CommonMark syntax MAY be used for rich text representation.");
 
     /**
-     * The column <code>oas_parameter.schema_type_reference</code>. A reference
-     * of the schema defining the type used for the parameter.
+     * The column <code>oagi.oas_parameter.schema_type_reference</code>. A
+     * reference of the schema defining the type used for the parameter.
      */
     public final TableField<OasParameterRecord, String> SCHEMA_TYPE_REFERENCE = createField(DSL.name("schema_type_reference"), SQLDataType.CLOB(65535).nullable(false), this, "A reference of the schema defining the type used for the parameter.");
 
     /**
-     * The column <code>oas_parameter.allow_reserved</code>. Determines whether
-     * the parameter value SHOULD allow reserved characters, as defined by
-     * RFC3986 :/?#[]@!$&amp;'()*+,;= to be included without percent-encoding.
-     * This property only applies to parameters with an in value of query. The
-     * default value is false.
+     * The column <code>oagi.oas_parameter.allow_reserved</code>. Determines
+     * whether the parameter value SHOULD allow reserved characters, as defined
+     * by RFC3986 :/?#[]@!$&amp;'()*+,;= to be included without
+     * percent-encoding. This property only applies to parameters with an in
+     * value of query. The default value is false.
      */
     public final TableField<OasParameterRecord, Byte> ALLOW_RESERVED = createField(DSL.name("allow_reserved"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Determines whether the parameter value SHOULD allow reserved characters, as defined by RFC3986 :/?#[]@!$&'()*+,;= to be included without percent-encoding. This property only applies to parameters with an in value of query. The default value is false.");
 
     /**
-     * The column <code>oas_parameter.deprecated</code>. Specifies that a
+     * The column <code>oagi.oas_parameter.deprecated</code>. Specifies that a
      * parameter is deprecated and SHOULD be transitioned out of usage. Default
      * value is false.
      */
     public final TableField<OasParameterRecord, Byte> DEPRECATED = createField(DSL.name("deprecated"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Specifies that a parameter is deprecated and SHOULD be transitioned out of usage. Default value is false.");
 
     /**
-     * The column <code>oas_parameter.oas_http_header_id</code>. IF IN = Header,
-     * Then select form OAS_HTTP_HEADER table
+     * The column <code>oagi.oas_parameter.oas_http_header_id</code>. IF IN =
+     * Header, Then select form OAS_HTTP_HEADER table
      */
     public final TableField<OasParameterRecord, ULong> OAS_HTTP_HEADER_ID = createField(DSL.name("oas_http_header_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "IF IN = Header, Then select form OAS_HTTP_HEADER table");
 
     /**
-     * The column <code>oas_parameter.created_by</code>. The user who creates
-     * the record.
+     * The column <code>oagi.oas_parameter.created_by</code>. The user who
+     * creates the record.
      */
     public final TableField<OasParameterRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who creates the record.");
 
     /**
-     * The column <code>oas_parameter.last_updated_by</code>. The user who last
-     * updates the record.
+     * The column <code>oagi.oas_parameter.last_updated_by</code>. The user who
+     * last updates the record.
      */
     public final TableField<OasParameterRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who last updates the record.");
 
     /**
-     * The column <code>oas_parameter.creation_timestamp</code>. The timestamp
-     * when the record is created.
+     * The column <code>oagi.oas_parameter.creation_timestamp</code>. The
+     * timestamp when the record is created.
      */
     public final TableField<OasParameterRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is created.");
 
     /**
-     * The column <code>oas_parameter.last_update_timestamp</code>. The
+     * The column <code>oagi.oas_parameter.last_update_timestamp</code>. The
      * timestamp when the record is last updated.
      */
     public final TableField<OasParameterRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is last updated.");
@@ -172,21 +171,21 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
     }
 
     /**
-     * Create an aliased <code>oas_parameter</code> table reference
+     * Create an aliased <code>oagi.oas_parameter</code> table reference
      */
     public OasParameter(String alias) {
         this(DSL.name(alias), OAS_PARAMETER);
     }
 
     /**
-     * Create an aliased <code>oas_parameter</code> table reference
+     * Create an aliased <code>oagi.oas_parameter</code> table reference
      */
     public OasParameter(Name alias) {
         this(alias, OAS_PARAMETER);
     }
 
     /**
-     * Create a <code>oas_parameter</code> table reference
+     * Create a <code>oagi.oas_parameter</code> table reference
      */
     public OasParameter() {
         this(DSL.name("oas_parameter"), null);
@@ -227,7 +226,7 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -248,8 +247,8 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
     private transient AppUserPath _oasParameterCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_parameter_created_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_parameter_created_by_fk</code> key.
      */
     public AppUserPath oasParameterCreatedByFk() {
         if (_oasParameterCreatedByFk == null)
@@ -261,8 +260,8 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
     private transient AppUserPath _oasParameterLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_parameter_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_parameter_last_updated_by_fk</code> key.
      */
     public AppUserPath oasParameterLastUpdatedByFk() {
         if (_oasParameterLastUpdatedByFk == null)
@@ -274,7 +273,8 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
     private transient OasHttpHeaderPath _oasHttpHeader;
 
     /**
-     * Get the implicit join path to the <code>oas_http_header</code> table.
+     * Get the implicit join path to the <code>oagi.oas_http_header</code>
+     * table.
      */
     public OasHttpHeaderPath oasHttpHeader() {
         if (_oasHttpHeader == null)
@@ -286,8 +286,8 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
     private transient OasParameterLinkPath _oasParameterLink;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_parameter_link</code>
-     * table
+     * Get the implicit to-many join path to the
+     * <code>oagi.oas_parameter_link</code> table
      */
     public OasParameterLinkPath oasParameterLink() {
         if (_oasParameterLink == null)
@@ -300,7 +300,7 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oas_request_parameter</code> table
+     * <code>oagi.oas_request_parameter</code> table
      */
     public OasRequestParameterPath oasRequestParameter() {
         if (_oasRequestParameter == null)
@@ -310,8 +310,8 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
     }
 
     /**
-     * Get the implicit many-to-many join path to the <code>oas_request</code>
-     * table
+     * Get the implicit many-to-many join path to the
+     * <code>oagi.oas_request</code> table
      */
     public OasRequestPath oasRequest() {
         return oasRequestParameter().oasRequest();
@@ -361,7 +361,7 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
      */
     @Override
     public OasParameter where(Condition condition) {
-        return new OasParameter(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new OasParameter(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -428,7 +428,7 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasParameter whereExists(TableLike<?> select) {
+    public OasParameter whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -436,7 +436,7 @@ public class OasParameter extends TableImpl<OasParameterRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasParameter whereNotExists(TableLike<?> select) {
+    public OasParameter whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

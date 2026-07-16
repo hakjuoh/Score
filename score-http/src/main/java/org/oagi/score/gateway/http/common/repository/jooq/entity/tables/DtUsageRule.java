@@ -20,19 +20,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Dt.DtPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.DtSc.DtScPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.UsageRule.UsageRulePath;
@@ -52,7 +51,7 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>dt_usage_rule</code>
+     * The reference instance of <code>oagi.dt_usage_rule</code>
      */
     public static final DtUsageRule DT_USAGE_RULE = new DtUsageRule();
 
@@ -65,28 +64,28 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
     }
 
     /**
-     * The column <code>dt_usage_rule.dt_usage_rule_id</code>. Primary key of
-     * the table.
+     * The column <code>oagi.dt_usage_rule.dt_usage_rule_id</code>. Primary key
+     * of the table.
      */
-    public final TableField<DtUsageRuleRecord, ULong> DT_USAGE_RULE_ID = createField(DSL.name("dt_usage_rule_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "Primary key of the table.");
+    public final TableField<DtUsageRuleRecord, ULong> DT_USAGE_RULE_ID = createField(DSL.name("dt_usage_rule_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Primary key of the table.");
 
     /**
-     * The column <code>dt_usage_rule.assigned_usage_rule_id</code>. Foreign key
-     * to the USAGE_RULE table indicating the usage rule assigned to the DT
-     * content component or DT_SC.
+     * The column <code>oagi.dt_usage_rule.assigned_usage_rule_id</code>.
+     * Foreign key to the USAGE_RULE table indicating the usage rule assigned to
+     * the DT content component or DT_SC.
      */
     public final TableField<DtUsageRuleRecord, ULong> ASSIGNED_USAGE_RULE_ID = createField(DSL.name("assigned_usage_rule_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the USAGE_RULE table indicating the usage rule assigned to the DT content component or DT_SC.");
 
     /**
-     * The column <code>dt_usage_rule.target_dt_id</code>. Foreign key to the
-     * DT_ID for assigning a usage rule to the corresponding DT content
+     * The column <code>oagi.dt_usage_rule.target_dt_id</code>. Foreign key to
+     * the DT_ID for assigning a usage rule to the corresponding DT content
      * component.
      */
     public final TableField<DtUsageRuleRecord, ULong> TARGET_DT_ID = createField(DSL.name("target_dt_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the DT_ID for assigning a usage rule to the corresponding DT content component.");
 
     /**
-     * The column <code>dt_usage_rule.target_dt_sc_id</code>. Foreign key to the
-     * DT_SC_ID for assigning a usage rule to the corresponding DT_SC.
+     * The column <code>oagi.dt_usage_rule.target_dt_sc_id</code>. Foreign key
+     * to the DT_SC_ID for assigning a usage rule to the corresponding DT_SC.
      */
     public final TableField<DtUsageRuleRecord, ULong> TARGET_DT_SC_ID = createField(DSL.name("target_dt_sc_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the DT_SC_ID for assigning a usage rule to the corresponding DT_SC.");
 
@@ -99,21 +98,21 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
     }
 
     /**
-     * Create an aliased <code>dt_usage_rule</code> table reference
+     * Create an aliased <code>oagi.dt_usage_rule</code> table reference
      */
     public DtUsageRule(String alias) {
         this(DSL.name(alias), DT_USAGE_RULE);
     }
 
     /**
-     * Create an aliased <code>dt_usage_rule</code> table reference
+     * Create an aliased <code>oagi.dt_usage_rule</code> table reference
      */
     public DtUsageRule(Name alias) {
         this(alias, DT_USAGE_RULE);
     }
 
     /**
-     * Create a <code>dt_usage_rule</code> table reference
+     * Create a <code>oagi.dt_usage_rule</code> table reference
      */
     public DtUsageRule() {
         this(DSL.name("dt_usage_rule"), null);
@@ -154,7 +153,7 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -175,7 +174,7 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
     private transient UsageRulePath _usageRule;
 
     /**
-     * Get the implicit join path to the <code>usage_rule</code> table.
+     * Get the implicit join path to the <code>oagi.usage_rule</code> table.
      */
     public UsageRulePath usageRule() {
         if (_usageRule == null)
@@ -187,7 +186,7 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
     private transient DtPath _dt;
 
     /**
-     * Get the implicit join path to the <code>dt</code> table.
+     * Get the implicit join path to the <code>oagi.dt</code> table.
      */
     public DtPath dt() {
         if (_dt == null)
@@ -199,7 +198,7 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
     private transient DtScPath _dtSc;
 
     /**
-     * Get the implicit join path to the <code>dt_sc</code> table.
+     * Get the implicit join path to the <code>oagi.dt_sc</code> table.
      */
     public DtScPath dtSc() {
         if (_dtSc == null)
@@ -252,7 +251,7 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
      */
     @Override
     public DtUsageRule where(Condition condition) {
-        return new DtUsageRule(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new DtUsageRule(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -319,7 +318,7 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public DtUsageRule whereExists(TableLike<?> select) {
+    public DtUsageRule whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -327,7 +326,7 @@ public class DtUsageRule extends TableImpl<DtUsageRuleRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public DtUsageRule whereNotExists(TableLike<?> select) {
+    public DtUsageRule whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

@@ -24,87 +24,87 @@ public class ModuleSetReleaseRecord extends UpdatableRecordImpl<ModuleSetRelease
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>module_set_release.module_set_release_id</code>. Primary
-     * key.
+     * Setter for <code>oagi.module_set_release.module_set_release_id</code>.
+     * Primary key.
      */
     public void setModuleSetReleaseId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>module_set_release.module_set_release_id</code>. Primary
-     * key.
+     * Getter for <code>oagi.module_set_release.module_set_release_id</code>.
+     * Primary key.
      */
     public ULong getModuleSetReleaseId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>module_set_release.module_set_id</code>. A foreign key
-     * of the module set.
+     * Setter for <code>oagi.module_set_release.module_set_id</code>. A foreign
+     * key of the module set.
      */
     public void setModuleSetId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>module_set_release.module_set_id</code>. A foreign key
-     * of the module set.
+     * Getter for <code>oagi.module_set_release.module_set_id</code>. A foreign
+     * key of the module set.
      */
     public ULong getModuleSetId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>module_set_release.release_id</code>. A foreign key of
-     * the release.
+     * Setter for <code>oagi.module_set_release.release_id</code>. A foreign key
+     * of the release.
      */
     public void setReleaseId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>module_set_release.release_id</code>. A foreign key of
-     * the release.
+     * Getter for <code>oagi.module_set_release.release_id</code>. A foreign key
+     * of the release.
      */
     public ULong getReleaseId() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for <code>module_set_release.name</code>. This is the name of the
-     * module set release.
+     * Setter for <code>oagi.module_set_release.name</code>. This is the name of
+     * the module set release.
      */
     public void setName(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>module_set_release.name</code>. This is the name of the
-     * module set release.
+     * Getter for <code>oagi.module_set_release.name</code>. This is the name of
+     * the module set release.
      */
     public String getName() {
         return (String) get(3);
     }
 
     /**
-     * Setter for <code>module_set_release.description</code>. Description or
-     * explanation about the module set release.
+     * Setter for <code>oagi.module_set_release.description</code>. Description
+     * or explanation about the module set release.
      */
     public void setDescription(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>module_set_release.description</code>. Description or
-     * explanation about the module set release.
+     * Getter for <code>oagi.module_set_release.description</code>. Description
+     * or explanation about the module set release.
      */
     public String getDescription() {
         return (String) get(4);
     }
 
     /**
-     * Setter for <code>module_set_release.is_default</code>. It would be a
+     * Setter for <code>oagi.module_set_release.is_default</code>. It would be a
      * default module set if this indicator is checked. Otherwise, it would be
      * an optional.
      */
@@ -113,7 +113,7 @@ public class ModuleSetReleaseRecord extends UpdatableRecordImpl<ModuleSetRelease
     }
 
     /**
-     * Getter for <code>module_set_release.is_default</code>. It would be a
+     * Getter for <code>oagi.module_set_release.is_default</code>. It would be a
      * default module set if this indicator is checked. Otherwise, it would be
      * an optional.
      */
@@ -122,8 +122,8 @@ public class ModuleSetReleaseRecord extends UpdatableRecordImpl<ModuleSetRelease
     }
 
     /**
-     * Setter for <code>module_set_release.created_by</code>. Foreign key to the
-     * APP_USER table. It indicates the user who created this
+     * Setter for <code>oagi.module_set_release.created_by</code>. Foreign key
+     * to the APP_USER table. It indicates the user who created this
      * MODULE_SET_RELEASE.
      */
     public void setCreatedBy(ULong value) {
@@ -131,8 +131,8 @@ public class ModuleSetReleaseRecord extends UpdatableRecordImpl<ModuleSetRelease
     }
 
     /**
-     * Getter for <code>module_set_release.created_by</code>. Foreign key to the
-     * APP_USER table. It indicates the user who created this
+     * Getter for <code>oagi.module_set_release.created_by</code>. Foreign key
+     * to the APP_USER table. It indicates the user who created this
      * MODULE_SET_RELEASE.
      */
     public ULong getCreatedBy() {
@@ -140,23 +140,25 @@ public class ModuleSetReleaseRecord extends UpdatableRecordImpl<ModuleSetRelease
     }
 
     /**
-     * Setter for <code>module_set_release.last_updated_by</code>. Foreign key
-     * to the APP_USER table referring to the last user who updated the record.
+     * Setter for <code>oagi.module_set_release.last_updated_by</code>. Foreign
+     * key to the APP_USER table referring to the last user who updated the
+     * record.
      */
     public void setLastUpdatedBy(ULong value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>module_set_release.last_updated_by</code>. Foreign key
-     * to the APP_USER table referring to the last user who updated the record.
+     * Getter for <code>oagi.module_set_release.last_updated_by</code>. Foreign
+     * key to the APP_USER table referring to the last user who updated the
+     * record.
      */
     public ULong getLastUpdatedBy() {
         return (ULong) get(7);
     }
 
     /**
-     * Setter for <code>module_set_release.creation_timestamp</code>. The
+     * Setter for <code>oagi.module_set_release.creation_timestamp</code>. The
      * timestamp when the record was first created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
@@ -164,7 +166,7 @@ public class ModuleSetReleaseRecord extends UpdatableRecordImpl<ModuleSetRelease
     }
 
     /**
-     * Getter for <code>module_set_release.creation_timestamp</code>. The
+     * Getter for <code>oagi.module_set_release.creation_timestamp</code>. The
      * timestamp when the record was first created.
      */
     public LocalDateTime getCreationTimestamp() {
@@ -172,16 +174,16 @@ public class ModuleSetReleaseRecord extends UpdatableRecordImpl<ModuleSetRelease
     }
 
     /**
-     * Setter for <code>module_set_release.last_update_timestamp</code>. The
-     * timestamp when the record was last updated.
+     * Setter for <code>oagi.module_set_release.last_update_timestamp</code>.
+     * The timestamp when the record was last updated.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>module_set_release.last_update_timestamp</code>. The
-     * timestamp when the record was last updated.
+     * Getter for <code>oagi.module_set_release.last_update_timestamp</code>.
+     * The timestamp when the record was last updated.
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(9);

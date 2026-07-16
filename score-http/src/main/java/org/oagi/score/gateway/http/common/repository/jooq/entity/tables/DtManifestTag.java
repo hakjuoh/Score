@@ -20,19 +20,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.DtManifest.DtManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Tag.TagPath;
@@ -49,7 +48,7 @@ public class DtManifestTag extends TableImpl<DtManifestTagRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>dt_manifest_tag</code>
+     * The reference instance of <code>oagi.dt_manifest_tag</code>
      */
     public static final DtManifestTag DT_MANIFEST_TAG = new DtManifestTag();
 
@@ -62,26 +61,26 @@ public class DtManifestTag extends TableImpl<DtManifestTagRecord> {
     }
 
     /**
-     * The column <code>dt_manifest_tag.dt_manifest_id</code>. Foreign key to
-     * the DT_MANIFEST table.
+     * The column <code>oagi.dt_manifest_tag.dt_manifest_id</code>. Foreign key
+     * to the DT_MANIFEST table.
      */
     public final TableField<DtManifestTagRecord, ULong> DT_MANIFEST_ID = createField(DSL.name("dt_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the DT_MANIFEST table.");
 
     /**
-     * The column <code>dt_manifest_tag.tag_id</code>. Foreign key to the TAG
-     * table.
+     * The column <code>oagi.dt_manifest_tag.tag_id</code>. Foreign key to the
+     * TAG table.
      */
     public final TableField<DtManifestTagRecord, ULong> TAG_ID = createField(DSL.name("tag_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the TAG table.");
 
     /**
-     * The column <code>dt_manifest_tag.created_by</code>. A foreign key
+     * The column <code>oagi.dt_manifest_tag.created_by</code>. A foreign key
      * referring to the user who creates the record.
      */
     public final TableField<DtManifestTagRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the user who creates the record.");
 
     /**
-     * The column <code>dt_manifest_tag.creation_timestamp</code>. Timestamp
-     * when the record was first created.
+     * The column <code>oagi.dt_manifest_tag.creation_timestamp</code>.
+     * Timestamp when the record was first created.
      */
     public final TableField<DtManifestTagRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Timestamp when the record was first created.");
 
@@ -94,21 +93,21 @@ public class DtManifestTag extends TableImpl<DtManifestTagRecord> {
     }
 
     /**
-     * Create an aliased <code>dt_manifest_tag</code> table reference
+     * Create an aliased <code>oagi.dt_manifest_tag</code> table reference
      */
     public DtManifestTag(String alias) {
         this(DSL.name(alias), DT_MANIFEST_TAG);
     }
 
     /**
-     * Create an aliased <code>dt_manifest_tag</code> table reference
+     * Create an aliased <code>oagi.dt_manifest_tag</code> table reference
      */
     public DtManifestTag(Name alias) {
         this(alias, DT_MANIFEST_TAG);
     }
 
     /**
-     * Create a <code>dt_manifest_tag</code> table reference
+     * Create a <code>oagi.dt_manifest_tag</code> table reference
      */
     public DtManifestTag() {
         this(DSL.name("dt_manifest_tag"), null);
@@ -149,7 +148,7 @@ public class DtManifestTag extends TableImpl<DtManifestTagRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -165,7 +164,7 @@ public class DtManifestTag extends TableImpl<DtManifestTagRecord> {
     private transient AppUserPath _appUser;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table.
+     * Get the implicit join path to the <code>oagi.app_user</code> table.
      */
     public AppUserPath appUser() {
         if (_appUser == null)
@@ -177,7 +176,7 @@ public class DtManifestTag extends TableImpl<DtManifestTagRecord> {
     private transient DtManifestPath _dtManifest;
 
     /**
-     * Get the implicit join path to the <code>dt_manifest</code> table.
+     * Get the implicit join path to the <code>oagi.dt_manifest</code> table.
      */
     public DtManifestPath dtManifest() {
         if (_dtManifest == null)
@@ -189,7 +188,7 @@ public class DtManifestTag extends TableImpl<DtManifestTagRecord> {
     private transient TagPath _tag;
 
     /**
-     * Get the implicit join path to the <code>tag</code> table.
+     * Get the implicit join path to the <code>oagi.tag</code> table.
      */
     public TagPath tag() {
         if (_tag == null)
@@ -242,7 +241,7 @@ public class DtManifestTag extends TableImpl<DtManifestTagRecord> {
      */
     @Override
     public DtManifestTag where(Condition condition) {
-        return new DtManifestTag(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new DtManifestTag(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -309,7 +308,7 @@ public class DtManifestTag extends TableImpl<DtManifestTagRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public DtManifestTag whereExists(TableLike<?> select) {
+    public DtManifestTag whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -317,7 +316,7 @@ public class DtManifestTag extends TableImpl<DtManifestTagRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public DtManifestTag whereNotExists(TableLike<?> select) {
+    public DtManifestTag whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

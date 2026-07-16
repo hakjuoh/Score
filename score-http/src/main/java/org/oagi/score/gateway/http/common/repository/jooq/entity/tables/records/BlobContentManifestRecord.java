@@ -23,64 +23,66 @@ public class BlobContentManifestRecord extends UpdatableRecordImpl<BlobContentMa
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>blob_content_manifest.blob_content_manifest_id</code>.
-     * An internal, primary database key of a BLOB_CONTENT_MANIFEST record.
+     * Setter for
+     * <code>oagi.blob_content_manifest.blob_content_manifest_id</code>. An
+     * internal, primary database key of a BLOB_CONTENT_MANIFEST record.
      */
     public void setBlobContentManifestId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>blob_content_manifest.blob_content_manifest_id</code>.
-     * An internal, primary database key of a BLOB_CONTENT_MANIFEST record.
+     * Getter for
+     * <code>oagi.blob_content_manifest.blob_content_manifest_id</code>. An
+     * internal, primary database key of a BLOB_CONTENT_MANIFEST record.
      */
     public ULong getBlobContentManifestId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>blob_content_manifest.blob_content_id</code>. Foreign
-     * key to the BLOB_CONTENT table.
+     * Setter for <code>oagi.blob_content_manifest.blob_content_id</code>.
+     * Foreign key to the BLOB_CONTENT table.
      */
     public void setBlobContentId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>blob_content_manifest.blob_content_id</code>. Foreign
-     * key to the BLOB_CONTENT table.
+     * Getter for <code>oagi.blob_content_manifest.blob_content_id</code>.
+     * Foreign key to the BLOB_CONTENT table.
      */
     public ULong getBlobContentId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>blob_content_manifest.release_id</code>. Foreign key to
-     * the RELEASE table.
+     * Setter for <code>oagi.blob_content_manifest.release_id</code>. Foreign
+     * key to the RELEASE table.
      */
     public void setReleaseId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>blob_content_manifest.release_id</code>. Foreign key to
-     * the RELEASE table.
+     * Getter for <code>oagi.blob_content_manifest.release_id</code>. Foreign
+     * key to the RELEASE table.
      */
     public ULong getReleaseId() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for <code>blob_content_manifest.conflict</code>. This indicates
-     * that there is a conflict between self and relationship.
+     * Setter for <code>oagi.blob_content_manifest.conflict</code>. This
+     * indicates that there is a conflict between self and relationship.
      */
     public void setConflict(Byte value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>blob_content_manifest.conflict</code>. This indicates
-     * that there is a conflict between self and relationship.
+     * Getter for <code>oagi.blob_content_manifest.conflict</code>. This
+     * indicates that there is a conflict between self and relationship.
      */
     public Byte getConflict() {
         return (Byte) get(3);
@@ -88,7 +90,7 @@ public class BlobContentManifestRecord extends UpdatableRecordImpl<BlobContentMa
 
     /**
      * Setter for
-     * <code>blob_content_manifest.prev_blob_content_manifest_id</code>. A
+     * <code>oagi.blob_content_manifest.prev_blob_content_manifest_id</code>. A
      * self-reference to the corresponding BLOB_CONTENT_MANIFEST record in the
      * previous release (revision chain). NULL for the first revision.
      */
@@ -98,7 +100,7 @@ public class BlobContentManifestRecord extends UpdatableRecordImpl<BlobContentMa
 
     /**
      * Getter for
-     * <code>blob_content_manifest.prev_blob_content_manifest_id</code>. A
+     * <code>oagi.blob_content_manifest.prev_blob_content_manifest_id</code>. A
      * self-reference to the corresponding BLOB_CONTENT_MANIFEST record in the
      * previous release (revision chain). NULL for the first revision.
      */
@@ -108,7 +110,7 @@ public class BlobContentManifestRecord extends UpdatableRecordImpl<BlobContentMa
 
     /**
      * Setter for
-     * <code>blob_content_manifest.next_blob_content_manifest_id</code>. A
+     * <code>oagi.blob_content_manifest.next_blob_content_manifest_id</code>. A
      * self-reference to the corresponding BLOB_CONTENT_MANIFEST record in the
      * next release (revision chain). NULL for the latest revision.
      */
@@ -118,7 +120,7 @@ public class BlobContentManifestRecord extends UpdatableRecordImpl<BlobContentMa
 
     /**
      * Getter for
-     * <code>blob_content_manifest.next_blob_content_manifest_id</code>. A
+     * <code>oagi.blob_content_manifest.next_blob_content_manifest_id</code>. A
      * self-reference to the corresponding BLOB_CONTENT_MANIFEST record in the
      * next release (revision chain). NULL for the latest revision.
      */

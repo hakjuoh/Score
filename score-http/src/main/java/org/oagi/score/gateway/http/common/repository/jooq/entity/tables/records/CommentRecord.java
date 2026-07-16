@@ -27,55 +27,57 @@ public class CommentRecord extends UpdatableRecordImpl<CommentRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>comment.comment_id</code>. An internal, primary database
-     * key of a COMMENT record.
+     * Setter for <code>oagi.comment.comment_id</code>. An internal, primary
+     * database key of a COMMENT record.
      */
     public void setCommentId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>comment.comment_id</code>. An internal, primary database
-     * key of a COMMENT record.
+     * Getter for <code>oagi.comment.comment_id</code>. An internal, primary
+     * database key of a COMMENT record.
      */
     public ULong getCommentId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>comment.reference</code>. The reference to the component
-     * the comment is associated with, in the form of the component type and its
-     * manifest ID (e.g., 'CODE_LIST-123').
+     * Setter for <code>oagi.comment.reference</code>. The reference to the
+     * component the comment is associated with, in the form of the component
+     * type and its manifest ID (e.g., 'CODE_LIST-123').
      */
     public void setReference(String value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>comment.reference</code>. The reference to the component
-     * the comment is associated with, in the form of the component type and its
-     * manifest ID (e.g., 'CODE_LIST-123').
+     * Getter for <code>oagi.comment.reference</code>. The reference to the
+     * component the comment is associated with, in the form of the component
+     * type and its manifest ID (e.g., 'CODE_LIST-123').
      */
     public String getReference() {
         return (String) get(1);
     }
 
     /**
-     * Setter for <code>comment.comment</code>. The text content of the comment.
+     * Setter for <code>oagi.comment.comment</code>. The text content of the
+     * comment.
      */
     public void setComment(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>comment.comment</code>. The text content of the comment.
+     * Getter for <code>oagi.comment.comment</code>. The text content of the
+     * comment.
      */
     public String getComment() {
         return (String) get(2);
     }
 
     /**
-     * Setter for <code>comment.is_hidden</code>. A boolean flag indicating
+     * Setter for <code>oagi.comment.is_hidden</code>. A boolean flag indicating
      * whether the comment is hidden. It is set instead of deletion when the
      * comment has replies, so the reply chain is preserved.
      */
@@ -84,7 +86,7 @@ public class CommentRecord extends UpdatableRecordImpl<CommentRecord> {
     }
 
     /**
-     * Getter for <code>comment.is_hidden</code>. A boolean flag indicating
+     * Getter for <code>oagi.comment.is_hidden</code>. A boolean flag indicating
      * whether the comment is hidden. It is set instead of deletion when the
      * comment has replies, so the reply chain is preserved.
      */
@@ -93,41 +95,41 @@ public class CommentRecord extends UpdatableRecordImpl<CommentRecord> {
     }
 
     /**
-     * Setter for <code>comment.is_deleted</code>. A boolean flag indicating
-     * whether the comment has been soft-deleted. Soft-deleted comments are
-     * excluded from queries.
+     * Setter for <code>oagi.comment.is_deleted</code>. A boolean flag
+     * indicating whether the comment has been soft-deleted. Soft-deleted
+     * comments are excluded from queries.
      */
     public void setIsDeleted(Byte value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>comment.is_deleted</code>. A boolean flag indicating
-     * whether the comment has been soft-deleted. Soft-deleted comments are
-     * excluded from queries.
+     * Getter for <code>oagi.comment.is_deleted</code>. A boolean flag
+     * indicating whether the comment has been soft-deleted. Soft-deleted
+     * comments are excluded from queries.
      */
     public Byte getIsDeleted() {
         return (Byte) get(4);
     }
 
     /**
-     * Setter for <code>comment.prev_comment_id</code>. A self-reference to the
-     * previous COMMENT record in the chain.
+     * Setter for <code>oagi.comment.prev_comment_id</code>. A self-reference to
+     * the previous COMMENT record in the chain.
      */
     public void setPrevCommentId(ULong value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>comment.prev_comment_id</code>. A self-reference to the
-     * previous COMMENT record in the chain.
+     * Getter for <code>oagi.comment.prev_comment_id</code>. A self-reference to
+     * the previous COMMENT record in the chain.
      */
     public ULong getPrevCommentId() {
         return (ULong) get(5);
     }
 
     /**
-     * Setter for <code>comment.created_by</code>. The user who creates the
+     * Setter for <code>oagi.comment.created_by</code>. The user who creates the
      * record.
      */
     public void setCreatedBy(ULong value) {
@@ -135,7 +137,7 @@ public class CommentRecord extends UpdatableRecordImpl<CommentRecord> {
     }
 
     /**
-     * Getter for <code>comment.created_by</code>. The user who creates the
+     * Getter for <code>oagi.comment.created_by</code>. The user who creates the
      * record.
      */
     public ULong getCreatedBy() {
@@ -143,32 +145,32 @@ public class CommentRecord extends UpdatableRecordImpl<CommentRecord> {
     }
 
     /**
-     * Setter for <code>comment.creation_timestamp</code>. The timestamp when
-     * the record is created.
+     * Setter for <code>oagi.comment.creation_timestamp</code>. The timestamp
+     * when the record is created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>comment.creation_timestamp</code>. The timestamp when
-     * the record is created.
+     * Getter for <code>oagi.comment.creation_timestamp</code>. The timestamp
+     * when the record is created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(7);
     }
 
     /**
-     * Setter for <code>comment.last_update_timestamp</code>. The timestamp when
-     * the record is last updated.
+     * Setter for <code>oagi.comment.last_update_timestamp</code>. The timestamp
+     * when the record is last updated.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>comment.last_update_timestamp</code>. The timestamp when
-     * the record is last updated.
+     * Getter for <code>oagi.comment.last_update_timestamp</code>. The timestamp
+     * when the record is last updated.
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(8);

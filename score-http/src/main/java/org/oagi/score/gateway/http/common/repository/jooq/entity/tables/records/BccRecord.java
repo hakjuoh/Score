@@ -22,54 +22,56 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>bcc.bcc_id</code>. A internal, primary database key of
-     * an BCC.
+     * Setter for <code>oagi.bcc.bcc_id</code>. A internal, primary database key
+     * of an BCC.
      */
     public void setBccId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>bcc.bcc_id</code>. A internal, primary database key of
-     * an BCC.
+     * Getter for <code>oagi.bcc.bcc_id</code>. A internal, primary database key
+     * of an BCC.
      */
     public ULong getBccId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>bcc.guid</code>. A globally unique identifier (GUID).
+     * Setter for <code>oagi.bcc.guid</code>. A globally unique identifier
+     * (GUID).
      */
     public void setGuid(String value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>bcc.guid</code>. A globally unique identifier (GUID).
+     * Getter for <code>oagi.bcc.guid</code>. A globally unique identifier
+     * (GUID).
      */
     public String getGuid() {
         return (String) get(1);
     }
 
     /**
-     * Setter for <code>bcc.cardinality_min</code>. Minimum cardinality of the
-     * TO_BCCP_ID. The valid values are non-negative integer.
+     * Setter for <code>oagi.bcc.cardinality_min</code>. Minimum cardinality of
+     * the TO_BCCP_ID. The valid values are non-negative integer.
      */
     public void setCardinalityMin(Integer value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>bcc.cardinality_min</code>. Minimum cardinality of the
-     * TO_BCCP_ID. The valid values are non-negative integer.
+     * Getter for <code>oagi.bcc.cardinality_min</code>. Minimum cardinality of
+     * the TO_BCCP_ID. The valid values are non-negative integer.
      */
     public Integer getCardinalityMin() {
         return (Integer) get(2);
     }
 
     /**
-     * Setter for <code>bcc.cardinality_max</code>. Maximum cardinality of the
-     * TO_BCCP_ID. The valid values are integer -1 and up. Specifically, -1
+     * Setter for <code>oagi.bcc.cardinality_max</code>. Maximum cardinality of
+     * the TO_BCCP_ID. The valid values are integer -1 and up. Specifically, -1
      * means unbounded. 0 means prohibited or not to use.
      */
     public void setCardinalityMax(Integer value) {
@@ -77,8 +79,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.cardinality_max</code>. Maximum cardinality of the
-     * TO_BCCP_ID. The valid values are integer -1 and up. Specifically, -1
+     * Getter for <code>oagi.bcc.cardinality_max</code>. Maximum cardinality of
+     * the TO_BCCP_ID. The valid values are integer -1 and up. Specifically, -1
      * means unbounded. 0 means prohibited or not to use.
      */
     public Integer getCardinalityMax() {
@@ -86,9 +88,9 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.to_bccp_id</code>. TO_BCCP_ID is a foreign key to an
-     * BCCP table record. It is basically pointing to a child data element of
-     * the FROM_ACC_ID. 
+     * Setter for <code>oagi.bcc.to_bccp_id</code>. TO_BCCP_ID is a foreign key
+     * to an BCCP table record. It is basically pointing to a child data element
+     * of the FROM_ACC_ID. 
      * 
      * Note that for the BCC history records, this column always points to the
      * BCCP_ID of the current record of a BCCP.
@@ -98,9 +100,9 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.to_bccp_id</code>. TO_BCCP_ID is a foreign key to an
-     * BCCP table record. It is basically pointing to a child data element of
-     * the FROM_ACC_ID. 
+     * Getter for <code>oagi.bcc.to_bccp_id</code>. TO_BCCP_ID is a foreign key
+     * to an BCCP table record. It is basically pointing to a child data element
+     * of the FROM_ACC_ID. 
      * 
      * Note that for the BCC history records, this column always points to the
      * BCCP_ID of the current record of a BCCP.
@@ -110,8 +112,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.from_acc_id</code>. FROM_ACC_ID is a foreign key
-     * pointing to an ACC record. It is basically pointing to a parent data
+     * Setter for <code>oagi.bcc.from_acc_id</code>. FROM_ACC_ID is a foreign
+     * key pointing to an ACC record. It is basically pointing to a parent data
      * element (type) of the TO_BCCP_ID. 
      * 
      * Note that for the BCC history records, this column always points to the
@@ -122,8 +124,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.from_acc_id</code>. FROM_ACC_ID is a foreign key
-     * pointing to an ACC record. It is basically pointing to a parent data
+     * Getter for <code>oagi.bcc.from_acc_id</code>. FROM_ACC_ID is a foreign
+     * key pointing to an ACC record. It is basically pointing to a parent data
      * element (type) of the TO_BCCP_ID. 
      * 
      * Note that for the BCC history records, this column always points to the
@@ -134,7 +136,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.seq_key</code>. @deprecated since 2.0.0. This
+     * Setter for <code>oagi.bcc.seq_key</code>. @deprecated since 2.0.0. This
      * indicates the order of the associations among other siblings. A valid
      * value is positive integer. The SEQ_KEY at the CC side is localized. In
      * other words, if an ACC is based on another ACC, SEQ_KEY of ASCCs or BCCs
@@ -145,7 +147,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.seq_key</code>. @deprecated since 2.0.0. This
+     * Getter for <code>oagi.bcc.seq_key</code>. @deprecated since 2.0.0. This
      * indicates the order of the associations among other siblings. A valid
      * value is positive integer. The SEQ_KEY at the CC side is localized. In
      * other words, if an ACC is based on another ACC, SEQ_KEY of ASCCs or BCCs
@@ -156,7 +158,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.entity_type</code>. This is a code list: 0 =
+     * Setter for <code>oagi.bcc.entity_type</code>. This is a code list: 0 =
      * ATTRIBUTE and 1 = ELEMENT. An expression generator may or may not use
      * this information. This column is necessary because some of the BCCs are
      * xsd:attribute and some are xsd:element in the OAGIS 10.x. 
@@ -166,7 +168,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.entity_type</code>. This is a code list: 0 =
+     * Getter for <code>oagi.bcc.entity_type</code>. This is a code list: 0 =
      * ATTRIBUTE and 1 = ELEMENT. An expression generator may or may not use
      * this information. This column is necessary because some of the BCCs are
      * xsd:attribute and some are xsd:element in the OAGIS 10.x. 
@@ -176,7 +178,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.definition</code>. This is a documentation or
+     * Setter for <code>oagi.bcc.definition</code>. This is a documentation or
      * description of the BCC. Since BCC is business context independent, this
      * is a business context independent description of the BCC. Since there are
      * definitions also in the BCCP (as referenced by TO_BCCP_ID column) and the
@@ -188,7 +190,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.definition</code>. This is a documentation or
+     * Getter for <code>oagi.bcc.definition</code>. This is a documentation or
      * description of the BCC. Since BCC is business context independent, this
      * is a business context independent description of the BCC. Since there are
      * definitions also in the BCCP (as referenced by TO_BCCP_ID column) and the
@@ -200,24 +202,24 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.definition_source</code>. This is typically a URL
-     * identifying the source of the DEFINITION column.
+     * Setter for <code>oagi.bcc.definition_source</code>. This is typically a
+     * URL identifying the source of the DEFINITION column.
      */
     public void setDefinitionSource(String value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>bcc.definition_source</code>. This is typically a URL
-     * identifying the source of the DEFINITION column.
+     * Getter for <code>oagi.bcc.definition_source</code>. This is typically a
+     * URL identifying the source of the DEFINITION column.
      */
     public String getDefinitionSource() {
         return (String) get(9);
     }
 
     /**
-     * Setter for <code>bcc.created_by</code>. Foreign key to the APP_USER table
-     * referring to the user who creates the entity.
+     * Setter for <code>oagi.bcc.created_by</code>. Foreign key to the APP_USER
+     * table referring to the user who creates the entity.
      * 
      * This column never change between the history and the current record. The
      * history record should have the same value as that of its current record.
@@ -227,8 +229,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.created_by</code>. Foreign key to the APP_USER table
-     * referring to the user who creates the entity.
+     * Getter for <code>oagi.bcc.created_by</code>. Foreign key to the APP_USER
+     * table referring to the user who creates the entity.
      * 
      * This column never change between the history and the current record. The
      * history record should have the same value as that of its current record.
@@ -238,9 +240,9 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.owner_user_id</code>. Foreign key to the APP_USER
-     * table. This is the user who owns the entity, is allowed to edit the
-     * entity, and who can transfer the ownership to another user.
+     * Setter for <code>oagi.bcc.owner_user_id</code>. Foreign key to the
+     * APP_USER table. This is the user who owns the entity, is allowed to edit
+     * the entity, and who can transfer the ownership to another user.
      * 
      * The ownership can change throughout the history, but undoing shouldn't
      * rollback the ownership.
@@ -250,9 +252,9 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.owner_user_id</code>. Foreign key to the APP_USER
-     * table. This is the user who owns the entity, is allowed to edit the
-     * entity, and who can transfer the ownership to another user.
+     * Getter for <code>oagi.bcc.owner_user_id</code>. Foreign key to the
+     * APP_USER table. This is the user who owns the entity, is allowed to edit
+     * the entity, and who can transfer the ownership to another user.
      * 
      * The ownership can change throughout the history, but undoing shouldn't
      * rollback the ownership.
@@ -262,8 +264,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.last_updated_by</code>. Foreign key to the APP_USER
-     * table referring to the last user who has updated the record. 
+     * Setter for <code>oagi.bcc.last_updated_by</code>. Foreign key to the
+     * APP_USER table referring to the last user who has updated the record. 
      * 
      * In the history record, this should always be the user who is editing the
      * entity (perhaps except when the ownership has just been changed).
@@ -273,8 +275,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.last_updated_by</code>. Foreign key to the APP_USER
-     * table referring to the last user who has updated the record. 
+     * Getter for <code>oagi.bcc.last_updated_by</code>. Foreign key to the
+     * APP_USER table referring to the last user who has updated the record. 
      * 
      * In the history record, this should always be the user who is editing the
      * entity (perhaps except when the ownership has just been changed).
@@ -284,7 +286,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.creation_timestamp</code>. Timestamp when the
+     * Setter for <code>oagi.bcc.creation_timestamp</code>. Timestamp when the
      * revision of the BCC was created. 
      * 
      * This never change for a revision.
@@ -294,7 +296,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.creation_timestamp</code>. Timestamp when the
+     * Getter for <code>oagi.bcc.creation_timestamp</code>. Timestamp when the
      * revision of the BCC was created. 
      * 
      * This never change for a revision.
@@ -304,8 +306,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.last_update_timestamp</code>. The timestamp when the
-     * record was last updated.
+     * Setter for <code>oagi.bcc.last_update_timestamp</code>. The timestamp
+     * when the record was last updated.
      * 
      * The value of this column in the latest history record should be the same
      * as that of the current record. This column keeps the record of when the
@@ -316,8 +318,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.last_update_timestamp</code>. The timestamp when the
-     * record was last updated.
+     * Getter for <code>oagi.bcc.last_update_timestamp</code>. The timestamp
+     * when the record was last updated.
      * 
      * The value of this column in the latest history record should be the same
      * as that of the current record. This column keeps the record of when the
@@ -328,9 +330,9 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.state</code>. Deleted, WIP, Draft, QA, Candidate,
-     * Production, Release Draft, Published. This the revision life cycle state
-     * of the BCC.
+     * Setter for <code>oagi.bcc.state</code>. Deleted, WIP, Draft, QA,
+     * Candidate, Production, Release Draft, Published. This the revision life
+     * cycle state of the BCC.
      * 
      * State change can't be undone. But the history record can still keep the
      * records of when the state was changed.
@@ -340,9 +342,9 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.state</code>. Deleted, WIP, Draft, QA, Candidate,
-     * Production, Release Draft, Published. This the revision life cycle state
-     * of the BCC.
+     * Getter for <code>oagi.bcc.state</code>. Deleted, WIP, Draft, QA,
+     * Candidate, Production, Release Draft, Published. This the revision life
+     * cycle state of the BCC.
      * 
      * State change can't be undone. But the history record can still keep the
      * records of when the state was changed.
@@ -352,8 +354,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.is_deprecated</code>. Indicates whether the CC is
-     * deprecated and should not be reused (i.e., no new reference to this
+     * Setter for <code>oagi.bcc.is_deprecated</code>. Indicates whether the CC
+     * is deprecated and should not be reused (i.e., no new reference to this
      * record should be created).
      */
     public void setIsDeprecated(Byte value) {
@@ -361,8 +363,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.is_deprecated</code>. Indicates whether the CC is
-     * deprecated and should not be reused (i.e., no new reference to this
+     * Getter for <code>oagi.bcc.is_deprecated</code>. Indicates whether the CC
+     * is deprecated and should not be reused (i.e., no new reference to this
      * record should be created).
      */
     public Byte getIsDeprecated() {
@@ -370,7 +372,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.replacement_bcc_id</code>. This refers to a
+     * Setter for <code>oagi.bcc.replacement_bcc_id</code>. This refers to a
      * replacement if the record is deprecated.
      */
     public void setReplacementBccId(ULong value) {
@@ -378,7 +380,7 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.replacement_bcc_id</code>. This refers to a
+     * Getter for <code>oagi.bcc.replacement_bcc_id</code>. This refers to a
      * replacement if the record is deprecated.
      */
     public ULong getReplacementBccId() {
@@ -386,8 +388,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.is_nillable</code>. @deprecated since 2.0.0 in favor
-     * of impossibility of nillable association (element reference) in XML
+     * Setter for <code>oagi.bcc.is_nillable</code>. @deprecated since 2.0.0 in
+     * favor of impossibility of nillable association (element reference) in XML
      * schema.
      * 
      * Indicate whether the field can have a NULL This is corresponding to the
@@ -398,8 +400,8 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Getter for <code>bcc.is_nillable</code>. @deprecated since 2.0.0 in favor
-     * of impossibility of nillable association (element reference) in XML
+     * Getter for <code>oagi.bcc.is_nillable</code>. @deprecated since 2.0.0 in
+     * favor of impossibility of nillable association (element reference) in XML
      * schema.
      * 
      * Indicate whether the field can have a NULL This is corresponding to the
@@ -410,66 +412,66 @@ public class BccRecord extends UpdatableRecordImpl<BccRecord> {
     }
 
     /**
-     * Setter for <code>bcc.default_value</code>. This set the default value at
-     * the association level. 
+     * Setter for <code>oagi.bcc.default_value</code>. This set the default
+     * value at the association level. 
      */
     public void setDefaultValue(String value) {
         set(19, value);
     }
 
     /**
-     * Getter for <code>bcc.default_value</code>. This set the default value at
-     * the association level. 
+     * Getter for <code>oagi.bcc.default_value</code>. This set the default
+     * value at the association level. 
      */
     public String getDefaultValue() {
         return (String) get(19);
     }
 
     /**
-     * Setter for <code>bcc.fixed_value</code>. This column captures the fixed
-     * value constraint. Default and fixed value constraints cannot be used at
-     * the same time.
+     * Setter for <code>oagi.bcc.fixed_value</code>. This column captures the
+     * fixed value constraint. Default and fixed value constraints cannot be
+     * used at the same time.
      */
     public void setFixedValue(String value) {
         set(20, value);
     }
 
     /**
-     * Getter for <code>bcc.fixed_value</code>. This column captures the fixed
-     * value constraint. Default and fixed value constraints cannot be used at
-     * the same time.
+     * Getter for <code>oagi.bcc.fixed_value</code>. This column captures the
+     * fixed value constraint. Default and fixed value constraints cannot be
+     * used at the same time.
      */
     public String getFixedValue() {
         return (String) get(20);
     }
 
     /**
-     * Setter for <code>bcc.prev_bcc_id</code>. A self-foreign key to indicate
-     * the previous history record.
+     * Setter for <code>oagi.bcc.prev_bcc_id</code>. A self-foreign key to
+     * indicate the previous history record.
      */
     public void setPrevBccId(ULong value) {
         set(21, value);
     }
 
     /**
-     * Getter for <code>bcc.prev_bcc_id</code>. A self-foreign key to indicate
-     * the previous history record.
+     * Getter for <code>oagi.bcc.prev_bcc_id</code>. A self-foreign key to
+     * indicate the previous history record.
      */
     public ULong getPrevBccId() {
         return (ULong) get(21);
     }
 
     /**
-     * Setter for <code>bcc.next_bcc_id</code>. A self-foreign key to indicate
-     * the next history record.
+     * Setter for <code>oagi.bcc.next_bcc_id</code>. A self-foreign key to
+     * indicate the next history record.
      */
     public void setNextBccId(ULong value) {
         set(22, value);
     }
 
     /**
-     * Getter for <code>bcc.next_bcc_id</code>. A self-foreign key to indicate
-     * the next history record.
+     * Getter for <code>oagi.bcc.next_bcc_id</code>. A self-foreign key to
+     * indicate the next history record.
      */
     public ULong getNextBccId() {
         return (ULong) get(22);

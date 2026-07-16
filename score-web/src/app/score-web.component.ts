@@ -7,6 +7,7 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import {DomSanitizer} from '@angular/platform-browser';
 import {WebPageInfoService} from './basis/basis.service';
 import {environment} from '../environments/environment';
+import {AiAssistantAvailabilityService} from './ai-management/ai-chat-panel/domain/ai-assistant-availability.service';
 
 const EXPORT_NOTES_ICON = `<svg xmlns="http://www.w3.org/2000/svg" height="48" viewBox="0 96 960 960" width="48"><path d="m661 920 117-117v99h30V752H658v30h99L640 899l21 21Zm-481 16q-24.75 0-42.375-17.625T120 876V276q0-24.75 17.625-42.375T180 216h600q24.75 0 42.375 17.625T840 276v329q-14-8-29.5-13t-30.5-8V276H180v600h309q4 16 9.023 31.172Q503.045 922.345 510 936H180Zm0-107v47-600 308-4 249Zm100-53h211q4-16 9-31t13-29H280v60Zm0-170h344q14-7 27-11.5t29-8.5v-40H280v60Zm0-170h400v-60H280v60Zm452.5 579q-77.5 0-132.5-55.5T545 828q0-78.435 54.99-133.718Q654.98 639 733 639q77 0 132.5 55.282Q921 749.565 921 828q0 76-55.5 131.5t-133 55.5Z"/></svg>`;
 
@@ -23,6 +24,7 @@ export class ScoreWebComponent implements OnInit, DoCheck {
   private matIconRegistry = inject(MatIconRegistry);
   private snackBar = inject(MatSnackBar);
   private sanitizer = inject(DomSanitizer);
+  private aiAssistantAvailability = inject(AiAssistantAvailabilityService);
   webPageInfoService = inject(WebPageInfoService);
 
   private wasAuthenticated = false;
@@ -44,10 +46,16 @@ export class ScoreWebComponent implements OnInit, DoCheck {
     });
 
     this.wasAuthenticated = this.auth.isAuthenticated();
+    if (this.wasAuthenticated) {
+      this.aiAssistantAvailability.load();
+    }
   }
 
   ngDoCheck(): void {
     const isAuthenticated = this.auth.isAuthenticated();
+    if (!this.wasAuthenticated && isAuthenticated) {
+      this.aiAssistantAvailability.load();
+    }
     if (this.wasAuthenticated && !isAuthenticated &&
       !this.auth.isLogoutInProgress() && this.shouldRedirectToLogin()) {
       this.snackBar.open('Authentication required', '', {
@@ -55,11 +63,18 @@ export class ScoreWebComponent implements OnInit, DoCheck {
       });
       this.auth.redirectToLogin(this.router.url);
     }
+    if (this.wasAuthenticated && !isAuthenticated) {
+      this.aiAssistantAvailability.reset();
+    }
     this.wasAuthenticated = isAuthenticated;
   }
 
   isAuthenticated() {
     return this.auth.isAuthenticated();
+  }
+
+  aiAssistantAvailable(): boolean {
+    return this.aiAssistantAvailability.isAvailable();
   }
 
   private shouldRedirectToLogin(): boolean {

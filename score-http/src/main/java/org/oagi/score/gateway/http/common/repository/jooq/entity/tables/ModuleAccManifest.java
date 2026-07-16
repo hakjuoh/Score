@@ -21,19 +21,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifest.AccManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Module.ModulePath;
@@ -52,7 +51,7 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>module_acc_manifest</code>
+     * The reference instance of <code>oagi.module_acc_manifest</code>
      */
     public static final ModuleAccManifest MODULE_ACC_MANIFEST = new ModuleAccManifest();
 
@@ -65,50 +64,51 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
     }
 
     /**
-     * The column <code>module_acc_manifest.module_acc_manifest_id</code>.
+     * The column <code>oagi.module_acc_manifest.module_acc_manifest_id</code>.
      * Primary key.
      */
-    public final TableField<ModuleAccManifestRecord, ULong> MODULE_ACC_MANIFEST_ID = createField(DSL.name("module_acc_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "Primary key.");
+    public final TableField<ModuleAccManifestRecord, ULong> MODULE_ACC_MANIFEST_ID = createField(DSL.name("module_acc_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Primary key.");
 
     /**
-     * The column <code>module_acc_manifest.module_set_release_id</code>. A
+     * The column <code>oagi.module_acc_manifest.module_set_release_id</code>. A
      * foreign key of the module set release record.
      */
     public final TableField<ModuleAccManifestRecord, ULong> MODULE_SET_RELEASE_ID = createField(DSL.name("module_set_release_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key of the module set release record.");
 
     /**
-     * The column <code>module_acc_manifest.acc_manifest_id</code>. A foreign
-     * key of the acc manifest record.
+     * The column <code>oagi.module_acc_manifest.acc_manifest_id</code>. A
+     * foreign key of the acc manifest record.
      */
     public final TableField<ModuleAccManifestRecord, ULong> ACC_MANIFEST_ID = createField(DSL.name("acc_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key of the acc manifest record.");
 
     /**
-     * The column <code>module_acc_manifest.module_id</code>. This indicates a
-     * module.
+     * The column <code>oagi.module_acc_manifest.module_id</code>. This
+     * indicates a module.
      */
     public final TableField<ModuleAccManifestRecord, ULong> MODULE_ID = createField(DSL.name("module_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "This indicates a module.");
 
     /**
-     * The column <code>module_acc_manifest.created_by</code>. Foreign key to
-     * the APP_USER table. It indicates the user who created this record.
+     * The column <code>oagi.module_acc_manifest.created_by</code>. Foreign key
+     * to the APP_USER table. It indicates the user who created this record.
      */
     public final TableField<ModuleAccManifestRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It indicates the user who created this record.");
 
     /**
-     * The column <code>module_acc_manifest.last_updated_by</code>. Foreign key
-     * to the APP_USER table referring to the last user who updated the record.
+     * The column <code>oagi.module_acc_manifest.last_updated_by</code>. Foreign
+     * key to the APP_USER table referring to the last user who updated the
+     * record.
      */
     public final TableField<ModuleAccManifestRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table referring to the last user who updated the record.");
 
     /**
-     * The column <code>module_acc_manifest.creation_timestamp</code>. The
+     * The column <code>oagi.module_acc_manifest.creation_timestamp</code>. The
      * timestamp when the record was first created.
      */
     public final TableField<ModuleAccManifestRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record was first created.");
 
     /**
-     * The column <code>module_acc_manifest.last_update_timestamp</code>. The
-     * timestamp when the record was last updated.
+     * The column <code>oagi.module_acc_manifest.last_update_timestamp</code>.
+     * The timestamp when the record was last updated.
      */
     public final TableField<ModuleAccManifestRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record was last updated.");
 
@@ -121,21 +121,21 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
     }
 
     /**
-     * Create an aliased <code>module_acc_manifest</code> table reference
+     * Create an aliased <code>oagi.module_acc_manifest</code> table reference
      */
     public ModuleAccManifest(String alias) {
         this(DSL.name(alias), MODULE_ACC_MANIFEST);
     }
 
     /**
-     * Create an aliased <code>module_acc_manifest</code> table reference
+     * Create an aliased <code>oagi.module_acc_manifest</code> table reference
      */
     public ModuleAccManifest(Name alias) {
         this(alias, MODULE_ACC_MANIFEST);
     }
 
     /**
-     * Create a <code>module_acc_manifest</code> table reference
+     * Create a <code>oagi.module_acc_manifest</code> table reference
      */
     public ModuleAccManifest() {
         this(DSL.name("module_acc_manifest"), null);
@@ -176,7 +176,7 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -197,7 +197,7 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
     private transient AccManifestPath _accManifest;
 
     /**
-     * Get the implicit join path to the <code>acc_manifest</code> table.
+     * Get the implicit join path to the <code>oagi.acc_manifest</code> table.
      */
     public AccManifestPath accManifest() {
         if (_accManifest == null)
@@ -209,8 +209,8 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
     private transient AppUserPath _moduleAccManifestCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>module_acc_manifest_created_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>module_acc_manifest_created_by_fk</code> key.
      */
     public AppUserPath moduleAccManifestCreatedByFk() {
         if (_moduleAccManifestCreatedByFk == null)
@@ -222,8 +222,8 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
     private transient AppUserPath _moduleAccManifestLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>module_acc_manifest_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>module_acc_manifest_last_updated_by_fk</code> key.
      */
     public AppUserPath moduleAccManifestLastUpdatedByFk() {
         if (_moduleAccManifestLastUpdatedByFk == null)
@@ -235,7 +235,7 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
     private transient ModulePath _module;
 
     /**
-     * Get the implicit join path to the <code>module</code> table.
+     * Get the implicit join path to the <code>oagi.module</code> table.
      */
     public ModulePath module() {
         if (_module == null)
@@ -247,7 +247,8 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
     private transient ModuleSetReleasePath _moduleSetRelease;
 
     /**
-     * Get the implicit join path to the <code>module_set_release</code> table.
+     * Get the implicit join path to the <code>oagi.module_set_release</code>
+     * table.
      */
     public ModuleSetReleasePath moduleSetRelease() {
         if (_moduleSetRelease == null)
@@ -300,7 +301,7 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
      */
     @Override
     public ModuleAccManifest where(Condition condition) {
-        return new ModuleAccManifest(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new ModuleAccManifest(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -367,7 +368,7 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public ModuleAccManifest whereExists(TableLike<?> select) {
+    public ModuleAccManifest whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -375,7 +376,7 @@ public class ModuleAccManifest extends TableImpl<ModuleAccManifestRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public ModuleAccManifest whereNotExists(TableLike<?> select) {
+    public ModuleAccManifest whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

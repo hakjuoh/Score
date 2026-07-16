@@ -20,19 +20,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasOperation.OasOperationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasTag.OasTagPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.OasResourceTagRecord;
@@ -49,7 +48,7 @@ public class OasResourceTag extends TableImpl<OasResourceTagRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oas_resource_tag</code>
+     * The reference instance of <code>oagi.oas_resource_tag</code>
      */
     public static final OasResourceTag OAS_RESOURCE_TAG = new OasResourceTag();
 
@@ -62,37 +61,37 @@ public class OasResourceTag extends TableImpl<OasResourceTagRecord> {
     }
 
     /**
-     * The column <code>oas_resource_tag.oas_operation_id</code>. The primary
-     * key of the record.
+     * The column <code>oagi.oas_resource_tag.oas_operation_id</code>. The
+     * primary key of the record.
      */
     public final TableField<OasResourceTagRecord, ULong> OAS_OPERATION_ID = createField(DSL.name("oas_operation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_resource_tag.oas_tag_id</code>. The primary key of
-     * the record.
+     * The column <code>oagi.oas_resource_tag.oas_tag_id</code>. The primary key
+     * of the record.
      */
     public final TableField<OasResourceTagRecord, ULong> OAS_TAG_ID = createField(DSL.name("oas_tag_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_resource_tag.created_by</code>. The user who creates
-     * the record.
+     * The column <code>oagi.oas_resource_tag.created_by</code>. The user who
+     * creates the record.
      */
     public final TableField<OasResourceTagRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who creates the record.");
 
     /**
-     * The column <code>oas_resource_tag.last_updated_by</code>. The user who
-     * last updates the record.
+     * The column <code>oagi.oas_resource_tag.last_updated_by</code>. The user
+     * who last updates the record.
      */
     public final TableField<OasResourceTagRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who last updates the record.");
 
     /**
-     * The column <code>oas_resource_tag.creation_timestamp</code>. The
+     * The column <code>oagi.oas_resource_tag.creation_timestamp</code>. The
      * timestamp when the record is created.
      */
     public final TableField<OasResourceTagRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is created.");
 
     /**
-     * The column <code>oas_resource_tag.last_update_timestamp</code>. The
+     * The column <code>oagi.oas_resource_tag.last_update_timestamp</code>. The
      * timestamp when the record is last updated.
      */
     public final TableField<OasResourceTagRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is last updated.");
@@ -106,21 +105,21 @@ public class OasResourceTag extends TableImpl<OasResourceTagRecord> {
     }
 
     /**
-     * Create an aliased <code>oas_resource_tag</code> table reference
+     * Create an aliased <code>oagi.oas_resource_tag</code> table reference
      */
     public OasResourceTag(String alias) {
         this(DSL.name(alias), OAS_RESOURCE_TAG);
     }
 
     /**
-     * Create an aliased <code>oas_resource_tag</code> table reference
+     * Create an aliased <code>oagi.oas_resource_tag</code> table reference
      */
     public OasResourceTag(Name alias) {
         this(alias, OAS_RESOURCE_TAG);
     }
 
     /**
-     * Create a <code>oas_resource_tag</code> table reference
+     * Create a <code>oagi.oas_resource_tag</code> table reference
      */
     public OasResourceTag() {
         this(DSL.name("oas_resource_tag"), null);
@@ -161,7 +160,7 @@ public class OasResourceTag extends TableImpl<OasResourceTagRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -177,7 +176,7 @@ public class OasResourceTag extends TableImpl<OasResourceTagRecord> {
     private transient OasOperationPath _oasOperation;
 
     /**
-     * Get the implicit join path to the <code>oas_operation</code> table.
+     * Get the implicit join path to the <code>oagi.oas_operation</code> table.
      */
     public OasOperationPath oasOperation() {
         if (_oasOperation == null)
@@ -189,7 +188,7 @@ public class OasResourceTag extends TableImpl<OasResourceTagRecord> {
     private transient OasTagPath _oasTag;
 
     /**
-     * Get the implicit join path to the <code>oas_tag</code> table.
+     * Get the implicit join path to the <code>oagi.oas_tag</code> table.
      */
     public OasTagPath oasTag() {
         if (_oasTag == null)
@@ -242,7 +241,7 @@ public class OasResourceTag extends TableImpl<OasResourceTagRecord> {
      */
     @Override
     public OasResourceTag where(Condition condition) {
-        return new OasResourceTag(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new OasResourceTag(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -309,7 +308,7 @@ public class OasResourceTag extends TableImpl<OasResourceTagRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasResourceTag whereExists(TableLike<?> select) {
+    public OasResourceTag whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -317,7 +316,7 @@ public class OasResourceTag extends TableImpl<OasResourceTagRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasResourceTag whereNotExists(TableLike<?> select) {
+    public OasResourceTag whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

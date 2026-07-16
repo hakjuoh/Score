@@ -2,6 +2,13 @@
   display: flex;
   flex-direction: column;
   min-height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding-top: var(--score-ai-chat-top, 0px);
+  padding-right: var(--score-ai-chat-right, 0px);
+  padding-bottom: var(--score-ai-chat-bottom, 0px);
+  padding-left: var(--score-ai-chat-left, 0px);
+  transition: padding 120ms ease;
 }
 
 div.body {

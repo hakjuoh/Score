@@ -1,0 +1,129 @@
+@if (mutation) {
+  <div class="model-command-panel interaction-command-panel"
+       role="group" aria-label="Mutation approval">
+    <div class="model-command-title">
+      {{ mutation.mode === 'confirm' ? 'Approve this action?' : 'Action approval unavailable' }}
+    </div>
+    <div class="interaction-command-message">
+      @if (mutation.mode === 'confirm') {
+        The assistant is requesting permission to perform a data-changing action.
+      } @else {
+        This action was approved previously, but its one-time grant is no longer available.
+      }
+    </div>
+    <dl class="interaction-command-details">
+      <dt>Tool</dt><dd>{{ mutation.toolName }}</dd>
+      <dt>Proposed arguments</dt><dd>{{ mutation.argumentsSummary }}</dd>
+    </dl>
+    @if (mutation.mode === 'confirm') {
+      <div class="model-command-options" aria-label="Approval choices">
+        <button type="button" class="model-command-option"
+                [disabled]="mutation.busy" (click)="mutationApproved.emit()">
+          <span class="model-command-caret visible" aria-hidden="true">›</span>
+          <span class="model-command-option-content">
+            <span class="model-command-option-name">1. Approve action</span>
+            <span class="model-command-option-description">Apply this exact data change and continue the task.</span>
+          </span>
+        </button>
+        <button type="button" class="model-command-option"
+                [disabled]="mutation.busy" (click)="mutationDenied.emit()">
+          <span class="model-command-caret visible" aria-hidden="true">›</span>
+          <span class="model-command-option-content">
+            <span class="model-command-option-name">2. Deny</span>
+            <span class="model-command-option-description">Do not apply this data change.</span>
+          </span>
+        </button>
+        <button type="button" class="model-command-option"
+                [disabled]="mutation.busy" (click)="mutationChangeRequested.emit()">
+          <span class="model-command-caret visible" aria-hidden="true">›</span>
+          <span class="model-command-option-content">
+            <span class="model-command-option-name">3. Modify action</span>
+            <span class="model-command-option-description">
+              Describe what to change in Chat. The modified action will run without another confirmation.
+            </span>
+          </span>
+        </button>
+      </div>
+    } @else {
+      <div class="model-command-actions">
+        <button type="button" [disabled]="mutation.busy" (click)="mutationDismissed.emit()">
+          Leave unused
+        </button>
+        <button type="button" [disabled]="mutation.busy" (click)="mutationRevoked.emit()">
+          {{ mutation.busy ? 'Revoking...' : 'Revoke unused approval' }}
+        </button>
+      </div>
+    }
+  </div>
+}
+
+@if (elicitation) {
+  <div class="model-command-panel interaction-command-panel"
+       role="group" aria-label="Assistant question">
+    <div class="model-command-title">Assistant needs your input</div>
+    <div class="interaction-command-message">{{ elicitation.message }}</div>
+
+    @for (field of fields; track field.path.join('.')) {
+      <section class="model-command-section interaction-field">
+        <h4>{{ field.title }}@if (field.required) { <span aria-label="required">*</span>}</h4>
+        @if (field.description) {
+          <div class="model-command-option-description">{{ field.description }}</div>
+        }
+
+        @if (field.kind === 'select' || field.kind === 'multiselect') {
+          <div class="model-command-options">
+            @for (option of field.options; track $index; let i = $index) {
+              <button type="button" class="model-command-option"
+                      [class.selected]="selected(field, option)"
+                      [attr.aria-pressed]="selected(field, option)"
+                      [disabled]="elicitationBusy"
+                      (click)="field.kind === 'multiselect' ? toggle(field, option) : choose(field, option)">
+                <span class="model-command-caret" aria-hidden="true">›</span>
+                <span class="model-command-option-content">
+                  <span class="model-command-option-name">{{ i + 1 }}. {{ option.label }}</span>
+                  @if (option.description) {
+                    <span class="model-command-option-description">{{ option.description }}</span>
+                  }
+                </span>
+              </button>
+            }
+          </div>
+        } @else if (field.kind === 'boolean') {
+          <label class="interaction-checkbox">
+            <input type="checkbox" [checked]="field.value === true"
+                   [disabled]="elicitationBusy" (change)="booleanChanged(field, $event)">
+            <span>Yes</span>
+          </label>
+        } @else if (field.kind === 'number') {
+          <input class="interaction-input" type="number"
+                 [value]="field.value ?? ''"
+                 [attr.min]="field.schema['minimum'] ?? null"
+                 [attr.max]="field.schema['maximum'] ?? null"
+                 [attr.step]="field.schema['type'] === 'integer' ? 1 : 'any'"
+                 [disabled]="elicitationBusy" (input)="numberChanged(field, $event)">
+        } @else if (field.kind === 'textarea' || field.kind === 'json') {
+          <textarea class="interaction-input interaction-textarea"
+                    [placeholder]="field.kind === 'json' ? 'Enter JSON' : ''"
+                    [value]="field.value ?? ''" [disabled]="elicitationBusy"
+                    (input)="textChanged(field, $event)"></textarea>
+        } @else {
+          <input class="interaction-input" type="text" [value]="field.value ?? ''"
+                 [attr.minlength]="field.schema['minLength'] ?? null"
+                 [attr.maxlength]="field.schema['maxLength'] ?? null"
+                 [disabled]="elicitationBusy" (input)="textChanged(field, $event)">
+        }
+        @if (field.error) {
+          <div class="interaction-field-error" role="alert">{{ field.error }}</div>
+        }
+      </section>
+    }
+
+    <div class="model-command-actions">
+      <button type="button" [disabled]="elicitationBusy" (click)="respond('CANCEL')">Cancel</button>
+      <button type="button" [disabled]="elicitationBusy" (click)="respond('DECLINE')">Decline</button>
+      <button type="button" class="primary" [disabled]="elicitationBusy" (click)="respond('ACCEPT')">
+        {{ elicitationBusy ? 'Sending...' : (fields.length > 0 ? 'Submit' : 'Continue') }}
+      </button>
+    </div>
+  </div>
+}

@@ -40,8 +40,7 @@ export class BieListRequest {
   ownedByDeveloper: boolean = undefined;
 
   constructor(paramMap?: ParamMap, defaultPageRequest?: PageRequest) {
-    const q = (paramMap) ? paramMap.get('q') : undefined;
-    const params = (q) ? new HttpParams({fromString: base64Decode(q)}) : new HttpParams();
+    const params = BieListRequest.queryParams(paramMap);
     this.releases = (params.get('releaseIds')) ? Array.from(params.get('releaseIds').split(',').map(e => {
       const release = new ReleaseSummary();
       release.releaseId = Number(e);
@@ -95,6 +94,25 @@ export class BieListRequest {
       asccpManifestId: Number(params.get('asccpManifestId')) || 0,
       den: params.get('den') || '',
     };
+  }
+
+  private static queryParams(paramMap?: ParamMap): HttpParams {
+    if (!paramMap) {
+      return new HttpParams();
+    }
+
+    const q = paramMap.get('q');
+    if (q) {
+      return new HttpParams({fromString: base64Decode(q)});
+    }
+
+    let params = new HttpParams();
+    paramMap.keys.forEach(key => {
+      paramMap.getAll(key).forEach(value => {
+        params = params.append(key, value);
+      });
+    });
+    return params;
   }
 
   toQuery(extras?): string {

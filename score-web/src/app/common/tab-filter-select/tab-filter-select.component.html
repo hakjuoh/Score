@@ -1,0 +1,66 @@
+<mat-form-field>
+  <mat-label>{{ label }}</mat-label>
+  <mat-select
+      [disableOptionCentering]="true"
+      [formControl]="selectionCtrl"
+      panelClass="tab-filter-select-panel"
+      (openedChange)="onOpenedChange($event)"
+      multiple>
+    <mat-select-trigger>
+      @if (selectedLabels().length > 0) {
+        {{ selectedLabels()[0] }}
+        @if (selectedLabels().length > 1) {
+          <span class="additional-selection">
+            (+{{ selectedLabels().length - 1 }} {{ selectedLabels().length === 2 ? 'other' : 'others' }})
+          </span>
+        }
+      }
+    </mat-select-trigger>
+
+    <div class="tab-filter-header">
+      <mat-option class="tab-filter-search-option">
+        <ngx-mat-select-search
+            [formControl]="searchCtrl"
+            [placeholderLabel]="placeholderLabel"
+            [noEntriesFoundLabel]="noEntriesFoundLabel">
+        </ngx-mat-select-search>
+      </mat-option>
+
+      <div class="tab-filter-tabs"
+          (click)="$event.stopPropagation()"
+          (mousedown)="$event.stopPropagation()"
+          (keydown)="$event.stopPropagation()">
+        @for (tab of displayTabs; track tab.id) {
+          <div class="tab-filter-tab"
+              [class.active]="activeTabId === tab.id"
+              (click)="setActiveTab(tab.id, $event)"
+              (keydown.enter)="setActiveTab(tab.id, $event)"
+              (keydown.space)="setActiveTab(tab.id, $event)"
+              (mousedown)="$event.preventDefault(); $event.stopPropagation()"
+              role="button"
+              tabindex="0">
+            <mat-checkbox
+                class="tab-filter-tab-checkbox"
+                [checked]="isTabAllSelected(tab)"
+                [indeterminate]="isTabPartiallySelected(tab)"
+                (click)="$event.stopPropagation()"
+                (mousedown)="$event.stopPropagation()"
+                (change)="toggleTabSelection(tab, $event.checked)">
+            </mat-checkbox>
+            <span class="tab-filter-tab-label">{{ tab.label }}</span>
+          </div>
+        }
+      </div>
+    </div>
+
+    @for (tab of displayTabs; track tab.id) {
+      <div #optionsContainer class="tab-filter-options" [class.tab-filter-hidden-options]="activeTabId !== tab.id">
+        @for (option of filteredOptions | async; track option) {
+          <mat-option [value]="optionValue(option, tab)">
+            {{ optionLabel(option, tab) }}
+          </mat-option>
+        }
+      </div>
+    }
+  </mat-select>
+</mat-form-field>

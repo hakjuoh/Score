@@ -20,21 +20,21 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.BccpManifest.BccpManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Dt.DtPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.DtManifest.DtManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.DtManifestTag.DtManifestTagPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.DtScManifest.DtScManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.GithubIssue.GithubIssuePath;
@@ -59,7 +59,7 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>dt_manifest</code>
+     * The reference instance of <code>oagi.dt_manifest</code>
      */
     public static final DtManifest DT_MANIFEST = new DtManifest();
 
@@ -72,64 +72,65 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     }
 
     /**
-     * The column <code>dt_manifest.dt_manifest_id</code>. An internal, primary
-     * database key of a DT_MANIFEST record.
+     * The column <code>oagi.dt_manifest.dt_manifest_id</code>. An internal,
+     * primary database key of a DT_MANIFEST record.
      */
-    public final TableField<DtManifestRecord, ULong> DT_MANIFEST_ID = createField(DSL.name("dt_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "An internal, primary database key of a DT_MANIFEST record.");
+    public final TableField<DtManifestRecord, ULong> DT_MANIFEST_ID = createField(DSL.name("dt_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of a DT_MANIFEST record.");
 
     /**
-     * The column <code>dt_manifest.release_id</code>. Foreign key to the
+     * The column <code>oagi.dt_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public final TableField<DtManifestRecord, ULong> RELEASE_ID = createField(DSL.name("release_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the RELEASE table.");
 
     /**
-     * The column <code>dt_manifest.dt_id</code>. Foreign key to the DT table.
+     * The column <code>oagi.dt_manifest.dt_id</code>. Foreign key to the DT
+     * table.
      */
     public final TableField<DtManifestRecord, ULong> DT_ID = createField(DSL.name("dt_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the DT table.");
 
     /**
-     * The column <code>dt_manifest.based_dt_manifest_id</code>. A
+     * The column <code>oagi.dt_manifest.based_dt_manifest_id</code>. A
      * self-reference to the DT_MANIFEST record that this record is based on
      * (its base/supertype from which it was derived).
      */
     public final TableField<DtManifestRecord, ULong> BASED_DT_MANIFEST_ID = createField(DSL.name("based_dt_manifest_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A self-reference to the DT_MANIFEST record that this record is based on (its base/supertype from which it was derived).");
 
     /**
-     * The column <code>dt_manifest.den</code>. Dictionary Entry Name of the
-     * data type.
+     * The column <code>oagi.dt_manifest.den</code>. Dictionary Entry Name of
+     * the data type.
      */
     public final TableField<DtManifestRecord, String> DEN = createField(DSL.name("den"), SQLDataType.VARCHAR(200).nullable(false), this, "Dictionary Entry Name of the data type.");
 
     /**
-     * The column <code>dt_manifest.conflict</code>. This indicates that there
-     * is a conflict between self and relationship.
+     * The column <code>oagi.dt_manifest.conflict</code>. This indicates that
+     * there is a conflict between self and relationship.
      */
     public final TableField<DtManifestRecord, Byte> CONFLICT = createField(DSL.name("conflict"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "This indicates that there is a conflict between self and relationship.");
 
     /**
-     * The column <code>dt_manifest.log_id</code>. A foreign key pointed to a
-     * log for the current record.
+     * The column <code>oagi.dt_manifest.log_id</code>. A foreign key pointed to
+     * a log for the current record.
      */
     public final TableField<DtManifestRecord, ULong> LOG_ID = createField(DSL.name("log_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A foreign key pointed to a log for the current record.");
 
     /**
-     * The column <code>dt_manifest.replacement_dt_manifest_id</code>. This
+     * The column <code>oagi.dt_manifest.replacement_dt_manifest_id</code>. This
      * refers to a replacement manifest if the record is deprecated.
      */
     public final TableField<DtManifestRecord, ULong> REPLACEMENT_DT_MANIFEST_ID = createField(DSL.name("replacement_dt_manifest_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "This refers to a replacement manifest if the record is deprecated.");
 
     /**
-     * The column <code>dt_manifest.prev_dt_manifest_id</code>. A self-reference
-     * to the corresponding DT_MANIFEST record in the previous release (revision
-     * chain). NULL for the first revision.
+     * The column <code>oagi.dt_manifest.prev_dt_manifest_id</code>. A
+     * self-reference to the corresponding DT_MANIFEST record in the previous
+     * release (revision chain). NULL for the first revision.
      */
     public final TableField<DtManifestRecord, ULong> PREV_DT_MANIFEST_ID = createField(DSL.name("prev_dt_manifest_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A self-reference to the corresponding DT_MANIFEST record in the previous release (revision chain). NULL for the first revision.");
 
     /**
-     * The column <code>dt_manifest.next_dt_manifest_id</code>. A self-reference
-     * to the corresponding DT_MANIFEST record in the next release (revision
-     * chain). NULL for the latest revision.
+     * The column <code>oagi.dt_manifest.next_dt_manifest_id</code>. A
+     * self-reference to the corresponding DT_MANIFEST record in the next
+     * release (revision chain). NULL for the latest revision.
      */
     public final TableField<DtManifestRecord, ULong> NEXT_DT_MANIFEST_ID = createField(DSL.name("next_dt_manifest_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A self-reference to the corresponding DT_MANIFEST record in the next release (revision chain). NULL for the latest revision.");
 
@@ -142,21 +143,21 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     }
 
     /**
-     * Create an aliased <code>dt_manifest</code> table reference
+     * Create an aliased <code>oagi.dt_manifest</code> table reference
      */
     public DtManifest(String alias) {
         this(DSL.name(alias), DT_MANIFEST);
     }
 
     /**
-     * Create an aliased <code>dt_manifest</code> table reference
+     * Create an aliased <code>oagi.dt_manifest</code> table reference
      */
     public DtManifest(Name alias) {
         this(alias, DT_MANIFEST);
     }
 
     /**
-     * Create a <code>dt_manifest</code> table reference
+     * Create a <code>oagi.dt_manifest</code> table reference
      */
     public DtManifest() {
         this(DSL.name("dt_manifest"), null);
@@ -197,7 +198,7 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -218,8 +219,8 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient DtManifestPath _dtManifestBasedDtManifestIdFk;
 
     /**
-     * Get the implicit join path to the <code>dt_manifest</code> table, via the
-     * <code>dt_manifest_based_dt_manifest_id_fk</code> key.
+     * Get the implicit join path to the <code>oagi.dt_manifest</code> table,
+     * via the <code>dt_manifest_based_dt_manifest_id_fk</code> key.
      */
     public DtManifestPath dtManifestBasedDtManifestIdFk() {
         if (_dtManifestBasedDtManifestIdFk == null)
@@ -231,7 +232,7 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient DtPath _dt;
 
     /**
-     * Get the implicit join path to the <code>dt</code> table.
+     * Get the implicit join path to the <code>oagi.dt</code> table.
      */
     public DtPath dt() {
         if (_dt == null)
@@ -243,7 +244,7 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient LogPath _log;
 
     /**
-     * Get the implicit join path to the <code>log</code> table.
+     * Get the implicit join path to the <code>oagi.log</code> table.
      */
     public LogPath log() {
         if (_log == null)
@@ -255,8 +256,8 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient DtManifestPath _dtManifestNextDtManifestIdFk;
 
     /**
-     * Get the implicit join path to the <code>dt_manifest</code> table, via the
-     * <code>dt_manifest_next_dt_manifest_id_fk</code> key.
+     * Get the implicit join path to the <code>oagi.dt_manifest</code> table,
+     * via the <code>dt_manifest_next_dt_manifest_id_fk</code> key.
      */
     public DtManifestPath dtManifestNextDtManifestIdFk() {
         if (_dtManifestNextDtManifestIdFk == null)
@@ -268,8 +269,8 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient DtManifestPath _dtManifestPrevDtManifestIdFk;
 
     /**
-     * Get the implicit join path to the <code>dt_manifest</code> table, via the
-     * <code>dt_manifest_prev_dt_manifest_id_fk</code> key.
+     * Get the implicit join path to the <code>oagi.dt_manifest</code> table,
+     * via the <code>dt_manifest_prev_dt_manifest_id_fk</code> key.
      */
     public DtManifestPath dtManifestPrevDtManifestIdFk() {
         if (_dtManifestPrevDtManifestIdFk == null)
@@ -281,7 +282,7 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient ReleasePath _release;
 
     /**
-     * Get the implicit join path to the <code>release</code> table.
+     * Get the implicit join path to the <code>oagi.release</code> table.
      */
     public ReleasePath release() {
         if (_release == null)
@@ -293,8 +294,8 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient DtManifestPath _dtReplacementDtManifestIdFk;
 
     /**
-     * Get the implicit join path to the <code>dt_manifest</code> table, via the
-     * <code>dt_replacement_dt_manifest_id_fk</code> key.
+     * Get the implicit join path to the <code>oagi.dt_manifest</code> table,
+     * via the <code>dt_replacement_dt_manifest_id_fk</code> key.
      */
     public DtManifestPath dtReplacementDtManifestIdFk() {
         if (_dtReplacementDtManifestIdFk == null)
@@ -306,7 +307,7 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient BccpManifestPath _bccpManifest;
 
     /**
-     * Get the implicit to-many join path to the <code>bccp_manifest</code>
+     * Get the implicit to-many join path to the <code>oagi.bccp_manifest</code>
      * table
      */
     public BccpManifestPath bccpManifest() {
@@ -319,8 +320,8 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient DtManifestTagPath _dtManifestTag;
 
     /**
-     * Get the implicit to-many join path to the <code>dt_manifest_tag</code>
-     * table
+     * Get the implicit to-many join path to the
+     * <code>oagi.dt_manifest_tag</code> table
      */
     public DtManifestTagPath dtManifestTag() {
         if (_dtManifestTag == null)
@@ -332,8 +333,8 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient DtScManifestPath _dtScManifest;
 
     /**
-     * Get the implicit to-many join path to the <code>dt_sc_manifest</code>
-     * table
+     * Get the implicit to-many join path to the
+     * <code>oagi.dt_sc_manifest</code> table
      */
     public DtScManifestPath dtScManifest() {
         if (_dtScManifest == null)
@@ -346,7 +347,7 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>github_issue_dt_manifest</code> table
+     * <code>oagi.github_issue_dt_manifest</code> table
      */
     public GithubIssueDtManifestPath githubIssueDtManifest() {
         if (_githubIssueDtManifest == null)
@@ -358,8 +359,8 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     private transient ModuleDtManifestPath _moduleDtManifest;
 
     /**
-     * Get the implicit to-many join path to the <code>module_dt_manifest</code>
-     * table
+     * Get the implicit to-many join path to the
+     * <code>oagi.module_dt_manifest</code> table
      */
     public ModuleDtManifestPath moduleDtManifest() {
         if (_moduleDtManifest == null)
@@ -369,15 +370,16 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
     }
 
     /**
-     * Get the implicit many-to-many join path to the <code>tag</code> table
+     * Get the implicit many-to-many join path to the <code>oagi.tag</code>
+     * table
      */
     public TagPath tag() {
         return dtManifestTag().tag();
     }
 
     /**
-     * Get the implicit many-to-many join path to the <code>github_issue</code>
-     * table
+     * Get the implicit many-to-many join path to the
+     * <code>oagi.github_issue</code> table
      */
     public GithubIssuePath githubIssue() {
         return githubIssueDtManifest().githubIssue();
@@ -427,7 +429,7 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
      */
     @Override
     public DtManifest where(Condition condition) {
-        return new DtManifest(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new DtManifest(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -494,7 +496,7 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public DtManifest whereExists(TableLike<?> select) {
+    public DtManifest whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -502,7 +504,7 @@ public class DtManifest extends TableImpl<DtManifestRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public DtManifest whereNotExists(TableLike<?> select) {
+    public DtManifest whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

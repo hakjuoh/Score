@@ -25,56 +25,56 @@ public class DtScManifestRecord extends UpdatableRecordImpl<DtScManifestRecord> 
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>dt_sc_manifest.dt_sc_manifest_id</code>. An internal,
-     * primary database key of a DT_SC_MANIFEST record.
+     * Setter for <code>oagi.dt_sc_manifest.dt_sc_manifest_id</code>. An
+     * internal, primary database key of a DT_SC_MANIFEST record.
      */
     public void setDtScManifestId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>dt_sc_manifest.dt_sc_manifest_id</code>. An internal,
-     * primary database key of a DT_SC_MANIFEST record.
+     * Getter for <code>oagi.dt_sc_manifest.dt_sc_manifest_id</code>. An
+     * internal, primary database key of a DT_SC_MANIFEST record.
      */
     public ULong getDtScManifestId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>dt_sc_manifest.release_id</code>. Foreign key to the
-     * RELEASE table.
+     * Setter for <code>oagi.dt_sc_manifest.release_id</code>. Foreign key to
+     * the RELEASE table.
      */
     public void setReleaseId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>dt_sc_manifest.release_id</code>. Foreign key to the
-     * RELEASE table.
+     * Getter for <code>oagi.dt_sc_manifest.release_id</code>. Foreign key to
+     * the RELEASE table.
      */
     public ULong getReleaseId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>dt_sc_manifest.dt_sc_id</code>. Foreign key to the DT_SC
-     * table.
+     * Setter for <code>oagi.dt_sc_manifest.dt_sc_id</code>. Foreign key to the
+     * DT_SC table.
      */
     public void setDtScId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>dt_sc_manifest.dt_sc_id</code>. Foreign key to the DT_SC
-     * table.
+     * Getter for <code>oagi.dt_sc_manifest.dt_sc_id</code>. Foreign key to the
+     * DT_SC table.
      */
     public ULong getDtScId() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for <code>dt_sc_manifest.owner_dt_manifest_id</code>. Foreign key
-     * to the DT_MANIFEST table representing the data type that owns this
+     * Setter for <code>oagi.dt_sc_manifest.owner_dt_manifest_id</code>. Foreign
+     * key to the DT_MANIFEST table representing the data type that owns this
      * supplementary component.
      */
     public void setOwnerDtManifestId(ULong value) {
@@ -82,8 +82,8 @@ public class DtScManifestRecord extends UpdatableRecordImpl<DtScManifestRecord> 
     }
 
     /**
-     * Getter for <code>dt_sc_manifest.owner_dt_manifest_id</code>. Foreign key
-     * to the DT_MANIFEST table representing the data type that owns this
+     * Getter for <code>oagi.dt_sc_manifest.owner_dt_manifest_id</code>. Foreign
+     * key to the DT_MANIFEST table representing the data type that owns this
      * supplementary component.
      */
     public ULong getOwnerDtManifestId() {
@@ -91,7 +91,7 @@ public class DtScManifestRecord extends UpdatableRecordImpl<DtScManifestRecord> 
     }
 
     /**
-     * Setter for <code>dt_sc_manifest.based_dt_sc_manifest_id</code>. A
+     * Setter for <code>oagi.dt_sc_manifest.based_dt_sc_manifest_id</code>. A
      * self-reference to the DT_SC_MANIFEST record that this record is based on
      * (its base/supertype from which it was derived).
      */
@@ -100,7 +100,7 @@ public class DtScManifestRecord extends UpdatableRecordImpl<DtScManifestRecord> 
     }
 
     /**
-     * Getter for <code>dt_sc_manifest.based_dt_sc_manifest_id</code>. A
+     * Getter for <code>oagi.dt_sc_manifest.based_dt_sc_manifest_id</code>. A
      * self-reference to the DT_SC_MANIFEST record that this record is based on
      * (its base/supertype from which it was derived).
      */
@@ -109,7 +109,7 @@ public class DtScManifestRecord extends UpdatableRecordImpl<DtScManifestRecord> 
     }
 
     /**
-     * Setter for <code>dt_sc_manifest.conflict</code>. This indicates that
+     * Setter for <code>oagi.dt_sc_manifest.conflict</code>. This indicates that
      * there is a conflict between self and relationship.
      */
     public void setConflict(Byte value) {
@@ -117,7 +117,7 @@ public class DtScManifestRecord extends UpdatableRecordImpl<DtScManifestRecord> 
     }
 
     /**
-     * Getter for <code>dt_sc_manifest.conflict</code>. This indicates that
+     * Getter for <code>oagi.dt_sc_manifest.conflict</code>. This indicates that
      * there is a conflict between self and relationship.
      */
     public Byte getConflict() {
@@ -125,23 +125,25 @@ public class DtScManifestRecord extends UpdatableRecordImpl<DtScManifestRecord> 
     }
 
     /**
-     * Setter for <code>dt_sc_manifest.replacement_dt_sc_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * Setter for
+     * <code>oagi.dt_sc_manifest.replacement_dt_sc_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public void setReplacementDtScManifestId(ULong value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>dt_sc_manifest.replacement_dt_sc_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * Getter for
+     * <code>oagi.dt_sc_manifest.replacement_dt_sc_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public ULong getReplacementDtScManifestId() {
         return (ULong) get(6);
     }
 
     /**
-     * Setter for <code>dt_sc_manifest.prev_dt_sc_manifest_id</code>. A
+     * Setter for <code>oagi.dt_sc_manifest.prev_dt_sc_manifest_id</code>. A
      * self-reference to the corresponding DT_SC_MANIFEST record in the previous
      * release (revision chain). NULL for the first revision.
      */
@@ -150,7 +152,7 @@ public class DtScManifestRecord extends UpdatableRecordImpl<DtScManifestRecord> 
     }
 
     /**
-     * Getter for <code>dt_sc_manifest.prev_dt_sc_manifest_id</code>. A
+     * Getter for <code>oagi.dt_sc_manifest.prev_dt_sc_manifest_id</code>. A
      * self-reference to the corresponding DT_SC_MANIFEST record in the previous
      * release (revision chain). NULL for the first revision.
      */
@@ -159,7 +161,7 @@ public class DtScManifestRecord extends UpdatableRecordImpl<DtScManifestRecord> 
     }
 
     /**
-     * Setter for <code>dt_sc_manifest.next_dt_sc_manifest_id</code>. A
+     * Setter for <code>oagi.dt_sc_manifest.next_dt_sc_manifest_id</code>. A
      * self-reference to the corresponding DT_SC_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */
@@ -168,7 +170,7 @@ public class DtScManifestRecord extends UpdatableRecordImpl<DtScManifestRecord> 
     }
 
     /**
-     * Getter for <code>dt_sc_manifest.next_dt_sc_manifest_id</code>. A
+     * Getter for <code>oagi.dt_sc_manifest.next_dt_sc_manifest_id</code>. A
      * self-reference to the corresponding DT_SC_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */

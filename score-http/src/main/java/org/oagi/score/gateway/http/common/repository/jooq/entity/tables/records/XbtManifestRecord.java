@@ -22,7 +22,7 @@ public class XbtManifestRecord extends UpdatableRecordImpl<XbtManifestRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>xbt_manifest.xbt_manifest_id</code>. An internal,
+     * Setter for <code>oagi.xbt_manifest.xbt_manifest_id</code>. An internal,
      * primary database key of a XBT_MANIFEST record.
      */
     public void setXbtManifestId(ULong value) {
@@ -30,7 +30,7 @@ public class XbtManifestRecord extends UpdatableRecordImpl<XbtManifestRecord> {
     }
 
     /**
-     * Getter for <code>xbt_manifest.xbt_manifest_id</code>. An internal,
+     * Getter for <code>oagi.xbt_manifest.xbt_manifest_id</code>. An internal,
      * primary database key of a XBT_MANIFEST record.
      */
     public ULong getXbtManifestId() {
@@ -38,7 +38,7 @@ public class XbtManifestRecord extends UpdatableRecordImpl<XbtManifestRecord> {
     }
 
     /**
-     * Setter for <code>xbt_manifest.release_id</code>. Foreign key to the
+     * Setter for <code>oagi.xbt_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public void setReleaseId(ULong value) {
@@ -46,7 +46,7 @@ public class XbtManifestRecord extends UpdatableRecordImpl<XbtManifestRecord> {
     }
 
     /**
-     * Getter for <code>xbt_manifest.release_id</code>. Foreign key to the
+     * Getter for <code>oagi.xbt_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public ULong getReleaseId() {
@@ -54,7 +54,7 @@ public class XbtManifestRecord extends UpdatableRecordImpl<XbtManifestRecord> {
     }
 
     /**
-     * Setter for <code>xbt_manifest.xbt_id</code>. Foreign key to the XBT
+     * Setter for <code>oagi.xbt_manifest.xbt_id</code>. Foreign key to the XBT
      * table.
      */
     public void setXbtId(ULong value) {
@@ -62,7 +62,7 @@ public class XbtManifestRecord extends UpdatableRecordImpl<XbtManifestRecord> {
     }
 
     /**
-     * Getter for <code>xbt_manifest.xbt_id</code>. Foreign key to the XBT
+     * Getter for <code>oagi.xbt_manifest.xbt_id</code>. Foreign key to the XBT
      * table.
      */
     public ULong getXbtId() {
@@ -70,71 +70,89 @@ public class XbtManifestRecord extends UpdatableRecordImpl<XbtManifestRecord> {
     }
 
     /**
-     * Setter for <code>xbt_manifest.conflict</code>. This indicates that there
-     * is a conflict between self and relationship.
+     * Setter for <code>oagi.xbt_manifest.cdt_pri_id</code>. Foreign key
+     * referencing the CDT_PRI table. Specifies how the current record maps to
+     * allowed primitives in CDT.
      */
-    public void setConflict(Byte value) {
+    public void setCdtPriId(ULong value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>xbt_manifest.conflict</code>. This indicates that there
-     * is a conflict between self and relationship.
+     * Getter for <code>oagi.xbt_manifest.cdt_pri_id</code>. Foreign key
+     * referencing the CDT_PRI table. Specifies how the current record maps to
+     * allowed primitives in CDT.
      */
-    public Byte getConflict() {
-        return (Byte) get(3);
+    public ULong getCdtPriId() {
+        return (ULong) get(3);
     }
 
     /**
-     * Setter for <code>xbt_manifest.log_id</code>. A foreign key pointed to a
-     * log for the current record.
+     * Setter for <code>oagi.xbt_manifest.conflict</code>. This indicates that
+     * there is a conflict between self and relationship.
      */
-    public void setLogId(ULong value) {
+    public void setConflict(Byte value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>xbt_manifest.log_id</code>. A foreign key pointed to a
-     * log for the current record.
+     * Getter for <code>oagi.xbt_manifest.conflict</code>. This indicates that
+     * there is a conflict between self and relationship.
      */
-    public ULong getLogId() {
-        return (ULong) get(4);
+    public Byte getConflict() {
+        return (Byte) get(4);
     }
 
     /**
-     * Setter for <code>xbt_manifest.prev_xbt_manifest_id</code>. A
-     * self-reference to the corresponding XBT_MANIFEST record in the previous
-     * release (revision chain). NULL for the first revision.
+     * Setter for <code>oagi.xbt_manifest.log_id</code>. A foreign key pointed
+     * to a log for the current record.
      */
-    public void setPrevXbtManifestId(ULong value) {
+    public void setLogId(ULong value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>xbt_manifest.prev_xbt_manifest_id</code>. A
-     * self-reference to the corresponding XBT_MANIFEST record in the previous
-     * release (revision chain). NULL for the first revision.
+     * Getter for <code>oagi.xbt_manifest.log_id</code>. A foreign key pointed
+     * to a log for the current record.
      */
-    public ULong getPrevXbtManifestId() {
+    public ULong getLogId() {
         return (ULong) get(5);
     }
 
     /**
-     * Setter for <code>xbt_manifest.next_xbt_manifest_id</code>. A
-     * self-reference to the corresponding XBT_MANIFEST record in the next
-     * release (revision chain). NULL for the latest revision.
+     * Setter for <code>oagi.xbt_manifest.prev_xbt_manifest_id</code>. A
+     * self-reference to the corresponding XBT_MANIFEST record in the previous
+     * release (revision chain). NULL for the first revision.
      */
-    public void setNextXbtManifestId(ULong value) {
+    public void setPrevXbtManifestId(ULong value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>xbt_manifest.next_xbt_manifest_id</code>. A
+     * Getter for <code>oagi.xbt_manifest.prev_xbt_manifest_id</code>. A
+     * self-reference to the corresponding XBT_MANIFEST record in the previous
+     * release (revision chain). NULL for the first revision.
+     */
+    public ULong getPrevXbtManifestId() {
+        return (ULong) get(6);
+    }
+
+    /**
+     * Setter for <code>oagi.xbt_manifest.next_xbt_manifest_id</code>. A
+     * self-reference to the corresponding XBT_MANIFEST record in the next
+     * release (revision chain). NULL for the latest revision.
+     */
+    public void setNextXbtManifestId(ULong value) {
+        set(7, value);
+    }
+
+    /**
+     * Getter for <code>oagi.xbt_manifest.next_xbt_manifest_id</code>. A
      * self-reference to the corresponding XBT_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */
     public ULong getNextXbtManifestId() {
-        return (ULong) get(6);
+        return (ULong) get(7);
     }
 
     // -------------------------------------------------------------------------
@@ -160,12 +178,13 @@ public class XbtManifestRecord extends UpdatableRecordImpl<XbtManifestRecord> {
     /**
      * Create a detached, initialised XbtManifestRecord
      */
-    public XbtManifestRecord(ULong xbtManifestId, ULong releaseId, ULong xbtId, Byte conflict, ULong logId, ULong prevXbtManifestId, ULong nextXbtManifestId) {
+    public XbtManifestRecord(ULong xbtManifestId, ULong releaseId, ULong xbtId, ULong cdtPriId, Byte conflict, ULong logId, ULong prevXbtManifestId, ULong nextXbtManifestId) {
         super(XbtManifest.XBT_MANIFEST);
 
         setXbtManifestId(xbtManifestId);
         setReleaseId(releaseId);
         setXbtId(xbtId);
+        setCdtPriId(cdtPriId);
         setConflict(conflict);
         setLogId(logId);
         setPrevXbtManifestId(prevXbtManifestId);

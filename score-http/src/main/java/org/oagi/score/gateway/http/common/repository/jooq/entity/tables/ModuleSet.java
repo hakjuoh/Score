@@ -21,19 +21,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Library.LibraryPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Module.ModulePath;
@@ -53,7 +52,7 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>module_set</code>
+     * The reference instance of <code>oagi.module_set</code>
      */
     public static final ModuleSet MODULE_SET = new ModuleSet();
 
@@ -66,55 +65,55 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
     }
 
     /**
-     * The column <code>module_set.module_set_id</code>. Primary key.
+     * The column <code>oagi.module_set.module_set_id</code>. Primary key.
      */
-    public final TableField<ModuleSetRecord, ULong> MODULE_SET_ID = createField(DSL.name("module_set_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "Primary key.");
+    public final TableField<ModuleSetRecord, ULong> MODULE_SET_ID = createField(DSL.name("module_set_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Primary key.");
 
     /**
-     * The column <code>module_set.library_id</code>. A foreign key pointed to a
-     * library of the current record.
+     * The column <code>oagi.module_set.library_id</code>. A foreign key pointed
+     * to a library of the current record.
      */
     public final TableField<ModuleSetRecord, ULong> LIBRARY_ID = createField(DSL.name("library_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key pointed to a library of the current record.");
 
     /**
-     * The column <code>module_set.guid</code>. A globally unique identifier
-     * (GUID).
+     * The column <code>oagi.module_set.guid</code>. A globally unique
+     * identifier (GUID).
      */
     public final TableField<ModuleSetRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.CHAR(32).nullable(false), this, "A globally unique identifier (GUID).");
 
     /**
-     * The column <code>module_set.name</code>. This is the name of the module
-     * set.
+     * The column <code>oagi.module_set.name</code>. This is the name of the
+     * module set.
      */
     public final TableField<ModuleSetRecord, String> NAME = createField(DSL.name("name"), SQLDataType.VARCHAR(100).nullable(false), this, "This is the name of the module set.");
 
     /**
-     * The column <code>module_set.description</code>. Description or
+     * The column <code>oagi.module_set.description</code>. Description or
      * explanation about the module set or use of the module set.
      */
     public final TableField<ModuleSetRecord, String> DESCRIPTION = createField(DSL.name("description"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Description or explanation about the module set or use of the module set.");
 
     /**
-     * The column <code>module_set.created_by</code>. Foreign key to the
+     * The column <code>oagi.module_set.created_by</code>. Foreign key to the
      * APP_USER table. It indicates the user who created this MODULE_SET.
      */
     public final TableField<ModuleSetRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. It indicates the user who created this MODULE_SET.");
 
     /**
-     * The column <code>module_set.last_updated_by</code>. Foreign key to the
-     * APP_USER table referring to the last user who updated the record.
+     * The column <code>oagi.module_set.last_updated_by</code>. Foreign key to
+     * the APP_USER table referring to the last user who updated the record.
      */
     public final TableField<ModuleSetRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table referring to the last user who updated the record.");
 
     /**
-     * The column <code>module_set.creation_timestamp</code>. The timestamp when
-     * the record was first created.
+     * The column <code>oagi.module_set.creation_timestamp</code>. The timestamp
+     * when the record was first created.
      */
     public final TableField<ModuleSetRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record was first created.");
 
     /**
-     * The column <code>module_set.last_update_timestamp</code>. The timestamp
-     * when the record was last updated.
+     * The column <code>oagi.module_set.last_update_timestamp</code>. The
+     * timestamp when the record was last updated.
      */
     public final TableField<ModuleSetRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record was last updated.");
 
@@ -127,21 +126,21 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
     }
 
     /**
-     * Create an aliased <code>module_set</code> table reference
+     * Create an aliased <code>oagi.module_set</code> table reference
      */
     public ModuleSet(String alias) {
         this(DSL.name(alias), MODULE_SET);
     }
 
     /**
-     * Create an aliased <code>module_set</code> table reference
+     * Create an aliased <code>oagi.module_set</code> table reference
      */
     public ModuleSet(Name alias) {
         this(alias, MODULE_SET);
     }
 
     /**
-     * Create a <code>module_set</code> table reference
+     * Create a <code>oagi.module_set</code> table reference
      */
     public ModuleSet() {
         this(DSL.name("module_set"), null);
@@ -182,7 +181,7 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -203,8 +202,8 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
     private transient AppUserPath _moduleSetCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>module_set_created_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>module_set_created_by_fk</code> key.
      */
     public AppUserPath moduleSetCreatedByFk() {
         if (_moduleSetCreatedByFk == null)
@@ -216,8 +215,8 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
     private transient AppUserPath _moduleSetLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>module_set_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>module_set_last_updated_by_fk</code> key.
      */
     public AppUserPath moduleSetLastUpdatedByFk() {
         if (_moduleSetLastUpdatedByFk == null)
@@ -229,7 +228,7 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
     private transient LibraryPath _library;
 
     /**
-     * Get the implicit join path to the <code>library</code> table.
+     * Get the implicit join path to the <code>oagi.library</code> table.
      */
     public LibraryPath library() {
         if (_library == null)
@@ -241,7 +240,7 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
     private transient ModulePath _module;
 
     /**
-     * Get the implicit to-many join path to the <code>module</code> table
+     * Get the implicit to-many join path to the <code>oagi.module</code> table
      */
     public ModulePath module() {
         if (_module == null)
@@ -253,8 +252,8 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
     private transient ModuleSetReleasePath _moduleSetRelease;
 
     /**
-     * Get the implicit to-many join path to the <code>module_set_release</code>
-     * table
+     * Get the implicit to-many join path to the
+     * <code>oagi.module_set_release</code> table
      */
     public ModuleSetReleasePath moduleSetRelease() {
         if (_moduleSetRelease == null)
@@ -307,7 +306,7 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
      */
     @Override
     public ModuleSet where(Condition condition) {
-        return new ModuleSet(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new ModuleSet(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -374,7 +373,7 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public ModuleSet whereExists(TableLike<?> select) {
+    public ModuleSet whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -382,7 +381,7 @@ public class ModuleSet extends TableImpl<ModuleSetRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public ModuleSet whereNotExists(TableLike<?> select) {
+    public ModuleSet whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

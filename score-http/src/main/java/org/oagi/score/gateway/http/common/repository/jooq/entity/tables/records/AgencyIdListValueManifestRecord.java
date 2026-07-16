@@ -24,7 +24,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Setter for
-     * <code>agency_id_list_value_manifest.agency_id_list_value_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.agency_id_list_value_manifest_id</code>.
      * An internal, primary database key of a AGENCY_ID_LIST_VALUE_MANIFEST
      * record.
      */
@@ -34,7 +34,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Getter for
-     * <code>agency_id_list_value_manifest.agency_id_list_value_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.agency_id_list_value_manifest_id</code>.
      * An internal, primary database key of a AGENCY_ID_LIST_VALUE_MANIFEST
      * record.
      */
@@ -43,16 +43,16 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
     }
 
     /**
-     * Setter for <code>agency_id_list_value_manifest.release_id</code>. Foreign
-     * key to the RELEASE table.
+     * Setter for <code>oagi.agency_id_list_value_manifest.release_id</code>.
+     * Foreign key to the RELEASE table.
      */
     public void setReleaseId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>agency_id_list_value_manifest.release_id</code>. Foreign
-     * key to the RELEASE table.
+     * Getter for <code>oagi.agency_id_list_value_manifest.release_id</code>.
+     * Foreign key to the RELEASE table.
      */
     public ULong getReleaseId() {
         return (ULong) get(1);
@@ -60,7 +60,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Setter for
-     * <code>agency_id_list_value_manifest.agency_id_list_value_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.agency_id_list_value_id</code>.
      * Foreign key to the AGENCY_ID_LIST_VALUE table.
      */
     public void setAgencyIdListValueId(ULong value) {
@@ -69,7 +69,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Getter for
-     * <code>agency_id_list_value_manifest.agency_id_list_value_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.agency_id_list_value_id</code>.
      * Foreign key to the AGENCY_ID_LIST_VALUE table.
      */
     public ULong getAgencyIdListValueId() {
@@ -78,7 +78,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Setter for
-     * <code>agency_id_list_value_manifest.agency_id_list_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.agency_id_list_manifest_id</code>.
      * Foreign key to the AGENCY_ID_LIST_MANIFEST table.
      */
     public void setAgencyIdListManifestId(ULong value) {
@@ -87,7 +87,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Getter for
-     * <code>agency_id_list_value_manifest.agency_id_list_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.agency_id_list_manifest_id</code>.
      * Foreign key to the AGENCY_ID_LIST_MANIFEST table.
      */
     public ULong getAgencyIdListManifestId() {
@@ -96,7 +96,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Setter for
-     * <code>agency_id_list_value_manifest.based_agency_id_list_value_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.based_agency_id_list_value_manifest_id</code>.
      * A self-reference to the AGENCY_ID_LIST_VALUE_MANIFEST record that this
      * record is based on (its base/supertype from which it was derived).
      */
@@ -106,7 +106,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Getter for
-     * <code>agency_id_list_value_manifest.based_agency_id_list_value_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.based_agency_id_list_value_manifest_id</code>.
      * A self-reference to the AGENCY_ID_LIST_VALUE_MANIFEST record that this
      * record is based on (its base/supertype from which it was derived).
      */
@@ -115,7 +115,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
     }
 
     /**
-     * Setter for <code>agency_id_list_value_manifest.conflict</code>. This
+     * Setter for <code>oagi.agency_id_list_value_manifest.conflict</code>. This
      * indicates that there is a conflict between self and relationship.
      */
     public void setConflict(Byte value) {
@@ -123,7 +123,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
     }
 
     /**
-     * Getter for <code>agency_id_list_value_manifest.conflict</code>. This
+     * Getter for <code>oagi.agency_id_list_value_manifest.conflict</code>. This
      * indicates that there is a conflict between self and relationship.
      */
     public Byte getConflict() {
@@ -132,7 +132,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Setter for
-     * <code>agency_id_list_value_manifest.replacement_agency_id_list_value_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.replacement_agency_id_list_value_manifest_id</code>.
      * This refers to a replacement manifest if the record is deprecated.
      */
     public void setReplacementAgencyIdListValueManifestId(ULong value) {
@@ -141,7 +141,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Getter for
-     * <code>agency_id_list_value_manifest.replacement_agency_id_list_value_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.replacement_agency_id_list_value_manifest_id</code>.
      * This refers to a replacement manifest if the record is deprecated.
      */
     public ULong getReplacementAgencyIdListValueManifestId() {
@@ -150,7 +150,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Setter for
-     * <code>agency_id_list_value_manifest.prev_agency_id_list_value_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.prev_agency_id_list_value_manifest_id</code>.
      * A self-reference to the corresponding AGENCY_ID_LIST_VALUE_MANIFEST
      * record in the previous release (revision chain). NULL for the first
      * revision.
@@ -161,7 +161,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Getter for
-     * <code>agency_id_list_value_manifest.prev_agency_id_list_value_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.prev_agency_id_list_value_manifest_id</code>.
      * A self-reference to the corresponding AGENCY_ID_LIST_VALUE_MANIFEST
      * record in the previous release (revision chain). NULL for the first
      * revision.
@@ -172,7 +172,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Setter for
-     * <code>agency_id_list_value_manifest.next_agency_id_list_value_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.next_agency_id_list_value_manifest_id</code>.
      * A self-reference to the corresponding AGENCY_ID_LIST_VALUE_MANIFEST
      * record in the next release (revision chain). NULL for the latest
      * revision.
@@ -183,7 +183,7 @@ public class AgencyIdListValueManifestRecord extends UpdatableRecordImpl<AgencyI
 
     /**
      * Getter for
-     * <code>agency_id_list_value_manifest.next_agency_id_list_value_manifest_id</code>.
+     * <code>oagi.agency_id_list_value_manifest.next_agency_id_list_value_manifest_id</code>.
      * A self-reference to the corresponding AGENCY_ID_LIST_VALUE_MANIFEST
      * record in the next release (revision chain). NULL for the latest
      * revision.

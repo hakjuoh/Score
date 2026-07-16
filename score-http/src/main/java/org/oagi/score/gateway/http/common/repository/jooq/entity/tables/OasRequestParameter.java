@@ -20,19 +20,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasParameter.OasParameterPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasRequest.OasRequestPath;
@@ -49,7 +48,7 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oas_request_parameter</code>
+     * The reference instance of <code>oagi.oas_request_parameter</code>
      */
     public static final OasRequestParameter OAS_REQUEST_PARAMETER = new OasRequestParameter();
 
@@ -62,38 +61,38 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
     }
 
     /**
-     * The column <code>oas_request_parameter.oas_parameter_id</code>. The
+     * The column <code>oagi.oas_request_parameter.oas_parameter_id</code>. The
      * primary key of the record.
      */
     public final TableField<OasRequestParameterRecord, ULong> OAS_PARAMETER_ID = createField(DSL.name("oas_parameter_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_request_parameter.oas_request_id</code>. The primary
-     * key of the record.
+     * The column <code>oagi.oas_request_parameter.oas_request_id</code>. The
+     * primary key of the record.
      */
     public final TableField<OasRequestParameterRecord, ULong> OAS_REQUEST_ID = createField(DSL.name("oas_request_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_request_parameter.created_by</code>. The user who
-     * creates the record.
+     * The column <code>oagi.oas_request_parameter.created_by</code>. The user
+     * who creates the record.
      */
     public final TableField<OasRequestParameterRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who creates the record.");
 
     /**
-     * The column <code>oas_request_parameter.last_updated_by</code>. The user
-     * who last updates the record.
+     * The column <code>oagi.oas_request_parameter.last_updated_by</code>. The
+     * user who last updates the record.
      */
     public final TableField<OasRequestParameterRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who last updates the record.");
 
     /**
-     * The column <code>oas_request_parameter.creation_timestamp</code>. The
-     * timestamp when the record is created.
+     * The column <code>oagi.oas_request_parameter.creation_timestamp</code>.
+     * The timestamp when the record is created.
      */
     public final TableField<OasRequestParameterRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is created.");
 
     /**
-     * The column <code>oas_request_parameter.last_update_timestamp</code>. The
-     * timestamp when the record is last updated.
+     * The column <code>oagi.oas_request_parameter.last_update_timestamp</code>.
+     * The timestamp when the record is last updated.
      */
     public final TableField<OasRequestParameterRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is last updated.");
 
@@ -106,21 +105,21 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
     }
 
     /**
-     * Create an aliased <code>oas_request_parameter</code> table reference
+     * Create an aliased <code>oagi.oas_request_parameter</code> table reference
      */
     public OasRequestParameter(String alias) {
         this(DSL.name(alias), OAS_REQUEST_PARAMETER);
     }
 
     /**
-     * Create an aliased <code>oas_request_parameter</code> table reference
+     * Create an aliased <code>oagi.oas_request_parameter</code> table reference
      */
     public OasRequestParameter(Name alias) {
         this(alias, OAS_REQUEST_PARAMETER);
     }
 
     /**
-     * Create a <code>oas_request_parameter</code> table reference
+     * Create a <code>oagi.oas_request_parameter</code> table reference
      */
     public OasRequestParameter() {
         this(DSL.name("oas_request_parameter"), null);
@@ -161,7 +160,7 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -177,8 +176,8 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
     private transient AppUserPath _oasRequestParameterCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_request_parameter_created_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_request_parameter_created_by_fk</code> key.
      */
     public AppUserPath oasRequestParameterCreatedByFk() {
         if (_oasRequestParameterCreatedByFk == null)
@@ -190,8 +189,8 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
     private transient AppUserPath _oasRequestParameterLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_request_parameter_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_request_parameter_last_updated_by_fk</code> key.
      */
     public AppUserPath oasRequestParameterLastUpdatedByFk() {
         if (_oasRequestParameterLastUpdatedByFk == null)
@@ -203,7 +202,7 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
     private transient OasParameterPath _oasParameter;
 
     /**
-     * Get the implicit join path to the <code>oas_parameter</code> table.
+     * Get the implicit join path to the <code>oagi.oas_parameter</code> table.
      */
     public OasParameterPath oasParameter() {
         if (_oasParameter == null)
@@ -215,7 +214,7 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
     private transient OasRequestPath _oasRequest;
 
     /**
-     * Get the implicit join path to the <code>oas_request</code> table.
+     * Get the implicit join path to the <code>oagi.oas_request</code> table.
      */
     public OasRequestPath oasRequest() {
         if (_oasRequest == null)
@@ -268,7 +267,7 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
      */
     @Override
     public OasRequestParameter where(Condition condition) {
-        return new OasRequestParameter(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new OasRequestParameter(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -335,7 +334,7 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasRequestParameter whereExists(TableLike<?> select) {
+    public OasRequestParameter whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -343,7 +342,7 @@ public class OasRequestParameter extends TableImpl<OasRequestParameterRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasRequestParameter whereNotExists(TableLike<?> select) {
+    public OasRequestParameter whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

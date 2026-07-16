@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.configuration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -9,8 +10,10 @@ import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.time.Duration;
 import java.util.List;
 
 @Configuration
@@ -18,9 +21,12 @@ import java.util.List;
 public class WebConfiguration implements WebMvcConfigurer {
 
     private final ObjectMapper objectMapper;
+    private final Duration asyncRequestTimeout;
 
-    public WebConfiguration(ObjectMapper objectMapper) {
+    public WebConfiguration(ObjectMapper objectMapper,
+                            @Value("${spring.mvc.async.request-timeout:10m}") Duration asyncRequestTimeout) {
         this.objectMapper = objectMapper;
+        this.asyncRequestTimeout = asyncRequestTimeout;
     }
 
     // @Primary so any unqualified RestTemplate injection resolves here; the GitHub integration uses a
@@ -50,6 +56,11 @@ public class WebConfiguration implements WebMvcConfigurer {
             }
         }
         converters.add(new MappingJackson2HttpMessageConverter(objectMapper));
+    }
+
+    @Override
+    public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
+        configurer.setDefaultTimeout(asyncRequestTimeout.toMillis());
     }
 
 }

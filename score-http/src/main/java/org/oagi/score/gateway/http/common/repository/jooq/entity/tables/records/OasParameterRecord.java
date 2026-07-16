@@ -24,38 +24,38 @@ public class OasParameterRecord extends UpdatableRecordImpl<OasParameterRecord> 
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oas_parameter.oas_parameter_id</code>. The primary key
-     * of the record.
+     * Setter for <code>oagi.oas_parameter.oas_parameter_id</code>. The primary
+     * key of the record.
      */
     public void setOasParameterId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oas_parameter.oas_parameter_id</code>. The primary key
-     * of the record.
+     * Getter for <code>oagi.oas_parameter.oas_parameter_id</code>. The primary
+     * key of the record.
      */
     public ULong getOasParameterId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oas_parameter.guid</code>. The GUID of the record.
+     * Setter for <code>oagi.oas_parameter.guid</code>. The GUID of the record.
      */
     public void setGuid(String value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oas_parameter.guid</code>. The GUID of the record.
+     * Getter for <code>oagi.oas_parameter.guid</code>. The GUID of the record.
      */
     public String getGuid() {
         return (String) get(1);
     }
 
     /**
-     * Setter for <code>oas_parameter.name</code>. REQUIRED. The name of the
-     * parameter. Parameter names are case sensitive.
+     * Setter for <code>oagi.oas_parameter.name</code>. REQUIRED. The name of
+     * the parameter. Parameter names are case sensitive.
      * If in is "path", the name field MUST correspond to a template expression
      * occurring within the path field in the Paths Object. See Path Templating
      * for further information.
@@ -69,8 +69,8 @@ public class OasParameterRecord extends UpdatableRecordImpl<OasParameterRecord> 
     }
 
     /**
-     * Getter for <code>oas_parameter.name</code>. REQUIRED. The name of the
-     * parameter. Parameter names are case sensitive.
+     * Getter for <code>oagi.oas_parameter.name</code>. REQUIRED. The name of
+     * the parameter. Parameter names are case sensitive.
      * If in is "path", the name field MUST correspond to a template expression
      * occurring within the path field in the Paths Object. See Path Templating
      * for further information.
@@ -84,24 +84,24 @@ public class OasParameterRecord extends UpdatableRecordImpl<OasParameterRecord> 
     }
 
     /**
-     * Setter for <code>oas_parameter.in</code>. REQUIRED. The location of the
-     * parameter. Possible values are "query", "header", "path" or "cookie".
+     * Setter for <code>oagi.oas_parameter.in</code>. REQUIRED. The location of
+     * the parameter. Possible values are "query", "header", "path" or "cookie".
      */
     public void setIn(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oas_parameter.in</code>. REQUIRED. The location of the
-     * parameter. Possible values are "query", "header", "path" or "cookie".
+     * Getter for <code>oagi.oas_parameter.in</code>. REQUIRED. The location of
+     * the parameter. Possible values are "query", "header", "path" or "cookie".
      */
     public String getIn() {
         return (String) get(3);
     }
 
     /**
-     * Setter for <code>oas_parameter.required</code>. Determines whether this
-     * parameter is mandatory. If the parameter location is "path", this
+     * Setter for <code>oagi.oas_parameter.required</code>. Determines whether
+     * this parameter is mandatory. If the parameter location is "path", this
      * property is REQUIRED and its value MUST be true. Otherwise, the property
      * MAY be included and its default value is false.
      */
@@ -110,8 +110,8 @@ public class OasParameterRecord extends UpdatableRecordImpl<OasParameterRecord> 
     }
 
     /**
-     * Getter for <code>oas_parameter.required</code>. Determines whether this
-     * parameter is mandatory. If the parameter location is "path", this
+     * Getter for <code>oagi.oas_parameter.required</code>. Determines whether
+     * this parameter is mandatory. If the parameter location is "path", this
      * property is REQUIRED and its value MUST be true. Otherwise, the property
      * MAY be included and its default value is false.
      */
@@ -120,63 +120,63 @@ public class OasParameterRecord extends UpdatableRecordImpl<OasParameterRecord> 
     }
 
     /**
-     * Setter for <code>oas_parameter.description</code>. A brief description of
-     * the parameter. This could contain examples of use. CommonMark syntax MAY
-     * be used for rich text representation.
+     * Setter for <code>oagi.oas_parameter.description</code>. A brief
+     * description of the parameter. This could contain examples of use.
+     * CommonMark syntax MAY be used for rich text representation.
      */
     public void setDescription(String value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oas_parameter.description</code>. A brief description of
-     * the parameter. This could contain examples of use. CommonMark syntax MAY
-     * be used for rich text representation.
+     * Getter for <code>oagi.oas_parameter.description</code>. A brief
+     * description of the parameter. This could contain examples of use.
+     * CommonMark syntax MAY be used for rich text representation.
      */
     public String getDescription() {
         return (String) get(5);
     }
 
     /**
-     * Setter for <code>oas_parameter.schema_type_reference</code>. A reference
-     * of the schema defining the type used for the parameter.
+     * Setter for <code>oagi.oas_parameter.schema_type_reference</code>. A
+     * reference of the schema defining the type used for the parameter.
      */
     public void setSchemaTypeReference(String value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oas_parameter.schema_type_reference</code>. A reference
-     * of the schema defining the type used for the parameter.
+     * Getter for <code>oagi.oas_parameter.schema_type_reference</code>. A
+     * reference of the schema defining the type used for the parameter.
      */
     public String getSchemaTypeReference() {
         return (String) get(6);
     }
 
     /**
-     * Setter for <code>oas_parameter.allow_reserved</code>. Determines whether
-     * the parameter value SHOULD allow reserved characters, as defined by
-     * RFC3986 :/?#[]@!$&amp;'()*+,;= to be included without percent-encoding.
-     * This property only applies to parameters with an in value of query. The
-     * default value is false.
+     * Setter for <code>oagi.oas_parameter.allow_reserved</code>. Determines
+     * whether the parameter value SHOULD allow reserved characters, as defined
+     * by RFC3986 :/?#[]@!$&amp;'()*+,;= to be included without
+     * percent-encoding. This property only applies to parameters with an in
+     * value of query. The default value is false.
      */
     public void setAllowReserved(Byte value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oas_parameter.allow_reserved</code>. Determines whether
-     * the parameter value SHOULD allow reserved characters, as defined by
-     * RFC3986 :/?#[]@!$&amp;'()*+,;= to be included without percent-encoding.
-     * This property only applies to parameters with an in value of query. The
-     * default value is false.
+     * Getter for <code>oagi.oas_parameter.allow_reserved</code>. Determines
+     * whether the parameter value SHOULD allow reserved characters, as defined
+     * by RFC3986 :/?#[]@!$&amp;'()*+,;= to be included without
+     * percent-encoding. This property only applies to parameters with an in
+     * value of query. The default value is false.
      */
     public Byte getAllowReserved() {
         return (Byte) get(7);
     }
 
     /**
-     * Setter for <code>oas_parameter.deprecated</code>. Specifies that a
+     * Setter for <code>oagi.oas_parameter.deprecated</code>. Specifies that a
      * parameter is deprecated and SHOULD be transitioned out of usage. Default
      * value is false.
      */
@@ -185,7 +185,7 @@ public class OasParameterRecord extends UpdatableRecordImpl<OasParameterRecord> 
     }
 
     /**
-     * Getter for <code>oas_parameter.deprecated</code>. Specifies that a
+     * Getter for <code>oagi.oas_parameter.deprecated</code>. Specifies that a
      * parameter is deprecated and SHOULD be transitioned out of usage. Default
      * value is false.
      */
@@ -194,71 +194,71 @@ public class OasParameterRecord extends UpdatableRecordImpl<OasParameterRecord> 
     }
 
     /**
-     * Setter for <code>oas_parameter.oas_http_header_id</code>. IF IN = Header,
-     * Then select form OAS_HTTP_HEADER table
+     * Setter for <code>oagi.oas_parameter.oas_http_header_id</code>. IF IN =
+     * Header, Then select form OAS_HTTP_HEADER table
      */
     public void setOasHttpHeaderId(ULong value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oas_parameter.oas_http_header_id</code>. IF IN = Header,
-     * Then select form OAS_HTTP_HEADER table
+     * Getter for <code>oagi.oas_parameter.oas_http_header_id</code>. IF IN =
+     * Header, Then select form OAS_HTTP_HEADER table
      */
     public ULong getOasHttpHeaderId() {
         return (ULong) get(9);
     }
 
     /**
-     * Setter for <code>oas_parameter.created_by</code>. The user who creates
-     * the record.
+     * Setter for <code>oagi.oas_parameter.created_by</code>. The user who
+     * creates the record.
      */
     public void setCreatedBy(ULong value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oas_parameter.created_by</code>. The user who creates
-     * the record.
+     * Getter for <code>oagi.oas_parameter.created_by</code>. The user who
+     * creates the record.
      */
     public ULong getCreatedBy() {
         return (ULong) get(10);
     }
 
     /**
-     * Setter for <code>oas_parameter.last_updated_by</code>. The user who last
-     * updates the record.
+     * Setter for <code>oagi.oas_parameter.last_updated_by</code>. The user who
+     * last updates the record.
      */
     public void setLastUpdatedBy(ULong value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oas_parameter.last_updated_by</code>. The user who last
-     * updates the record.
+     * Getter for <code>oagi.oas_parameter.last_updated_by</code>. The user who
+     * last updates the record.
      */
     public ULong getLastUpdatedBy() {
         return (ULong) get(11);
     }
 
     /**
-     * Setter for <code>oas_parameter.creation_timestamp</code>. The timestamp
-     * when the record is created.
+     * Setter for <code>oagi.oas_parameter.creation_timestamp</code>. The
+     * timestamp when the record is created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(12, value);
     }
 
     /**
-     * Getter for <code>oas_parameter.creation_timestamp</code>. The timestamp
-     * when the record is created.
+     * Getter for <code>oagi.oas_parameter.creation_timestamp</code>. The
+     * timestamp when the record is created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(12);
     }
 
     /**
-     * Setter for <code>oas_parameter.last_update_timestamp</code>. The
+     * Setter for <code>oagi.oas_parameter.last_update_timestamp</code>. The
      * timestamp when the record is last updated.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
@@ -266,7 +266,7 @@ public class OasParameterRecord extends UpdatableRecordImpl<OasParameterRecord> 
     }
 
     /**
-     * Getter for <code>oas_parameter.last_update_timestamp</code>. The
+     * Getter for <code>oagi.oas_parameter.last_update_timestamp</code>. The
      * timestamp when the record is last updated.
      */
     public LocalDateTime getLastUpdateTimestamp() {

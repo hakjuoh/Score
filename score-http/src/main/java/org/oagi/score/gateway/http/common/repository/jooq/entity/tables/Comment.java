@@ -22,21 +22,21 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Comment.CommentPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.CommentRecord;
 
 
@@ -55,7 +55,7 @@ public class Comment extends TableImpl<CommentRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>comment</code>
+     * The reference instance of <code>oagi.comment</code>
      */
     public static final Comment COMMENT = new Comment();
 
@@ -68,58 +68,59 @@ public class Comment extends TableImpl<CommentRecord> {
     }
 
     /**
-     * The column <code>comment.comment_id</code>. An internal, primary database
-     * key of a COMMENT record.
+     * The column <code>oagi.comment.comment_id</code>. An internal, primary
+     * database key of a COMMENT record.
      */
-    public final TableField<CommentRecord, ULong> COMMENT_ID = createField(DSL.name("comment_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "An internal, primary database key of a COMMENT record.");
+    public final TableField<CommentRecord, ULong> COMMENT_ID = createField(DSL.name("comment_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of a COMMENT record.");
 
     /**
-     * The column <code>comment.reference</code>. The reference to the component
-     * the comment is associated with, in the form of the component type and its
-     * manifest ID (e.g., 'CODE_LIST-123').
+     * The column <code>oagi.comment.reference</code>. The reference to the
+     * component the comment is associated with, in the form of the component
+     * type and its manifest ID (e.g., 'CODE_LIST-123').
      */
     public final TableField<CommentRecord, String> REFERENCE = createField(DSL.name("reference"), SQLDataType.VARCHAR(100).nullable(false).defaultValue(DSL.field(DSL.raw("''"), SQLDataType.VARCHAR)), this, "The reference to the component the comment is associated with, in the form of the component type and its manifest ID (e.g., 'CODE_LIST-123').");
 
     /**
-     * The column <code>comment.comment</code>. The text content of the comment.
+     * The column <code>oagi.comment.comment</code>. The text content of the
+     * comment.
      */
     public final TableField<CommentRecord, String> COMMENT_ = createField(DSL.name("comment"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The text content of the comment.");
 
     /**
-     * The column <code>comment.is_hidden</code>. A boolean flag indicating
+     * The column <code>oagi.comment.is_hidden</code>. A boolean flag indicating
      * whether the comment is hidden. It is set instead of deletion when the
      * comment has replies, so the reply chain is preserved.
      */
     public final TableField<CommentRecord, Byte> IS_HIDDEN = createField(DSL.name("is_hidden"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "A boolean flag indicating whether the comment is hidden. It is set instead of deletion when the comment has replies, so the reply chain is preserved.");
 
     /**
-     * The column <code>comment.is_deleted</code>. A boolean flag indicating
-     * whether the comment has been soft-deleted. Soft-deleted comments are
-     * excluded from queries.
+     * The column <code>oagi.comment.is_deleted</code>. A boolean flag
+     * indicating whether the comment has been soft-deleted. Soft-deleted
+     * comments are excluded from queries.
      */
     public final TableField<CommentRecord, Byte> IS_DELETED = createField(DSL.name("is_deleted"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "A boolean flag indicating whether the comment has been soft-deleted. Soft-deleted comments are excluded from queries.");
 
     /**
-     * The column <code>comment.prev_comment_id</code>. A self-reference to the
-     * previous COMMENT record in the chain.
+     * The column <code>oagi.comment.prev_comment_id</code>. A self-reference to
+     * the previous COMMENT record in the chain.
      */
     public final TableField<CommentRecord, ULong> PREV_COMMENT_ID = createField(DSL.name("prev_comment_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A self-reference to the previous COMMENT record in the chain.");
 
     /**
-     * The column <code>comment.created_by</code>. The user who creates the
+     * The column <code>oagi.comment.created_by</code>. The user who creates the
      * record.
      */
     public final TableField<CommentRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who creates the record.");
 
     /**
-     * The column <code>comment.creation_timestamp</code>. The timestamp when
-     * the record is created.
+     * The column <code>oagi.comment.creation_timestamp</code>. The timestamp
+     * when the record is created.
      */
     public final TableField<CommentRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is created.");
 
     /**
-     * The column <code>comment.last_update_timestamp</code>. The timestamp when
-     * the record is last updated.
+     * The column <code>oagi.comment.last_update_timestamp</code>. The timestamp
+     * when the record is last updated.
      */
     public final TableField<CommentRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is last updated.");
 
@@ -132,21 +133,21 @@ public class Comment extends TableImpl<CommentRecord> {
     }
 
     /**
-     * Create an aliased <code>comment</code> table reference
+     * Create an aliased <code>oagi.comment</code> table reference
      */
     public Comment(String alias) {
         this(DSL.name(alias), COMMENT);
     }
 
     /**
-     * Create an aliased <code>comment</code> table reference
+     * Create an aliased <code>oagi.comment</code> table reference
      */
     public Comment(Name alias) {
         this(alias, COMMENT);
     }
 
     /**
-     * Create a <code>comment</code> table reference
+     * Create a <code>oagi.comment</code> table reference
      */
     public Comment() {
         this(DSL.name("comment"), null);
@@ -187,7 +188,7 @@ public class Comment extends TableImpl<CommentRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -213,7 +214,7 @@ public class Comment extends TableImpl<CommentRecord> {
     private transient AppUserPath _appUser;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table.
+     * Get the implicit join path to the <code>oagi.app_user</code> table.
      */
     public AppUserPath appUser() {
         if (_appUser == null)
@@ -225,7 +226,7 @@ public class Comment extends TableImpl<CommentRecord> {
     private transient CommentPath _comment;
 
     /**
-     * Get the implicit join path to the <code>comment</code> table.
+     * Get the implicit join path to the <code>oagi.comment</code> table.
      */
     public CommentPath comment() {
         if (_comment == null)
@@ -278,7 +279,7 @@ public class Comment extends TableImpl<CommentRecord> {
      */
     @Override
     public Comment where(Condition condition) {
-        return new Comment(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new Comment(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -345,7 +346,7 @@ public class Comment extends TableImpl<CommentRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public Comment whereExists(TableLike<?> select) {
+    public Comment whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -353,7 +354,7 @@ public class Comment extends TableImpl<CommentRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public Comment whereNotExists(TableLike<?> select) {
+    public Comment whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

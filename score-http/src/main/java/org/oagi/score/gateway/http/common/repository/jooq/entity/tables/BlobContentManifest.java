@@ -20,20 +20,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.BlobContent.BlobContentPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.BlobContentManifest.BlobContentManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.ModuleBlobContentManifest.ModuleBlobContentManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Release.ReleasePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.BlobContentManifestRecord;
@@ -52,7 +52,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>blob_content_manifest</code>
+     * The reference instance of <code>oagi.blob_content_manifest</code>
      */
     public static final BlobContentManifest BLOB_CONTENT_MANIFEST = new BlobContentManifest();
 
@@ -65,32 +65,33 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
     }
 
     /**
-     * The column <code>blob_content_manifest.blob_content_manifest_id</code>.
-     * An internal, primary database key of a BLOB_CONTENT_MANIFEST record.
+     * The column
+     * <code>oagi.blob_content_manifest.blob_content_manifest_id</code>. An
+     * internal, primary database key of a BLOB_CONTENT_MANIFEST record.
      */
-    public final TableField<BlobContentManifestRecord, ULong> BLOB_CONTENT_MANIFEST_ID = createField(DSL.name("blob_content_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "An internal, primary database key of a BLOB_CONTENT_MANIFEST record.");
+    public final TableField<BlobContentManifestRecord, ULong> BLOB_CONTENT_MANIFEST_ID = createField(DSL.name("blob_content_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of a BLOB_CONTENT_MANIFEST record.");
 
     /**
-     * The column <code>blob_content_manifest.blob_content_id</code>. Foreign
-     * key to the BLOB_CONTENT table.
+     * The column <code>oagi.blob_content_manifest.blob_content_id</code>.
+     * Foreign key to the BLOB_CONTENT table.
      */
     public final TableField<BlobContentManifestRecord, ULong> BLOB_CONTENT_ID = createField(DSL.name("blob_content_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the BLOB_CONTENT table.");
 
     /**
-     * The column <code>blob_content_manifest.release_id</code>. Foreign key to
-     * the RELEASE table.
+     * The column <code>oagi.blob_content_manifest.release_id</code>. Foreign
+     * key to the RELEASE table.
      */
     public final TableField<BlobContentManifestRecord, ULong> RELEASE_ID = createField(DSL.name("release_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the RELEASE table.");
 
     /**
-     * The column <code>blob_content_manifest.conflict</code>. This indicates
-     * that there is a conflict between self and relationship.
+     * The column <code>oagi.blob_content_manifest.conflict</code>. This
+     * indicates that there is a conflict between self and relationship.
      */
     public final TableField<BlobContentManifestRecord, Byte> CONFLICT = createField(DSL.name("conflict"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "This indicates that there is a conflict between self and relationship.");
 
     /**
      * The column
-     * <code>blob_content_manifest.prev_blob_content_manifest_id</code>. A
+     * <code>oagi.blob_content_manifest.prev_blob_content_manifest_id</code>. A
      * self-reference to the corresponding BLOB_CONTENT_MANIFEST record in the
      * previous release (revision chain). NULL for the first revision.
      */
@@ -98,7 +99,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
 
     /**
      * The column
-     * <code>blob_content_manifest.next_blob_content_manifest_id</code>. A
+     * <code>oagi.blob_content_manifest.next_blob_content_manifest_id</code>. A
      * self-reference to the corresponding BLOB_CONTENT_MANIFEST record in the
      * next release (revision chain). NULL for the latest revision.
      */
@@ -113,21 +114,21 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
     }
 
     /**
-     * Create an aliased <code>blob_content_manifest</code> table reference
+     * Create an aliased <code>oagi.blob_content_manifest</code> table reference
      */
     public BlobContentManifest(String alias) {
         this(DSL.name(alias), BLOB_CONTENT_MANIFEST);
     }
 
     /**
-     * Create an aliased <code>blob_content_manifest</code> table reference
+     * Create an aliased <code>oagi.blob_content_manifest</code> table reference
      */
     public BlobContentManifest(Name alias) {
         this(alias, BLOB_CONTENT_MANIFEST);
     }
 
     /**
-     * Create a <code>blob_content_manifest</code> table reference
+     * Create a <code>oagi.blob_content_manifest</code> table reference
      */
     public BlobContentManifest() {
         this(DSL.name("blob_content_manifest"), null);
@@ -168,7 +169,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -189,7 +190,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
     private transient BlobContentPath _blobContent;
 
     /**
-     * Get the implicit join path to the <code>blob_content</code> table.
+     * Get the implicit join path to the <code>oagi.blob_content</code> table.
      */
     public BlobContentPath blobContent() {
         if (_blobContent == null)
@@ -201,7 +202,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
     private transient BlobContentManifestPath _blobContentManifestNextBlobContentManifestIdFk;
 
     /**
-     * Get the implicit join path to the <code>blob_content_manifest</code>
+     * Get the implicit join path to the <code>oagi.blob_content_manifest</code>
      * table, via the
      * <code>blob_content_manifest_next_blob_content_manifest_id_fk</code> key.
      */
@@ -215,7 +216,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
     private transient BlobContentManifestPath _blobContentManifestPrevBlobContentManifestIdFk;
 
     /**
-     * Get the implicit join path to the <code>blob_content_manifest</code>
+     * Get the implicit join path to the <code>oagi.blob_content_manifest</code>
      * table, via the
      * <code>blob_content_manifest_prev_blob_content_manifest_id_fk</code> key.
      */
@@ -229,7 +230,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
     private transient ReleasePath _release;
 
     /**
-     * Get the implicit join path to the <code>release</code> table.
+     * Get the implicit join path to the <code>oagi.release</code> table.
      */
     public ReleasePath release() {
         if (_release == null)
@@ -242,7 +243,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>module_blob_content_manifest</code> table
+     * <code>oagi.module_blob_content_manifest</code> table
      */
     public ModuleBlobContentManifestPath moduleBlobContentManifest() {
         if (_moduleBlobContentManifest == null)
@@ -295,7 +296,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
      */
     @Override
     public BlobContentManifest where(Condition condition) {
-        return new BlobContentManifest(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new BlobContentManifest(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -362,7 +363,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public BlobContentManifest whereExists(TableLike<?> select) {
+    public BlobContentManifest whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -370,7 +371,7 @@ public class BlobContentManifest extends TableImpl<BlobContentManifestRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public BlobContentManifest whereNotExists(TableLike<?> select) {
+    public BlobContentManifest whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

@@ -21,19 +21,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.BiePackage.BiePackagePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.TopLevelAsbiep.TopLevelAsbiepPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.BiePackageTopLevelAsbiepRecord;
@@ -52,7 +51,7 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>bie_package_top_level_asbiep</code>
+     * The reference instance of <code>oagi.bie_package_top_level_asbiep</code>
      */
     public static final BiePackageTopLevelAsbiep BIE_PACKAGE_TOP_LEVEL_ASBIEP = new BiePackageTopLevelAsbiep();
 
@@ -66,42 +65,44 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
 
     /**
      * The column
-     * <code>bie_package_top_level_asbiep.bie_package_top_level_asbiep_id</code>.
+     * <code>oagi.bie_package_top_level_asbiep.bie_package_top_level_asbiep_id</code>.
      * The primary key of the BIE package-Top-Level ASBIEP record.
      */
-    public final TableField<BiePackageTopLevelAsbiepRecord, ULong> BIE_PACKAGE_TOP_LEVEL_ASBIEP_ID = createField(DSL.name("bie_package_top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the BIE package-Top-Level ASBIEP record.");
+    public final TableField<BiePackageTopLevelAsbiepRecord, ULong> BIE_PACKAGE_TOP_LEVEL_ASBIEP_ID = createField(DSL.name("bie_package_top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the BIE package-Top-Level ASBIEP record.");
 
     /**
-     * The column <code>bie_package_top_level_asbiep.bie_package_id</code>. A
-     * foreign key referring to the BIE package.
+     * The column <code>oagi.bie_package_top_level_asbiep.bie_package_id</code>.
+     * A foreign key referring to the BIE package.
      */
     public final TableField<BiePackageTopLevelAsbiepRecord, ULong> BIE_PACKAGE_ID = createField(DSL.name("bie_package_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the BIE package.");
 
     /**
-     * The column <code>bie_package_top_level_asbiep.top_level_asbiep_id</code>.
-     * A foreign key referring to the TOP_LEVEL_ASBIEP_ID which has linked to
-     * the BIE package. The release ID of this record must be the same to the
-     * BIE package's release ID.
+     * The column
+     * <code>oagi.bie_package_top_level_asbiep.top_level_asbiep_id</code>. A
+     * foreign key referring to the TOP_LEVEL_ASBIEP_ID which has linked to the
+     * BIE package. The release ID of this record must be the same to the BIE
+     * package's release ID.
      */
     public final TableField<BiePackageTopLevelAsbiepRecord, ULong> TOP_LEVEL_ASBIEP_ID = createField(DSL.name("top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the TOP_LEVEL_ASBIEP_ID which has linked to the BIE package. The release ID of this record must be the same to the BIE package's release ID.");
 
     /**
      * The column
-     * <code>bie_package_top_level_asbiep.prev_top_level_asbiep_id</code>. A
-     * foreign key referring to the previous version of the Top-Level ASBIEP
+     * <code>oagi.bie_package_top_level_asbiep.prev_top_level_asbiep_id</code>.
+     * A foreign key referring to the previous version of the Top-Level ASBIEP
      * record, if any. Used to track version history within the BIE package.
      */
     public final TableField<BiePackageTopLevelAsbiepRecord, ULong> PREV_TOP_LEVEL_ASBIEP_ID = createField(DSL.name("prev_top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A foreign key referring to the previous version of the Top-Level ASBIEP record, if any. Used to track version history within the BIE package.");
 
     /**
-     * The column <code>bie_package_top_level_asbiep.created_by</code>. A
+     * The column <code>oagi.bie_package_top_level_asbiep.created_by</code>. A
      * foreign key referring to the user who adds the record into the BIE
      * package.
      */
     public final TableField<BiePackageTopLevelAsbiepRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the user who adds the record into the BIE package.");
 
     /**
-     * The column <code>bie_package_top_level_asbiep.creation_timestamp</code>.
+     * The column
+     * <code>oagi.bie_package_top_level_asbiep.creation_timestamp</code>.
      * Timestamp when this record was first created.
      */
     public final TableField<BiePackageTopLevelAsbiepRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Timestamp when this record was first created.");
@@ -115,7 +116,7 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
     }
 
     /**
-     * Create an aliased <code>bie_package_top_level_asbiep</code> table
+     * Create an aliased <code>oagi.bie_package_top_level_asbiep</code> table
      * reference
      */
     public BiePackageTopLevelAsbiep(String alias) {
@@ -123,7 +124,7 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
     }
 
     /**
-     * Create an aliased <code>bie_package_top_level_asbiep</code> table
+     * Create an aliased <code>oagi.bie_package_top_level_asbiep</code> table
      * reference
      */
     public BiePackageTopLevelAsbiep(Name alias) {
@@ -131,7 +132,7 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
     }
 
     /**
-     * Create a <code>bie_package_top_level_asbiep</code> table reference
+     * Create a <code>oagi.bie_package_top_level_asbiep</code> table reference
      */
     public BiePackageTopLevelAsbiep() {
         this(DSL.name("bie_package_top_level_asbiep"), null);
@@ -172,7 +173,7 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -198,7 +199,7 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
     private transient BiePackagePath _biePackage;
 
     /**
-     * Get the implicit join path to the <code>bie_package</code> table.
+     * Get the implicit join path to the <code>oagi.bie_package</code> table.
      */
     public BiePackagePath biePackage() {
         if (_biePackage == null)
@@ -210,8 +211,8 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
     private transient TopLevelAsbiepPath _biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk;
 
     /**
-     * Get the implicit join path to the <code>top_level_asbiep</code> table,
-     * via the
+     * Get the implicit join path to the <code>oagi.top_level_asbiep</code>
+     * table, via the
      * <code>bie_package_top_level_asbiep_prev_top_level_asbiep_id_fk</code>
      * key.
      */
@@ -225,9 +226,9 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
     private transient TopLevelAsbiepPath _biePackageTopLevelAsbiepTopLevelAsbiepIdFk;
 
     /**
-     * Get the implicit join path to the <code>top_level_asbiep</code> table,
-     * via the <code>bie_package_top_level_asbiep_top_level_asbiep_id_fk</code>
-     * key.
+     * Get the implicit join path to the <code>oagi.top_level_asbiep</code>
+     * table, via the
+     * <code>bie_package_top_level_asbiep_top_level_asbiep_id_fk</code> key.
      */
     public TopLevelAsbiepPath biePackageTopLevelAsbiepTopLevelAsbiepIdFk() {
         if (_biePackageTopLevelAsbiepTopLevelAsbiepIdFk == null)
@@ -280,7 +281,7 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
      */
     @Override
     public BiePackageTopLevelAsbiep where(Condition condition) {
-        return new BiePackageTopLevelAsbiep(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new BiePackageTopLevelAsbiep(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -347,7 +348,7 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
      * Create an inline derived table from this table
      */
     @Override
-    public BiePackageTopLevelAsbiep whereExists(TableLike<?> select) {
+    public BiePackageTopLevelAsbiep whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -355,7 +356,7 @@ public class BiePackageTopLevelAsbiep extends TableImpl<BiePackageTopLevelAsbiep
      * Create an inline derived table from this table
      */
     @Override
-    public BiePackageTopLevelAsbiep whereNotExists(TableLike<?> select) {
+    public BiePackageTopLevelAsbiep whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

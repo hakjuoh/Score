@@ -21,19 +21,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.OasMediaTypeRecord;
 
@@ -49,7 +48,7 @@ public class OasMediaType extends TableImpl<OasMediaTypeRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oas_media_type</code>
+     * The reference instance of <code>oagi.oas_media_type</code>
      */
     public static final OasMediaType OAS_MEDIA_TYPE = new OasMediaType();
 
@@ -62,48 +61,48 @@ public class OasMediaType extends TableImpl<OasMediaTypeRecord> {
     }
 
     /**
-     * The column <code>oas_media_type.oas_media_type_id</code>. The primary key
-     * of the record.
+     * The column <code>oagi.oas_media_type.oas_media_type_id</code>. The
+     * primary key of the record.
      */
-    public final TableField<OasMediaTypeRecord, ULong> OAS_MEDIA_TYPE_ID = createField(DSL.name("oas_media_type_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the record.");
+    public final TableField<OasMediaTypeRecord, ULong> OAS_MEDIA_TYPE_ID = createField(DSL.name("oas_media_type_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_media_type.guid</code>. The GUID of the record.
+     * The column <code>oagi.oas_media_type.guid</code>. The GUID of the record.
      */
     public final TableField<OasMediaTypeRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.VARCHAR(41).nullable(false), this, "The GUID of the record.");
 
     /**
-     * The column <code>oas_media_type.description</code>. On POST, PUT, and
-     * PATCH, $ref is present
+     * The column <code>oagi.oas_media_type.description</code>. On POST, PUT,
+     * and PATCH, $ref is present
      */
     public final TableField<OasMediaTypeRecord, String> DESCRIPTION = createField(DSL.name("description"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "On POST, PUT, and PATCH, $ref is present");
 
     /**
-     * The column <code>oas_media_type.owner_user_id</code>. The user who owns
-     * the record.
+     * The column <code>oagi.oas_media_type.owner_user_id</code>. The user who
+     * owns the record.
      */
     public final TableField<OasMediaTypeRecord, ULong> OWNER_USER_ID = createField(DSL.name("owner_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who owns the record.");
 
     /**
-     * The column <code>oas_media_type.created_by</code>. The user who creates
-     * the record.
+     * The column <code>oagi.oas_media_type.created_by</code>. The user who
+     * creates the record.
      */
     public final TableField<OasMediaTypeRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who creates the record.");
 
     /**
-     * The column <code>oas_media_type.last_updated_by</code>. The user who last
-     * updates the record.
+     * The column <code>oagi.oas_media_type.last_updated_by</code>. The user who
+     * last updates the record.
      */
     public final TableField<OasMediaTypeRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who last updates the record.");
 
     /**
-     * The column <code>oas_media_type.creation_timestamp</code>. The timestamp
-     * when the record is created.
+     * The column <code>oagi.oas_media_type.creation_timestamp</code>. The
+     * timestamp when the record is created.
      */
     public final TableField<OasMediaTypeRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is created.");
 
     /**
-     * The column <code>oas_media_type.last_update_timestamp</code>. The
+     * The column <code>oagi.oas_media_type.last_update_timestamp</code>. The
      * timestamp when the record is last updated.
      */
     public final TableField<OasMediaTypeRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is last updated.");
@@ -117,21 +116,21 @@ public class OasMediaType extends TableImpl<OasMediaTypeRecord> {
     }
 
     /**
-     * Create an aliased <code>oas_media_type</code> table reference
+     * Create an aliased <code>oagi.oas_media_type</code> table reference
      */
     public OasMediaType(String alias) {
         this(DSL.name(alias), OAS_MEDIA_TYPE);
     }
 
     /**
-     * Create an aliased <code>oas_media_type</code> table reference
+     * Create an aliased <code>oagi.oas_media_type</code> table reference
      */
     public OasMediaType(Name alias) {
         this(alias, OAS_MEDIA_TYPE);
     }
 
     /**
-     * Create a <code>oas_media_type</code> table reference
+     * Create a <code>oagi.oas_media_type</code> table reference
      */
     public OasMediaType() {
         this(DSL.name("oas_media_type"), null);
@@ -172,7 +171,7 @@ public class OasMediaType extends TableImpl<OasMediaTypeRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -193,8 +192,8 @@ public class OasMediaType extends TableImpl<OasMediaTypeRecord> {
     private transient AppUserPath _oasMediaTypeCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_media_type_created_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_media_type_created_by_fk</code> key.
      */
     public AppUserPath oasMediaTypeCreatedByFk() {
         if (_oasMediaTypeCreatedByFk == null)
@@ -206,8 +205,8 @@ public class OasMediaType extends TableImpl<OasMediaTypeRecord> {
     private transient AppUserPath _oasMediaTypeLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_media_type_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_media_type_last_updated_by_fk</code> key.
      */
     public AppUserPath oasMediaTypeLastUpdatedByFk() {
         if (_oasMediaTypeLastUpdatedByFk == null)
@@ -219,8 +218,8 @@ public class OasMediaType extends TableImpl<OasMediaTypeRecord> {
     private transient AppUserPath _oasMediaTypeOwnerUserIdFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_media_type_owner_user_id_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_media_type_owner_user_id_fk</code> key.
      */
     public AppUserPath oasMediaTypeOwnerUserIdFk() {
         if (_oasMediaTypeOwnerUserIdFk == null)
@@ -273,7 +272,7 @@ public class OasMediaType extends TableImpl<OasMediaTypeRecord> {
      */
     @Override
     public OasMediaType where(Condition condition) {
-        return new OasMediaType(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new OasMediaType(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -340,7 +339,7 @@ public class OasMediaType extends TableImpl<OasMediaTypeRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasMediaType whereExists(TableLike<?> select) {
+    public OasMediaType whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -348,7 +347,7 @@ public class OasMediaType extends TableImpl<OasMediaTypeRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasMediaType whereNotExists(TableLike<?> select) {
+    public OasMediaType whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

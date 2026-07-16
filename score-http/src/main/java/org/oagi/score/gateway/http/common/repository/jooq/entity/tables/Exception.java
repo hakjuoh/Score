@@ -22,20 +22,19 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.ExceptionRecord;
 
@@ -52,7 +51,7 @@ public class Exception extends TableImpl<ExceptionRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>exception</code>
+     * The reference instance of <code>oagi.exception</code>
      */
     public static final Exception EXCEPTION = new Exception();
 
@@ -65,37 +64,38 @@ public class Exception extends TableImpl<ExceptionRecord> {
     }
 
     /**
-     * The column <code>exception.exception_id</code>. Internal, primary
+     * The column <code>oagi.exception.exception_id</code>. Internal, primary
      * database key.
      */
-    public final TableField<ExceptionRecord, ULong> EXCEPTION_ID = createField(DSL.name("exception_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "Internal, primary database key.");
+    public final TableField<ExceptionRecord, ULong> EXCEPTION_ID = createField(DSL.name("exception_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Internal, primary database key.");
 
     /**
-     * The column <code>exception.tag</code>. A tag of the exception for the
-     * purpose of the searching facilitation
+     * The column <code>oagi.exception.tag</code>. A tag of the exception for
+     * the purpose of the searching facilitation
      */
     public final TableField<ExceptionRecord, String> TAG = createField(DSL.name("tag"), SQLDataType.VARCHAR(50).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "A tag of the exception for the purpose of the searching facilitation");
 
     /**
-     * The column <code>exception.message</code>. The exception message.
+     * The column <code>oagi.exception.message</code>. The exception message.
      */
     public final TableField<ExceptionRecord, String> MESSAGE = createField(DSL.name("message"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The exception message.");
 
     /**
-     * The column <code>exception.stacktrace</code>. The serialized stacktrace
-     * object.
+     * The column <code>oagi.exception.stacktrace</code>. The serialized
+     * stacktrace object.
      */
     public final TableField<ExceptionRecord, byte[]> STACKTRACE = createField(DSL.name("stacktrace"), SQLDataType.BLOB(16777215).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BLOB)), this, "The serialized stacktrace object.");
 
     /**
-     * The column <code>exception.created_by</code>. Foreign key to the APP_USER
-     * table. It indicates the user who is working on when the exception occurs.
+     * The column <code>oagi.exception.created_by</code>. Foreign key to the
+     * APP_USER table. It indicates the user who is working on when the
+     * exception occurs.
      */
     public final TableField<ExceptionRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the APP_USER table. It indicates the user who is working on when the exception occurs.");
 
     /**
-     * The column <code>exception.creation_timestamp</code>. Timestamp when the
-     * exception was created.
+     * The column <code>oagi.exception.creation_timestamp</code>. Timestamp when
+     * the exception was created.
      */
     public final TableField<ExceptionRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Timestamp when the exception was created.");
 
@@ -108,21 +108,21 @@ public class Exception extends TableImpl<ExceptionRecord> {
     }
 
     /**
-     * Create an aliased <code>exception</code> table reference
+     * Create an aliased <code>oagi.exception</code> table reference
      */
     public Exception(String alias) {
         this(DSL.name(alias), EXCEPTION);
     }
 
     /**
-     * Create an aliased <code>exception</code> table reference
+     * Create an aliased <code>oagi.exception</code> table reference
      */
     public Exception(Name alias) {
         this(alias, EXCEPTION);
     }
 
     /**
-     * Create a <code>exception</code> table reference
+     * Create a <code>oagi.exception</code> table reference
      */
     public Exception() {
         this(DSL.name("exception"), null);
@@ -163,7 +163,7 @@ public class Exception extends TableImpl<ExceptionRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -189,7 +189,7 @@ public class Exception extends TableImpl<ExceptionRecord> {
     private transient AppUserPath _appUser;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table.
+     * Get the implicit join path to the <code>oagi.app_user</code> table.
      */
     public AppUserPath appUser() {
         if (_appUser == null)
@@ -242,7 +242,7 @@ public class Exception extends TableImpl<ExceptionRecord> {
      */
     @Override
     public Exception where(Condition condition) {
-        return new Exception(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new Exception(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -309,7 +309,7 @@ public class Exception extends TableImpl<ExceptionRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public Exception whereExists(TableLike<?> select) {
+    public Exception whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -317,7 +317,7 @@ public class Exception extends TableImpl<ExceptionRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public Exception whereNotExists(TableLike<?> select) {
+    public Exception whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

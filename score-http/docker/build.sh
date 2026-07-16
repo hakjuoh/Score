@@ -106,8 +106,8 @@ cp "$jdbc_jar_path" "$script_dir/mariadb-java-client-$mariadb_client_version.jar
 
 echo "Building docker image $image_name..."
 (
-  cd "$script_dir"
-  docker build --no-cache --platform "$docker_platform" --build-arg "MARIADB_CLIENT_VERSION=$mariadb_client_version" -f Dockerfile -t "$image_name" .
+  cd "$project_dir"
+  docker build --no-cache --platform "$docker_platform" --build-arg "MARIADB_CLIENT_VERSION=$mariadb_client_version" -f docker/Dockerfile -t "$image_name" .
 )
 
 if command -v trivy >/dev/null 2>&1; then

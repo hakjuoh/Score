@@ -72,7 +72,7 @@ export class BusinessTermService {
       params = params.set('primaryIndicator', request.filters.primaryIndicator);
     }
     if (request.updaterUsernameList.length > 0) {
-      params = params.set('updaterUsernameList', request.updaterUsernameList.join(','));
+      params = params.set('updaterLoginIdList', request.updaterUsernameList.join(','));
     }
     if (request.updatedDate.start) {
       params = params.set('updateStart', '' + request.updatedDate.start.getTime());

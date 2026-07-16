@@ -23,39 +23,39 @@ public class AsccpManifestTagRecord extends UpdatableRecordImpl<AsccpManifestTag
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>asccp_manifest_tag.asccp_manifest_id</code>. Foreign key
-     * to the ASCCP_MANIFEST table.
+     * Setter for <code>oagi.asccp_manifest_tag.asccp_manifest_id</code>.
+     * Foreign key to the ASCCP_MANIFEST table.
      */
     public void setAsccpManifestId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>asccp_manifest_tag.asccp_manifest_id</code>. Foreign key
-     * to the ASCCP_MANIFEST table.
+     * Getter for <code>oagi.asccp_manifest_tag.asccp_manifest_id</code>.
+     * Foreign key to the ASCCP_MANIFEST table.
      */
     public ULong getAsccpManifestId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>asccp_manifest_tag.tag_id</code>. Foreign key to the TAG
-     * table.
+     * Setter for <code>oagi.asccp_manifest_tag.tag_id</code>. Foreign key to
+     * the TAG table.
      */
     public void setTagId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>asccp_manifest_tag.tag_id</code>. Foreign key to the TAG
-     * table.
+     * Getter for <code>oagi.asccp_manifest_tag.tag_id</code>. Foreign key to
+     * the TAG table.
      */
     public ULong getTagId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>asccp_manifest_tag.created_by</code>. A foreign key
+     * Setter for <code>oagi.asccp_manifest_tag.created_by</code>. A foreign key
      * referring to the user who creates the record.
      */
     public void setCreatedBy(ULong value) {
@@ -63,7 +63,7 @@ public class AsccpManifestTagRecord extends UpdatableRecordImpl<AsccpManifestTag
     }
 
     /**
-     * Getter for <code>asccp_manifest_tag.created_by</code>. A foreign key
+     * Getter for <code>oagi.asccp_manifest_tag.created_by</code>. A foreign key
      * referring to the user who creates the record.
      */
     public ULong getCreatedBy() {
@@ -71,16 +71,16 @@ public class AsccpManifestTagRecord extends UpdatableRecordImpl<AsccpManifestTag
     }
 
     /**
-     * Setter for <code>asccp_manifest_tag.creation_timestamp</code>. Timestamp
-     * when the record was first created.
+     * Setter for <code>oagi.asccp_manifest_tag.creation_timestamp</code>.
+     * Timestamp when the record was first created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>asccp_manifest_tag.creation_timestamp</code>. Timestamp
-     * when the record was first created.
+     * Getter for <code>oagi.asccp_manifest_tag.creation_timestamp</code>.
+     * Timestamp when the record was first created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(3);

@@ -1,0 +1,52 @@
+<header class="chat-header">
+  <div class="chat-title">
+    @if (assistantBrand) {
+      <span class="assistant-brand" [innerHTML]="assistantBrand"></span>
+    }
+    <span class="assistant-title-label">Assistant</span>
+  </div>
+  <div class="chat-actions">
+    <button class="chat-icon-button"
+            type="button"
+            matTooltip="Panel options"
+            aria-label="Panel options"
+            #dockMenuTrigger="matMenuTrigger"
+            [matMenuTriggerFor]="dockMenu">
+      <mat-icon>more_vert</mat-icon>
+    </button>
+    <mat-menu #dockMenu="matMenu" class="ai-chat-menu">
+      <div class="dock-side-row" (click)="$event.stopPropagation()">
+        <span>Dock side</span>
+        <div class="dock-side-actions">
+          <button type="button" class="dock-side-button" aria-label="Dock left"
+                  [class.active]="dock === 'left'"
+                  (click)="selectDock('left'); dockMenuTrigger.closeMenu()">
+            <mat-icon>align_horizontal_left</mat-icon>
+          </button>
+          <button type="button" class="dock-side-button" aria-label="Dock top"
+                  [class.active]="dock === 'top'"
+                  (click)="selectDock('top'); dockMenuTrigger.closeMenu()">
+            <mat-icon>vertical_align_top</mat-icon>
+          </button>
+          <button type="button" class="dock-side-button" aria-label="Dock bottom"
+                  [class.active]="dock === 'bottom'"
+                  (click)="selectDock('bottom'); dockMenuTrigger.closeMenu()">
+            <mat-icon>vertical_align_bottom</mat-icon>
+          </button>
+          <button type="button" class="dock-side-button" aria-label="Dock right"
+                  [class.active]="dock === 'right'"
+                  (click)="selectDock('right'); dockMenuTrigger.closeMenu()">
+            <mat-icon>align_horizontal_right</mat-icon>
+          </button>
+        </div>
+      </div>
+    </mat-menu>
+    <button class="chat-icon-button"
+            type="button"
+            matTooltip="Close"
+            aria-label="Close AI assistant"
+            (click)="closeRequested.emit($event)">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+</header>

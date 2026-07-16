@@ -21,19 +21,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasDoc.OasDocPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasOperation.OasOperationPath;
@@ -52,7 +51,7 @@ public class OasResource extends TableImpl<OasResourceRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oas_resource</code>
+     * The reference instance of <code>oagi.oas_resource</code>
      */
     public static final OasResource OAS_RESOURCE = new OasResource();
 
@@ -65,49 +64,49 @@ public class OasResource extends TableImpl<OasResourceRecord> {
     }
 
     /**
-     * The column <code>oas_resource.oas_resource_id</code>. The primary key of
-     * the record.
+     * The column <code>oagi.oas_resource.oas_resource_id</code>. The primary
+     * key of the record.
      */
-    public final TableField<OasResourceRecord, ULong> OAS_RESOURCE_ID = createField(DSL.name("oas_resource_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the record.");
+    public final TableField<OasResourceRecord, ULong> OAS_RESOURCE_ID = createField(DSL.name("oas_resource_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the record.");
 
     /**
-     * The column <code>oas_resource.oas_doc_id</code>. A reference of the doc
-     * record.
+     * The column <code>oagi.oas_resource.oas_doc_id</code>. A reference of the
+     * doc record.
      */
     public final TableField<OasResourceRecord, ULong> OAS_DOC_ID = createField(DSL.name("oas_doc_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A reference of the doc record.");
 
     /**
-     * The column <code>oas_resource.path</code>. This will hold the BIE name by
-     * default.
+     * The column <code>oagi.oas_resource.path</code>. This will hold the BIE
+     * name by default.
      */
     public final TableField<OasResourceRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB(65535).nullable(false), this, "This will hold the BIE name by default.");
 
     /**
-     * The column <code>oas_resource.ref</code>.
+     * The column <code>oagi.oas_resource.ref</code>.
      */
     public final TableField<OasResourceRecord, String> REF = createField(DSL.name("ref"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "");
 
     /**
-     * The column <code>oas_resource.created_by</code>. The user who creates the
-     * record.
+     * The column <code>oagi.oas_resource.created_by</code>. The user who
+     * creates the record.
      */
     public final TableField<OasResourceRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who creates the record.");
 
     /**
-     * The column <code>oas_resource.last_updated_by</code>. The user who last
-     * updates the record.
+     * The column <code>oagi.oas_resource.last_updated_by</code>. The user who
+     * last updates the record.
      */
     public final TableField<OasResourceRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who last updates the record.");
 
     /**
-     * The column <code>oas_resource.creation_timestamp</code>. The timestamp
-     * when the record is created.
+     * The column <code>oagi.oas_resource.creation_timestamp</code>. The
+     * timestamp when the record is created.
      */
     public final TableField<OasResourceRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is created.");
 
     /**
-     * The column <code>oas_resource.last_update_timestamp</code>. The timestamp
-     * when the record is last updated.
+     * The column <code>oagi.oas_resource.last_update_timestamp</code>. The
+     * timestamp when the record is last updated.
      */
     public final TableField<OasResourceRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is last updated.");
 
@@ -120,21 +119,21 @@ public class OasResource extends TableImpl<OasResourceRecord> {
     }
 
     /**
-     * Create an aliased <code>oas_resource</code> table reference
+     * Create an aliased <code>oagi.oas_resource</code> table reference
      */
     public OasResource(String alias) {
         this(DSL.name(alias), OAS_RESOURCE);
     }
 
     /**
-     * Create an aliased <code>oas_resource</code> table reference
+     * Create an aliased <code>oagi.oas_resource</code> table reference
      */
     public OasResource(Name alias) {
         this(alias, OAS_RESOURCE);
     }
 
     /**
-     * Create a <code>oas_resource</code> table reference
+     * Create a <code>oagi.oas_resource</code> table reference
      */
     public OasResource() {
         this(DSL.name("oas_resource"), null);
@@ -175,7 +174,7 @@ public class OasResource extends TableImpl<OasResourceRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -196,8 +195,8 @@ public class OasResource extends TableImpl<OasResourceRecord> {
     private transient AppUserPath _oasResourceCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_resource_created_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_resource_created_by_fk</code> key.
      */
     public AppUserPath oasResourceCreatedByFk() {
         if (_oasResourceCreatedByFk == null)
@@ -209,8 +208,8 @@ public class OasResource extends TableImpl<OasResourceRecord> {
     private transient AppUserPath _oasResourceLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>oas_resource_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>oas_resource_last_updated_by_fk</code> key.
      */
     public AppUserPath oasResourceLastUpdatedByFk() {
         if (_oasResourceLastUpdatedByFk == null)
@@ -222,7 +221,7 @@ public class OasResource extends TableImpl<OasResourceRecord> {
     private transient OasDocPath _oasDoc;
 
     /**
-     * Get the implicit join path to the <code>oas_doc</code> table.
+     * Get the implicit join path to the <code>oagi.oas_doc</code> table.
      */
     public OasDocPath oasDoc() {
         if (_oasDoc == null)
@@ -234,7 +233,7 @@ public class OasResource extends TableImpl<OasResourceRecord> {
     private transient OasOperationPath _oasOperation;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_operation</code>
+     * Get the implicit to-many join path to the <code>oagi.oas_operation</code>
      * table
      */
     public OasOperationPath oasOperation() {
@@ -288,7 +287,7 @@ public class OasResource extends TableImpl<OasResourceRecord> {
      */
     @Override
     public OasResource where(Condition condition) {
-        return new OasResource(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new OasResource(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -355,7 +354,7 @@ public class OasResource extends TableImpl<OasResourceRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasResource whereExists(TableLike<?> select) {
+    public OasResource whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -363,7 +362,7 @@ public class OasResource extends TableImpl<OasResourceRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasResource whereNotExists(TableLike<?> select) {
+    public OasResource whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

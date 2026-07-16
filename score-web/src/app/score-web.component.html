@@ -11,3 +11,7 @@
 @if (isAuthenticated()) {
   <score-footer></score-footer>
 }
+
+@if (isAuthenticated() && aiAssistantAvailable()) {
+  <score-ai-chat-panel></score-ai-chat-panel>
+}

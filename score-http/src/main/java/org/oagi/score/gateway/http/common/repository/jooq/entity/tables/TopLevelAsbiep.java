@@ -21,19 +21,18 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
+import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
-import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Abie.AbiePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbie.AsbiePath;
@@ -51,6 +50,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasOpera
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasRequest.OasRequestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasResponse.OasResponsePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Release.ReleasePath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.TopLevelAsbiep.TopLevelAsbiepPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.TopLevelAsbiepRecord;
 
 
@@ -65,7 +65,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>top_level_asbiep</code>
+     * The reference instance of <code>oagi.top_level_asbiep</code>
      */
     public static final TopLevelAsbiep TOP_LEVEL_ASBIEP = new TopLevelAsbiep();
 
@@ -78,63 +78,63 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     }
 
     /**
-     * The column <code>top_level_asbiep.top_level_asbiep_id</code>. An
+     * The column <code>oagi.top_level_asbiep.top_level_asbiep_id</code>. An
      * internal, primary database key of a TOP_LEVEL_ASBIEP record.
      */
-    public final TableField<TopLevelAsbiepRecord, ULong> TOP_LEVEL_ASBIEP_ID = createField(DSL.name("top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "An internal, primary database key of a TOP_LEVEL_ASBIEP record.");
+    public final TableField<TopLevelAsbiepRecord, ULong> TOP_LEVEL_ASBIEP_ID = createField(DSL.name("top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of a TOP_LEVEL_ASBIEP record.");
 
     /**
-     * The column <code>top_level_asbiep.based_top_level_asbiep_id</code>.
+     * The column <code>oagi.top_level_asbiep.based_top_level_asbiep_id</code>.
      * Foreign key referencing the inherited base TOP_LEVEL_ASBIEP_ID.
      */
     public final TableField<TopLevelAsbiepRecord, ULong> BASED_TOP_LEVEL_ASBIEP_ID = createField(DSL.name("based_top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key referencing the inherited base TOP_LEVEL_ASBIEP_ID.");
 
     /**
-     * The column <code>top_level_asbiep.asbiep_id</code>. Foreign key to the
-     * ASBIEP table pointing to a record which is a top-level ASBIEP.
+     * The column <code>oagi.top_level_asbiep.asbiep_id</code>. Foreign key to
+     * the ASBIEP table pointing to a record which is a top-level ASBIEP.
      */
     public final TableField<TopLevelAsbiepRecord, ULong> ASBIEP_ID = createField(DSL.name("asbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the ASBIEP table pointing to a record which is a top-level ASBIEP.");
 
     /**
-     * The column <code>top_level_asbiep.owner_user_id</code>. Foreign key to
-     * the APP_USER table. This is the user who owns the entity, is allowed to
-     * edit the entity, and who can transfer the ownership to another user.
-     * 
+     * The column <code>oagi.top_level_asbiep.owner_user_id</code>. Foreign key
+     * to the APP_USER table. This is the user who owns the entity, is allowed
+     * to edit the entity, and who can transfer the ownership to another user.
+     *
      * The ownership can change throughout the history, but undoing shouldn't
      * rollback the ownership.
      */
     public final TableField<TopLevelAsbiepRecord, ULong> OWNER_USER_ID = createField(DSL.name("owner_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table. This is the user who owns the entity, is allowed to edit the entity, and who can transfer the ownership to another user.\n\nThe ownership can change throughout the history, but undoing shouldn't rollback the ownership.");
 
     /**
-     * The column <code>top_level_asbiep.last_update_timestamp</code>. The
+     * The column <code>oagi.top_level_asbiep.last_update_timestamp</code>. The
      * timestamp when any of the related BIE records was last updated.
      */
     public final TableField<TopLevelAsbiepRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("current_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "The timestamp when any of the related BIE records was last updated.");
 
     /**
-     * The column <code>top_level_asbiep.last_updated_by</code>. A foreign key
-     * referring to the last user who has updated any related bie records.
+     * The column <code>oagi.top_level_asbiep.last_updated_by</code>. A foreign
+     * key referring to the last user who has updated any related bie records.
      */
     public final TableField<TopLevelAsbiepRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "A foreign key referring to the last user who has updated any related bie records.");
 
     /**
-     * The column <code>top_level_asbiep.release_id</code>. Foreign key to the
-     * RELEASE table. It identifies the release, for which this top-level ASBIEP
-     * is associated.
+     * The column <code>oagi.top_level_asbiep.release_id</code>. Foreign key to
+     * the RELEASE table. It identifies the release, for which this top-level
+     * ASBIEP is associated.
      */
     public final TableField<TopLevelAsbiepRecord, ULong> RELEASE_ID = createField(DSL.name("release_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the RELEASE table. It identifies the release, for which this top-level ASBIEP is associated.");
 
     /**
-     * The column <code>top_level_asbiep.version</code>. This column holds a
-     * version number assigned by the user. This column is only used by the
+     * The column <code>oagi.top_level_asbiep.version</code>. This column holds
+     * a version number assigned by the user. This column is only used by the
      * top-level ASBIEP. No format of version is enforced.
      */
     public final TableField<TopLevelAsbiepRecord, String> VERSION = createField(DSL.name("version"), SQLDataType.VARCHAR(45).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "This column holds a version number assigned by the user. This column is only used by the top-level ASBIEP. No format of version is enforced.");
 
     /**
-     * The column <code>top_level_asbiep.status</code>. This is different from
-     * the STATE column which is CRUD life cycle of an entity. The use case for
-     * this is to allow the user to indicate the usage status of a top-level
+     * The column <code>oagi.top_level_asbiep.status</code>. This is different
+     * from the STATE column which is CRUD life cycle of an entity. The use case
+     * for this is to allow the user to indicate the usage status of a top-level
      * ASBIEP (a profile BOD). An integration architect can use this column.
      * Example values are 'Prototype', 'Test', and 'Production'. Only the
      * top-level ASBIEP can use this field.
@@ -142,54 +142,54 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     public final TableField<TopLevelAsbiepRecord, String> STATUS = createField(DSL.name("status"), SQLDataType.VARCHAR(45).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "This is different from the STATE column which is CRUD life cycle of an entity. The use case for this is to allow the user to indicate the usage status of a top-level ASBIEP (a profile BOD). An integration architect can use this column. Example values are 'Prototype', 'Test', and 'Production'. Only the top-level ASBIEP can use this field.");
 
     /**
-     * The column <code>top_level_asbiep.state</code>. The life cycle state of
-     * the top-level ASBIEP. Possible values are Initiating, WIP, QA, and
+     * The column <code>oagi.top_level_asbiep.state</code>. The life cycle state
+     * of the top-level ASBIEP. Possible values are Initiating, WIP, QA, and
      * Production.
      */
     public final TableField<TopLevelAsbiepRecord, String> STATE = createField(DSL.name("state"), SQLDataType.VARCHAR(20).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "The life cycle state of the top-level ASBIEP. Possible values are Initiating, WIP, QA, and Production.");
 
     /**
-     * The column <code>top_level_asbiep.inverse_mode</code>. If this is true,
-     * all BIEs not edited by users under this TOP_LEVEL_ASBIEP will be treated
-     * as used BIEs.
+     * The column <code>oagi.top_level_asbiep.inverse_mode</code>. If this is
+     * true, all BIEs not edited by users under this TOP_LEVEL_ASBIEP will be
+     * treated as used BIEs.
      */
     public final TableField<TopLevelAsbiepRecord, Byte> INVERSE_MODE = createField(DSL.name("inverse_mode"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "If this is true, all BIEs not edited by users under this TOP_LEVEL_ASBIEP will be treated as used BIEs.");
 
     /**
-     * The column <code>top_level_asbiep.is_deprecated</code>. Indicates whether
-     * the TOP_LEVEL_ASBIEP is deprecated.
+     * The column <code>oagi.top_level_asbiep.is_deprecated</code>. Indicates
+     * whether the TOP_LEVEL_ASBIEP is deprecated.
      */
     public final TableField<TopLevelAsbiepRecord, Byte> IS_DEPRECATED = createField(DSL.name("is_deprecated"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicates whether the TOP_LEVEL_ASBIEP is deprecated.");
 
     /**
-     * The column <code>top_level_asbiep.deprecated_reason</code>. The reason
-     * for the deprecation of the TOP_LEVEL_ASBIEP.
+     * The column <code>oagi.top_level_asbiep.deprecated_reason</code>. The
+     * reason for the deprecation of the TOP_LEVEL_ASBIEP.
      */
     public final TableField<TopLevelAsbiepRecord, String> DEPRECATED_REASON = createField(DSL.name("deprecated_reason"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The reason for the deprecation of the TOP_LEVEL_ASBIEP.");
 
     /**
-     * The column <code>top_level_asbiep.deprecated_remark</code>. The remark
-     * for the deprecation of the TOP_LEVEL_ASBIEP.
+     * The column <code>oagi.top_level_asbiep.deprecated_remark</code>. The
+     * remark for the deprecation of the TOP_LEVEL_ASBIEP.
      */
     public final TableField<TopLevelAsbiepRecord, String> DEPRECATED_REMARK = createField(DSL.name("deprecated_remark"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "The remark for the deprecation of the TOP_LEVEL_ASBIEP.");
 
     /**
-     * The column <code>top_level_asbiep.source_top_level_asbiep_id</code>. A
-     * foreign key referring to the source TOP_LEVEL_ASBIEP_ID which has linked
-     * to this record.
+     * The column <code>oagi.top_level_asbiep.source_top_level_asbiep_id</code>.
+     * A foreign key referring to the source TOP_LEVEL_ASBIEP_ID which has
+     * linked to this record.
      */
     public final TableField<TopLevelAsbiepRecord, ULong> SOURCE_TOP_LEVEL_ASBIEP_ID = createField(DSL.name("source_top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A foreign key referring to the source TOP_LEVEL_ASBIEP_ID which has linked to this record.");
 
     /**
-     * The column <code>top_level_asbiep.source_action</code>. An action that
-     * had used to create a reference from the source (e.g., 'Copy' or
+     * The column <code>oagi.top_level_asbiep.source_action</code>. An action
+     * that had used to create a reference from the source (e.g., 'Copy' or
      * 'Uplift'.)
      */
     public final TableField<TopLevelAsbiepRecord, String> SOURCE_ACTION = createField(DSL.name("source_action"), SQLDataType.VARCHAR(20).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "An action that had used to create a reference from the source (e.g., 'Copy' or 'Uplift'.)");
 
     /**
-     * The column <code>top_level_asbiep.source_timestamp</code>. A timestamp
-     * when a source reference had been made.
+     * The column <code>oagi.top_level_asbiep.source_timestamp</code>. A
+     * timestamp when a source reference had been made.
      */
     public final TableField<TopLevelAsbiepRecord, LocalDateTime> SOURCE_TIMESTAMP = createField(DSL.name("source_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "A timestamp when a source reference had been made.");
 
@@ -202,21 +202,21 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     }
 
     /**
-     * Create an aliased <code>top_level_asbiep</code> table reference
+     * Create an aliased <code>oagi.top_level_asbiep</code> table reference
      */
     public TopLevelAsbiep(String alias) {
         this(DSL.name(alias), TOP_LEVEL_ASBIEP);
     }
 
     /**
-     * Create an aliased <code>top_level_asbiep</code> table reference
+     * Create an aliased <code>oagi.top_level_asbiep</code> table reference
      */
     public TopLevelAsbiep(Name alias) {
         this(alias, TOP_LEVEL_ASBIEP);
     }
 
     /**
-     * Create a <code>top_level_asbiep</code> table reference
+     * Create a <code>oagi.top_level_asbiep</code> table reference
      */
     public TopLevelAsbiep() {
         this(DSL.name("top_level_asbiep"), null);
@@ -257,7 +257,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
+        return aliased() ? null : Oagi.OAGI;
     }
 
     @Override
@@ -278,7 +278,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient AsbiepPath _asbiep;
 
     /**
-     * Get the implicit join path to the <code>asbiep</code> table.
+     * Get the implicit join path to the <code>oagi.asbiep</code> table.
      */
     public AsbiepPath asbiep() {
         if (_asbiep == null)
@@ -290,8 +290,8 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient AppUserPath _topLevelAsbiepLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>top_level_asbiep_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>top_level_asbiep_last_updated_by_fk</code> key.
      */
     public AppUserPath topLevelAsbiepLastUpdatedByFk() {
         if (_topLevelAsbiepLastUpdatedByFk == null)
@@ -303,8 +303,8 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient AppUserPath _topLevelAsbiepOwnerUserIdFk;
 
     /**
-     * Get the implicit join path to the <code>app_user</code> table, via the
-     * <code>top_level_asbiep_owner_user_id_fk</code> key.
+     * Get the implicit join path to the <code>oagi.app_user</code> table, via
+     * the <code>top_level_asbiep_owner_user_id_fk</code> key.
      */
     public AppUserPath topLevelAsbiepOwnerUserIdFk() {
         if (_topLevelAsbiepOwnerUserIdFk == null)
@@ -316,7 +316,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient ReleasePath _release;
 
     /**
-     * Get the implicit join path to the <code>release</code> table.
+     * Get the implicit join path to the <code>oagi.release</code> table.
      */
     public ReleasePath release() {
         if (_release == null)
@@ -328,7 +328,8 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient TopLevelAsbiepPath _topLevelAsbiep;
 
     /**
-     * Get the implicit join path to the <code>top_level_asbiep</code> table.
+     * Get the implicit join path to the <code>oagi.top_level_asbiep</code>
+     * table.
      */
     public TopLevelAsbiepPath topLevelAsbiep() {
         if (_topLevelAsbiep == null)
@@ -340,7 +341,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient AbiePath _abie;
 
     /**
-     * Get the implicit to-many join path to the <code>abie</code> table
+     * Get the implicit to-many join path to the <code>oagi.abie</code> table
      */
     public AbiePath abie() {
         if (_abie == null)
@@ -352,7 +353,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient AsbiePath _asbie;
 
     /**
-     * Get the implicit to-many join path to the <code>asbie</code> table
+     * Get the implicit to-many join path to the <code>oagi.asbie</code> table
      */
     public AsbiePath asbie() {
         if (_asbie == null)
@@ -364,7 +365,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient BbiePath _bbie;
 
     /**
-     * Get the implicit to-many join path to the <code>bbie</code> table
+     * Get the implicit to-many join path to the <code>oagi.bbie</code> table
      */
     public BbiePath bbie() {
         if (_bbie == null)
@@ -376,7 +377,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient BbieScPath _bbieSc;
 
     /**
-     * Get the implicit to-many join path to the <code>bbie_sc</code> table
+     * Get the implicit to-many join path to the <code>oagi.bbie_sc</code> table
      */
     public BbieScPath bbieSc() {
         if (_bbieSc == null)
@@ -388,7 +389,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient BbiepPath _bbiep;
 
     /**
-     * Get the implicit to-many join path to the <code>bbiep</code> table
+     * Get the implicit to-many join path to the <code>oagi.bbiep</code> table
      */
     public BbiepPath bbiep() {
         if (_bbiep == null)
@@ -401,7 +402,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>bie_package_top_level_asbiep</code> table, via the
+     * <code>oagi.bie_package_top_level_asbiep</code> table, via the
      * <code>bie_package_top_level_asbiep_prev_top_level_asbiep_id_fk</code> key
      */
     public BiePackageTopLevelAsbiepPath biePackageTopLevelAsbiepPrevTopLevelAsbiepIdFk() {
@@ -415,7 +416,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>bie_package_top_level_asbiep</code> table, via the
+     * <code>oagi.bie_package_top_level_asbiep</code> table, via the
      * <code>bie_package_top_level_asbiep_top_level_asbiep_id_fk</code> key
      */
     public BiePackageTopLevelAsbiepPath biePackageTopLevelAsbiepTopLevelAsbiepIdFk() {
@@ -429,7 +430,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>bie_user_ext_revision</code> table
+     * <code>oagi.bie_user_ext_revision</code> table
      */
     public BieUserExtRevisionPath bieUserExtRevision() {
         if (_bieUserExtRevision == null)
@@ -441,8 +442,8 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient BizCtxAssignmentPath _bizCtxAssignment;
 
     /**
-     * Get the implicit to-many join path to the <code>biz_ctx_assignment</code>
-     * table
+     * Get the implicit to-many join path to the
+     * <code>oagi.biz_ctx_assignment</code> table
      */
     public BizCtxAssignmentPath bizCtxAssignment() {
         if (_bizCtxAssignment == null)
@@ -454,8 +455,8 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient OasMessageBodyPath _oasMessageBody;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_message_body</code>
-     * table
+     * Get the implicit to-many join path to the
+     * <code>oagi.oas_message_body</code> table
      */
     public OasMessageBodyPath oasMessageBody() {
         if (_oasMessageBody == null)
@@ -467,7 +468,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient OasOperationPath _oasOperation;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_operation</code>
+     * Get the implicit to-many join path to the <code>oagi.oas_operation</code>
      * table
      */
     public OasOperationPath oasOperation() {
@@ -480,8 +481,9 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient OasRequestPath _oasRequestMetaHeaderTopLevelAsbiepIdFk;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_request</code> table,
-     * via the <code>oas_request_meta_header_top_level_asbiep_id_fk</code> key
+     * Get the implicit to-many join path to the <code>oagi.oas_request</code>
+     * table, via the
+     * <code>oas_request_meta_header_top_level_asbiep_id_fk</code> key
      */
     public OasRequestPath oasRequestMetaHeaderTopLevelAsbiepIdFk() {
         if (_oasRequestMetaHeaderTopLevelAsbiepIdFk == null)
@@ -493,8 +495,9 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient OasRequestPath _oasRequestPaginationTopLevelAsbiepIdFk;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_request</code> table,
-     * via the <code>oas_request_pagination_top_level_asbiep_id_fk</code> key
+     * Get the implicit to-many join path to the <code>oagi.oas_request</code>
+     * table, via the <code>oas_request_pagination_top_level_asbiep_id_fk</code>
+     * key
      */
     public OasRequestPath oasRequestPaginationTopLevelAsbiepIdFk() {
         if (_oasRequestPaginationTopLevelAsbiepIdFk == null)
@@ -506,7 +509,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient OasResponsePath _oasResponseMetaHeaderTopLevelAsbiepIdFk;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_response</code>
+     * Get the implicit to-many join path to the <code>oagi.oas_response</code>
      * table, via the
      * <code>oas_response_meta_header_top_level_asbiep_id_fk</code> key
      */
@@ -520,7 +523,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     private transient OasResponsePath _oasResponsePaginationTopLevelAsbiepIdFk;
 
     /**
-     * Get the implicit to-many join path to the <code>oas_response</code>
+     * Get the implicit to-many join path to the <code>oagi.oas_response</code>
      * table, via the
      * <code>oas_response_pagination_top_level_asbiep_id_fk</code> key
      */
@@ -532,15 +535,16 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
     }
 
     /**
-     * Get the implicit many-to-many join path to the <code>bie_package</code>
-     * table
+     * Get the implicit many-to-many join path to the
+     * <code>oagi.bie_package</code> table
      */
     public BiePackagePath biePackage() {
         return biePackageTopLevelAsbiepTopLevelAsbiepIdFk().biePackage();
     }
 
     /**
-     * Get the implicit many-to-many join path to the <code>biz_ctx</code> table
+     * Get the implicit many-to-many join path to the <code>oagi.biz_ctx</code>
+     * table
      */
     public BizCtxPath bizCtx() {
         return bizCtxAssignment().bizCtx();
@@ -590,7 +594,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
      */
     @Override
     public TopLevelAsbiep where(Condition condition) {
-        return new TopLevelAsbiep(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
+        return new TopLevelAsbiep(getQualifiedName(), aliased() ? this : null, null, condition);
     }
 
     /**
@@ -657,7 +661,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public TopLevelAsbiep whereExists(TableLike<?> select) {
+    public TopLevelAsbiep whereExists(Select<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -665,7 +669,7 @@ public class TopLevelAsbiep extends TableImpl<TopLevelAsbiepRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public TopLevelAsbiep whereNotExists(TableLike<?> select) {
+    public TopLevelAsbiep whereNotExists(Select<?> select) {
         return where(DSL.notExists(select));
     }
 }

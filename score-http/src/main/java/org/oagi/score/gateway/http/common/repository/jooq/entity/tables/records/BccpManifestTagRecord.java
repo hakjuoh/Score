@@ -22,39 +22,39 @@ public class BccpManifestTagRecord extends UpdatableRecordImpl<BccpManifestTagRe
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>bccp_manifest_tag.bccp_manifest_id</code>. Foreign key
-     * to the BCCP_MANIFEST table.
+     * Setter for <code>oagi.bccp_manifest_tag.bccp_manifest_id</code>. Foreign
+     * key to the BCCP_MANIFEST table.
      */
     public void setBccpManifestId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>bccp_manifest_tag.bccp_manifest_id</code>. Foreign key
-     * to the BCCP_MANIFEST table.
+     * Getter for <code>oagi.bccp_manifest_tag.bccp_manifest_id</code>. Foreign
+     * key to the BCCP_MANIFEST table.
      */
     public ULong getBccpManifestId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>bccp_manifest_tag.tag_id</code>. Foreign key to the TAG
-     * table.
+     * Setter for <code>oagi.bccp_manifest_tag.tag_id</code>. Foreign key to the
+     * TAG table.
      */
     public void setTagId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>bccp_manifest_tag.tag_id</code>. Foreign key to the TAG
-     * table.
+     * Getter for <code>oagi.bccp_manifest_tag.tag_id</code>. Foreign key to the
+     * TAG table.
      */
     public ULong getTagId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>bccp_manifest_tag.created_by</code>. A foreign key
+     * Setter for <code>oagi.bccp_manifest_tag.created_by</code>. A foreign key
      * referring to the user who creates the record.
      */
     public void setCreatedBy(ULong value) {
@@ -62,7 +62,7 @@ public class BccpManifestTagRecord extends UpdatableRecordImpl<BccpManifestTagRe
     }
 
     /**
-     * Getter for <code>bccp_manifest_tag.created_by</code>. A foreign key
+     * Getter for <code>oagi.bccp_manifest_tag.created_by</code>. A foreign key
      * referring to the user who creates the record.
      */
     public ULong getCreatedBy() {
@@ -70,16 +70,16 @@ public class BccpManifestTagRecord extends UpdatableRecordImpl<BccpManifestTagRe
     }
 
     /**
-     * Setter for <code>bccp_manifest_tag.creation_timestamp</code>. Timestamp
-     * when the record was first created.
+     * Setter for <code>oagi.bccp_manifest_tag.creation_timestamp</code>.
+     * Timestamp when the record was first created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>bccp_manifest_tag.creation_timestamp</code>. Timestamp
-     * when the record was first created.
+     * Getter for <code>oagi.bccp_manifest_tag.creation_timestamp</code>.
+     * Timestamp when the record was first created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(3);

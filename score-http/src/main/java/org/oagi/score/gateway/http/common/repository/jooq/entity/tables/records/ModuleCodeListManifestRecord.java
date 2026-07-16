@@ -24,7 +24,7 @@ public class ModuleCodeListManifestRecord extends UpdatableRecordImpl<ModuleCode
 
     /**
      * Setter for
-     * <code>module_code_list_manifest.module_code_list_manifest_id</code>.
+     * <code>oagi.module_code_list_manifest.module_code_list_manifest_id</code>.
      * Primary key.
      */
     public void setModuleCodeListManifestId(ULong value) {
@@ -33,7 +33,7 @@ public class ModuleCodeListManifestRecord extends UpdatableRecordImpl<ModuleCode
 
     /**
      * Getter for
-     * <code>module_code_list_manifest.module_code_list_manifest_id</code>.
+     * <code>oagi.module_code_list_manifest.module_code_list_manifest_id</code>.
      * Primary key.
      */
     public ULong getModuleCodeListManifestId() {
@@ -41,39 +41,43 @@ public class ModuleCodeListManifestRecord extends UpdatableRecordImpl<ModuleCode
     }
 
     /**
-     * Setter for <code>module_code_list_manifest.module_set_release_id</code>.
-     * A foreign key of the module set release record.
+     * Setter for
+     * <code>oagi.module_code_list_manifest.module_set_release_id</code>. A
+     * foreign key of the module set release record.
      */
     public void setModuleSetReleaseId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>module_code_list_manifest.module_set_release_id</code>.
-     * A foreign key of the module set release record.
+     * Getter for
+     * <code>oagi.module_code_list_manifest.module_set_release_id</code>. A
+     * foreign key of the module set release record.
      */
     public ULong getModuleSetReleaseId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>module_code_list_manifest.code_list_manifest_id</code>.
-     * A foreign key of the code list manifest record.
+     * Setter for
+     * <code>oagi.module_code_list_manifest.code_list_manifest_id</code>. A
+     * foreign key of the code list manifest record.
      */
     public void setCodeListManifestId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>module_code_list_manifest.code_list_manifest_id</code>.
-     * A foreign key of the code list manifest record.
+     * Getter for
+     * <code>oagi.module_code_list_manifest.code_list_manifest_id</code>. A
+     * foreign key of the code list manifest record.
      */
     public ULong getCodeListManifestId() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for <code>module_code_list_manifest.module_id</code>. This
+     * Setter for <code>oagi.module_code_list_manifest.module_id</code>. This
      * indicates a module.
      */
     public void setModuleId(ULong value) {
@@ -81,7 +85,7 @@ public class ModuleCodeListManifestRecord extends UpdatableRecordImpl<ModuleCode
     }
 
     /**
-     * Getter for <code>module_code_list_manifest.module_id</code>. This
+     * Getter for <code>oagi.module_code_list_manifest.module_id</code>. This
      * indicates a module.
      */
     public ULong getModuleId() {
@@ -89,23 +93,25 @@ public class ModuleCodeListManifestRecord extends UpdatableRecordImpl<ModuleCode
     }
 
     /**
-     * Setter for <code>module_code_list_manifest.created_by</code>. Foreign key
-     * to the APP_USER table. It indicates the user who created this record.
+     * Setter for <code>oagi.module_code_list_manifest.created_by</code>.
+     * Foreign key to the APP_USER table. It indicates the user who created this
+     * record.
      */
     public void setCreatedBy(ULong value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>module_code_list_manifest.created_by</code>. Foreign key
-     * to the APP_USER table. It indicates the user who created this record.
+     * Getter for <code>oagi.module_code_list_manifest.created_by</code>.
+     * Foreign key to the APP_USER table. It indicates the user who created this
+     * record.
      */
     public ULong getCreatedBy() {
         return (ULong) get(4);
     }
 
     /**
-     * Setter for <code>module_code_list_manifest.last_updated_by</code>.
+     * Setter for <code>oagi.module_code_list_manifest.last_updated_by</code>.
      * Foreign key to the APP_USER table referring to the last user who updated
      * the record.
      */
@@ -114,7 +120,7 @@ public class ModuleCodeListManifestRecord extends UpdatableRecordImpl<ModuleCode
     }
 
     /**
-     * Getter for <code>module_code_list_manifest.last_updated_by</code>.
+     * Getter for <code>oagi.module_code_list_manifest.last_updated_by</code>.
      * Foreign key to the APP_USER table referring to the last user who updated
      * the record.
      */
@@ -123,7 +129,8 @@ public class ModuleCodeListManifestRecord extends UpdatableRecordImpl<ModuleCode
     }
 
     /**
-     * Setter for <code>module_code_list_manifest.creation_timestamp</code>. The
+     * Setter for
+     * <code>oagi.module_code_list_manifest.creation_timestamp</code>. The
      * timestamp when the record was first created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
@@ -131,7 +138,8 @@ public class ModuleCodeListManifestRecord extends UpdatableRecordImpl<ModuleCode
     }
 
     /**
-     * Getter for <code>module_code_list_manifest.creation_timestamp</code>. The
+     * Getter for
+     * <code>oagi.module_code_list_manifest.creation_timestamp</code>. The
      * timestamp when the record was first created.
      */
     public LocalDateTime getCreationTimestamp() {
@@ -139,16 +147,18 @@ public class ModuleCodeListManifestRecord extends UpdatableRecordImpl<ModuleCode
     }
 
     /**
-     * Setter for <code>module_code_list_manifest.last_update_timestamp</code>.
-     * The timestamp when the record was last updated.
+     * Setter for
+     * <code>oagi.module_code_list_manifest.last_update_timestamp</code>. The
+     * timestamp when the record was last updated.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>module_code_list_manifest.last_update_timestamp</code>.
-     * The timestamp when the record was last updated.
+     * Getter for
+     * <code>oagi.module_code_list_manifest.last_update_timestamp</code>. The
+     * timestamp when the record was last updated.
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(7);
