@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.configuration.ai;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.oagi.score.gateway.http.api.ai_management.service.AiMutationToolGuard;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AnthropicRuntimeProperties;
 import org.oagi.score.gateway.http.api.ai_management.runtime.OpenAiRuntimeProperties;
 import org.springframework.ai.anthropic.AnthropicChatModel;
@@ -10,8 +11,11 @@ import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.DefaultResourceLoader;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.core.env.StandardEnvironment;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -23,24 +27,52 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 class ScoreAiConfigurationTest {
 
     @Test
+    void promptResourcesUsePlaceholdersForRuntimeProtocolValues() throws Exception {
+        Resource[] prompts = new PathMatchingResourcePatternResolver()
+                .getResources("classpath*:prompts/*.md");
+        for (Resource resource : prompts) {
+            String text = resource.getContentAsString(StandardCharsets.UTF_8);
+            assertThat(text).as(resource.getDescription())
+                    .doesNotContain(AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED,
+                            AiMutationToolGuard.REQUEST_STOPPING);
+        }
+        String assistant = new ClassPathResource(
+                "prompts/connect-center-assistant-system-prompt.md")
+                .getContentAsString(StandardCharsets.UTF_8);
+        assertThat(assistant)
+                .contains("## Input", "Input interpretation rules:",
+                        "## Output", "Workflow execution rules:", "Tool-use rules:",
+                        "Evidence and identity rules:", "Mutation and interruption rules:",
+                        "Safety rules:", "separate request-scoped user-context block",
+                        "${mutationConfirmationRequired}", "${requestStopping}");
+        assertThat(assistant).doesNotContain("${pageContext}", "## Request-scoped input");
+    }
+
+    @Test
     void reloadsTheSystemPromptFromAnExternalFile(@TempDir Path tempDir) throws Exception {
         Path promptFile = Files.createTempFile(tempDir, "assistant-system-prompt", ".md");
-        Files.writeString(promptFile, "First prompt: {pageContext}");
+        Files.writeString(promptFile, "First prompt: ${pageContext}");
         ScoreAiProperties properties = new ScoreAiProperties();
         properties.getAssistant().setSystemPromptResource(promptFile.toUri().toString());
 
         ScoreAiSystemPrompt prompt = new ScoreAiConfiguration().scoreAiSystemPrompt(
                 properties, new DefaultResourceLoader());
 
-        assertEquals("First prompt: {pageContext}", prompt.text());
-        Files.writeString(promptFile, "Updated prompt: {pageContext}");
-        assertEquals("Updated prompt: {pageContext}", prompt.text());
+        assertEquals("First prompt: ${pageContext}", prompt.text());
+        assertEquals("First prompt: page ${literal}",
+                prompt.render(Map.of("pageContext", "page ${literal}")));
+        assertThatThrownBy(() -> prompt.render(Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("pageContext");
+        Files.writeString(promptFile, "Updated prompt: ${pageContext}");
+        assertEquals("Updated prompt: ${pageContext}", prompt.text());
     }
 
     @Test

@@ -73,6 +73,7 @@ from fastmcp.server.elicitation import (
     CancelledElicitation,
     DeclinedElicitation,
 )
+from mcp.types import ToolAnnotations
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,6 +112,7 @@ async def get_ctx_scheme_service(
 @mcp.tool(
     name="get_context_schemes",
     description="Get a paginated list of context schemes",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing paginated list of context schemes",
@@ -454,6 +456,7 @@ async def get_context_schemes(
 @mcp.tool(
     name="get_context_scheme",
     description="Get a specific context scheme by ID",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing context scheme information",

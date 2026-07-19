@@ -77,6 +77,7 @@ import logging
 from typing import Annotated, Any
 
 from fastmcp import Context, FastMCP
+from mcp.types import ToolAnnotations
 from fastmcp.dependencies import Depends
 from fastmcp.exceptions import ToolError
 from fastmcp.server.elicitation import (
@@ -148,6 +149,7 @@ async def get_app_user_service(
 @mcp.tool(
     name="get_top_level_asbiep_list",
     description="Get a paginated list of Top-Level ASBIEPs (Association Business Information Entity Properties).",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing paginated list of Top-Level ASBIEPs (Association Business Information Entity Properties).",
@@ -583,6 +585,7 @@ async def get_top_level_asbiep_list(
 @mcp.tool(
     name="get_top_level_asbiep",
     description="Get a top-level ASBIEP (Association Business Information Entity Property) by its ID. The response displays the ASBIEP first, with its relationships (ASBIE/BBIE) shown as children under the role_of_abie section. The relationships array is an ordered sequence that preserves the original order from the ABIE structure. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie/create_bbie, traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure. This tool is used for profiling core components - when is_used=True, the component is profiled for practical use (asbie_id/bbie_id will be created), when is_used=False, it shows all available components for profiling. To explore relationships further: (1) If a relationship has asbie_id/bbie_id (is_used=True), use get_asbie_by_asbie_id(asbie_id) or get_bbie_by_bbie_id(bbie_id) to get full details. (2) If a relationship has no asbie_id/bbie_id (is_used=False), use get_asbie_by_based_ascc_manifest_id(top_level_asbiep_id, parent_abie_path, based_ascc_manifest_id) or get_bbie_by_based_bcc_manifest_id(top_level_asbiep_id, parent_abie_path, based_bcc_manifest_id) to explore the component structure before profiling.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing a top-level ASBIEP (Association Business Information Entity Property) with basic information. The ASBIEP is displayed first, with its relationships (ASBIE/BBIE) shown as children under the role_of_abie section. The relationships array is an ordered sequence that preserves the original order from the ABIE structure. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie/create_bbie, traverse the actual BIE structure recursively. Each relationship has an 'is_used' property indicating whether it's profiled for practical use (is_used=True means asbie_id/bbie_id exists). To explore relationships: (1) If relationship has asbie_id/bbie_id (is_used=True), use get_asbie_by_asbie_id(asbie_id) or get_bbie_by_bbie_id(bbie_id). (2) If relationship has no asbie_id/bbie_id (is_used=False), use get_asbie_by_based_ascc_manifest_id(top_level_asbiep_id, parent_abie_path, based_ascc_manifest_id) or get_bbie_by_based_bcc_manifest_id(top_level_asbiep_id, parent_abie_path, based_bcc_manifest_id) - extract parent_abie_path from relationship.path and manifest_id from relationship.based_ascc/based_bcc.",
@@ -1695,6 +1698,7 @@ async def get_top_level_asbiep(
 @mcp.tool(
     name="get_asbie_by_asbie_id",
     description="Get an ASBIE (Association Business Information Entity) by its ASBIE ID. This function fetches the complete ASBIE information from the database when you have the asbie_id. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie, traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing ASBIE (Association Business Information Entity) information with its ASBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (asbie_id will be created); when is_used=False, it shows all available components for profiling. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie, traverse the actual BIE structure recursively.",
@@ -2727,6 +2731,7 @@ async def get_asbie_by_asbie_id(
 @mcp.tool(
     name="get_asbie_by_based_ascc_manifest_id",
     description="Get an ASBIE (Association Business Information Entity) by its based ASCC manifest ID. This function returns basic information based on based_ascc_manifest_id when you don't have the asbie_id. This tool assumes there's no existing ASBIE and returns basic information for creating a new one. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie, traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing ASBIE (Association Business Information Entity) information with its ASBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (asbie_id will be created); when is_used=False, it shows all available components for profiling. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_asbie, traverse the actual BIE structure recursively.",
@@ -3768,6 +3773,7 @@ async def get_asbie_by_based_ascc_manifest_id(
 @mcp.tool(
     name="get_bbie_by_bbie_id",
     description="Get a BBIE (Basic Business Information Entity) by its BBIE ID. This function fetches the complete BBIE information from the database when you have the bbie_id. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_bbie, traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure. This tool provides all information needed for create_bbie_sc: use to_bbiep.supplementary_components[].based_dt_sc.dt_sc_manifest_id for create_bbie_sc's based_dt_sc_manifest_id parameter.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing BBIE (Basic Business Information Entity) information with its BBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (bbie_id will be created); when is_used=False, it shows all available components for profiling. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_bbie, traverse the actual BIE structure recursively.",
@@ -4652,6 +4658,7 @@ async def get_bbie_by_bbie_id(
 @mcp.tool(
     name="get_bbie_by_based_bcc_manifest_id",
     description="Get a BBIE (Basic Business Information Entity) by its based BCC manifest ID. This function returns basic information based on based_bcc_manifest_id when you don't have the bbie_id. This tool assumes there's no existing BBIE and returns basic information for creating a new one. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_bbie, traverse the actual BIE structure recursively using get_top_level_asbiep, get_asbie_*, and get_bbie_* to find the abie_id in the BIE structure. This tool provides all information needed for create_bbie_sc: use to_bbiep.supplementary_components[].based_dt_sc.dt_sc_manifest_id for create_bbie_sc's based_dt_sc_manifest_id parameter.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing BBIE (Basic Business Information Entity) information with its BBIEP. Used for profiling core components – when is_used=True, the component is profiled for practical use (bbie_id will be created); when is_used=False, it shows all available components for profiling. IMPORTANT: Groups (component_type 3=SemanticGroup or 4=UserExtensionGroup) are automatically skipped in BIE expressions, so the BIE structure may differ from the CC structure. To find the correct from_abie_id for create_bbie, traverse the actual BIE structure recursively.",

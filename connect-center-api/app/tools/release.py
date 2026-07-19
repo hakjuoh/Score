@@ -48,6 +48,7 @@ from typing import Annotated, Any
 
 from fastmcp import FastMCP
 from fastmcp.dependencies import Depends
+from mcp.types import ToolAnnotations
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -217,6 +218,7 @@ async def get_release_service(
         "Get a paginated list of releases. To answer latest published release questions, filter state=Published "
         "and use the item where is_latest is true; do not infer latest by sorting release_num."
     ),
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing paginated list of releases",
@@ -539,7 +541,7 @@ async def get_releases(
         raise _to_tool_error(exc, fallback="Unable to retrieve releases.") from exc
 
 
-@mcp.tool(name="get_release", description="Get a specific release by ID", output_schema=_RELEASE_OUTPUT_SCHEMA)
+@mcp.tool(name="get_release", description="Get a specific release by ID", annotations=ToolAnnotations(readOnlyHint=True), output_schema=_RELEASE_OUTPUT_SCHEMA)
 async def get_release(
     release_id: Annotated[int, Field(gt=0, description="Unique numeric identifier of the release to retrieve.")],
     release_service: ReleaseService = Depends(get_release_service),
@@ -599,6 +601,7 @@ async def get_release(
 @mcp.tool(
     name="get_working_release",
     description="Get the `Working` release for a specific library",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema=_RELEASE_OUTPUT_SCHEMA,
 )
 async def get_working_release(

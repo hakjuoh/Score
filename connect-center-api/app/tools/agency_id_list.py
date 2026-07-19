@@ -44,6 +44,7 @@ import logging
 from typing import Annotated, Any
 
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from fastmcp.dependencies import Depends
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,6 +77,7 @@ async def get_agency_id_list_service(
 @mcp.tool(
     name="get_agency_id_lists",
     description="Get a paginated list of agency ID lists associated with a specific release.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing paginated list of agency ID lists",
@@ -554,6 +556,7 @@ async def get_agency_id_lists(
 @mcp.tool(
     name="get_agency_id_list",
     description="Get a specific agency ID list by its manifest ID.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing agency ID list information",

@@ -40,6 +40,7 @@ from typing import Annotated
 from fastmcp import FastMCP
 from fastmcp.dependencies import Depends
 from fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,6 +72,7 @@ async def get_app_user_service(
 @mcp.tool(
     name="get_users",
     description="Get a paginated list of users.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing paginated list of users.",
@@ -264,6 +266,7 @@ async def get_users(
 @mcp.tool(
     name="who_am_i",
     description="Get information about the currently authenticated user.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing information about the current user",

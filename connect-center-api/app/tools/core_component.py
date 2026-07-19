@@ -95,6 +95,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context, FastMCP
 from fastmcp.dependencies import Depends
 from fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
 from fastmcp.server.elicitation import (
     AcceptedElicitation,
     CancelledElicitation,
@@ -211,6 +212,7 @@ async def get_app_user_service(
 @mcp.tool(
     name="get_core_components",
     description="Get a paginated list of core components (ACC: Aggregation Core Component, ASCCP: Association Core Component Property, BCCP: Basic Core Component Property) with unified response format",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing paginated list of core components with unified format",
@@ -2665,6 +2667,7 @@ async def discard_bccp(
 @mcp.tool(
     name="get_acc",
     description="Get a specific ACC by its manifest ID.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing ACC (Aggregation Core Component) information",
@@ -3567,6 +3570,7 @@ async def get_acc(
 @mcp.tool(
     name="get_asccp",
     description="Get a specific ASCCP by its manifest ID.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing ASCCP (Association Core Component Property) information",
@@ -3961,6 +3965,7 @@ async def get_asccp(
 @mcp.tool(
     name="get_bccp",
     description="Get a specific BCCP by its manifest ID.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing BCCP (Basic Core Component Property) information",

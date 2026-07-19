@@ -23,6 +23,12 @@ logging:
 
 score:
   ai:
+    multi-agent:
+      # Caps apply per application instance; cluster-wide bounding comes from the
+      # per-user active-request limit enforced by the shared AI request registry.
+      max-concurrent-specialists: ${SCORE_AI_MULTI_AGENT_MAX_CONCURRENT_SPECIALISTS:16}
+      max-concurrent-specialists-per-user: ${SCORE_AI_MULTI_AGENT_MAX_CONCURRENT_SPECIALISTS_PER_USER:8}
+      specialist-timeout: ${SCORE_AI_MULTI_AGENT_SPECIALIST_TIMEOUT:2m}
     providers:
       azure-foundry:
         type: anthropic

@@ -58,6 +58,8 @@ public final class ScoreToolSearchToolCallingAdvisor extends ToolSearchToolCalli
             keywords. If one query cannot cover the workflow, issue all necessary searches in
             parallel in the same response. Search results are accumulated and their full tool
             definitions become available on the next step. Do not guess an unknown tool name.
+            Never write or simulate `[Tool call: ...]`, `[Tool: ...]`, or another textual placeholder;
+            invoke toolSearchTool and selected tools only through the structured tool interface.
             """;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 

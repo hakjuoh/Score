@@ -11,11 +11,35 @@ import {
   toolCallEventSemantics
 } from './domain/ai-chat-event-semantics';
 import {FORMATTER_META_RESPONSE_PATTERN} from './domain/ai-chat-panel-display.constants';
+import {
+  agentActivityUpdate,
+  isExecutionActivityEvent,
+  isSpecialistToolEvent,
+  upsertAgentActivity,
+  upsertAgentGuideEvent,
+  upsertAgentToolEvent
+} from './domain/ai-agent-activity';
 import {AiChatSocketEvent} from './domain/ai-chat-panel.model';
 
 export abstract class AiChatPanelMessageController extends AiChatPanelEventController {
   protected handleSystemEvent(event: AiChatSocketEvent): void {
     const content = this.primaryContent(event);
+    if (isExecutionActivityEvent(event)) {
+      this.applyAgentActivity(event);
+      return;
+    }
+    if (event.subtype === 'guide' && content) {
+      if (upsertAgentGuideEvent(this.state.agentActivities, event)) return;
+      // A guide is the first substantive assistant message for this stage. It
+      // replaces only the generic connection/wait placeholder; later tool
+      // status updates are then appended below it in event order.
+      if (this.messageTracker.activeToolCallCount === 0) {
+        this.clearStatusMessage();
+      }
+      this.state.messages.push({role: 'guide', content});
+      this.scrollToBottom();
+      return;
+    }
     if (event.subtype === 'context_usage' || event.subtype === 'context_compacted') {
       this.applyContextEvent(event);
       if (event.subtype === 'context_compacted' && event.metadata?.['automatic'] === true) {
@@ -109,6 +133,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     }
     this.cancellationService.reset();
     this.completeProgressMessages();
+    this.settleAgentActivity('cancelled');
     this.clearTimers();
     this.clearStatusMessage();
     this.state.elicitation = undefined;
@@ -133,6 +158,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   protected completeAuthenticationFailure(content?: string): void {
     this.cancellationService.reset();
     this.completeProgressMessages();
+    this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
     this.state.elicitation = undefined;
@@ -162,6 +188,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.clearCompletedPayloadRecovery();
     this.cancellationService.reset();
     this.completeProgressMessages();
+    this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
     this.state.elicitation = undefined;
@@ -191,11 +218,30 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   }
 
   protected upsertToolGroup(event: AiChatSocketEvent): void {
+    if (this.divertSpecialistToolEvent(event)) {
+      return;
+    }
     this.messageTracker.upsertToolGroup(this.state, event);
   }
 
   protected handleToolCallEvent(event: AiChatSocketEvent): void {
+    if (this.divertSpecialistToolEvent(event)) {
+      return;
+    }
     this.messageTracker.handleToolCall(this.state, event);
+  }
+
+  /**
+   * Specialist tool activity never renders as main-chat tool rows. It is
+   * appended to the owning agent's timeline for the focused view instead.
+   * Returns true when the event was claimed by a specialist.
+   */
+  protected divertSpecialistToolEvent(event: AiChatSocketEvent): boolean {
+    if (!isSpecialistToolEvent(event)) {
+      return false;
+    }
+    upsertAgentToolEvent(this.state.agentActivities, event);
+    return true;
   }
 
   protected handleLegacyRecoverableToolError(event: AiChatSocketEvent, content: string): boolean {
@@ -241,6 +287,8 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         || event.subtype === 'model_fallback'
         || event.subtype === 'context_usage'
         || event.subtype === 'context_compacted'
+        || event.subtype === 'guide'
+        || isExecutionActivityEvent(event)
         || event.visibility === 'debug'
         || event.metadata?.['inProgress'] === true;
     }
@@ -253,6 +301,40 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
 
   protected primaryContent(event: AiChatSocketEvent): string {
     return event.content || event.response || event.message || '';
+  }
+
+  private applyAgentActivity(event: AiChatSocketEvent): void {
+    const update = agentActivityUpdate(event);
+    if (!update) return;
+    const firstActivity = this.state.agentActivities.length === 0;
+    if (!upsertAgentActivity(this.state.agentActivities, update)) {
+      return;
+    }
+    if (firstActivity) {
+      // One anchor row per fan-out. The anchor keeps a REFERENCE to this
+      // fan-out's activity array; request starts replace (never mutate) the
+      // state array, so settled anchors keep their own final statuses.
+      this.state.messages.push({
+        role: update.executionKind === 'parallel' ? 'workflow_group' : 'agent_group',
+        content: update.executionKind === 'parallel' ? 'Parallel workflow' : 'Multi-agent workflow',
+        activities: this.state.agentActivities
+      });
+    }
+    this.state.currentStatus = this.aggregateAgentStatus();
+  }
+
+  private aggregateAgentStatus(): string {
+    const activities = this.state.agentActivities;
+    if (activities.some(activity => activity.inProgress)) {
+      const parallel = activities.some(activity => activity.executionKind === 'parallel');
+      return activities.some(activity => activity.isLead && activity.status === 'synthesizing')
+        ? parallel ? 'Synthesizing parallel results' : 'Synthesizing agent results'
+        : parallel ? 'Parallel tasks working' : 'Agents working';
+    }
+    const parallel = activities.some(activity => activity.executionKind === 'parallel');
+    return activities.some(activity => activity.status === 'failed')
+      ? parallel ? 'Parallel workflow completed with errors' : 'Agent completed with errors'
+      : parallel ? 'Parallel tasks finished' : 'Agents finished';
   }
 
   protected handleConversationRestoreEvent(event: AiChatSocketEvent): void {
