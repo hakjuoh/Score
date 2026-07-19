@@ -52,8 +52,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.security.Principal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CancellationException;
@@ -66,6 +68,12 @@ import java.util.concurrent.atomic.AtomicLong;
 public class AiChatController {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiChatController.class);
+    private static final Set<String> WORKFLOW_LIFECYCLE_EVENT_TYPES = Set.of(
+            "multi_agent_started", "subagent_started", "subagent_completed", "subagent_failed",
+            "multi_agent_synthesizing", "multi_agent_completed", "multi_agent_failed",
+            "parallel_workflow_started", "parallel_task_started", "parallel_task_completed",
+            "parallel_task_failed", "parallel_workflow_synthesizing",
+            "parallel_workflow_completed", "parallel_workflow_failed");
 
     private final ChatService chatService;
     private final SessionService sessionService;
@@ -127,20 +135,22 @@ public class AiChatController {
                         && ("mutation_confirmation_required".equals(event.subtype())
                         || "elicitation_required".equals(event.subtype())
                         || "context_usage".equals(event.subtype())
-                        || "context_compacted".equals(event.subtype()))) {
+                        || "context_compacted".equals(event.subtype())
+                        || isWorkflowLifecycleEvent(event.subtype()))) {
                     AiChatSocketEvent socketEvent = socketEvent(
                             prepared, sequence.incrementAndGet(), event);
                     responseEvents.add(socketEvent);
-                    if ("elicitation_required".equals(event.subtype())) {
+                    if ("elicitation_required".equals(event.subtype())
+                            || isWorkflowLifecycleEvent(event.subtype())) {
                         try {
                             send(requester, queue(prepared.requestId()), socketEvent);
                         } catch (RuntimeException exception) {
-                            LOGGER.warn("Could not stream an HTTP chat elicitation to the user", exception);
+                            LOGGER.warn("Could not stream an HTTP chat interaction event to the user", exception);
                         }
                     }
                 }
             });
-            return response.withEvents(responseEvents);
+            return response.withEvents(orderedResponseEvents(responseEvents));
         }, executor);
         return future.handle((response, throwable) -> {
             String status = requests.finish(entry, throwable);
@@ -153,7 +163,7 @@ public class AiChatController {
             if (!responseEvents.isEmpty()) {
                 return ResponseEntity.status(restTerminalStatus(status)).body(new ChatResponse(
                         "connectcenter-assistant", null, prepared.conversationId(),
-                        false, List.of(), responseEvents));
+                        false, List.of(), orderedResponseEvents(responseEvents)));
             }
             throw propagate(throwable, status);
         });
@@ -374,7 +384,8 @@ public class AiChatController {
         ChatRequest correlated = new ChatRequest(request.prompt(), requestId, request.agent(),
                 request.conversationId(), request.pageContext(), request.attachments(),
                 request.mutationConfirmation(), request.modelName(), request.reasoningEffort(),
-                request.runtime(), request.runtimeOptions(), request.permissionMode());
+                request.runtime(), request.runtimeOptions(), request.permissionMode(),
+                request.multiAgent());
         Instant deadline = Instant.now().plus(requestTimeout);
         AiRequestRegistry.Entry entry = requests.register(
                 requestId, request.conversationId(), requester, deadline);
@@ -409,7 +420,7 @@ public class AiChatController {
         LOGGER.warn("AI chat request failed", current);
         if (current instanceof IllegalArgumentException && StringUtils.hasText(current.getMessage())) {
             String message = current.getMessage();
-            if (message.length() <= 500 && message.matches("(?i)^(attachment|attachments|unsupported ai attachment|a prompt|a maximum|runtime option|the requested assistant model|the requested reasoning effort|the requested ai runtime|chat request).*$")) {
+            if (message.length() <= 500 && message.matches("(?i)^(attachment|attachments|unsupported ai attachment|a prompt|a maximum|runtime option|the requested assistant model|the requested reasoning effort|the requested ai runtime|chat request|multiagent).*$")) {
                 return message;
             }
         }
@@ -479,9 +490,28 @@ public class AiChatController {
                 return AiChatSocketEvent.elicitationRequired(request.requestId(),
                         request.conversationId(), sequence, event.content(), event.metadata());
             }
+            if ("guide".equals(event.subtype())) {
+                return AiChatSocketEvent.system(request.requestId(), request.conversationId(), sequence,
+                        event.subtype(), event.content(), event.metadata());
+            }
+            if (isWorkflowLifecycleEvent(event.subtype())) {
+                return AiChatSocketEvent.system(request.requestId(), request.conversationId(), sequence,
+                        event.subtype(), event.content(), event.metadata());
+            }
             return AiChatSocketEvent.detail(request.requestId(), request.conversationId(), sequence,
                     event.subtype(), event.content(), event.metadata());
         }
         return AiChatSocketEvent.progress(request.requestId(), request.conversationId(), sequence, event.content());
+    }
+
+    private static boolean isWorkflowLifecycleEvent(String subtype) {
+        return WORKFLOW_LIFECYCLE_EVENT_TYPES.contains(subtype);
+    }
+
+    static List<AiChatSocketEvent> orderedResponseEvents(List<AiChatSocketEvent> events) {
+        return events.stream()
+                .sorted(Comparator.comparing(AiChatSocketEvent::sequence,
+                        Comparator.nullsLast(Long::compareTo)))
+                .toList();
     }
 }

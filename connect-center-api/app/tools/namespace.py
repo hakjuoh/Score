@@ -60,6 +60,7 @@ from fastmcp.server.elicitation import (
     CancelledElicitation,
     DeclinedElicitation,
 )
+from mcp.types import ToolAnnotations
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,6 +102,7 @@ async def get_namespace_service(
 @mcp.tool(
     name="get_namespaces",
     description="Get a paginated list of namespaces. Namespaces are globally unique identifiers that work across systems, standards, and organizations.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing paginated list of namespaces. Namespaces are globally unique identifiers that work across systems, standards, and organizations.",
@@ -417,6 +419,7 @@ async def get_namespaces(
 @mcp.tool(
     name="get_namespace",
     description="Get a specific namespace by ID. Namespaces are globally unique identifiers that work across systems, standards, and organizations.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing namespace information. Namespaces are globally unique identifiers that work across systems, standards, and organizations.",

@@ -47,6 +47,7 @@ class ConfiguredAiRuntimeRequestOptionsMatrixTest {
                         assertThat(options.getMaxTokens()).isEqualTo(16_000);
                         assertThat(options.getCacheOptions().getStrategy())
                                 .isEqualTo(AnthropicCacheStrategy.CONVERSATION_HISTORY);
+                        assertThat(options.getCacheOptions().isMultiBlockSystemCaching()).isTrue();
                         assertThat(options.getCacheOptions().isCacheToolResults()).isTrue();
                         if ("claude-haiku-4_5".equals(model.name())) {
                             assertThat(options.getThinking()).isNotNull();

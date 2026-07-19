@@ -1,5 +1,45 @@
 <div class="message-list" (click)="messageListClicked.emit($event)">
   <div class="terminal-flow">
+    @if (agentFocus; as focus) {
+    <div class="agent-focus-view" role="region"
+         [attr.aria-label]="focus.agentName + ' agent activity'">
+      <div class="agent-focus-header">
+        <button type="button" class="agent-focus-back"
+                aria-label="Back to conversation"
+                (click)="agentFocusClosed.emit(); $event.stopPropagation()">
+          <mat-icon aria-hidden="true">arrow_back</mat-icon>
+        </button>
+        <span class="agent-focus-name">{{ focus.agentName }}</span>
+        @if (focus.agentRole) {
+          <span class="agent-focus-role">{{ focus.agentRole }}</span>
+        }
+        <span class="agent-focus-status"
+              [class.agent-terminal-warn]="focus.status === 'failed' || focus.status === 'cancelled'">
+          @if (focus.inProgress) {
+            <mat-progress-spinner class="message-progress-spinner"
+                                  mode="indeterminate"
+                                  [diameter]="12"></mat-progress-spinner>
+          }
+          <span>{{ agentStatusLabel(focus) }}</span>
+        </span>
+      </div>
+      <div class="agent-focus-events">
+        @for (activityEvent of focus.events; track $index) {
+          @if (activityEvent.status === 'tool') {
+            <ng-container [ngTemplateOutlet]="messageRow"
+                          [ngTemplateOutletContext]="{
+                            message: agentToolMessage(activityEvent, focus.inProgress)
+                          }"></ng-container>
+          } @else {
+            <ng-container [ngTemplateOutlet]="messageRow"
+                          [ngTemplateOutletContext]="{
+                            message: agentConversationMessage(activityEvent)
+                          }"></ng-container>
+          }
+        }
+      </div>
+    </div>
+    } @else {
     @for (item of displayItems; track item.trackKey) {
       @if (item.kind === 'turn') {
         <div class="message-turn" [class.history-expanded]="isHistoryExpanded(item.userIndex)">
@@ -33,18 +73,6 @@
       }
     }
 
-    <score-ai-chat-interaction-panel
-      [mutation]="mutationInteraction"
-      [elicitation]="elicitation"
-      [elicitationBusy]="elicitationBusy"
-      (mutationApproved)="mutationApproved.emit()"
-      (mutationDenied)="mutationDenied.emit()"
-      (mutationChangeRequested)="mutationChangeRequested.emit()"
-      (mutationRevoked)="mutationRevoked.emit()"
-      (mutationDismissed)="mutationDismissed.emit()"
-      (elicitationResponded)="elicitationResponded.emit($event)">
-    </score-ai-chat-interaction-panel>
-
     @if (showRequestPendingIndicator) {
       <div class="message-row progress request-pending-indicator"
            role="status" aria-live="polite" aria-label="Request in progress">
@@ -58,6 +86,19 @@
         </div>
       </div>
     }
+    }
+
+    <score-ai-chat-interaction-panel
+      [mutation]="mutationInteraction"
+      [elicitation]="elicitation"
+      [elicitationBusy]="elicitationBusy"
+      (mutationApproved)="mutationApproved.emit()"
+      (mutationDenied)="mutationDenied.emit()"
+      (mutationChangeRequested)="mutationChangeRequested.emit()"
+      (mutationRevoked)="mutationRevoked.emit()"
+      (mutationDismissed)="mutationDismissed.emit()"
+      (elicitationResponded)="elicitationResponded.emit($event)">
+    </score-ai-chat-interaction-panel>
 
     @if (modelSettingsOpen) {
       <div class="model-command-panel" role="group" aria-label="Assistant model settings">
@@ -268,8 +309,10 @@
              let-userIndex="userIndex"
              let-historyCount="historyCount">
   <div class="message-row" [class.user]="message.role === 'user'"
-       [class.assistant]="message.role === 'assistant'"
+       [class.assistant]="message.role === 'assistant' || message.role === 'guide'"
        [class.progress]="message.role === 'progress'"
+       [class.agent_group]="message.role === 'agent_group'"
+       [class.workflow_group]="message.role === 'workflow_group'"
        [class.tool_group]="message.role === 'tool_group'"
        [class.tool_call]="message.role === 'tool_call'"
        [class.tool_failed]="message.role === 'tool_call' && message.toolStatus === 'failed'"
@@ -278,7 +321,7 @@
        [class.formatting]="message.formatting"
        [class.history-toggleable]="historyCount > 0">
     <div class="message-bubble">
-      @if (message.role === 'assistant') {
+      @if (message.role === 'assistant' || message.role === 'guide') {
         <span class="message-prefix">•</span>
         @if (message.formatting && message.formattingPreviousContent) {
           <div class="formatted-swipe">
@@ -317,6 +360,53 @@
           <span class="message-prefix">*</span>
         }
         <span class="message-text">{{ message.content }}</span>
+      } @else if (message.role === 'agent_group' || message.role === 'workflow_group') {
+        <div class="agent-group-block" role="status" aria-live="polite" aria-atomic="false"
+             [attr.data-workflow]="agentGroupWorkflow(message)"
+             [attr.data-execution-kind]="agentGroupExecutionKind(message)"
+             [attr.aria-label]="(message.role === 'workflow_group' ? 'Parallel workflow: ' : 'Multi-agent workflow: ')
+               + (agentGroupSummary(message) || 'starting')">
+          <div class="agent-group-header">
+            <mat-icon aria-hidden="true">{{ message.role === 'workflow_group' ? 'account_tree' : 'hub' }}</mat-icon>
+            <span class="agent-group-title">{{ agentGroupPhase(message) }}</span>
+            @if (agentGroupWorkflowLabel(message); as workflowLabel) {
+              <span class="agent-group-workflow">· {{ workflowLabel }}</span>
+            }
+            @if (agentGroupCount(message) > 0) {
+              <span class="agent-group-count">· {{ agentGroupCount(message) }}
+                {{ message.role === 'workflow_group' ? 'tasks' : 'agents' }}</span>
+            }
+            @if (agentGroupSummary(message)) {
+              <span class="agent-group-summary">{{ agentGroupSummary(message) }}</span>
+            }
+          </div>
+          <div class="agent-group-plan">{{ agentGroupPlan(message) }}</div>
+          @for (activity of agentGroupActivities(message); track activity.agentId) {
+            <button type="button" class="agent-group-row"
+                    [class.agent-terminal-warn]="activity.status === 'failed' || activity.status === 'cancelled'"
+                    [attr.aria-label]="'Show ' + activity.agentName + ' activity: ' + agentStatusLabel(activity)"
+                    (click)="agentFocusRequested.emit(activity.agentId); $event.stopPropagation()">
+              <span class="agent-row-status" aria-hidden="true">
+                @if (activity.inProgress) {
+                  <mat-progress-spinner class="message-progress-spinner"
+                                        mode="indeterminate" [diameter]="12"></mat-progress-spinner>
+                } @else if (activity.status === 'failed') {
+                  <mat-icon>error_outline</mat-icon>
+                } @else if (activity.status === 'cancelled') {
+                  <mat-icon>cancel</mat-icon>
+                } @else {
+                  <mat-icon>check_circle_outline</mat-icon>
+                }
+              </span>
+              <span class="agent-row-name">{{ agentDisplayName(activity) }}</span>
+              @if (agentDisplayRole(activity); as displayRole) {
+                <span class="agent-row-role">{{ displayRole }}</span>
+              }
+              <span class="agent-row-snippet">{{ activity.content }}</span>
+              <span class="agent-row-elapsed">{{ agentElapsed(activity) }}</span>
+            </button>
+          }
+        </div>
       } @else if (message.role === 'tool_group') {
         <span class="message-prefix progress-prefix">
           @if (message.inProgress) {
@@ -329,48 +419,12 @@
         </span>
         <span class="message-text">{{ message.content }}</span>
       } @else if (message.role === 'tool_call') {
-        <span class="tool-call-a11y-status" role="status" aria-live="polite" aria-atomic="true">
-          {{ toolCallStatusLabel(message) }}: {{ message.content }}
-        </span>
-        @if (hasToolDetail(message)) {
-          <details class="tool-call-disclosure">
-            <summary class="tool-call-summary">
-              <mat-icon class="tool-call-expand-icon" aria-hidden="true">chevron_right</mat-icon>
-              <span class="tool-call-status">
-                @if (message.inProgress) {
-                  <mat-progress-spinner class="message-progress-spinner"
-                                        mode="indeterminate"
-                                        [diameter]="12"></mat-progress-spinner>
-                } @else if (message.toolStatus === 'failed') {
-                  <mat-icon class="message-prefix-icon" aria-hidden="true">error_outline</mat-icon>
-                } @else if (message.toolStatus === 'completed') {
-                  <mat-icon class="message-prefix-icon" aria-hidden="true">check_circle_outline</mat-icon>
-                } @else {
-                  <mat-icon class="message-prefix-icon" aria-hidden="true">terminal</mat-icon>
-                }
-              </span>
-              <span class="message-text">{{ message.content }}</span>
-            </summary>
-            <pre class="tool-call-detail">{{ message.toolDetail }}</pre>
-          </details>
-        } @else {
-          <div class="tool-call-summary tool-call-summary-static">
-            <span class="tool-call-status">
-              @if (message.inProgress) {
-                <mat-progress-spinner class="message-progress-spinner"
-                                      mode="indeterminate"
-                                      [diameter]="12"></mat-progress-spinner>
-              } @else if (message.toolStatus === 'failed') {
-                <mat-icon class="message-prefix-icon" aria-hidden="true">error_outline</mat-icon>
-              } @else if (message.toolStatus === 'completed') {
-                <mat-icon class="message-prefix-icon" aria-hidden="true">check_circle_outline</mat-icon>
-              } @else {
-                <mat-icon class="message-prefix-icon" aria-hidden="true">terminal</mat-icon>
-              }
-            </span>
-            <span class="message-text">{{ message.content }}</span>
-          </div>
-        }
+        <score-ai-chat-tool-call
+          [content]="message.content"
+          [detail]="message.toolDetail"
+          [status]="message.toolStatus"
+          [inProgress]="message.inProgress === true">
+        </score-ai-chat-tool-call>
       } @else {
         <span class="message-prefix">*</span>
         <span class="message-text">{{ message.content }}</span>

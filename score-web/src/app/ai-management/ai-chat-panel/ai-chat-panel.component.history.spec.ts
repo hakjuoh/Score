@@ -43,6 +43,7 @@ describe('AiChatPanelComponent streaming and history management', () => {
       role: 'progress',
       content: 'Working on the request.',
       eventType: 'assistant_update',
+      requestId: 'request-1',
       inProgress: true
     });
   });

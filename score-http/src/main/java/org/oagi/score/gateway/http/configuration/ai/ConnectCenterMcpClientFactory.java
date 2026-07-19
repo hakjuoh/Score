@@ -6,6 +6,8 @@ import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTranspor
 import io.modelcontextprotocol.spec.McpSchema;
 import org.oagi.score.gateway.http.api.application_management.service.BrokerJwtService;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
@@ -15,13 +17,17 @@ import org.springframework.util.StringUtils;
 
 import java.net.http.HttpRequest;
 import java.time.Duration;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 
 /** Creates requester-scoped MCP tools for connect-center-mcp. */
 @Component
 public class ConnectCenterMcpClientFactory {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConnectCenterMcpClientFactory.class);
     private static final ToolCallbackProvider NO_TOOLS = () -> new ToolCallback[0];
 
     private final ScoreAiProperties properties;
@@ -44,7 +50,7 @@ public class ConnectCenterMcpClientFactory {
             Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler) {
         McpConnection connection = connection(requester);
         if (connection == null) {
-            return new McpSession(null, NO_TOOLS);
+            return new McpSession(null, NO_TOOLS, Set.of());
         }
         String baseUrl = connection.baseUrl();
         String endpoint = connection.endpoint();
@@ -71,11 +77,41 @@ public class ConnectCenterMcpClientFactory {
             ToolCallbackProvider tools = SyncMcpToolCallbackProvider.builder()
                     .mcpClients(List.of(client))
                     .build();
-            return new McpSession(client, tools);
+            return new McpSession(client, tools, readOnlyToolNames(client));
         } catch (RuntimeException exception) {
             client.closeGracefully();
             throw exception;
         }
+    }
+
+    /**
+     * Resolves the tools the connect-center-mcp server itself declares as read-only
+     * through the MCP readOnlyHint tool annotation. Fail-closed: a tool without an
+     * explicit readOnlyHint=true annotation is treated as data-changing.
+     */
+    private static Set<String> readOnlyToolNames(McpSyncClient client) {
+        Set<String> names = new LinkedHashSet<>();
+        Set<String> visitedCursors = new HashSet<>();
+        int toolCount = 0;
+        String cursor = null;
+        do {
+            McpSchema.ListToolsResult page = cursor == null
+                    ? client.listTools() : client.listTools(cursor);
+            for (McpSchema.Tool tool : page.tools()) {
+                toolCount++;
+                McpSchema.ToolAnnotations annotations = tool.annotations();
+                if (annotations != null && Boolean.TRUE.equals(annotations.readOnlyHint())) {
+                    names.add(tool.name());
+                }
+            }
+            cursor = page.nextCursor();
+        } while (StringUtils.hasText(cursor) && visitedCursors.add(cursor));
+        if (toolCount > 0 && names.isEmpty()) {
+            LOGGER.warn("connect-center-mcp declared none of its {} tools read-only;"
+                    + " the server likely predates readOnlyHint annotations, so every tool"
+                    + " will require mutation approval and specialists get no tools.", toolCount);
+        }
+        return Set.copyOf(names);
     }
 
     private Duration longer(Duration first, Duration second) {
@@ -107,7 +143,8 @@ public class ConnectCenterMcpClientFactory {
                 auth.getAlgorithm(), Math.max(auth.getTokenTtlSeconds(), minimumTtl));
     }
 
-    public record McpSession(McpSyncClient client, ToolCallbackProvider tools) implements AutoCloseable {
+    public record McpSession(McpSyncClient client, ToolCallbackProvider tools,
+                             Set<String> readOnlyToolNames) implements AutoCloseable {
         @Override
         public void close() {
             if (client != null) {

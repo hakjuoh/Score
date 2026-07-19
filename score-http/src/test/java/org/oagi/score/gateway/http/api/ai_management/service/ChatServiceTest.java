@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationDetails;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatAttachment;
@@ -83,6 +84,140 @@ class ChatServiceTest {
         assertEquals("high", prepared.reasoningEffort());
         assertEquals("openai", prepared.runtime());
         verify(repository).settingsForUpdate(requester, "conversation-1");
+    }
+
+    @Test
+    void restoresThePersistedActiveWorkflowForAnOrdinaryFollowUp() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        when(models.isAvailable()).thenReturn(true);
+        when(repository.settingsForUpdate(requester, "conversation-1"))
+                .thenReturn(new AiChatConversationSettings("model", "high", "claude"));
+        when(repository.activeWorkflow(requester, "conversation-1"))
+                .thenReturn(Optional.of("orchestrator_workers"));
+        when(models.resolveModelName("model")).thenReturn("model");
+        when(models.resolveReasoningEffort("model", "high")).thenReturn("high");
+        when(models.resolveRuntime("model", "claude")).thenReturn("claude");
+        when(models.normalizeRuntime("claude")).thenReturn("claude");
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        when(runtimes.normalizeOptions("claude", "model", Map.of())).thenReturn(Map.of());
+        when(repository.open(requester, "conversation-1", "Show business context 75"))
+                .thenReturn("conversation-1");
+        ChatService service = new ChatService(models, runtimes, null, null, repository, null);
+
+        ChatRequest prepared = service.prepare(new ChatRequest(
+                "Show business context 75", "request-2", null, "conversation-1",
+                null, List.of(), null), requester);
+
+        assertThat(prepared.activeWorkflow()).isEqualTo("orchestrator_workers");
+        assertThat(prepared.multiAgent().active()).isFalse();
+    }
+
+    @Test
+    void persistsTheWorkflowPreferenceAndAcknowledgesItWithoutCallingTheModel() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        when(models.resolveModelName("model")).thenReturn("model");
+        when(models.resolveReasoningEffort("model", "high")).thenReturn("high");
+        when(models.resolveRuntime("model", "default")).thenReturn("default");
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        when(runtimes.normalizeOptions("default", "model", Map.of())).thenReturn(Map.of());
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("conversation-1")).thenReturn(List.of());
+        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        when(repository.open(any(), eq(null), eq("Use sub-agents for the following prompts")))
+                .thenReturn("conversation-1");
+        when(repository.latestUsage(any(), eq("conversation-1"))).thenReturn(Optional.empty());
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        when(budgets.budget("model")).thenReturn(Optional.empty());
+        AiMultiAgentManager manager = mock(AiMultiAgentManager.class);
+        ChatService service = new ChatService(models, runtimes, null, memory, repository,
+                new ObjectMapper(), null, budgets, manager);
+        ScoreUser requester = mock(ScoreUser.class);
+
+        ChatRequest prepared = service.prepare(new ChatRequest(
+                "Use sub-agents for the following prompts", "request-1", null, null,
+                null, List.of(), null, "model", "high", "default"), requester);
+        var response = service.chat(prepared, requester, ignored -> {});
+
+        assertThat(prepared.activeWorkflow()).isEqualTo("orchestrator_workers");
+        assertThat(response.response()).isEqualTo(
+                "Understood. I’ll use sub-agents for subsequent requests in this conversation. "
+                        + "What would you like to know?");
+        verify(manager, never()).execute(any());
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, org.mockito.Mockito.times(4))
+                .append(eq(requester), eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues()).extracting(AiChatTrajectoryStep::messageKind)
+                .containsExactly("settings_change", "workflow_preference", "user", "assistant");
+        AiChatTrajectoryStep preference = steps.getAllValues().get(1);
+        assertThat(preference.extra()).containsEntry("activeWorkflow", "orchestrator_workers");
+    }
+
+    @Test
+    void persistsARequestToNeverUseSubAgentsAsTheDirectWorkflow() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        when(models.resolveModelName("model")).thenReturn("model");
+        when(models.resolveReasoningEffort("model", "high")).thenReturn("high");
+        when(models.resolveRuntime("model", "default")).thenReturn("default");
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        when(runtimes.normalizeOptions("default", "model", Map.of())).thenReturn(Map.of());
+        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        when(repository.settingsForUpdate(requester, "conversation-1"))
+                .thenReturn(new AiChatConversationSettings("model", "high", "default"));
+        when(repository.activeWorkflow(requester, "conversation-1"))
+                .thenReturn(Optional.of("orchestrator_workers"));
+        when(repository.open(requester, "conversation-1",
+                "Never use sub-agents for future requests")).thenReturn("conversation-1");
+        ChatService service = new ChatService(models, runtimes, null, null, repository, null);
+
+        ChatRequest prepared = service.prepare(new ChatRequest(
+                "Never use sub-agents for future requests", "request-3", null,
+                "conversation-1", null, List.of(), null), requester);
+
+        assertThat(prepared.activeWorkflow()).isEqualTo("direct");
+        ArgumentCaptor<AiChatTrajectoryStep> step =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq(requester), eq("conversation-1"), step.capture());
+        assertThat(step.getValue().messageKind()).isEqualTo("workflow_preference");
+        assertThat(step.getValue().extra()).containsEntry("activeWorkflow", "direct");
+    }
+
+    @Test
+    void resetsAPersistedWorkflowToAutomaticSelection() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        when(models.resolveModelName("model")).thenReturn("model");
+        when(models.resolveReasoningEffort("model", "high")).thenReturn("high");
+        when(models.resolveRuntime("model", "default")).thenReturn("default");
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        when(runtimes.normalizeOptions("default", "model", Map.of())).thenReturn(Map.of());
+        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        when(repository.settingsForUpdate(requester, "conversation-1"))
+                .thenReturn(new AiChatConversationSettings("model", "high", "default"));
+        when(repository.activeWorkflow(requester, "conversation-1"))
+                .thenReturn(Optional.of("orchestrator_workers"));
+        when(repository.open(requester, "conversation-1",
+                "Choose the workflow automatically from now on")).thenReturn("conversation-1");
+        ChatService service = new ChatService(models, runtimes, null, null, repository, null);
+
+        ChatRequest prepared = service.prepare(new ChatRequest(
+                "Choose the workflow automatically from now on", "request-4", null,
+                "conversation-1", null, List.of(), null), requester);
+
+        assertThat(prepared.activeWorkflow()).isNull();
+        ArgumentCaptor<AiChatTrajectoryStep> step =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq(requester), eq("conversation-1"), step.capture());
+        assertThat(step.getValue().messageKind()).isEqualTo("workflow_preference");
+        assertThat(step.getValue().extra())
+                .containsEntry("automatic", true)
+                .doesNotContainKey("activeWorkflow");
     }
 
     @Test
@@ -346,6 +481,65 @@ class ChatServiceTest {
         assertThatThrownBy(() -> service.prepare(request, mock(ScoreUser.class)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Approved mutation tool details are invalid.");
+    }
+
+    @Test
+    void forcesApprovedMutationContinuationsToSingleAgentOnTheServer() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        when(models.resolveModelName("model")).thenReturn("model");
+        when(models.resolveReasoningEffort("model", "high")).thenReturn("high");
+        when(models.resolveRuntime("model", "default")).thenReturn("default");
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        when(runtimes.normalizeOptions("default", "model", Map.of())).thenReturn(Map.of());
+        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        when(repository.open(any(), eq(null), eq("Execute it"))).thenReturn("conversation-1");
+        ChatService service = new ChatService(models, runtimes, null,
+                mock(ChatMemory.class), repository, new ObjectMapper());
+        MutationConfirmation confirmation = new MutationConfirmation(
+                "confirmation-1", "grant", "create_business_context", "{}");
+        ChatRequest request = new ChatRequest("Execute it", "request-1", null, null,
+                null, List.of(), confirmation, "model", "high", "default", Map.of(), "ask",
+                new AiMultiAgentOptions(true, 4, "creative"));
+
+        ChatRequest prepared = service.prepare(request, mock(ScoreUser.class));
+
+        assertThat(prepared.multiAgent()).isEqualTo(AiMultiAgentOptions.single());
+        assertThat(prepared.activeWorkflow()).isEqualTo("direct");
+    }
+
+    @Test
+    void persistsLeadTraceMetadataOnTheFinalAssistantStep() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("conversation-1")).thenReturn(List.of());
+        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        when(repository.latestUsage(any(), eq("conversation-1"))).thenReturn(Optional.empty());
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        when(budgets.budget("model")).thenReturn(Optional.empty());
+        AiMultiAgentManager multiAgents = mock(AiMultiAgentManager.class);
+        when(multiAgents.execute(any())).thenReturn(new AiRuntime.Result("Final answer.", Map.of(
+                "fanout_id", "fanout-1", "node_id", "fanout-1-lead",
+                "agent_name", "lead", "depth", 0, "status", "completed")));
+        ChatService service = new ChatService(models, runtimes, null, memory, repository,
+                new ObjectMapper(), null, budgets, multiAgents);
+        ScoreUser requester = mock(ScoreUser.class);
+
+        service.chat(prepared("Investigate", List.of()), requester, ignored -> {});
+
+        ArgumentCaptor<AiChatTrajectoryStep> steps = ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, org.mockito.Mockito.times(2)).append(eq(requester), eq("conversation-1"),
+                steps.capture());
+        AiChatTrajectoryStep answer = steps.getAllValues().stream()
+                .filter(step -> "assistant".equals(step.messageKind())).findFirst().orElseThrow();
+        assertThat(answer.extra())
+                .containsEntry("fanout_id", "fanout-1")
+                .containsEntry("node_id", "fanout-1-lead")
+                .containsEntry("agent_name", "lead")
+                .containsEntry("depth", 0)
+                .containsEntry("status", "completed");
     }
 
     @Test

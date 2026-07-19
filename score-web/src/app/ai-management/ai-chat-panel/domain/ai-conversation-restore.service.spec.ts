@@ -419,6 +419,26 @@ describe('AiConversationRestoreService', () => {
     expect(finished).toHaveBeenCalledOnce();
   });
 
+  it('never restores model-authored textual tool markers as executed calls', () => {
+    const projected = service.projectStoredMessages([
+      {index: 0, role: 'user', content: 'add values'},
+      {
+        index: 1, role: 'assistant',
+        content: 'I will look up the available values.\n\n[Tool call: contextScheme_search]'
+      },
+      {
+        index: 2, role: 'assistant',
+        content: '**[Tool: toolSearchTool]** → searching "context scheme values"'
+      }
+    ]);
+
+    expect(projected).toEqual([
+      {role: 'user', content: 'add values'},
+      {role: 'assistant', content: 'I will look up the available values.'}
+    ]);
+    expect(projected.some(message => message.role === 'tool_call')).toBe(false);
+  });
+
   it('restores failed tool evidence with conservative policy flags', async () => {
     handle({requestId: 'r1', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
     handle({
@@ -435,7 +455,7 @@ describe('AiConversationRestoreService', () => {
     await vi.runAllTimersAsync();
 
     expect(messages).toEqual([{
-      role: 'tool_call', content: 'Business context lookup failed.',
+      role: 'tool_call', content: 'get_business_contexts failed.',
       groupId: 'tool-calls-1-batch-1-connect-center-mcp',
       toolCallId: 'call-1', toolName: 'get_business_contexts',
       toolStatus: 'failed', recoverable: true, retryable: false, mutationSafe: false
@@ -458,6 +478,71 @@ describe('AiConversationRestoreService', () => {
     expect(messages).toEqual([
       {role: 'error', content: 'The AI model service is temporarily unavailable.'}
     ]);
+  });
+
+  it('reconstructs guide text, dynamic agent verbs, and child tool activity', () => {
+    const projected = service.projectStoredMessages([
+      {index: 0, role: 'user', content: 'Compare two BODs.'},
+      {index: 1, role: 'guide', content: 'I’ll review both BODs independently.'},
+      {
+        index: 2, role: 'agent_event', content: 'I’ll review both BODs independently.',
+        requestId: 'request-1', subtype: 'parallel_workflow_started', metadata: {
+          fanout_id: 'fanout-1', node_id: 'fanout-1-lead', agent_name: 'lead',
+          agent_role: 'workflow orchestrator', status: 'started', agent_count: 1,
+          workflow: 'parallel', execution_kind: 'parallel',
+          active_verb: 'Reviewing', completed_verb: 'Reviewed'
+        }
+      },
+      {
+        index: 3, role: 'agent_event', content: 'I’ll review Sync Purchase Order.',
+        requestId: 'request-1', subtype: 'parallel_task_started', metadata: {
+          fanout_id: 'fanout-1', node_id: 'fanout-1-agent-01',
+          parent_node_id: 'fanout-1-lead', agent_name: 'Evidence researcher',
+          task_label: 'Sync Purchase Order', status: 'started',
+          workflow: 'parallel', execution_kind: 'parallel', conversation_kind: 'PARALLEL',
+          active_verb: 'Reviewing', completed_verb: 'Reviewed'
+        }
+      },
+      {
+        index: 4, role: 'tool_call', content: 'get_asccp\nArguments: {}\nResult: {}',
+        requestId: 'request-1', groupId: 'request-1', toolCallId: 'call-1',
+        toolStatus: 'completed', subtype: 'completed', metadata: {
+          toolName: 'get_asccp', node_id: 'fanout-1-agent-01',
+          parent_node_id: 'fanout-1-lead', toolCallSeq: 0
+        }
+      },
+      {
+        index: 5, role: 'agent_event', content: 'Reviewed Sync Purchase Order.',
+        requestId: 'request-1', subtype: 'parallel_task_completed', metadata: {
+          fanout_id: 'fanout-1', node_id: 'fanout-1-agent-01',
+          parent_node_id: 'fanout-1-lead', agent_name: 'Evidence researcher',
+          task_label: 'Sync Purchase Order', status: 'completed',
+          workflow: 'parallel', execution_kind: 'parallel', conversation_kind: 'PARALLEL',
+          active_verb: 'Reviewing', completed_verb: 'Reviewed'
+        }
+      },
+      {
+        index: 6, role: 'agent_event', content: 'Compared.', requestId: 'request-1',
+        subtype: 'parallel_workflow_completed', metadata: {
+          fanout_id: 'fanout-1', node_id: 'fanout-1-lead', agent_name: 'lead',
+          agent_role: 'workflow orchestrator', status: 'completed',
+          workflow: 'parallel', execution_kind: 'parallel',
+          active_verb: 'Comparing', completed_verb: 'Compared'
+        }
+      },
+      {index: 7, role: 'assistant', content: 'Comparison complete.'}
+    ]);
+
+    expect(projected.map(message => message.role))
+      .toEqual(['user', 'guide', 'workflow_group', 'assistant']);
+    const group = projected.find(message => message.role === 'workflow_group')!;
+    expect(group.activities).toHaveLength(2);
+    expect(group.activities?.find(activity => activity.isLead)).toEqual(expect.objectContaining({
+      status: 'completed', activeVerb: 'Comparing', completedVerb: 'Compared',
+      workflow: 'parallel', executionKind: 'parallel'
+    }));
+    expect(group.activities?.find(activity => !activity.isLead)?.events)
+      .toContainEqual(expect.objectContaining({status: 'tool', content: 'get_asccp completed.'}));
   });
 
   it('restores route registry context markers', () => {

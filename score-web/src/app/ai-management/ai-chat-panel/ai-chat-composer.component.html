@@ -24,14 +24,6 @@
            multiple
            [attr.accept]="attachmentAccept"
            (change)="fileInputChanged.emit($event)">
-    <button class="attachment-button"
-            type="button"
-            aria-label="Attach files"
-            matTooltip="Attach files"
-           [disabled]="pending || blocked"
-            (click)="filePickerRequested.emit(fileInput)">
-      <mat-icon>attach_file</mat-icon>
-    </button>
     <textarea #commandInput
               rows="1"
               aria-label="Message to connectCenter Assistant"
@@ -59,6 +51,36 @@
         }
       </button>
     }
+    <button class="composer-menu-button"
+            type="button"
+            matTooltip="Chat options"
+            aria-label="Chat options"
+            [matMenuTriggerFor]="composerMenu"
+            (click)="$event.stopPropagation()">
+      <mat-icon>more_vert</mat-icon>
+    </button>
+    <mat-menu #composerMenu="matMenu" class="ai-chat-menu ai-chat-composer-menu">
+      <button mat-menu-item
+              class="composer-attachment-menu-item"
+              type="button"
+              [disabled]="pending || blocked"
+              (click)="filePickerRequested.emit(fileInput)">
+        <mat-icon>attach_file</mat-icon>
+        <span>Attach files</span>
+      </button>
+      @if (trajectoryUrl; as url) {
+        <a mat-menu-item [href]="url" target="_blank" rel="noopener"
+           aria-label="Open reproducible ATIF trajectory">
+          <mat-icon>account_tree</mat-icon>
+          <span>Trajectory</span>
+        </a>
+      } @else {
+        <button mat-menu-item type="button" disabled>
+          <mat-icon>account_tree</mat-icon>
+          <span>Trajectory</span>
+        </button>
+      }
+    </mat-menu>
   </div>
   @if (pending && cancellationDelayed) {
     <div class="cancellation-recovery" role="status" aria-live="polite">
