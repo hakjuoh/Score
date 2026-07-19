@@ -41,6 +41,7 @@ import {AiChatPanelComponent} from './ai-management/ai-chat-panel/ai-chat-panel.
 import {AiChatPanelHeaderComponent} from './ai-management/ai-chat-panel/ai-chat-panel-header.component';
 import {AiChatPanelTabsComponent} from './ai-management/ai-chat-panel/ai-chat-panel-tabs.component';
 import {AiChatMessageListComponent} from './ai-management/ai-chat-panel/ai-chat-message-list.component';
+import {AiChatToolCallComponent} from './ai-management/ai-chat-panel/ai-chat-tool-call.component';
 import {AiChatComposerComponent} from './ai-management/ai-chat-panel/ai-chat-composer.component';
 import {AiChatHistoryListComponent} from './ai-management/ai-chat-panel/ai-chat-history-list.component';
 import {AiChatInteractionPanelComponent} from './ai-management/ai-chat-panel/ai-chat-interaction-panel.component';
@@ -102,6 +103,7 @@ class ShouldReuseRouteFalseRouteReuseStrategy extends BaseRouteReuseStrategy {
     AiChatPanelHeaderComponent,
     AiChatPanelTabsComponent,
     AiChatMessageListComponent,
+    AiChatToolCallComponent,
     AiChatInteractionPanelComponent,
     AiChatComposerComponent,
     AiChatHistoryListComponent

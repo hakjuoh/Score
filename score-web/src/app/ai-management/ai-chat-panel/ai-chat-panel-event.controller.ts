@@ -15,6 +15,7 @@ import {
   AiElicitationResponse,
   AiMutationConfirmationAuthorization
 } from './domain/ai-chat-panel.model';
+import {withoutTextualToolCallPlaceholder} from './domain/ai-chat-event-semantics';
 
 export abstract class AiChatPanelEventController extends AiChatPanelUiController {
   protected handleSocketEvent(event: AiChatSocketEvent): void {
@@ -79,6 +80,10 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     if (!this.isRecognizedRequestEvent(event)) {
       return;
     }
+    // Any admitted backend event is already a response. Do not allow the
+    // delayed client-side "Request sent" placeholder to appear afterward or
+    // overwrite the chronological position of newer guide/tool messages.
+    this.clearResponseTimeout();
     if (this.acknowledgementTimeout) {
       window.clearTimeout(this.acknowledgementTimeout);
       this.acknowledgementTimeout = undefined;
@@ -87,16 +92,21 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       this.completeProgressMessages();
       this.clearStatusMessage();
       const content = this.primaryContent(event);
-      const existingIndex = this.assistantMessageIndexesByRequestId.get(event.requestId);
-      const existing = existingIndex === undefined ? undefined : this.state.messages[existingIndex];
-      if (existingIndex !== undefined && existing?.role === 'progress'
-        && existing.eventType === 'assistant_update') {
-        this.state.messages[existingIndex] = {
-          ...existing, content: existing.content + content, inProgress: true
+      const lastIndex = this.state.messages.length - 1;
+      const last = lastIndex >= 0 ? this.state.messages[lastIndex] : undefined;
+      if (last?.role === 'progress' && last.eventType === 'assistant_update'
+        && last.requestId === event.requestId) {
+        this.state.messages[lastIndex] = {
+          ...last, content: last.content + content, inProgress: true
         };
+        this.assistantMessageIndexesByRequestId.set(event.requestId, lastIndex);
       } else {
+        // Rows appended after the streamed bubble (tool calls, statuses) close
+        // that segment: it settles as interim narration and the next segment
+        // streams into a fresh bubble so the answer follows its evidence.
         this.state.messages.push({
-          role: 'progress', content, eventType: event.type, inProgress: true
+          role: 'progress', content, eventType: event.type,
+          requestId: event.requestId, inProgress: true
         });
         this.assistantMessageIndexesByRequestId.set(event.requestId, this.state.messages.length - 1);
       }
@@ -203,22 +213,41 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       );
       return;
     }
+    this.settleAgentActivity('completed');
     this.state.conversationId = confirmationConversationId
       || event.conversationId || this.state.conversationId;
     this.sessionPersistence.rememberLastConversation(this.state.conversationId);
     this.confirmContextUpdate();
     this.confirmedMutationRequests.cancel(event.requestId);
     this.activeRequestId = undefined;
-    const content = this.primaryContent(event);
+    const content = withoutTextualToolCallPlaceholder(this.primaryContent(event));
     if (content) {
-      const streamedIndex = this.assistantMessageIndexesByRequestId.get(event.requestId);
-      const streamed = streamedIndex === undefined ? undefined : this.state.messages[streamedIndex];
-      if (streamedIndex !== undefined && streamed?.eventType === 'assistant_update') {
+      // Locate the live streamed bubble by identity, not by remembered index:
+      // out-of-order tool rows may have been spliced in before it. Interim
+      // segments of the same request are earlier, so the last match wins.
+      // (Reverse loop instead of findLastIndex: the build targets ES2022.)
+      let streamedIndex = -1;
+      for (let index = this.state.messages.length - 1; index >= 0; index--) {
+        const message = this.state.messages[index];
+        if (message.role === 'progress' && message.eventType === 'assistant_update'
+          && message.requestId === event.requestId) {
+          streamedIndex = index;
+          break;
+        }
+      }
+      if (streamedIndex === this.state.messages.length - 1 && streamedIndex >= 0) {
         this.state.messages[streamedIndex] = {role: 'assistant', content};
       } else {
+        if (streamedIndex >= 0) {
+          // The answer always renders as the turn's last row, after every tool
+          // row that produced it. Tool tracking is cleared below, so removing
+          // the stale streamed bubble cannot desynchronize row indexes.
+          this.state.messages.splice(streamedIndex, 1);
+        }
         this.state.messages.push({role: 'assistant', content});
-        this.assistantMessageIndexesByRequestId.set(event.requestId, this.state.messages.length - 1);
       }
+      this.assistantMessageIndexesByRequestId.set(
+        event.requestId, this.state.messages.length - 1);
     }
     this.clearToolCallTracking();
     this.state.pending = false;
@@ -291,6 +320,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     confirmationConversationId: string
   ): void {
     this.pendingContextUpdate = undefined;
+    this.settleAgentActivity('failed');
     this.pendingMutationConfirmation = undefined;
     this.confirmedMutationRequests.cancel(requestId);
     this.clearMutationRepeatDraft(requestId);
@@ -411,6 +441,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     this.activeRequestId = requestId;
     this.activeRequestPublished = false;
     this.clearToolCallTracking();
+    this.state.resetAgentActivity();
     this.state.activePanelTab = 'chat';
     this.state.pending = true;
     this.state.currentStatus = 'Sending approved action';

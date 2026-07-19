@@ -72,6 +72,7 @@
             [selectedRuntime]="state.selectedRuntime"
             [permissionMode]="state.permissionMode"
             [permissionDraft]="state.permissionDraft"
+            [agentFocus]="focusedAgentActivity"
             [modelChangePending]="state.modelChangePending"
             [mutationInteraction]="mutationInteraction"
             [elicitation]="state.elicitation"
@@ -88,6 +89,8 @@
             (permissionDraftChange)="state.permissionDraft = $event"
             (permissionSettingsApplied)="applyPermissionSettings()"
             (permissionSettingsCancelled)="closePermissionSettings()"
+            (agentFocusRequested)="focusAgentActivity($event)"
+            (agentFocusClosed)="closeAgentFocus()"
             (mutationApproved)="approveMutationInteraction()"
             (mutationDenied)="denyMutationInteraction()"
             (mutationChangeRequested)="requestMutationChange()"
@@ -98,6 +101,7 @@
           </score-ai-chat-message-list>
           <score-ai-chat-composer
             [prompt]="state.prompt"
+            [trajectoryUrl]="trajectoryUrl"
             [pending]="state.pending"
             [blocked]="commandInputBlocked"
             [cancellationInProgress]="cancellationInProgress"
@@ -117,6 +121,46 @@
             (forceSafeStopRequested)="forceSafeStop()">
           </score-ai-chat-composer>
         </div>
+        @if (agentStripVisible) {
+          @if (state.agentListOpen && state.agentActivities.length > 0) {
+            <div class="agent-list-panel" role="list" [attr.aria-label]="activityListLabel">
+              @for (activity of state.agentActivities; track activity.agentId) {
+                <button type="button" class="agent-list-row" role="listitem"
+                        [class.agent-terminal-warn]="activity.status === 'failed' || activity.status === 'cancelled'"
+                        [attr.aria-label]="'Show ' + activity.agentName + ' activity'"
+                        (click)="focusAgentActivity(activity.agentId); $event.stopPropagation()">
+                  <span class="agent-list-status" aria-hidden="true">
+                    @if (activity.inProgress) {
+                      <mat-progress-spinner class="message-progress-spinner"
+                                            mode="indeterminate" [diameter]="12"></mat-progress-spinner>
+                    } @else if (activity.status === 'failed') {
+                      <mat-icon>error_outline</mat-icon>
+                    } @else if (activity.status === 'cancelled') {
+                      <mat-icon>cancel</mat-icon>
+                    } @else {
+                      <mat-icon>check_circle_outline</mat-icon>
+                    }
+                  </span>
+                  <span class="agent-list-name">{{ activity.agentName }}</span>
+                  @if (activity.agentRole) {
+                    <span class="agent-list-role">{{ activity.agentRole }}</span>
+                  }
+                  <span class="agent-list-snippet">{{ activity.content }}</span>
+                  <span class="agent-list-elapsed">{{ agentElapsedLabel(activity) }}</span>
+                </button>
+              }
+            </div>
+          }
+          <div class="agents-status-strip">
+            <button type="button" class="agents-strip-button"
+                    [attr.aria-expanded]="state.agentListOpen"
+                    aria-label="Toggle the agent list"
+                    (click)="onAgentStripClick(); $event.stopPropagation()">
+              <mat-icon aria-hidden="true">hub</mat-icon>
+              <span>{{ agentStripLabel }}</span>
+            </button>
+          </div>
+        }
         @if (state.contextUsage; as usage) {
           <div class="context-budget-status">
             <div class="context-budget-summary">

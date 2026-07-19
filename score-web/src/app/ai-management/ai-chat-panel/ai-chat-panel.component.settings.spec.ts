@@ -19,7 +19,8 @@ describe('AiChatPanelComponent settings and active recovery', () => {
       modelName: 'claude-fable-5',
       reasoningEffort: 'medium',
       runtime: 'claude',
-      runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true, retired: 'value'}
+      runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true, retired: 'value'},
+      multiAgent: {enabled: true, maxAgents: 99, strategy: 'creative'}
     }));
 
     (component as any).loadAvailableModels();

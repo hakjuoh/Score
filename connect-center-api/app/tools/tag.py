@@ -36,6 +36,7 @@ from typing import Annotated, Any
 
 from fastmcp import FastMCP
 from fastmcp.dependencies import Depends
+from mcp.types import ToolAnnotations
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,6 +63,7 @@ async def get_tag_service(
 @mcp.tool(
     name="get_tags",
     description="Get a paginated list of tags used to categorize and organize core components",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing paginated list of tags. Tags are classification labels used to categorize and organize core components, enabling filtering and grouping of components by shared characteristics. Common examples include semantic classifications such as 'Noun' and 'Verb', as well as domain-specific groupings like 'BOD' (Business Object Document) in connectSpec.",

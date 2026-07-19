@@ -1,7 +1,9 @@
 package org.oagi.score.gateway.http.api.ai_management.controller;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
 import org.oagi.score.gateway.http.api.ai_management.service.AiExecutionEvent;
@@ -45,6 +47,27 @@ class AiChatControllerTest {
     private final AuthenticatedPrincipal principal = mock(AuthenticatedPrincipal.class);
     private final ChatService chatService = mock(ChatService.class);
     private final SessionService sessionService = mock(SessionService.class);
+    private final SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
+
+    @Test
+    void preservesMultiAgentSettingsWhileAddingRestCorrelation() throws Exception {
+        AiChatController controller = controller(new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
+        AiMultiAgentOptions options = new AiMultiAgentOptions(true, 4, "creative");
+        ChatRequest request = new ChatRequest("Help me", null, null, "conversation-1",
+                null, List.of(), null, "model", "high", "default", Map.of(), "ask", options);
+        when(sessionService.asScoreUser(principal)).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenReturn(
+                new ChatResponse("agent", "done", "conversation-1", false, List.of()));
+
+        controller.chat(principal, request).get(1, TimeUnit.SECONDS);
+
+        ArgumentCaptor<ChatRequest> correlated = ArgumentCaptor.forClass(ChatRequest.class);
+        verify(chatService).prepare(correlated.capture(), eq(user));
+        assertThat(correlated.getValue().requestId()).isNotBlank();
+        assertThat(correlated.getValue().multiAgent()).isEqualTo(options);
+    }
 
     @Test
     void returnsMutationConfirmationEventsFromTheRestTransport() throws Exception {
@@ -76,6 +99,54 @@ class AiChatControllerTest {
             assertThat(event.subtype()).isEqualTo("mutation_confirmation_required");
             assertThat(event.metadata()).containsEntry("confirmationRequestId", "confirmation-1");
         });
+    }
+
+    @Test
+    void exposesMultiAgentLifecycleAsVisibleSystemEventsFromRest() throws Exception {
+        AiChatController controller = controller(new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
+        ChatRequest request = request("request-1", "conversation-1");
+        when(sessionService.asScoreUser(principal)).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            Consumer<AiExecutionEvent> events = invocation.getArgument(2);
+            events.accept(AiExecutionEvent.detail("subagent_started", "Specialist started.", Map.of(
+                    "agentId", "fanout-1-agent-01",
+                    "nodeId", "fanout-1-agent-01",
+                    "agentName", "requirements-analyst",
+                    "agentRole", "requirements analysis")));
+            return new ChatResponse("connectcenter-assistant", "Working.",
+                    "conversation-1", false, List.of());
+        });
+
+        ChatResponse response = controller.chat(principal, request).get(1, TimeUnit.SECONDS).getBody();
+
+        assertThat(response).isNotNull();
+        assertThat(response.events()).singleElement().satisfies(event -> {
+            assertThat(event.type()).isEqualTo("system");
+            assertThat(event.subtype()).isEqualTo("subagent_started");
+            assertThat(event.metadata())
+                    .containsEntry("agentId", "fanout-1-agent-01")
+                    .containsEntry("agentName", "requirements-analyst");
+        });
+        ArgumentCaptor<Object> streamed = ArgumentCaptor.forClass(Object.class);
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("tester"), eq("/queue/ai/chat/request-1"), streamed.capture());
+        assertThat(streamed.getValue()).isInstanceOfSatisfying(
+                org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChatSocketEvent.class,
+                event -> assertThat(event.subtype()).isEqualTo("subagent_started"));
+    }
+
+    @Test
+    void ordersConcurrentRestEventsByTheirAssignedSequence() {
+        var second = org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChatSocketEvent.system(
+                "request-1", "conversation-1", 2L, "subagent_completed", "second", Map.of());
+        var first = org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChatSocketEvent.system(
+                "request-1", "conversation-1", 1L, "subagent_started", "first", Map.of());
+
+        assertThat(AiChatController.orderedResponseEvents(List.of(second, first)))
+                .extracting(event -> event.sequence())
+                .containsExactly(1L, 2L);
     }
 
     @Test
@@ -155,7 +226,7 @@ class AiChatControllerTest {
 
     private AiChatController controller(AiRequestRegistry registry, ScoreAiProperties properties,
                                         java.util.concurrent.Executor executor) {
-        return new AiChatController(chatService, sessionService, mock(SimpMessagingTemplate.class),
+        return new AiChatController(chatService, sessionService, messagingTemplate,
                 mock(WebSocketSessionUserResolver.class), registry,
                 mock(AiMutationConfirmationService.class), properties, executor);
     }

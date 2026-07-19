@@ -16,6 +16,7 @@ public class ScoreAiProperties {
     private String modelName;
     private Duration requestTimeout = Duration.ofMinutes(10);
     private Assistant assistant = new Assistant();
+    private MultiAgent multiAgent = new MultiAgent();
     private Memory memory = new Memory();
     private Mcp mcp = new Mcp();
 
@@ -57,6 +58,14 @@ public class ScoreAiProperties {
 
     public void setAssistant(Assistant assistant) {
         this.assistant = assistant != null ? assistant : new Assistant();
+    }
+
+    public MultiAgent getMultiAgent() {
+        return multiAgent;
+    }
+
+    public void setMultiAgent(MultiAgent multiAgent) {
+        this.multiAgent = multiAgent != null ? multiAgent : new MultiAgent();
     }
 
     public Memory getMemory() {
@@ -232,6 +241,29 @@ public class ScoreAiProperties {
         public String getSystemPromptResource() { return systemPromptResource; }
         public void setSystemPromptResource(String systemPromptResource) {
             this.systemPromptResource = systemPromptResource;
+        }
+    }
+
+    /** Process-wide fan-out admission and one shared deadline for each specialist wave. */
+    public static class MultiAgent {
+        private int maxConcurrentSpecialists = 16;
+        // Both caps are per application instance; cluster-wide bounding comes from
+        // the per-user active-request limit in the shared AI request registry.
+        private int maxConcurrentSpecialistsPerUser = 8;
+        private Duration specialistTimeout = Duration.ofMinutes(2);
+
+        public int getMaxConcurrentSpecialists() { return maxConcurrentSpecialists; }
+        public void setMaxConcurrentSpecialists(int maxConcurrentSpecialists) {
+            this.maxConcurrentSpecialists = maxConcurrentSpecialists;
+        }
+        public int getMaxConcurrentSpecialistsPerUser() { return maxConcurrentSpecialistsPerUser; }
+        public void setMaxConcurrentSpecialistsPerUser(int maxConcurrentSpecialistsPerUser) {
+            this.maxConcurrentSpecialistsPerUser = maxConcurrentSpecialistsPerUser;
+        }
+        public Duration getSpecialistTimeout() { return specialistTimeout; }
+        public void setSpecialistTimeout(Duration specialistTimeout) {
+            this.specialistTimeout = specialistTimeout != null
+                    ? specialistTimeout : Duration.ofMinutes(2);
         }
     }
 

@@ -26,50 +26,29 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
-/** Enforces explicit, one-time approval before any non-allowlisted connectCenter MCP tool call. */
+/** Enforces explicit, one-time approval before any connectCenter MCP tool call the server did not declare read-only. */
 @Component
 public class AiMutationToolGuard {
 
+    public static final String MUTATION_CONFIRMATION_REQUIRED = "MUTATION_CONFIRMATION_REQUIRED";
+    public static final String REQUEST_STOPPING = "REQUEST_STOPPING";
+
     /*
-     * MCP's Spring AI adapter does not expose MCP readOnlyHint metadata. Keep an
-     * exact, case-sensitive allowlist of the current connectCenter read tools so
-     * a future data-changing tool cannot bypass approval merely by using a
-     * get_* prefix. Every unknown/future name requires approval by default.
+     * Read-only classification comes from the MCP server itself: the session's
+     * read-only set contains exactly the tool names the server declared with the
+     * readOnlyHint tool annotation, resolved at session open. The set is exact and
+     * case-sensitive, so a data-changing tool cannot bypass approval merely by
+     * using a get_* prefix, and every unannotated/unknown/future name requires
+     * approval by default.
      */
-    private static final Set<String> READ_ONLY_TOOLS = Set.of(
-            "get_agency_id_lists",
-            "get_agency_id_list",
-            "get_users",
-            "who_am_i",
-            "get_business_contexts",
-            "get_business_context",
-            "get_top_level_asbiep_list",
-            "get_top_level_asbiep",
-            "get_asbie_by_asbie_id",
-            "get_asbie_by_based_ascc_manifest_id",
-            "get_bbie_by_bbie_id",
-            "get_bbie_by_based_bcc_manifest_id",
-            "get_code_lists",
-            "get_code_list",
-            "get_core_components",
-            "get_acc",
-            "get_asccp",
-            "get_bccp",
-            "get_context_categories",
-            "get_context_category",
-            "get_context_schemes",
-            "get_context_scheme",
-            "get_data_types",
-            "get_data_type",
-            "get_libraries",
-            "get_library",
-            "get_namespaces",
-            "get_namespace",
-            "get_releases",
-            "get_release",
-            "get_working_release",
-            "get_tags",
-            "get_xbt");
+    private static final String CONFIRMATION_REQUIRED_RESULT =
+            "{\"error\":\"" + MUTATION_CONFIRMATION_REQUIRED
+                    + "\",\"message\":\"This data-changing tool call was not executed."
+                    + " Wait for explicit user approval.\"}";
+    private static final String REQUEST_STOPPING_RESULT =
+            "{\"error\":\"" + REQUEST_STOPPING
+                    + "\",\"message\":\"The request is stopping;"
+                    + " the data-changing tool was not executed.\"}";
 
     private final AiMutationConfirmationService confirmations;
     private final AiRequestRegistry requests;
@@ -89,16 +68,16 @@ public class AiMutationToolGuard {
 
     public ToolCallbackProvider guard(ChatRequest request, ScoreUser requester,
                                       Consumer<AiMutationConfirmationNotice> noticeConsumer,
-                                      ToolCallbackProvider delegate) {
-        return session(request, requester, noticeConsumer, delegate);
+                                      ToolCallbackProvider delegate, Set<String> readOnlyToolNames) {
+        return session(request, requester, noticeConsumer, delegate, readOnlyToolNames);
     }
 
     public GuardedToolSession session(ChatRequest request, ScoreUser requester,
                                       Consumer<AiMutationConfirmationNotice> noticeConsumer,
-                                      ToolCallbackProvider delegate) {
+                                      ToolCallbackProvider delegate, Set<String> readOnlyToolNames) {
         ToolCallback[] callbacks = delegate != null ? delegate.getToolCallbacks() : new ToolCallback[0];
         ToolCallback[] guarded = new ToolCallback[callbacks.length];
-        GuardedToolSession session = new GuardedToolSession(request, guarded);
+        GuardedToolSession session = new GuardedToolSession(request, guarded, readOnlyToolNames);
         Set<String> emitted = ConcurrentHashMap.newKeySet();
         for (int index = 0; index < callbacks.length; index++) {
             guarded[index] = new GuardedToolCallback(callbacks[index], request, requester,
@@ -111,8 +90,18 @@ public class AiMutationToolGuard {
         return session;
     }
 
-    boolean isMutation(String toolName) {
-        return toolName == null || !READ_ONLY_TOOLS.contains(toolName);
+    /** Returns only the tools the server declared read-only, fail-closed, for specialist agents. */
+    public ToolCallbackProvider readOnly(ToolCallbackProvider delegate, Set<String> readOnlyToolNames) {
+        ToolCallback[] callbacks = delegate != null ? delegate.getToolCallbacks() : new ToolCallback[0];
+        ToolCallback[] readOnly = Arrays.stream(callbacks)
+                .filter(callback -> !isMutation(callback.getToolDefinition().name(), readOnlyToolNames))
+                .toArray(ToolCallback[]::new);
+        return () -> readOnly;
+    }
+
+    static boolean isMutation(String toolName, Set<String> readOnlyToolNames) {
+        return toolName == null || readOnlyToolNames == null
+                || !readOnlyToolNames.contains(toolName);
     }
 
     private final class GuardedToolCallback implements ToolCallback {
@@ -146,7 +135,7 @@ public class AiMutationToolGuard {
             String name = getToolDefinition().name();
             String normalizedInput = inputNormalizer.normalize(
                     input, getToolDefinition().inputSchema());
-            if (!isMutation(name)) {
+            if (!session.isMutation(name)) {
                 String result = delegate.call(normalizedInput, context);
                 session.readCompleted();
                 return result;
@@ -163,13 +152,11 @@ public class AiMutationToolGuard {
                 if (!authorization.allowed()) {
                     session.markConfirmationRequired();
                     notices.accept(authorization.notice());
-                    return "{\"error\":\"MUTATION_CONFIRMATION_REQUIRED\","
-                            + "\"message\":\"This data-changing tool call was not executed. Wait for explicit user approval.\"}";
+                    return CONFIRMATION_REQUIRED_RESULT;
                 }
             }
             if (!requests.mutationStarted(request.requestId())) {
-                return "{\"error\":\"REQUEST_STOPPING\","
-                        + "\"message\":\"The request is stopping; the data-changing tool was not executed.\"}";
+                return REQUEST_STOPPING_RESULT;
             }
             try {
                 String result = delegate.call(normalizedInput, context);
@@ -185,6 +172,7 @@ public class AiMutationToolGuard {
     public final class GuardedToolSession implements ToolCallbackProvider {
         private final ChatRequest request;
         private final ToolCallback[] callbacks;
+        private final Set<String> readOnlyToolNames;
         private final AtomicLong sequence = new AtomicLong();
         private final CopyOnWriteArrayList<ApprovedExecution> completedMutations =
                 new CopyOnWriteArrayList<>();
@@ -193,9 +181,15 @@ public class AiMutationToolGuard {
         private volatile boolean confirmationRequired;
         private volatile ApprovedExecution approvedExecution;
 
-        private GuardedToolSession(ChatRequest request, ToolCallback[] callbacks) {
+        private GuardedToolSession(ChatRequest request, ToolCallback[] callbacks,
+                                   Set<String> readOnlyToolNames) {
             this.request = request;
             this.callbacks = callbacks;
+            this.readOnlyToolNames = readOnlyToolNames != null ? Set.copyOf(readOnlyToolNames) : Set.of();
+        }
+
+        boolean isMutation(String toolName) {
+            return AiMutationToolGuard.isMutation(toolName, readOnlyToolNames);
         }
 
         @Override

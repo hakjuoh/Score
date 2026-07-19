@@ -45,6 +45,7 @@ from fastmcp import Context, FastMCP
 from fastmcp.dependencies import Depends
 from fastmcp.exceptions import ToolError
 from fastmcp.server.elicitation import AcceptedElicitation, CancelledElicitation, DeclinedElicitation
+from mcp.types import ToolAnnotations
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -86,6 +87,7 @@ async def get_library_service(
 @mcp.tool(
     name="get_libraries",
     description="Get a paginated list of libraries.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing paginated list of libraries.",
@@ -388,6 +390,7 @@ async def get_libraries(
 @mcp.tool(
     name="get_library",
     description="Get a specific library by ID",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing library information",

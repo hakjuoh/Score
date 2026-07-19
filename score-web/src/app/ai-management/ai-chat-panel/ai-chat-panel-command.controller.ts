@@ -1,5 +1,6 @@
 import {Message} from '@stomp/stompjs';
 import {AiChatPanelMessageController} from './ai-chat-panel-message.controller';
+import {AiAgentActivity, agentActivityElapsedLabel} from './domain/ai-agent-activity';
 import {AiLocalCommand} from './domain/ai-chat-command.service';
 import {AiChatSocketEvent} from './domain/ai-chat-panel.model';
 
@@ -80,6 +81,83 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
   closePermissionSettings(): void {
     this.settingsService.closePermission(this.state);
     this.focusPrompt();
+  }
+
+  /** The roster strip accompanies a live fan-out only: it appears when the
+   *  first agent starts and disappears once every agent has settled. Settled
+   *  runs stay inspectable through the inline agent group block. */
+  get agentStripVisible(): boolean {
+    return this.state.agentActivities.some(activity => activity.inProgress);
+  }
+
+  get agentStripLabel(): string {
+    const activities = this.state.agentActivities;
+    if (activities.length === 0) {
+      return 'Agent workflow';
+    }
+    const specialists = activities.filter(activity => !activity.isLead);
+    const lead = activities.find(activity => activity.isLead);
+    const total = Math.max(specialists.length, lead?.plannedAgentCount || 0);
+    const settled = specialists.filter(activity => !activity.inProgress).length;
+    const phase = specialists.some(activity => activity.inProgress)
+      ? 'working'
+      : lead?.status === 'synthesizing'
+        ? 'synthesizing'
+        : activities.some(activity => activity.status === 'failed') ? 'failed'
+          : activities.some(activity => activity.status === 'cancelled') ? 'stopped'
+            : lead?.inProgress ? 'working' : 'finished';
+    const unit = activities.some(activity => activity.executionKind === 'parallel')
+      ? 'Tasks' : 'Agents';
+    return `${unit} ${settled}/${total} · ${phase}`;
+  }
+
+  get focusedAgentActivity(): AiAgentActivity | undefined {
+    const agentFocusId = this.state.agentFocusId;
+    return agentFocusId ? this.findAgentActivity(agentFocusId) : undefined;
+  }
+
+  get activityListLabel(): string {
+    return this.state.agentActivities.some(activity => activity.executionKind === 'parallel')
+      ? 'Parallel tasks in this request' : 'Agents in this request';
+  }
+
+  onAgentStripClick(): void {
+    this.state.agentListOpen = !this.state.agentListOpen;
+  }
+
+  focusAgentActivity(agentId: string): void {
+    if (!this.findAgentActivity(agentId)) {
+      return;
+    }
+    this.state.agentFocusId = agentId;
+    this.state.agentListOpen = false;
+  }
+
+  closeAgentFocus(): void {
+    this.state.agentFocusId = undefined;
+  }
+
+  /** Finds an agent in the live fan-out first, then in settled group anchors. */
+  private findAgentActivity(agentId: string): AiAgentActivity | undefined {
+    const live = this.state.agentActivities.find(activity => activity.agentId === agentId);
+    if (live) {
+      return live;
+    }
+    for (let index = this.state.messages.length - 1; index >= 0; index--) {
+      const message = this.state.messages[index];
+      if (message.role !== 'agent_group' && message.role !== 'workflow_group') {
+        continue;
+      }
+      const historical = message.activities?.find(activity => activity.agentId === agentId);
+      if (historical) {
+        return historical;
+      }
+    }
+    return undefined;
+  }
+
+  agentElapsedLabel(activity: AiAgentActivity): string {
+    return agentActivityElapsedLabel(activity);
   }
 
   cancelActiveRequest(): void {

@@ -1,0 +1,340 @@
+.message-row.agent_group .message-bubble,
+.message-row.workflow_group .message-bubble {
+  display: block;
+}
+
+.message-row.workflow_group .agent-group-block {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.agent-group-block {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 6px;
+  border: 1px solid #e4e4e7;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #52525b;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.agent-group-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 18px;
+  color: #3f3f46;
+}
+
+.agent-group-header mat-icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 14px;
+  color: #52525b;
+}
+
+.agent-group-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.agent-group-count {
+  color: #71717a;
+  white-space: nowrap;
+}
+
+.agent-group-workflow {
+  color: #71717a;
+  white-space: nowrap;
+}
+
+.agent-group-plan {
+  margin: 2px 2px 3px 19px;
+  color: #71717a;
+}
+
+.agent-group-summary {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: #71717a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-group-row,
+.agent-list-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 6px;
+  min-height: 22px;
+  padding: 1px 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #52525b;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-group-row:hover,
+.agent-group-row:focus-visible,
+.agent-list-row:hover,
+.agent-list-row:focus-visible {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.agent-row-status,
+.agent-list-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 14px;
+  min-height: 16px;
+  color: #52525b;
+}
+
+.agent-row-status mat-icon,
+.agent-list-status mat-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 14px;
+}
+
+.agent-terminal-warn .agent-row-status,
+.agent-terminal-warn .agent-list-status,
+.agent-focus-status.agent-terminal-warn {
+  color: #b45309;
+}
+
+.agent-row-name,
+.agent-list-name {
+  flex: 0 0 auto;
+  color: #18181b;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.agent-row-role,
+.agent-list-role {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: #71717a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-row-snippet,
+.agent-list-snippet {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-row-elapsed,
+.agent-list-elapsed {
+  flex: 0 0 auto;
+  color: #a1a1aa;
+  white-space: nowrap;
+}
+
+.agents-status-strip {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 12px 4px;
+  box-sizing: border-box;
+  border-top: 1px solid #e4e4e7;
+  background: #fafafa;
+  color: #52525b;
+  font: 11px/16px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.agents-strip-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agents-strip-button:hover,
+.agents-strip-button:focus-visible {
+  color: #18181b;
+}
+
+.agents-strip-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.agents-strip-button mat-icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 14px;
+}
+
+.agents-strip-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-list-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  width: 100%;
+  max-height: 132px;
+  min-width: 0;
+  padding: 4px 10px;
+  box-sizing: border-box;
+  border-top: 1px solid #e4e4e7;
+  background: #fafafa;
+  color: #52525b;
+  font: 11px/16px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  overflow-y: auto;
+}
+
+.agent-focus-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.agent-focus-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 2px 4px;
+  border-bottom: 1px solid #e4e4e7;
+  background: #ffffff;
+  color: #18181b;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.agent-focus-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+}
+
+.agent-focus-back:hover,
+.agent-focus-back:focus-visible {
+  background: #e4e4e7;
+  color: #18181b;
+}
+
+.agent-focus-back mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+.agent-focus-name {
+  flex: 0 0 auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.agent-focus-role {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+  border: 1px solid #e4e4e7;
+  border-radius: 999px;
+  overflow: hidden;
+  color: #52525b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-focus-status {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 5px;
+  margin-left: auto;
+  color: #71717a;
+  white-space: nowrap;
+}
+
+.agent-focus-events {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px 0 0;
+  color: #3f3f46;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.composer-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #52525b;
+  cursor: pointer;
+}
+
+.composer-menu-button:hover,
+.composer-menu-button:focus-visible {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.composer-menu-button mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 16px;
+}

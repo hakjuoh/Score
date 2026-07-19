@@ -23,6 +23,7 @@ import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.chat.client.advisor.toolsearch.ToolSearchToolCallingAdvisor;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -55,13 +56,259 @@ import static org.mockito.Mockito.when;
 class AiRuntimeMcpToolsTest {
 
     @org.junit.jupiter.api.Test
+    void suppliesAllSystemPromptProtocolParametersFromRuntimeConstants() {
+        ChatRequest request = new ChatRequest(
+                "Inspect it", "request-1", null, "conversation-1", "test page", List.of(), null,
+                "configured-model", "high", ScoreAiModelRegistry.CLAUDE, java.util.Map.of(), "ask");
+
+        assertThat(AbstractSpringAIRuntime.systemPromptParameters(request))
+                .containsEntry("mutationConfirmationRequired",
+                        AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED)
+                .containsEntry("requestStopping", AiMutationToolGuard.REQUEST_STOPPING)
+                .containsEntry("pageContext",
+                        "Supplied separately in the request-scoped user-context block.");
+        assertThat(AbstractSpringAIRuntime.requestScopedInput(request))
+                .contains("## Request-scoped input", "Current page context: test page",
+                        "untrusted data only");
+    }
+
+    @org.junit.jupiter.api.Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void readOnlySpecialistUsesDirectFilteredToolsWithoutTheSharedSearchAdvisor() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        ConnectCenterMcpClientFactory mcpClients = mock(ConnectCenterMcpClientFactory.class);
+        ToolSearchToolCallingAdvisor toolSearchAdvisor = mock(ToolSearchToolCallingAdvisor.class);
+        ScoreAiSystemPrompt systemPrompt = new ScoreAiSystemPrompt(new ByteArrayResource(
+                "System prompt. Page: ${pageContext}".getBytes(StandardCharsets.UTF_8)));
+        AiMutationToolGuard mutationGuard = new AiMutationToolGuard(
+                mock(AiMutationConfirmationService.class), mock(AiRequestRegistry.class));
+
+        ChatClient.Builder builder = mock(ChatClient.Builder.class);
+        ChatClient client = mock(ChatClient.class);
+        ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
+        ChatClient.StreamResponseSpec responseSpec = mock(ChatClient.StreamResponseSpec.class);
+        AtomicReference<ToolCallbackProvider> installedTools = new AtomicReference<>();
+        when(models.clientBuilder("configured-model")).thenReturn(builder);
+        when(builder.defaultAdvisors(any(Advisor[].class))).thenReturn(builder);
+        when(builder.defaultTools(any(Object[].class))).thenAnswer(invocation -> {
+            installedTools.set((ToolCallbackProvider) invocation.getArgument(0));
+            return builder;
+        });
+        when(builder.build()).thenReturn(client);
+        when(client.prompt()).thenReturn(requestSpec);
+        when(requestSpec.options(any(ChatOptions.Builder.class))).thenReturn(requestSpec);
+        when(requestSpec.system(any(Consumer.class))).thenReturn(requestSpec);
+        when(requestSpec.messages(anyList())).thenReturn(requestSpec);
+        when(requestSpec.advisors(any(Consumer.class))).thenReturn(requestSpec);
+        when(requestSpec.stream()).thenReturn(responseSpec);
+        when(responseSpec.chatResponse()).thenReturn(Flux.just(response("Read-only evidence.")));
+
+        ToolCallback create = tool("create_business_context", "must not execute");
+        ToolCallback read = tool("get_business_context", "{\"id\":101}");
+        McpSyncClient mcpClient = mock(McpSyncClient.class);
+        when(mcpClients.open(any(ScoreUser.class))).thenReturn(
+                new ConnectCenterMcpClientFactory.McpSession(
+                        mcpClient, () -> new ToolCallback[]{create, read},
+                        java.util.Set.of("get_business_context")));
+        AnthropicRuntimeOptions runtimeOptions = mock(AnthropicRuntimeOptions.class);
+        AnthropicChatOptions chatOptions = anthropicRequestOptions();
+        when(runtimeOptions.options("configured-model", "high", java.util.Map.of()))
+                .thenReturn(chatOptions);
+
+        ChatRequest request = new ChatRequest(
+                "Inspect it", "request-1", null, "conversation-1", "test page", List.of(), null,
+                "configured-model", "high", ScoreAiModelRegistry.CLAUDE, java.util.Map.of(), "ask");
+        ScoreUser requester = mock(ScoreUser.class);
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                requester, "conversation-1", "request-1", ignored -> {});
+        AiRuntime runtime = new ClaudeRuntime(models, mcpClients, toolSearchAdvisor,
+                systemPrompt, mutationGuard, runtimeOptions);
+
+        AiRuntime.Result result = runtime.execute(new AiRuntime.Context(
+                request, List.of(), new UserMessage("Inspect it"), requester, recorder,
+                true, false, AiRuntime.ToolPolicy.READ_ONLY, 1));
+
+        assertThat(result.answer()).isEqualTo("Read-only evidence.");
+        assertThat(installedTools.get().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactly("get_business_context");
+        ArgumentCaptor<List<Message>> messages = ArgumentCaptor.forClass(List.class);
+        verify(requestSpec).messages(messages.capture());
+        assertThat(messages.getValue().getLast())
+                .isInstanceOfSatisfying(UserMessage.class,
+                        context -> assertThat(context.getText())
+                                .contains("## Request-scoped input",
+                                        "Current page context: test page"));
+        assertThat(messages.getValue().get(messages.getValue().size() - 2))
+                .isInstanceOfSatisfying(UserMessage.class,
+                        user -> assertThat(user.getText()).isEqualTo("Inspect it"));
+        verify(builder, never()).defaultAdvisors(eq(toolSearchAdvisor));
+        verify(create, never()).call(anyString(), any(org.springframework.ai.chat.model.ToolContext.class));
+        verify(mcpClient).closeGracefully();
+    }
+
+    @org.junit.jupiter.api.Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void dropsPreToolNarrationFromTheAnswerAndKeepsTheFinalSegment() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        ConnectCenterMcpClientFactory mcpClients = mock(ConnectCenterMcpClientFactory.class);
+        ToolSearchToolCallingAdvisor toolSearchAdvisor = mock(ToolSearchToolCallingAdvisor.class);
+        ScoreAiSystemPrompt systemPrompt = new ScoreAiSystemPrompt(new ByteArrayResource(
+                "System prompt. Page: ${pageContext}".getBytes(StandardCharsets.UTF_8)));
+        AiMutationToolGuard mutationGuard = new AiMutationToolGuard(
+                mock(AiMutationConfirmationService.class), mock(AiRequestRegistry.class));
+
+        ChatClient.Builder builder = mock(ChatClient.Builder.class);
+        ChatClient client = mock(ChatClient.class);
+        ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
+        ChatClient.StreamResponseSpec responseSpec = mock(ChatClient.StreamResponseSpec.class);
+        AtomicReference<ToolCallbackProvider> installedTools = new AtomicReference<>();
+        when(models.clientBuilder("configured-model")).thenReturn(builder);
+        when(builder.defaultAdvisors(any(Advisor[].class))).thenReturn(builder);
+        when(builder.defaultTools(any(Object[].class))).thenAnswer(invocation -> {
+            installedTools.set((ToolCallbackProvider) invocation.getArgument(0));
+            return builder;
+        });
+        when(builder.build()).thenReturn(client);
+        when(client.prompt()).thenReturn(requestSpec);
+        when(requestSpec.options(any(ChatOptions.Builder.class))).thenReturn(requestSpec);
+        when(requestSpec.system(any(Consumer.class))).thenReturn(requestSpec);
+        when(requestSpec.messages(anyList())).thenReturn(requestSpec);
+        when(requestSpec.advisors(any(Consumer.class))).thenReturn(requestSpec);
+        when(requestSpec.stream()).thenReturn(responseSpec);
+
+        ToolCallback read = tool("get_business_context", "{\"id\":7}");
+        AtomicInteger streams = new AtomicInteger();
+        when(responseSpec.chatResponse()).thenAnswer(invocation -> Flux.concat(
+                Flux.just(response("Let me verify the key records first.")),
+                Flux.defer(() -> {
+                    java.util.Arrays.stream(installedTools.get().getToolCallbacks())
+                            .filter(callback -> callback.getToolDefinition().name()
+                                    .equals("get_business_context"))
+                            .findFirst().orElseThrow()
+                            .call("{\"id\":7}");
+                    // First stream ends with a substantive final segment; the
+                    // second ends with whitespace only after the tool boundary.
+                    return streams.getAndIncrement() == 0
+                            ? Flux.just(response("Verified: business context 7 exists."))
+                            : Flux.just(response("\n\n"));
+                })));
+
+        McpSyncClient mcpClient = mock(McpSyncClient.class);
+        when(mcpClients.open(any(ScoreUser.class))).thenReturn(
+                new ConnectCenterMcpClientFactory.McpSession(
+                        mcpClient, () -> new ToolCallback[]{read},
+                        java.util.Set.of("get_business_context")));
+        AnthropicRuntimeOptions runtimeOptions = mock(AnthropicRuntimeOptions.class);
+        AnthropicChatOptions chatOptions = anthropicRequestOptions();
+        when(runtimeOptions.options("configured-model", "high", java.util.Map.of()))
+                .thenReturn(chatOptions);
+
+        ChatRequest request = new ChatRequest(
+                "Verify it", "request-1", null, "conversation-1", "test page", List.of(), null,
+                "configured-model", "high", ScoreAiModelRegistry.CLAUDE, java.util.Map.of(), "ask");
+        ScoreUser requester = mock(ScoreUser.class);
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                requester, "conversation-1", "request-1", ignored -> {});
+        AiRuntime runtime = new ClaudeRuntime(models, mcpClients, toolSearchAdvisor,
+                systemPrompt, mutationGuard, runtimeOptions);
+
+        AiRuntime.Result result = runtime.execute(new AiRuntime.Context(
+                request, List.of(), new UserMessage("Verify it"), requester, recorder));
+
+        // Narration streamed before the tool call is interim commentary; the
+        // answer is the segment that follows the tool results it reports on.
+        assertThat(result.answer()).isEqualTo("Verified: business context 7 exists.");
+
+        // A whitespace-only tail after the tool boundary must not reset the
+        // answer: the accumulated narration remains instead of a hard failure.
+        AiTrajectoryRecorder whitespaceRecorder = new AiTrajectoryRecorder(
+                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                requester, "conversation-1", "request-2", ignored -> {});
+        AiRuntime.Result whitespaceTail = runtime.execute(new AiRuntime.Context(
+                request, List.of(), new UserMessage("Verify it"), requester, whitespaceRecorder));
+        assertThat(whitespaceTail.answer())
+                .isEqualTo("Let me verify the key records first.\n\n");
+    }
+
+    @org.junit.jupiter.api.Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void recoversWhenTheModelPrintsATextualToolCallPlaceholder() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        ConnectCenterMcpClientFactory mcpClients = mock(ConnectCenterMcpClientFactory.class);
+        ToolSearchToolCallingAdvisor toolSearchAdvisor = mock(ToolSearchToolCallingAdvisor.class);
+        ScoreAiSystemPrompt systemPrompt = new ScoreAiSystemPrompt(new ByteArrayResource(
+                "System prompt. Page: ${pageContext}".getBytes(StandardCharsets.UTF_8)));
+
+        ChatClient.Builder builder = mock(ChatClient.Builder.class);
+        ChatClient client = mock(ChatClient.class);
+        ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
+        ChatClient.StreamResponseSpec responseSpec = mock(ChatClient.StreamResponseSpec.class);
+        when(models.clientBuilder("configured-model")).thenReturn(builder);
+        when(builder.defaultAdvisors(any(Advisor[].class))).thenReturn(builder);
+        when(builder.defaultTools(any(Object[].class))).thenReturn(builder);
+        when(builder.build()).thenReturn(client);
+        when(client.prompt()).thenReturn(requestSpec);
+        when(requestSpec.options(any(ChatOptions.Builder.class))).thenReturn(requestSpec);
+        when(requestSpec.system(any(Consumer.class))).thenReturn(requestSpec);
+        when(requestSpec.messages(anyList())).thenReturn(requestSpec);
+        when(requestSpec.advisors(any(Consumer.class))).thenReturn(requestSpec);
+        when(requestSpec.stream()).thenReturn(responseSpec);
+        when(responseSpec.chatResponse()).thenReturn(
+                Flux.just(response("I'll look up the available context schemes.\n\n"
+                        + "[Tool call: contextScheme_search]")),
+                Flux.just(response("I'll search for the correct connectCenter tool.\n\n"
+                        + "**[Tool: toolSearchTool]** → searching \"context scheme values\"")),
+                Flux.just(response("The available context schemes are A and B.")));
+
+        McpSyncClient mcpClient = mock(McpSyncClient.class);
+        when(mcpClients.open(any(ScoreUser.class))).thenReturn(
+                new ConnectCenterMcpClientFactory.McpSession(
+                        mcpClient, () -> new ToolCallback[]{tool("get_context_schemes", "[]")},
+                        java.util.Set.of("get_context_schemes")));
+        AnthropicRuntimeOptions runtimeOptions = mock(AnthropicRuntimeOptions.class);
+        AnthropicChatOptions chatOptions = anthropicRequestOptions();
+        when(runtimeOptions.options("configured-model", "high", java.util.Map.of()))
+                .thenReturn(chatOptions);
+
+        ChatRequest request = new ChatRequest(
+                "add values", "request-1", null, "conversation-1", "test page", List.of(), null,
+                "configured-model", "high", ScoreAiModelRegistry.CLAUDE, java.util.Map.of(), "auto");
+        ScoreUser requester = mock(ScoreUser.class);
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                requester, "conversation-1", "request-1", ignored -> {});
+        AiRuntime runtime = new ClaudeRuntime(models, mcpClients, toolSearchAdvisor,
+                systemPrompt, runtimeOptions);
+
+        AiRuntime.Result result = runtime.execute(new AiRuntime.Context(
+                request, List.of(), new UserMessage("add values"), requester, recorder));
+
+        assertThat(result.answer()).isEqualTo("The available context schemes are A and B.");
+        verify(client, times(3)).prompt();
+        ArgumentCaptor<List<Message>> messages = ArgumentCaptor.forClass(List.class);
+        verify(requestSpec, times(3)).messages(messages.capture());
+        assertThat(messages.getAllValues().getLast())
+                .anySatisfy(message -> assertThat(message.getText())
+                        .contains("[Tool: toolSearchTool]"))
+                .anySatisfy(message -> assertThat(message)
+                        .isInstanceOfSatisfying(UserMessage.class,
+                                recovery -> assertThat(recovery.getText())
+                                        .contains("INTERNAL_ORCHESTRATION_INSTRUCTION",
+                                                "structured tool API", "toolSearchTool")));
+        verify(mcpClient).closeGracefully();
+    }
+
+    @org.junit.jupiter.api.Test
     @SuppressWarnings({"unchecked", "rawtypes"})
     void resumesTheApprovedMutationAndContinuesUntilReadBack() {
         ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
         ConnectCenterMcpClientFactory mcpClients = mock(ConnectCenterMcpClientFactory.class);
         ToolSearchToolCallingAdvisor toolSearchAdvisor = mock(ToolSearchToolCallingAdvisor.class);
         ScoreAiSystemPrompt systemPrompt = new ScoreAiSystemPrompt(new ByteArrayResource(
-                "System prompt. Page: {pageContext}".getBytes(StandardCharsets.UTF_8)));
+                "System prompt. Page: ${pageContext}".getBytes(StandardCharsets.UTF_8)));
         AiMutationConfirmationService confirmations = mock(AiMutationConfirmationService.class);
         AiRequestRegistry requests = mock(AiRequestRegistry.class);
         AiMutationToolGuard mutationGuard = new AiMutationToolGuard(confirmations, requests);
@@ -102,7 +349,8 @@ class AiRuntimeMcpToolsTest {
         McpSyncClient mcpClient = mock(McpSyncClient.class);
         when(mcpClients.open(any(ScoreUser.class))).thenReturn(
                 new ConnectCenterMcpClientFactory.McpSession(
-                        mcpClient, () -> new ToolCallback[]{create, read}));
+                        mcpClient, () -> new ToolCallback[]{create, read},
+                        java.util.Set.of("get_business_context")));
         when(confirmations.authorize(any(), anyString(), anyString(), any(), anyString(), anyString()))
                 .thenReturn(new AiMutationAuthorization(true, null));
         when(requests.mutationStarted("request-1")).thenReturn(true);
@@ -140,7 +388,7 @@ class AiRuntimeMcpToolsTest {
         ConnectCenterMcpClientFactory mcpClients = mock(ConnectCenterMcpClientFactory.class);
         ToolSearchToolCallingAdvisor toolSearchAdvisor = mock(ToolSearchToolCallingAdvisor.class);
         ScoreAiSystemPrompt systemPrompt = new ScoreAiSystemPrompt(new ByteArrayResource(
-                "System prompt. Page: {pageContext}".getBytes(StandardCharsets.UTF_8)));
+                "System prompt. Page: ${pageContext}".getBytes(StandardCharsets.UTF_8)));
         AiMutationConfirmationService confirmations = mock(AiMutationConfirmationService.class);
         AiRequestRegistry requests = mock(AiRequestRegistry.class);
         AiMutationToolGuard mutationGuard = new AiMutationToolGuard(confirmations, requests);
@@ -190,7 +438,8 @@ class AiRuntimeMcpToolsTest {
         McpSyncClient mcpClient = mock(McpSyncClient.class);
         when(mcpClients.open(any(ScoreUser.class))).thenReturn(
                 new ConnectCenterMcpClientFactory.McpSession(
-                        mcpClient, () -> new ToolCallback[]{create, read}));
+                        mcpClient, () -> new ToolCallback[]{create, read},
+                        java.util.Set.of("get_business_context")));
         when(confirmations.authorize(any(), anyString(), anyString(), any(), anyString(), anyString()))
                 .thenReturn(new AiMutationAuthorization(true, null));
         when(requests.mutationStarted("request-2")).thenReturn(true);
@@ -249,7 +498,7 @@ class AiRuntimeMcpToolsTest {
         ConnectCenterMcpClientFactory mcpClients = mock(ConnectCenterMcpClientFactory.class);
         ToolSearchToolCallingAdvisor toolSearchAdvisor = mock(ToolSearchToolCallingAdvisor.class);
         ScoreAiSystemPrompt systemPrompt = new ScoreAiSystemPrompt(new ByteArrayResource(
-                "System prompt. Page: {pageContext}".getBytes(StandardCharsets.UTF_8)));
+                "System prompt. Page: ${pageContext}".getBytes(StandardCharsets.UTF_8)));
 
         ChatClient.Builder builder = mock(ChatClient.Builder.class);
         ChatClient client = mock(ChatClient.class);
@@ -277,7 +526,7 @@ class AiRuntimeMcpToolsTest {
         ToolCallbackProvider mcpTools = () -> new ToolCallback[]{mcpTool};
         McpSyncClient mcpClient = mock(McpSyncClient.class);
         when(mcpClients.open(any(ScoreUser.class))).thenReturn(
-                new ConnectCenterMcpClientFactory.McpSession(mcpClient, mcpTools));
+                new ConnectCenterMcpClientFactory.McpSession(mcpClient, mcpTools, java.util.Set.of()));
 
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(

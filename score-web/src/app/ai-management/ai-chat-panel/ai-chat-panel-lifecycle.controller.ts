@@ -43,10 +43,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
 
   protected clearTimers(): void {
     this.clearRequestStatusWatchdog();
-    if (this.responseTimeout) {
-      window.clearTimeout(this.responseTimeout);
-      this.responseTimeout = undefined;
-    }
+    this.clearResponseTimeout();
     if (this.acknowledgementTimeout) {
       window.clearTimeout(this.acknowledgementTimeout);
       this.acknowledgementTimeout = undefined;
@@ -208,6 +205,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     }
     this.clearCompletedPayloadRecovery();
     this.completeProgressMessages();
+    this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
     this.pendingContextUpdate = undefined;
@@ -296,6 +294,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.clearCompletedPayloadRecovery();
     this.completeProgressMessages();
     this.completeToolGroupMessages();
+    this.settleAgentActivity('completed');
     this.clearTimers();
     this.clearStatusMessage();
     this.confirmedMutationRequests.cancel(requestId);

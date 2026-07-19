@@ -65,7 +65,7 @@ export class AiChatMessageTrackerService {
   }
 
   handleLegacyRecoverableToolError(
-    state: AiChatPanelState, event: AiChatSocketEvent, content: string
+    state: AiChatPanelState, event: AiChatSocketEvent, _content: string
   ): boolean {
     const toolName = legacyRecoverableToolName(event);
     if (!toolName) return false;
@@ -85,7 +85,7 @@ export class AiChatMessageTrackerService {
       ...active,
       active: false,
       status: 'failed',
-      content: content || `${toolName} failed.`,
+      content: 'Execution failed',
       recoverable: true
     });
     this.showStatus(state, 'Continuing after tool failure', true);

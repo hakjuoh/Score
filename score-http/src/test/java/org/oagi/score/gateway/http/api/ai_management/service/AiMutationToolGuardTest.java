@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,6 +28,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AiMutationToolGuardTest {
+
+    /** Stands in for the tool names the MCP server annotates with readOnlyHint=true. */
+    private static final Set<String> SERVER_READ_ONLY_TOOLS = Set.of(
+            "get_business_context", "get_top_level_asbiep_list", "get_xbt", "who_am_i");
 
     private final AiMutationConfirmationService confirmations = mock(AiMutationConfirmationService.class);
     private final AiRequestRegistry requests = mock(AiRequestRegistry.class);
@@ -148,7 +153,8 @@ class AiMutationToolGuardTest {
         when(requests.mutationStarted("request-1")).thenReturn(true);
         ToolCallback delegate = tool("create_business_context", "created");
         AiMutationToolGuard.GuardedToolSession session = guard.session(
-                approved, requester, ignored -> {}, () -> new ToolCallback[]{delegate});
+                approved, requester, ignored -> {}, () -> new ToolCallback[]{delegate},
+                SERVER_READ_ONLY_TOOLS);
 
         AiMutationToolGuard.ApprovedExecution execution = session.executeApproved(session).orElseThrow();
 
@@ -172,7 +178,8 @@ class AiMutationToolGuardTest {
         when(requests.mutationStarted("request-1")).thenReturn(true);
         ToolCallback delegate = tool("create_business_context", "created");
         AiMutationToolGuard.GuardedToolSession session = guard.session(
-                approved, requester, ignored -> {}, () -> new ToolCallback[]{delegate});
+                approved, requester, ignored -> {}, () -> new ToolCallback[]{delegate},
+                SERVER_READ_ONLY_TOOLS);
 
         assertThat(session.executeApproved(session)).isEmpty();
         verify(delegate, never()).call(anyString(), any(ToolContext.class));
@@ -191,7 +198,8 @@ class AiMutationToolGuardTest {
         AiMutationToolGuard.GuardedToolSession session = guard.session(
                 fullAccess, requester, ignored -> {}, () -> new ToolCallback[]{
                         tool("create_business_context", "created"),
-                        tool("get_business_context", "read")});
+                        tool("get_business_context", "read")},
+                SERVER_READ_ONLY_TOOLS);
 
         session.getToolCallbacks()[0].call("{}", new ToolContext(Map.of()));
         assertThat(session.readAfterLastMutation()).isFalse();
@@ -204,18 +212,34 @@ class AiMutationToolGuardTest {
     }
 
     @Test
-    void allowlistsCurrentReadToolsAndFailsClosedForEveryOtherName() {
+    void treatsOnlyServerAnnotatedReadOnlyToolsAsReadsAndFailsClosedForEveryOtherName() {
         assertThat(List.of("create_x", "update_x", "delete_x", "add_x", "remove_x",
                 "assign_x", "unassign_x", "transfer_x", "discard_x", "publish_x",
                 "copy_x", "move_x", "uplift_x", "reuse_x", "set_x", "reset_x",
                 "replace_x", "import_x", "upload_x", "change_x", "cancel_x",
                 "revise_or_amend_x", "search_x", "future_unknown_tool",
-                "get_and_delete_business_context", "GET_BUSINESS_CONTEXT"))
-                .allMatch(guard::isMutation);
+                "get_and_delete_business_context", "GET_BUSINESS_CONTEXT", "get_x"))
+                .allMatch(name -> AiMutationToolGuard.isMutation(name, SERVER_READ_ONLY_TOOLS));
         assertThat(List.of("get_business_context", "get_top_level_asbiep_list", "get_xbt", "who_am_i"))
-                .noneMatch(guard::isMutation);
-        assertThat(guard.isMutation("get_x")).isTrue();
-        assertThat(guard.isMutation(null)).isTrue();
+                .noneMatch(name -> AiMutationToolGuard.isMutation(name, SERVER_READ_ONLY_TOOLS));
+        assertThat(AiMutationToolGuard.isMutation(null, SERVER_READ_ONLY_TOOLS)).isTrue();
+        assertThat(AiMutationToolGuard.isMutation("get_business_context", null)).isTrue();
+        assertThat(AiMutationToolGuard.isMutation("get_business_context", Set.of())).isTrue();
+    }
+
+    @Test
+    void readOnlySpecialistProviderDropsEveryMutationAndUnknownTool() {
+        ToolCallback read = tool("get_business_context", "read");
+        ToolCallback mutation = tool("create_business_context", "created");
+        ToolCallback unknown = tool("future_unknown_tool", "unsafe");
+
+        ToolCallbackProvider provider = guard.readOnly(
+                () -> new ToolCallback[]{mutation, read, unknown}, SERVER_READ_ONLY_TOOLS);
+
+        assertThat(provider.getToolCallbacks()).extracting(callback ->
+                callback.getToolDefinition().name()).containsExactly("get_business_context");
+        verify(mutation, never()).call(anyString(), any(ToolContext.class));
+        verify(unknown, never()).call(anyString(), any(ToolContext.class));
     }
 
     @Test
@@ -238,7 +262,7 @@ class AiMutationToolGuardTest {
     private ToolCallback guarded(ChatRequest chatRequest, ToolCallback callback,
                                  java.util.function.Consumer<AiMutationConfirmationNotice> notices) {
         ToolCallbackProvider provider = guard.guard(chatRequest, requester, notices,
-                () -> new ToolCallback[]{callback});
+                () -> new ToolCallback[]{callback}, SERVER_READ_ONLY_TOOLS);
         return provider.getToolCallbacks()[0];
     }
 

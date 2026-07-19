@@ -58,7 +58,11 @@ describe('AiChatComposerComponent cancellation actions', () => {
     await fixture.whenStable();
 
     const prompt = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
-    const attachment = fixture.nativeElement.querySelector('.attachment-button') as HTMLButtonElement;
+    (fixture.nativeElement.querySelector('.composer-menu-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const attachment = document.querySelector(
+      '.ai-chat-composer-menu .composer-attachment-menu-item'
+    ) as HTMLButtonElement;
     expect(prompt.disabled).toBe(false);
     expect(attachment.disabled).toBe(true);
   });
@@ -70,8 +74,10 @@ describe('AiChatComposerComponent cancellation actions', () => {
     fixture.detectChanges();
 
     const prompt = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
-    const attachment = fixture.nativeElement.querySelector(
-      '.attachment-button'
+    (fixture.nativeElement.querySelector('.composer-menu-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const attachment = document.querySelector(
+      '.ai-chat-composer-menu .composer-attachment-menu-item'
     ) as HTMLButtonElement;
     expect(prompt.disabled).toBe(true);
     expect(attachment.disabled).toBe(true);
@@ -84,6 +90,26 @@ describe('AiChatComposerComponent cancellation actions', () => {
       'input[type="file"]'
     ) as HTMLInputElement;
     expect(input.accept).toBe(AI_CHAT_ATTACHMENT_ACCEPT);
+  });
+
+  it('opens the file picker from the composer menu', () => {
+    const requested = vi.fn();
+    component.filePickerRequested.subscribe(requested);
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    expect(fixture.nativeElement.querySelector('.attachment-button')).toBeNull();
+
+    (fixture.nativeElement.querySelector('.composer-menu-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const attachment = document.querySelector(
+      '.ai-chat-composer-menu .composer-attachment-menu-item'
+    ) as HTMLButtonElement;
+    attachment.click();
+
+    expect(requested).toHaveBeenCalledWith(input);
   });
 
   it('shows a contextual placeholder while requesting mutation changes', async () => {
@@ -100,6 +126,54 @@ describe('AiChatComposerComponent cancellation actions', () => {
 
     const prompt = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
     expect(prompt.getAttribute('aria-label')).toBe('Message to connectCenter Assistant');
+  });
+
+  it('caps the composer at four message lines', async () => {
+    fixture.detectChanges();
+
+    const prompt = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    Object.defineProperty(prompt, 'scrollHeight', {value: 100, configurable: true});
+
+    component.resize();
+    await new Promise(resolve => setTimeout(resolve));
+
+    expect(prompt.style.height).toBe('72px');
+  });
+
+  it('exposes the ATIF trajectory through the composer overflow menu', () => {
+    component.trajectoryUrl = '/api/ai/chat/conversations/conversation-1/trajectory';
+    fixture.detectChanges();
+
+    const trigger = fixture.nativeElement.querySelector(
+      '.composer-menu-button'
+    ) as HTMLButtonElement;
+    expect(trigger).not.toBeNull();
+    trigger.click();
+    fixture.detectChanges();
+
+    const item = document.querySelector(
+      '.ai-chat-menu a[href="/api/ai/chat/conversations/conversation-1/trajectory"]'
+    ) as HTMLAnchorElement;
+    expect(item).not.toBeNull();
+    expect(item.getAttribute('target')).toBe('_blank');
+    expect(item.getAttribute('rel')).toBe('noopener');
+    expect(item.textContent).toContain('Trajectory');
+    expect(item.textContent).toContain('account_tree');
+  });
+
+  it('disables the trajectory menu item without an active conversation', () => {
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('.composer-menu-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(document.querySelector('.ai-chat-menu a[href]')).toBeNull();
+    const disabled = document.querySelector(
+      '.ai-chat-menu button[disabled]'
+    ) as HTMLButtonElement;
+    expect(disabled).not.toBeNull();
+    expect(disabled.closest('.ai-chat-composer-menu')).not.toBeNull();
+    expect(disabled.textContent).toContain('Trajectory');
   });
 
   it('renders command suggestions next to the composer and emits the selected command', () => {

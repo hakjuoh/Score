@@ -55,6 +55,7 @@ from fastmcp.server.elicitation import (
     CancelledElicitation,
     DeclinedElicitation,
 )
+from mcp.types import ToolAnnotations
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,6 +112,7 @@ async def get_app_user_service(
 @mcp.tool(
     name="get_code_lists",
     description="Get a paginated list of code lists associated with a specific release.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing paginated list of code lists",
@@ -581,6 +583,7 @@ async def get_code_lists(
 @mcp.tool(
     name="get_code_list",
     description="Get a specific code list by its manifest ID.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing code list information",

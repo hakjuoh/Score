@@ -136,6 +136,7 @@ public class ScoreAiConfiguration {
         if ("conversation-history".equalsIgnoreCase(model.getCacheStrategy())) {
             options.cacheOptions(AnthropicCacheOptions.builder()
                     .strategy(AnthropicCacheStrategy.CONVERSATION_HISTORY)
+                    .multiBlockSystemCaching(true)
                     .cacheToolResults(true)
                     .build());
         }

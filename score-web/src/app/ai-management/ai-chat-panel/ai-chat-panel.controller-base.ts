@@ -43,6 +43,7 @@ import {
 import {AiTerminalRequestErrorStatus} from './domain/ai-chat-event-semantics';
 import {
   AiActiveRequestIdentity,
+  AiAgentExecutionStatus,
   AiCancellationResponse,
   AiChatAttachment,
   AiChatCommand,
@@ -197,8 +198,35 @@ export abstract class AiChatPanelControllerBase {
     return this.state.pending || this.commandInputBlocked;
   }
 
+  protected settleAgentActivity(status: Extract<AiAgentExecutionStatus,
+    'completed' | 'failed' | 'cancelled'>): void {
+    const now = Date.now();
+    for (const activity of this.state.agentActivities) {
+      if (!activity.inProgress) {
+        continue;
+      }
+      const name = activity.agentName || 'Agent';
+      const content = status === 'completed'
+        ? `${name} finished.`
+        : status === 'cancelled'
+          ? `${name} stopped when the request was cancelled.`
+          : `${name} stopped before completing.`;
+      activity.status = status;
+      activity.content = content;
+      activity.inProgress = false;
+      activity.lastUpdateAt = now;
+      activity.events.push({status, content});
+    }
+  }
+
   get cancellationInProgress(): boolean {
     return this.state.cancellation.phase !== 'idle' || !!this.completedPayloadRequestId;
+  }
+
+  get trajectoryUrl(): string | undefined {
+    return this.state.conversationId
+      ? `/api/ai/chat/conversations/${encodeURIComponent(this.state.conversationId)}/trajectory`
+      : undefined;
   }
 
   get cancellationDelayed(): boolean {
@@ -286,6 +314,7 @@ export abstract class AiChatPanelControllerBase {
                                            status?: AiTerminalRequestErrorStatus): void;
   protected abstract upsertToolGroup(event: AiChatSocketEvent): void;
   protected abstract handleToolCallEvent(event: AiChatSocketEvent): void;
+  protected abstract divertSpecialistToolEvent(event: AiChatSocketEvent): boolean;
   protected abstract handleLegacyRecoverableToolError(event: AiChatSocketEvent, content: string): boolean;
   protected abstract isToolDiscoveryName(value: unknown): boolean;
   protected abstract isRecognizedRequestEvent(event: AiChatSocketEvent): boolean;

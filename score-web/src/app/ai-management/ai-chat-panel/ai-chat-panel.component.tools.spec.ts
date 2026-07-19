@@ -3,7 +3,8 @@ import {
   Subscription,
   component,
   setupAiChatPanelSpec,
-  teardownAiChatPanelSpec
+  teardownAiChatPanelSpec,
+  transport
 } from './ai-chat-panel.component.spec-support';
 
 describe('AiChatPanelComponent tool events', () => {
@@ -30,7 +31,7 @@ describe('AiChatPanelComponent tool events', () => {
     });
 
     expect(component.state.messages).toContainEqual(expect.objectContaining({
-      role: 'tool_call', content: 'GitHub search failed.',
+      role: 'tool_call', content: 'github_search failed.',
       groupId: 'mcp', toolCallId: 'call-1', toolName: 'github_search',
       toolStatus: 'failed', recoverable: true, retryable: true, mutationSafe: true
     }));
@@ -49,6 +50,118 @@ describe('AiChatPanelComponent tool events', () => {
     expect(component.state.messages).toContainEqual(expect.objectContaining({
       role: 'assistant', content: 'Used a safe alternative.'
     }));
+  });
+
+  it('starts a fresh visible tool lifecycle for every follow-up request', () => {
+    vi.mocked((component as any).createRequestId).mockReset()
+      .mockReturnValueOnce('request-1')
+      .mockReturnValueOnce('request-2')
+      .mockReturnValueOnce('request-3');
+
+    const runTurn = (requestId: string, prompt: string, toolName: string) => {
+      component.state.prompt = prompt;
+      component.send();
+      (component as any).handleSocketEvent({
+        requestId, turnId: requestId, type: 'tool_call', subtype: 'started',
+        groupId: requestId, toolCallId: `${requestId}-call`,
+        content: `Calling ${toolName}`,
+        metadata: {toolName, toolCallSeq: 0}
+      });
+      expect(component.state.messages.at(-1)).toEqual(expect.objectContaining({
+        role: 'progress', content: `Calling ${toolName}.`, inProgress: true
+      }));
+
+      (component as any).handleSocketEvent({
+        requestId, turnId: requestId, type: 'tool_call', subtype: 'completed',
+        groupId: requestId, toolCallId: `${requestId}-call`,
+        content: `${toolName} completed`,
+        metadata: {toolName, toolCallSeq: 0}
+      });
+      expect(component.state.messages).toContainEqual(expect.objectContaining({
+        role: 'tool_call', turnId: requestId, toolName,
+        toolStatus: 'completed', inProgress: false
+      }));
+      expect(component.state.pending).toBe(true);
+
+      (component as any).handleSocketEvent({
+        requestId, conversationId: 'conversation-1',
+        type: 'assistant_final', content: `${toolName} result verified.`
+      });
+      expect(component.state.pending).toBe(false);
+    };
+
+    runTurn('request-1', 'Create a sample context', 'create_business_context');
+    runTurn('request-2', 'Show its values', 'get_business_context');
+    runTurn('request-3', 'Check additional schemes', 'get_context_schemes');
+
+    expect(component.state.messages.filter(message => message.role === 'tool_call')
+      .map(message => [message.turnId, message.toolName, message.toolStatus]))
+      .toEqual([
+        ['request-1', 'create_business_context', 'completed'],
+        ['request-2', 'get_business_context', 'completed'],
+        ['request-3', 'get_context_schemes', 'completed']
+      ]);
+  });
+
+  it('replaces the delayed wait placeholder with a follow-up guide before later tool rows', () => {
+    vi.useFakeTimers();
+    vi.mocked((component as any).createRequestId).mockReset()
+      .mockReturnValueOnce('request-1')
+      .mockReturnValueOnce('request-2');
+
+    component.state.prompt = 'Create a sample context';
+    component.send();
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'assistant_final', content: 'Created context 73.'
+    });
+
+    component.state.prompt = 'Add values';
+    component.send();
+    transport.publishWhenConnected.mock.calls[1][0].publish();
+    vi.advanceTimersByTime(5000);
+    expect(component.state.messages.at(-1)).toEqual(expect.objectContaining({
+      role: 'progress', content: 'Request sent. Waiting for the assistant response.'
+    }));
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-2', type: 'system', subtype: 'guide',
+      content: 'I will check context 73 before adding values.'
+    });
+    expect(component.state.messages.map(message => [message.role, message.content]))
+      .toEqual([
+        ['user', 'Create a sample context'],
+        ['assistant', 'Created context 73.'],
+        ['user', 'Add values'],
+        ['guide', 'I will check context 73 before adding values.']
+      ]);
+
+    // The cleared five-second callback must not reinsert a stale wait row.
+    vi.advanceTimersByTime(5000);
+    expect(component.state.messages.some(message =>
+      message.content === 'Request sent. Waiting for the assistant response.')).toBe(false);
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-2', turnId: 'request-2',
+      type: 'tool_call', subtype: 'started', groupId: 'request-2',
+      toolCallId: 'call-2', content: 'Calling get_business_context',
+      metadata: {toolName: 'get_business_context', toolCallSeq: 0}
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-2', turnId: 'request-2',
+      type: 'tool_call', subtype: 'completed', groupId: 'request-2',
+      toolCallId: 'call-2', content: 'get_business_context completed',
+      metadata: {toolName: 'get_business_context', toolCallSeq: 0}
+    });
+
+    const guideIndex = component.state.messages.findIndex(message => message.role === 'guide');
+    const toolIndex = component.state.messages.findIndex(message =>
+      message.role === 'tool_call' && message.turnId === 'request-2');
+    const statusIndex = component.state.messages.findIndex(message =>
+      message.role === 'progress' && message.inProgress === true);
+    expect(toolIndex).toBeGreaterThan(guideIndex);
+    expect(statusIndex).toBeGreaterThan(toolIndex);
   });
 
   it.each([
@@ -158,11 +271,11 @@ describe('AiChatPanelComponent tool events', () => {
     const liveRows = visibleToolRows();
     expect(liveRows).toEqual([
       {
-        toolCallId: 'call-1', content: 'Allowed lookup completed.',
+        toolCallId: 'call-1', content: 'allowed_lookup completed.',
         toolStatus: 'completed'
       },
       {
-        toolCallId: 'call-2', content: 'Mutation denied by policy.',
+        toolCallId: 'call-2', content: 'denied_mutation failed.',
         toolStatus: 'failed'
       }
     ]);

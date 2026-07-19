@@ -29,19 +29,48 @@ public interface AiRuntime {
 
     record Context(ChatRequest request, List<Message> history, UserMessage userMessage,
                    ScoreUser requester, AiTrajectoryRecorder recorder,
-                   boolean toolsEnabled, boolean streamVisibleContent) {
+                   boolean toolsEnabled, boolean streamVisibleContent,
+                   ToolPolicy toolPolicy, int agentDepth) {
 
         public Context(ChatRequest request, List<Message> history, UserMessage userMessage,
                        ScoreUser requester, AiTrajectoryRecorder recorder) {
-            this(request, history, userMessage, requester, recorder, true, true);
+            this(request, history, userMessage, requester, recorder,
+                    true, true, ToolPolicy.FULL, 0);
+        }
+
+        public Context(ChatRequest request, List<Message> history, UserMessage userMessage,
+                       ScoreUser requester, AiTrajectoryRecorder recorder,
+                       boolean toolsEnabled, boolean streamVisibleContent) {
+            this(request, history, userMessage, requester, recorder, toolsEnabled,
+                    streamVisibleContent, toolsEnabled ? ToolPolicy.FULL : ToolPolicy.NONE, 0);
         }
 
         public Context {
             history = history != null ? List.copyOf(history) : List.of();
+            toolPolicy = toolsEnabled
+                    ? toolPolicy != null ? toolPolicy : ToolPolicy.FULL
+                    : ToolPolicy.NONE;
+            if (agentDepth < 0 || agentDepth > 1) {
+                throw new IllegalArgumentException("AI agent depth must be 0 or 1.");
+            }
         }
     }
 
-    record Result(String answer) {}
+    enum ToolPolicy {
+        NONE,
+        READ_ONLY,
+        FULL
+    }
+
+    record Result(String answer, Map<String, Object> traceMetadata) {
+        public Result(String answer) {
+            this(answer, Map.of());
+        }
+
+        public Result {
+            traceMetadata = traceMetadata != null ? Map.copyOf(traceMetadata) : Map.of();
+        }
+    }
 
     record Setting(String name, String displayName, String description, String type,
                    Object defaultValue, List<Option> options,

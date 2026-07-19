@@ -78,10 +78,9 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
             || this.state.conversationId !== conversationId) {
             return;
           }
-          this.state.messages = [...(details.messages || [])]
-            .sort((left, right) => left.index - right.index)
-            .map(message => this.conversationRestoreService.projectStoredMessage(message))
-            .filter((message): message is AiChatMessage => message !== null);
+          this.state.messages = this.conversationRestoreService.projectStoredMessages(
+            [...(details.messages || [])].sort((left, right) => left.index - right.index));
+          this.state.agentActivities = [];
           this.state.conversationId = details.conversationId;
           if (details.modelName) this.state.selectedModelName = details.modelName;
           if (details.reasoningEffort) this.state.selectedReasoningEffort = details.reasoningEffort;
@@ -166,10 +165,8 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
 
   protected applyRecoveredConversation(details: AiChatConversationDetails,
                                      status: AiPublicExecutionRequestStatus): void {
-    const messages = [...(details.messages || [])]
-      .sort((left, right) => left.index - right.index)
-      .map(message => this.conversationRestoreService.projectStoredMessage(message))
-      .filter((message): message is AiChatMessage => message !== null);
+    const messages = this.conversationRestoreService.projectStoredMessages(
+      [...(details.messages || [])].sort((left, right) => left.index - right.index));
     if (!this.isTerminalExecutionStatus(status.status)) {
       messages.push({
         role: 'progress',
@@ -179,6 +176,9 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
       });
     }
     this.state.messages = messages;
+    this.state.agentActivities = [...messages].reverse()
+      .find(message => (message.role === 'agent_group' || message.role === 'workflow_group')
+        && message.activities?.some(activity => activity.inProgress))?.activities || [];
     this.state.conversationId = details.conversationId;
     this.sessionPersistence.rememberLastConversation(details.conversationId);
     if (details.modelName) this.state.selectedModelName = details.modelName;
@@ -197,6 +197,8 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
   protected finishRecoveredRequest(status: AiPublicExecutionRequestStatus): void {
     this.clearActiveRecovery();
     this.completeProgressMessages();
+    this.settleAgentActivity(status.status === 'COMPLETED' ? 'completed'
+      : status.status === 'CANCELLED' ? 'cancelled' : 'failed');
     this.state.pending = false;
     this.activeRequestPublished = false;
     this.state.activeRequest = undefined;

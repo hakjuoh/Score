@@ -7,13 +7,18 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MarkdownModule} from 'ngx-markdown';
 import {AiChatMessageListComponent} from './ai-chat-message-list.component';
 import {AiChatInteractionPanelComponent} from './ai-chat-interaction-panel.component';
+import {AiChatToolCallComponent} from './ai-chat-tool-call.component';
 
 describe('AiChatMessageListComponent', () => {
   let fixture: ComponentFixture<AiChatMessageListComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [AiChatMessageListComponent, AiChatInteractionPanelComponent],
+      declarations: [
+        AiChatMessageListComponent,
+        AiChatInteractionPanelComponent,
+        AiChatToolCallComponent
+      ],
       imports: [
         CommonModule,
         FormsModule,
@@ -64,6 +69,33 @@ describe('AiChatMessageListComponent', () => {
     expect(fixture.nativeElement.querySelector('.message-history-panel')).not.toBeNull();
   });
 
+  it('hides completed tool calls until the completed request is expanded', async () => {
+    fixture.componentInstance.messages = [
+      {role: 'user', content: 'Add values'},
+      {
+        role: 'tool_call', content: 'get_context_schemes completed.',
+        toolStatus: 'completed', toolName: 'get_context_schemes'
+      },
+      {role: 'assistant', content: 'The values were added and verified.'}
+    ];
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const userRow = fixture.nativeElement.querySelector('.message-row.user') as HTMLElement;
+    const toggle = userRow.querySelector('.message-history-toggle') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(fixture.nativeElement.querySelector('.message-row.tool_call')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('The values were added and verified.');
+
+    toggle.click();
+    fixture.detectChanges();
+
+    const toolRow = fixture.nativeElement.querySelector('.message-row.tool_call') as HTMLElement;
+    expect(toolRow).not.toBeNull();
+    expect(toolRow.textContent).toContain('get_context_schemes completed.');
+  });
+
   it('announces and visually distinguishes a failed tool row', () => {
     fixture.componentInstance.messages = [{
       role: 'tool_call',
@@ -74,6 +106,7 @@ describe('AiChatMessageListComponent', () => {
     fixture.detectChanges();
 
     const row = fixture.nativeElement.querySelector('.message-row.tool_call') as HTMLElement;
+    expect(row.querySelector('score-ai-chat-tool-call')).not.toBeNull();
     expect(row.classList.contains('tool_failed')).toBe(true);
     const a11yStatus = row.querySelector('.tool-call-a11y-status') as HTMLElement;
     expect(a11yStatus.getAttribute('role')).toBe('status');
@@ -93,7 +126,7 @@ describe('AiChatMessageListComponent', () => {
     const row = fixture.nativeElement.querySelector('.message-row.tool_call') as HTMLElement;
     expect(row.classList.contains('tool_failed')).toBe(false);
     expect(row.textContent).toContain('Tool completed:');
-    expect(row.querySelector('mat-icon')?.textContent).toContain('check_circle_outline');
+    expect(row.querySelector('mat-icon')?.textContent).toContain('build');
   });
 
   it('keeps a fallback spinner after tools complete until the request is terminal', () => {
@@ -156,7 +189,7 @@ describe('AiChatMessageListComponent', () => {
     const row = fixture.nativeElement.querySelector('.message-row.tool_call') as HTMLElement;
     expect(row.textContent).toContain('Tool result:');
     expect(row.textContent).not.toContain('Tool completed:');
-    expect(row.querySelector('mat-icon')?.textContent).toContain('terminal');
+    expect(row.querySelector('mat-icon')?.textContent).toContain('build');
   });
 
   it('expands tool detail while keeping the tool row at the root alignment', () => {
@@ -351,4 +384,273 @@ describe('AiChatMessageListComponent', () => {
     expect(fixture.nativeElement.querySelector('.model-command-title').textContent)
       .not.toContain('Effort');
   });
+
+  it('renders one consolidated agent group block for a fan-out', () => {
+    fixture.componentInstance.messages = [
+      {role: 'user', content: 'Verify this request.'},
+      {
+        role: 'workflow_group', content: 'Parallel workflow', activities: [
+          {
+            agentId: 'request-1:agent:1', agentName: 'Verifier',
+            agentRole: 'Evidence and edge cases', taskLabel: 'Sync Purchase Order', status: 'started',
+            content: 'Reading Sync Purchase Order.', inProgress: true, isLead: false,
+            workflow: 'parallel',
+            executionKind: 'parallel',
+            firstSeenAt: Date.now(), lastUpdateAt: Date.now(),
+            events: [{status: 'started', content: 'Reading Sync Purchase Order.'}]
+          },
+          {
+            agentId: 'request-1:lead', agentName: 'Lead agent',
+            status: 'synthesizing', content: 'Analyzing specialist findings.', inProgress: true,
+            isLead: true, firstSeenAt: 1000, lastUpdateAt: 13000,
+            workflow: 'parallel',
+            executionKind: 'parallel',
+            plannedAgentCount: 3, activeVerb: 'Analyzing', completedVerb: 'Analyzed',
+            events: [{status: 'synthesizing', content: 'Analyzing specialist findings.'}]
+          }
+        ]
+      }
+    ];
+    fixture.detectChanges();
+
+    const blocks = fixture.nativeElement.querySelectorAll('.agent-group-block') as NodeListOf<HTMLElement>;
+    expect(blocks).toHaveLength(1);
+    const block = blocks[0];
+    expect(block.getAttribute('role')).toBe('status');
+    expect(block.getAttribute('aria-live')).toBe('polite');
+    expect(block.getAttribute('aria-label')).toContain('Parallel workflow');
+    expect(block.dataset['workflow']).toBe('parallel');
+    expect(block.dataset['executionKind']).toBe('parallel');
+    expect(block.textContent).toContain('Analyzing...');
+    expect(block.querySelector('.agent-group-workflow')?.textContent).toContain('Parallel workflow');
+    expect(block.textContent).toContain('· 3 tasks');
+    expect(block.textContent).toContain('synthesizing');
+    expect(block.textContent).toContain('Analyzing specialist findings.');
+
+    const rows = block.querySelectorAll('.agent-group-row') as NodeListOf<HTMLButtonElement>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('Sync Purchase Order');
+    expect(rows[0].textContent).toContain('Verifier');
+    expect(rows[0].textContent).toContain('Reading Sync Purchase Order.');
+    expect(rows[0].querySelector('mat-progress-spinner')).not.toBeNull();
+
+    const focused = vi.fn();
+    fixture.componentInstance.agentFocusRequested.subscribe(focused);
+    rows[0].click();
+    expect(focused).toHaveBeenCalledWith('request-1:agent:1');
+  });
+
+  it('keeps the settled group block in request history at its execution position', () => {
+    fixture.componentInstance.messages = [
+      {role: 'user', content: 'Verify this request.'},
+      {role: 'guide', content: 'Reviewing the existing records first.'},
+      {
+        role: 'agent_group', content: 'Parallel agents', activities: [{
+          agentId: 'request-1:agent:1', agentName: 'Verifier', status: 'failed',
+          content: 'Verifier stopped before completing.', inProgress: false, isLead: false,
+          firstSeenAt: 0, lastUpdateAt: 4000,
+          events: [{status: 'failed', content: 'Verifier stopped before completing.'}]
+        }]
+      },
+      {role: 'guide', content: 'Creating and reading the records back.'},
+      {
+        role: 'tool_call', content: 'create_business_context completed.',
+        toolStatus: 'completed', toolName: 'create_business_context'
+      },
+      {role: 'assistant', content: 'Done.'}
+    ];
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.agent-group-block')).toBeNull();
+    const toggle = fixture.nativeElement.querySelector('.message-history-toggle') as HTMLButtonElement;
+    toggle.click();
+    fixture.detectChanges();
+
+    const block = fixture.nativeElement.querySelector('.agent-group-block') as HTMLElement;
+    expect(block.textContent).toContain('1 failed');
+    const row = block.querySelector('.agent-group-row') as HTMLElement;
+    expect(row.classList.contains('agent-terminal-warn')).toBe(true);
+    expect(row.querySelector('mat-icon')?.textContent).toContain('error_outline');
+    expect(row.querySelector('mat-progress-spinner')).toBeNull();
+
+    const historyRows = Array.from(fixture.nativeElement.querySelectorAll(
+      '.message-history-panel > .message-row'
+    )) as HTMLElement[];
+    expect(historyRows.map(historyRow => historyRow.classList.contains('agent_group')
+      ? 'agent_group' : historyRow.classList.contains('tool_call')
+        ? 'tool_call' : 'guide')).toEqual([
+      'guide', 'agent_group', 'guide', 'tool_call'
+    ]);
+  });
+
+  it('renders each fan-out block from its own activity snapshot', () => {
+    const settled = [{
+      agentId: 'fanout-1-agent-01', agentName: 'First checker', status: 'completed' as const,
+      content: 'First checker finished.', inProgress: false, isLead: false,
+      firstSeenAt: 0, lastUpdateAt: 1000,
+      events: [{status: 'completed' as const, content: 'First checker finished.'}]
+    }];
+    const live = [{
+      agentId: 'fanout-2-agent-01', agentName: 'Second checker', status: 'started' as const,
+      content: 'Second checker running.', inProgress: true, isLead: false,
+      firstSeenAt: Date.now(), lastUpdateAt: Date.now(),
+      events: [{status: 'started' as const, content: 'Second checker running.'}]
+    }];
+    fixture.componentInstance.messages = [
+      {role: 'user', content: 'First fan-out'},
+      {role: 'agent_group', content: 'Parallel agents', activities: settled},
+      {role: 'assistant', content: 'First answer.'},
+      {role: 'user', content: 'Second fan-out'},
+      {role: 'agent_group', content: 'Parallel agents', activities: live}
+    ];
+    fixture.detectChanges();
+
+    const firstTurnToggle = fixture.nativeElement.querySelector(
+      '.message-turn .message-history-toggle'
+    ) as HTMLButtonElement;
+    firstTurnToggle.click();
+    fixture.detectChanges();
+
+    const blocks = fixture.nativeElement.querySelectorAll('.agent-group-block') as NodeListOf<HTMLElement>;
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].textContent).toContain('First checker finished.');
+    expect(blocks[0].textContent).toContain('1 done');
+    expect(blocks[0].textContent).not.toContain('Second checker');
+    expect(blocks[1].textContent).toContain('Second checker running.');
+    expect(blocks[1].textContent).toContain('1 running');
+    expect(blocks[1].textContent).not.toContain('First checker');
+  });
+
+  it('replaces the conversation flow with the focused per-agent view', async () => {
+    fixture.componentInstance.messages = [
+      {role: 'user', content: 'Verify this request.'},
+      {role: 'assistant', content: 'Done.'}
+    ];
+    fixture.componentInstance.agentFocus = {
+      agentId: 'request-1:agent:1', agentName: 'Verifier',
+      agentRole: 'Evidence and edge cases', status: 'completed',
+      content: 'Verifier finished.', inProgress: false, isLead: false,
+      firstSeenAt: 0, lastUpdateAt: 5000,
+      events: [
+        {status: 'started', content: 'Checking independent evidence.'},
+        {status: 'tool', content: 'get_libraries completed', key: 'tool_call:mcp:call-1:completed'},
+        {status: 'completed', content: 'Verifier finished.'}
+      ]
+    };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.message-turn')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.message-row.user')).toBeNull();
+    const header = fixture.nativeElement.querySelector('.agent-focus-header') as HTMLElement;
+    expect(header.textContent).toContain('Verifier');
+    expect(header.textContent).toContain('Evidence and edge cases');
+    expect(header.textContent).toContain('completed');
+
+    expect(fixture.nativeElement.querySelector('.agent-focus-event')).toBeNull();
+    const conversationRows = fixture.nativeElement.querySelectorAll(
+      '.agent-focus-events .message-row.assistant'
+    ) as NodeListOf<HTMLElement>;
+    expect(conversationRows).toHaveLength(2);
+    expect(conversationRows[0].textContent).not.toContain('started');
+    expect(conversationRows[0].textContent).toContain('Checking independent evidence.');
+    const toolRow = fixture.nativeElement.querySelector(
+      '.agent-focus-events .message-row.tool_call'
+    ) as HTMLElement;
+    expect(toolRow.querySelector('score-ai-chat-tool-call')).not.toBeNull();
+    expect(toolRow.querySelector('.agent-focus-tool-icon')?.textContent).toContain('build');
+    expect(toolRow.textContent).toContain('get_libraries completed');
+    expect(conversationRows[1].textContent).not.toContain('completed');
+    expect(conversationRows[1].textContent).toContain('Verifier finished.');
+
+    const closed = vi.fn();
+    fixture.componentInstance.agentFocusClosed.subscribe(closed);
+    const back = header.querySelector('.agent-focus-back') as HTMLButtonElement;
+    expect(back.getAttribute('aria-label')).toBe('Back to conversation');
+    expect(back.textContent).toContain('arrow_back');
+    back.click();
+    expect(closed).toHaveBeenCalledOnce();
+  });
+
+  it('renders a focused tool event with detail as an expandable disclosure', () => {
+    fixture.componentInstance.agentFocus = {
+      agentId: 'request-1:agent:1', agentName: 'Verifier',
+      agentRole: 'Evidence and edge cases', status: 'started',
+      content: 'Reading releases...', inProgress: true, isLead: false,
+      firstSeenAt: 0, lastUpdateAt: 5000,
+      events: [
+        {
+          status: 'tool', content: 'Read libraries',
+          key: 'tool_call:mcp:call-1:completed', toolKey: 'mcp:call-1',
+          toolStatus: 'completed',
+          detail: 'get_libraries\nArguments: {}\nResult: {"total_items":3}'
+        },
+        {status: 'tool', content: 'Reading releases...', toolKey: 'mcp:call-2', toolStatus: 'started'}
+      ]
+    };
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll(
+      '.agent-focus-events .message-row.tool_call'
+    ) as NodeListOf<HTMLElement>;
+    expect(rows).toHaveLength(2);
+    const disclosure = rows[0].querySelector('details.tool-call-disclosure') as HTMLDetailsElement;
+    expect(disclosure).not.toBeNull();
+    expect(disclosure.open).toBe(false);
+    expect(disclosure.querySelector('.tool-call-summary')?.textContent).toContain('Read libraries');
+    expect(disclosure.querySelector('.agent-focus-tool-icon')?.textContent).toContain('build');
+    expect(disclosure.querySelector('.tool-call-detail')?.textContent)
+      .toContain('Result: {"total_items":3}');
+    // A running tool renders a spinner row, not a disclosure.
+    expect(rows[1].querySelector('details')).toBeNull();
+    expect(rows[1].querySelector('mat-progress-spinner')).not.toBeNull();
+    expect(rows[1].textContent).toContain('Reading releases...');
+  });
+
+  it('stops the tool spinner once the agent itself has settled', () => {
+    fixture.componentInstance.agentFocus = {
+      agentId: 'request-1:agent:1', agentName: 'Verifier',
+      agentRole: 'Evidence and edge cases', status: 'cancelled',
+      content: 'Verifier stopped when the request was cancelled.',
+      inProgress: false, isLead: false,
+      firstSeenAt: 0, lastUpdateAt: 5000,
+      events: [
+        // A sealed recorder can drop the terminal tool event; the row must not
+        // imply live activity inside a settled agent.
+        {status: 'tool', content: 'Reading libraries...', toolKey: 'mcp:call-3', toolStatus: 'started'}
+      ]
+    };
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector(
+      '.agent-focus-events .message-row.tool_call'
+    ) as HTMLElement;
+    expect(row.querySelector('mat-progress-spinner')).toBeNull();
+    expect(row.querySelector('.agent-focus-tool-icon')?.textContent).toContain('build');
+  });
+
+  it('keeps the mutation decision panel visible while an agent focus is open', () => {
+    fixture.componentInstance.agentFocus = {
+      agentId: 'request-1:agent:1', agentName: 'Verifier', status: 'started',
+      content: 'Checking independent evidence.', inProgress: true, isLead: false,
+      firstSeenAt: 0, lastUpdateAt: 0,
+      events: [{status: 'started', content: 'Checking independent evidence.'}]
+    };
+    fixture.componentInstance.mutationInteraction = {
+      toolName: 'create_business_context',
+      argumentsSummary: '{"name":"Example"}',
+      mode: 'confirm',
+      busy: false
+    };
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.agent-focus-view')).not.toBeNull();
+    const interaction = fixture.nativeElement.querySelector(
+      '.interaction-command-panel'
+    ) as HTMLElement;
+    expect(interaction).not.toBeNull();
+    expect(interaction.textContent).toContain('create_business_context');
+  });
+
 });

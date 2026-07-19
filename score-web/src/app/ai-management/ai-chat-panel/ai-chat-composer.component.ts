@@ -2,6 +2,8 @@ import {Component, ElementRef, EventEmitter, Input, Output, ViewChild} from '@an
 import {AI_CHAT_ATTACHMENT_ACCEPT} from './domain/ai-chat-panel.constants';
 import {AiChatCommand} from './domain/ai-chat-panel.model';
 
+const MAX_COMPOSER_HEIGHT_PX = 72;
+
 @Component({
   standalone: false,
   selector: 'score-ai-chat-composer',
@@ -10,6 +12,7 @@ import {AiChatCommand} from './domain/ai-chat-panel.model';
     './ai-chat-panel.component.css',
     './ai-chat-panel-history.css',
     './ai-chat-panel-messages.css',
+    './ai-chat-panel-agents.css',
     './ai-chat-panel-composer.css'
   ]
 })
@@ -18,6 +21,7 @@ export class AiChatComposerComponent {
   readonly attachmentAccept = AI_CHAT_ATTACHMENT_ACCEPT;
 
   @Input() prompt = '';
+  @Input() trajectoryUrl?: string;
   @Input() pending = false;
   @Input() blocked = false;
   @Input() cancellationInProgress = false;
@@ -53,7 +57,7 @@ export class AiChatComposerComponent {
         return;
       }
       input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 88) + 'px';
+      input.style.height = Math.min(input.scrollHeight, MAX_COMPOSER_HEIGHT_PX) + 'px';
     });
   }
 

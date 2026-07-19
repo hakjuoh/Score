@@ -46,6 +46,7 @@ from typing import Annotated
 
 from fastmcp import FastMCP
 from fastmcp.dependencies import Depends
+from mcp.types import ToolAnnotations
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,6 +72,7 @@ async def get_xbt_service(
 @mcp.tool(
     name="get_xbt",
     description="Get a specific XBT (XML Built-in Type) by its manifest ID. XBTs are fundamental XML Schema data types (e.g., string, integer, date, boolean) that form a type hierarchy and include mappings to JSON Schema, OpenAPI, and Avro formats.",
+    annotations=ToolAnnotations(readOnlyHint=True),
     output_schema={
         "type": "object",
         "description": "Response containing XBT (XML Built-in Type) information, including type hierarchy relationships, data format mappings, and metadata",

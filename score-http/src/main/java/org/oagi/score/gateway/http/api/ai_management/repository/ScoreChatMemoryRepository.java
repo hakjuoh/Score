@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.repository;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationDetails;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationSummary;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatLatestUsage;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
@@ -25,6 +26,10 @@ public interface ScoreChatMemoryRepository extends ChatMemoryRepository {
      */
     String open(ScoreUser requester, String requestedConversationId, String firstPrompt);
 
+    /** Creates an independently traced parallel or sub-agent child conversation. */
+    String openChild(ScoreUser requester, String parentConversationId, String parentRequestId,
+                     AiChatConversationKind kind, String workerId, String title);
+
     /**
      * Returns the latest model selected for an owned conversation.
      */
@@ -39,6 +44,9 @@ public interface ScoreChatMemoryRepository extends ChatMemoryRepository {
      * Locks an owned conversation and returns its latest complete settings snapshot.
      */
     AiChatConversationSettings settingsForUpdate(ScoreUser requester, String conversationId);
+
+    /** Returns the conversation's forced workflow, or empty when workflow selection is automatic. */
+    Optional<String> activeWorkflow(ScoreUser requester, String conversationId);
 
     /**
      * Returns the latest recorded context-usage measurement.

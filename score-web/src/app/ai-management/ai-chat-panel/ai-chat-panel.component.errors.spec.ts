@@ -79,11 +79,11 @@ describe('AiChatPanelComponent terminal errors and data changes', () => {
     expect(subscription.closed).toBe(false);
     expect(component.state.messages).toContainEqual(expect.objectContaining({
       role: 'tool_call', toolCallId: 'call-legacy', toolStatus: 'failed',
-      content: 'GitHub search failed: upstream returned 500'
+      content: 'Execution failed'
     }));
   });
 
-  it('keeps a legacy tool-discovery failure recoverable without rendering the internal call', () => {
+  it('keeps a legacy tool-discovery failure recoverable with the generic execution row', () => {
     component.state.prompt = 'Discover tools on an older backend';
     component.send();
     const subscription = (component as any).requestSubscription as Subscription;
@@ -104,9 +104,9 @@ describe('AiChatPanelComponent terminal errors and data changes', () => {
 
     expect(component.state.pending).toBe(true);
     expect(subscription.closed).toBe(false);
-    expect(component.state.currentStatus).toBe('Working');
-    expect(component.state.messages).not.toContainEqual(expect.objectContaining({
-      role: 'tool_call', toolCallId: 'search-1'
+    expect(component.state.currentStatus).toBe('Continuing after tool failure');
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      role: 'tool_call', toolCallId: 'search-1', content: 'Execution failed'
     }));
   });
 

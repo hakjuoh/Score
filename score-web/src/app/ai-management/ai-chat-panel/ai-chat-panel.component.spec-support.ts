@@ -180,7 +180,10 @@ export function setupAiChatPanelSpec(): void {
       {provide: AiConversationRestoreService, useValue: {
         reset: vi.fn(), cancel: vi.fn(), expectAttempt: vi.fn(),
         isRestoreEvent: () => false, isLegacyRestoreAdmission: () => false,
-        projectStoredMessage: (message: any) => ({role: message.role, content: message.content})
+        projectStoredMessage: (message: any) => ({role: message.role, content: message.content}),
+        projectStoredMessages: (messages: any[]) => messages.map(message => ({
+          role: message.role, content: message.content
+        }))
       }},
       {provide: AiChatNavigationService, useValue: navigation},
       {provide: AiChatPanelLayoutService, useValue: {

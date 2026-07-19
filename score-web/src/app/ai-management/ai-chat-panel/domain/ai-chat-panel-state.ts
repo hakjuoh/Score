@@ -1,4 +1,5 @@
 import {SafeHtml} from '@angular/platform-browser';
+import {AiAgentActivity} from './ai-agent-activity';
 import {
   AiChatAttachment,
   AiActiveRequestIdentity,
@@ -42,6 +43,9 @@ export class AiChatPanelState {
   permissionMode: AiMutationPermissionMode = 'ask';
   permissionSettingsOpen = false;
   permissionDraft: AiMutationPermissionMode = 'ask';
+  agentActivities: AiAgentActivity[] = [];
+  agentListOpen = false;
+  agentFocusId?: string;
   elicitation?: AiElicitationNotice;
   elicitationBusy = false;
   modelChangePending = false;
@@ -79,6 +83,7 @@ export class AiChatPanelState {
     this.runtimeDraftOptions = {};
     this.permissionSettingsOpen = false;
     this.permissionDraft = this.permissionMode;
+    this.resetAgentActivity();
     this.elicitation = undefined;
     this.elicitationBusy = false;
     this.modelChangePending = false;
@@ -212,6 +217,7 @@ export class AiChatPanelState {
     this.runtimeDraftOptions = {};
     this.permissionSettingsOpen = false;
     this.permissionDraft = this.permissionMode;
+    this.resetAgentActivity();
     this.elicitation = undefined;
     this.elicitationBusy = false;
     this.modelChangePending = false;
@@ -226,6 +232,12 @@ export class AiChatPanelState {
 
   resetCancellation(): void {
     this.cancellation = this.idleCancellation();
+  }
+
+  resetAgentActivity(): void {
+    this.agentActivities = [];
+    this.agentListOpen = false;
+    this.agentFocusId = undefined;
   }
 
   private idleCancellation(): AiCancellationUiState {

@@ -124,8 +124,7 @@
   white-space: nowrap;
 }
 
-.attachment-chip > button,
-.attachment-button {
+.attachment-chip > button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -140,13 +139,11 @@
   cursor: pointer;
 }
 
-.attachment-chip > button:hover,
-.attachment-button:hover {
+.attachment-chip > button:hover {
   color: #18181b;
 }
 
-.attachment-chip > button mat-icon,
-.attachment-button mat-icon {
+.attachment-chip > button mat-icon {
   width: 14px;
   height: 14px;
   font-size: 14px;
@@ -179,7 +176,8 @@
   align-items: flex-start;
   flex: 1 1 auto;
   min-height: 28px;
-  padding: 0 0 0 2px;
+  box-sizing: border-box;
+  padding: 2px 0 2px 2px;
   border: 1px solid transparent;
   border-radius: 0;
   background: transparent;
@@ -205,38 +203,20 @@
   line-height: 22px;
 }
 
-.attachment-button {
-  width: 0;
-  margin: 1px 0 0 0;
-  opacity: 0;
-  pointer-events: none;
-  overflow: hidden;
-  transform: translateX(-2px);
-  transition: width 120ms ease, margin-right 120ms ease, opacity 120ms ease, transform 120ms ease;
-}
-
-.command-box:hover .attachment-button,
-.attachment-button:focus-visible {
-  width: 20px;
-  margin-right: 4px;
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateX(0);
-}
-
 .command-box textarea {
   flex: 1 1 auto;
   min-width: 0;
-  height: 22px;
-  max-height: 88px;
+  height: 18px;
+  max-height: 72px;
+  margin: 2px 0 0;
   padding: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: #18181b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
-  line-height: 22px;
+  font-size: 12px;
+  line-height: 18px;
   overflow-y: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

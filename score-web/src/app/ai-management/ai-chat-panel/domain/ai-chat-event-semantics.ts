@@ -1,5 +1,8 @@
 import {AiChatSocketEvent, AiChatToolStatus, AiContextUsage, AiExecutionStatus} from './ai-chat-panel.model';
 
+const TEXTUAL_TOOL_CALL_PLACEHOLDER =
+  /\*{0,2}\[\s*tool(?:[ -]call)?\s*:\s*[^\]\r\n]+]\*{0,2}(?:\s*(?:→|->).*?)?\s*$/is;
+
 export type AiTerminalRequestErrorStatus = Extract<
   AiExecutionStatus, 'FAILED' | 'TIMED_OUT' | 'STEP_LIMIT_REACHED'
 >;
@@ -45,9 +48,13 @@ export function toolCallEventSemantics(event: AiChatSocketEvent): AiToolCallEven
       return undefined;
     }
   }
-  const statusMessage = nonBlank(event.metadata?.['statusMessage']);
-  const content = statusMessage || primaryContent(event) || 'Used tool';
   const active = subtype === 'started' || subtype === 'progress';
+  const toolName = nonBlank(event.metadata?.['toolName']);
+  const content = active
+    ? (toolName ? `Calling ${toolName}.` : 'Executing...')
+    : subtype === 'completed'
+      ? (toolName ? `${toolName} completed.` : 'Executed')
+      : (toolName ? `${toolName} failed.` : 'Execution failed');
   const turnId = nonBlank(event.turnId);
   const toolCallSeq = nonNegativeSequence(event.metadata?.['toolCallSeq']);
   const toolDetail = nonBlank(event.metadata?.['toolDetail']);
@@ -57,11 +64,11 @@ export function toolCallEventSemantics(event: AiChatSocketEvent): AiToolCallEven
     groupId,
     toolCallId,
     ...(toolCallSeq !== undefined ? {toolCallSeq} : {}),
-    toolName: nonBlank(event.metadata?.['toolName']),
+    toolName,
     ...(toolDetail ? {toolDetail} : {}),
     content,
     active,
-    hidden: event.metadata?.['toolDiscovery'] === true,
+    hidden: false,
     status: active ? undefined : subtype,
     recoverable: subtype === 'failed' ? true : undefined,
     retryable: booleanValue(event.metadata?.['retryable']),
@@ -115,6 +122,15 @@ export function legacyRecoverableToolName(event: AiChatSocketEvent): string | un
 
 export function primaryContent(event: AiChatSocketEvent): string {
   return event.content || event.response || event.message || '';
+}
+
+/**
+ * Removes a model-authored imitation of a tool call from visible assistant
+ * text. Only correlated tool_call lifecycle events are execution evidence and
+ * may be rendered as expandable tool rows.
+ */
+export function withoutTextualToolCallPlaceholder(content: string): string {
+  return content.replace(TEXTUAL_TOOL_CALL_PLACEHOLDER, '').trim();
 }
 
 /** Accepts only internally consistent usage snapshots from untrusted socket/restore metadata. */

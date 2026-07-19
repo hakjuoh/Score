@@ -36,7 +36,7 @@ class AiContextBudgetServiceTest {
         long shortEstimate = service.estimateInputTokens(
                 List.of(new UserMessage("hello")), null, null);
         long multilingualEstimate = service.estimateInputTokens(
-                List.of(new UserMessage("데이터🙂".repeat(1000))), new UserMessage("next"), "page");
+                List.of(new UserMessage("data🙂".repeat(1000))), new UserMessage("next"), "page");
 
         assertThat(shortEstimate).isGreaterThanOrEqualTo(4096L);
         assertThat(multilingualEstimate).isGreaterThan(shortEstimate);

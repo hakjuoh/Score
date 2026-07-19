@@ -43,7 +43,7 @@ describe('AI chat event semantics', () => {
       groupId: 'mcp',
       toolCallId: 'call-1',
       toolName: 'github_search',
-      content: 'GitHub search failed.',
+      content: 'github_search failed.',
       active: false,
       hidden: false,
       status: 'failed',
@@ -53,14 +53,14 @@ describe('AI chat event semantics', () => {
     });
   });
 
-  it('keeps a correlated tool discovery lifecycle hidden but available for skew handling', () => {
+  it('shows a correlated tool discovery lifecycle with its tool name', () => {
     expect(toolCallEventSemantics({
       requestId: 'request-1', type: 'tool_call', subtype: 'started',
       groupId: 'discovery', toolCallId: 'search-1',
       metadata: {toolName: 'tool_search_agent', toolDiscovery: true}
     })).toEqual(expect.objectContaining({
       key: 'discovery:search-1', toolName: 'tool_search_agent',
-      active: true, hidden: true
+      active: true, hidden: false, content: 'Calling tool_search_agent.'
     }));
   });
 
@@ -75,7 +75,7 @@ describe('AI chat event semantics', () => {
     });
 
     expect(semantics).toEqual(expect.objectContaining({
-      content: 'Lookup completed.',
+      content: 'Executed',
       toolDetail: 'lookup\nArguments: {"limit":1}\nResult: {"total":0}'
     }));
   });

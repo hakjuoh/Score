@@ -132,6 +132,7 @@ final class AnthropicRuntimeOptions {
         if ("conversation-history".equalsIgnoreCase(model.cacheStrategy())) {
             builder.cacheOptions(AnthropicCacheOptions.builder()
                     .strategy(AnthropicCacheStrategy.CONVERSATION_HISTORY)
+                    .multiBlockSystemCaching(true)
                     .cacheToolResults(true)
                     .build());
         }

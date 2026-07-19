@@ -1,7 +1,10 @@
 import {Injectable, inject} from '@angular/core';
 import {AuthService} from '../../../authentication/auth.service';
 import {AiChatPanelState} from './ai-chat-panel-state';
-import {AiMutationPermissionMode, AiRuntimeOptions} from './ai-chat-panel.model';
+import {
+  AiMutationPermissionMode,
+  AiRuntimeOptions
+} from './ai-chat-panel.model';
 
 export const AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY = 'score.ai-chat.selection-preference';
 export const AI_CHAT_LAST_CONVERSATION_STORAGE_KEY_PREFIX = 'score.ai-chat.last-conversation';
@@ -127,4 +130,5 @@ export class AiChatSessionPersistenceService {
   private isRecord(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
   }
+
 }

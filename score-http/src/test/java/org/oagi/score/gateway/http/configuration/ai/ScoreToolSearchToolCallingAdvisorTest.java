@@ -87,7 +87,10 @@ class ScoreToolSearchToolCallingAdvisorTest {
 
         assertThat(initialized.prompt().getSystemMessage().getText())
                 .contains("comprehensive search with maxResults 10",
-                        "all necessary searches", "parallel in the same response");
+                        "all necessary searches", "parallel in the same response",
+                        "Never write or simulate `[Tool call: ...]`",
+                        "`[Tool: ...]`",
+                        "structured tool interface");
     }
 
     private ChatClientRequest request(List<org.springframework.ai.chat.messages.Message> messages,

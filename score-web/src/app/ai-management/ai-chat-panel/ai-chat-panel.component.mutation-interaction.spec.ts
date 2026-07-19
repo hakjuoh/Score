@@ -112,6 +112,7 @@ describe('AiChatPanelComponent elicitation and mutation interaction', () => {
         toolName: 'create_business_context', arguments: '{"name":"Example"}'
       }
     }));
+    expect(transport.publish.mock.calls.at(-1)?.[1]).not.toHaveProperty('multiAgent');
     expect(JSON.stringify(component.state)).not.toContain(canonicalGrant);
     expect((component as any).mutationRepeatDraft).toEqual({
       requestId: 'request-2', prompt: 'Create the same item again', attachments: []

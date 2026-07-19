@@ -1,8 +1,12 @@
+import type {AiAgentActivity} from './ai-agent-activity';
+
 export type AiChatDock = 'right' | 'bottom' | 'left' | 'top';
-export type AiChatMessageRole = 'user' | 'assistant' | 'progress' | 'tool_group' | 'tool_call' | 'error' | 'debug';
+export type AiChatMessageRole = 'user' | 'assistant' | 'guide' | 'progress'
+  | 'agent_group' | 'workflow_group' | 'tool_group' | 'tool_call' | 'error' | 'debug';
 export type AiChatToolStatus = 'completed' | 'failed';
 export type AiChatPanelTab = 'chat' | 'history';
 export type AiMutationPermissionMode = 'ask' | 'auto' | 'full_access';
+export type AiAgentExecutionStatus = 'started' | 'completed' | 'failed' | 'cancelled' | 'synthesizing';
 
 export interface AiChatMessage {
   role: AiChatMessageRole;
@@ -11,6 +15,9 @@ export interface AiChatMessage {
   formatting?: boolean;
   formattingPreviousContent?: string;
   eventType?: string;
+  /** Owning request of a streamed assistant segment; identifies the live bubble
+   *  without relying on array indexes that tool-row splices can shift. */
+  requestId?: string;
   turnId?: string;
   groupId?: string;
   toolCallId?: string;
@@ -21,6 +28,12 @@ export interface AiChatMessage {
   recoverable?: boolean;
   retryable?: boolean;
   mutationSafe?: boolean;
+  /**
+   * Per-execution snapshot held BY REFERENCE on an agent/workflow group anchor.
+   * Request starts replace (never mutate) the live state array, so settled
+   * anchors keep rendering their own final statuses.
+   */
+  activities?: AiAgentActivity[];
 }
 
 export interface AiChatAttachment {

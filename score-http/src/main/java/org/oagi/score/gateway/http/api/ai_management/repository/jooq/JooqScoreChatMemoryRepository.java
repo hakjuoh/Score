@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
+import org.jooq.Field;
 import org.jooq.Record;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatContextMessage;
@@ -11,6 +12,7 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConv
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationSummary;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatHistoryMessage;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatLatestUsage;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
@@ -44,7 +46,11 @@ import java.util.UUID;
 
 import static org.jooq.impl.DSL.coalesce;
 import static org.jooq.impl.DSL.count;
+import static org.jooq.impl.DSL.field;
 import static org.jooq.impl.DSL.max;
+import static org.jooq.impl.DSL.name;
+import static org.jooq.impl.SQLDataType.BIGINTUNSIGNED;
+import static org.jooq.impl.SQLDataType.VARCHAR;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AI_CHAT_CONVERSATION;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory.AI_CHAT_MEMORY;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMutationConfirmation.AI_CHAT_MUTATION_CONFIRMATION;
@@ -66,6 +72,16 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> LIST_OF_MAPS_TYPE = new TypeReference<>() {};
+    // These columns are introduced by V3_6_1. Plain fields keep this repository
+    // buildable before a developer regenerates the checked-in jOOQ sources.
+    private static final Field<ULong> PARENT_CONVERSATION_ID = field(
+            name("ai_chat_conversation", "parent_ai_chat_conversation_id"), BIGINTUNSIGNED);
+    private static final Field<String> CONVERSATION_KIND = field(
+            name("ai_chat_conversation", "conversation_kind"), VARCHAR(16));
+    private static final Field<String> AGENT_ID = field(
+            name("ai_chat_conversation", "agent_id"), VARCHAR(64));
+    private static final Field<String> PARENT_REQUEST_ID = field(
+            name("ai_chat_conversation", "parent_request_id"), VARCHAR(128));
 
     private final DSLContext dslContext;
     private final ObjectMapper objectMapper;
@@ -106,6 +122,33 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
     }
 
     @Override
+    @Transactional
+    public String openChild(ScoreUser requester, String parentConversationId,
+                            String parentRequestId, AiChatConversationKind kind,
+                            String workerId, String firstPrompt) {
+        if (kind == null || !kind.isChild() || !StringUtils.hasText(parentRequestId)
+                || !StringUtils.hasText(workerId)) {
+            throw new IllegalArgumentException("Child execution conversation identity is incomplete.");
+        }
+        ULong parentId = lockOwned(requester, parentConversationId);
+        String conversationId = UUID.randomUUID().toString();
+        LocalDateTime now = LocalDateTime.now();
+        dslContext.insertInto(AI_CHAT_CONVERSATION)
+                .set(AI_CHAT_CONVERSATION.GUID, conversationId)
+                .set(AI_CHAT_CONVERSATION.APP_USER_ID, userId(requester))
+                .set(PARENT_CONVERSATION_ID, parentId)
+                .set(CONVERSATION_KIND, kind.name())
+                .set(AGENT_ID, workerId.strip())
+                .set(PARENT_REQUEST_ID, parentRequestId.strip())
+                .set(AI_CHAT_CONVERSATION.TITLE, title(firstPrompt))
+                .set(AI_CHAT_CONVERSATION.COMPACTED, (byte) 0)
+                .set(AI_CHAT_CONVERSATION.CREATED_AT, now)
+                .set(AI_CHAT_CONVERSATION.UPDATED_AT, now)
+                .execute();
+        return conversationId;
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public String modelName(ScoreUser requester, String conversationId) {
         return settings(requester, conversationId).modelName();
@@ -125,13 +168,32 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<String> activeWorkflow(ScoreUser requester, String conversationId) {
+        ULong internalConversationId = ownedId(requester, conversationId);
+        return dslContext.select(AI_CHAT_STEP.EXTRA_JSON)
+                .from(AI_CHAT_STEP)
+                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
+                        .and(AI_CHAT_STEP.MESSAGE_KIND.eq("workflow_preference")))
+                .orderBy(AI_CHAT_STEP.STEP_SEQUENCE.desc())
+                .limit(1)
+                .fetchOptional(AI_CHAT_STEP.EXTRA_JSON)
+                .flatMap(value -> Optional.ofNullable(mapOrEmpty(value).get("activeWorkflow")))
+                .map(Object::toString)
+                .filter(StringUtils::hasText);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<AiChatLatestUsage> latestUsage(ScoreUser requester, String conversationId) {
         ULong internalConversationId = ownedId(requester, conversationId);
         return dslContext.select(AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.METRICS_JSON,
                         AI_CHAT_STEP.CREATED_AT)
                 .from(AI_CHAT_STEP)
                 .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
-                        .and(AI_CHAT_STEP.METRICS_JSON.isNotNull()))
+                        .and(AI_CHAT_STEP.METRICS_JSON.isNotNull())
+                        // Fan-out subagent calls carry transient prompts; only
+                        // conversation-scoped metrics may drive the context floor.
+                        .and(AI_CHAT_STEP.METRICS_JSON.notLike("%\"context_scope\"%")))
                 .orderBy(AI_CHAT_STEP.STEP_SEQUENCE.desc())
                 .limit(1)
                 .fetchOptional(record -> {
@@ -214,7 +276,8 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
                 .from(AI_CHAT_CONVERSATION)
                 .leftJoin(AI_CHAT_STEP).on(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
                         .eq(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID))
-                .where(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId(requester)))
+                .where(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId(requester))
+                        .and(PARENT_CONVERSATION_ID.isNull()))
                 .groupBy(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID,
                         AI_CHAT_CONVERSATION.GUID, AI_CHAT_CONVERSATION.TITLE,
                         AI_CHAT_CONVERSATION.COMPACTED, AI_CHAT_CONVERSATION.CREATED_AT,
@@ -241,21 +304,36 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
                 .fetchSingle(record -> new Header(record.get(AI_CHAT_CONVERSATION.TITLE),
                         instant(record.get(AI_CHAT_CONVERSATION.UPDATED_AT))));
         AiChatConversationSettings settings = latestSettings(internalConversationId);
+        List<ULong> childIds = dslContext.select(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID)
+                .from(AI_CHAT_CONVERSATION)
+                .where(PARENT_CONVERSATION_ID.eq(internalConversationId))
+                .fetch(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+        var visibleChildKinds = AI_CHAT_STEP.MESSAGE_KIND.in(
+                "agent_lifecycle", "tool_call", "tool_call_update", "guide");
         List<ChatHistoryMessage> messages = dslContext.select(
-                        AI_CHAT_STEP.STEP_SEQUENCE, AI_CHAT_STEP.REQUEST_ID,
+                        AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID, AI_CHAT_STEP.STEP_SEQUENCE,
+                        AI_CHAT_STEP.REQUEST_ID,
                         AI_CHAT_STEP.MESSAGE_KIND, AI_CHAT_STEP.VISIBILITY,
                         AI_CHAT_STEP.MESSAGE, AI_CHAT_STEP.REASONING_CONTENT,
                         AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.TOOL_CALLS_JSON,
-                        AI_CHAT_STEP.OBSERVATION_JSON, AI_CHAT_STEP.EXTRA_JSON)
+                        AI_CHAT_STEP.OBSERVATION_JSON, AI_CHAT_STEP.EXTRA_JSON,
+                        AI_CHAT_STEP.CREATED_AT)
                 .from(AI_CHAT_STEP)
-                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
-                .orderBy(AI_CHAT_STEP.STEP_SEQUENCE.desc())
+                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
+                        .or(childIds.isEmpty() ? org.jooq.impl.DSL.falseCondition()
+                                : AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.in(childIds)
+                                        .and(visibleChildKinds)))
+                .orderBy(AI_CHAT_STEP.CREATED_AT.desc(), AI_CHAT_STEP.AI_CHAT_STEP_ID.desc())
                 .limit(MAX_HISTORY_STEPS)
                 .fetch(this::historyMessage);
         Collections.reverse(messages);
+        List<ChatHistoryMessage> indexedMessages = new ArrayList<>(messages.size());
+        for (int index = 0; index < messages.size(); index++) {
+            indexedMessages.add(withIndex(messages.get(index), index));
+        }
         return new ChatConversationDetails(conversationId, header.title(), settings.modelName(),
                 settings.reasoningEffort(), settings.runtime(), settings.runtimeOptions(), header.updatedAt(),
-                messages, List.<ChatContextMessage>of());
+                indexedMessages, List.<ChatContextMessage>of());
     }
 
     @Override
@@ -263,6 +341,13 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
     public Map<String, Object> trajectory(ScoreUser requester, String conversationId,
                                           String agentVersion, String defaultModel) {
         ULong internalConversationId = ownedId(requester, conversationId);
+        List<ULong> childIds = dslContext.select(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID)
+                .from(AI_CHAT_CONVERSATION)
+                .where(PARENT_CONVERSATION_ID.eq(internalConversationId))
+                .fetch(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+        var conversationScope = AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
+                .or(childIds.isEmpty() ? org.jooq.impl.DSL.falseCondition()
+                        : AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.in(childIds));
         List<TrajectoryRow> rows = dslContext.select(
                         AI_CHAT_STEP.STEP_SEQUENCE, AI_CHAT_STEP.REQUEST_ID, AI_CHAT_STEP.SOURCE,
                         AI_CHAT_STEP.MESSAGE_KIND, AI_CHAT_STEP.VISIBILITY, AI_CHAT_STEP.MESSAGE,
@@ -273,8 +358,8 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
                         AI_CHAT_STEP.EXTRA_JSON, AI_CHAT_STEP.LLM_CALL_COUNT,
                         AI_CHAT_STEP.IS_COPIED_CONTEXT, AI_CHAT_STEP.CREATED_AT)
                 .from(AI_CHAT_STEP)
-                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
-                .orderBy(AI_CHAT_STEP.STEP_SEQUENCE.desc())
+                .where(conversationScope)
+                .orderBy(AI_CHAT_STEP.CREATED_AT.desc(), AI_CHAT_STEP.AI_CHAT_STEP_ID.desc())
                 .limit(MAX_TRAJECTORY_STEPS)
                 .fetch(this::trajectoryRow);
         Collections.reverse(rows);
@@ -283,9 +368,10 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
         long promptTokens = 0;
         long completionTokens = 0;
         long cachedTokens = 0;
-        for (TrajectoryRow row : rows) {
+        for (int index = 0; index < rows.size(); index++) {
+            TrajectoryRow row = rows.get(index);
             Map<String, Object> step = new LinkedHashMap<>();
-            step.put("step_id", row.sequence() + 1);
+            step.put("step_id", index + 1);
             step.put("timestamp", row.createdAt().toString());
             step.put("source", row.source());
             if (StringUtils.hasText(row.modelName()) && "agent".equals(row.source())) {
@@ -338,8 +424,7 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
         trajectory.put("steps", steps);
         trajectory.put("notes", "UI projection steps are retained for auditability and marked in step.extra.");
         trajectory.put("final_metrics", finalMetrics);
-        long totalSteps = dslContext.fetchCount(AI_CHAT_STEP,
-                AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId));
+        long totalSteps = dslContext.fetchCount(AI_CHAT_STEP, conversationScope);
         trajectory.put("extra", Map.of("producer", "connectCenter",
                 "total_steps", totalSteps, "returned_steps", rows.size(),
                 "truncated", totalSteps > rows.size()));
@@ -371,7 +456,8 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
     @Transactional
     public int deleteExpiredConversations(Instant cutoff) {
         return dslContext.deleteFrom(AI_CHAT_CONVERSATION)
-                .where(AI_CHAT_CONVERSATION.UPDATED_AT.lt(localDateTime(cutoff)))
+                .where(AI_CHAT_CONVERSATION.UPDATED_AT.lt(localDateTime(cutoff))
+                        .and(PARENT_CONVERSATION_ID.isNull()))
                 .execute();
     }
 
@@ -468,7 +554,9 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
         Map<String, Object> storedExtra = readMap(record.get(AI_CHAT_STEP.EXTRA_JSON));
         Map<String, Object> extra = storedExtra != null ? storedExtra : Map.of();
         String role = switch (kind) {
-            case "assistant", "user", "error", "progress", "tool_call" -> kind;
+            case "assistant", "user", "error", "progress", "tool_call", "guide" -> kind;
+            case "tool_call_update" -> "tool_call";
+            case "agent_lifecycle" -> "agent_event";
             default -> "debug";
         };
         if ("debug".equals(role) && StringUtils.hasText(reasoning)) {
@@ -485,7 +573,14 @@ public class JooqScoreChatMemoryRepository implements ScoreChatMemoryRepository 
         return new ChatHistoryMessage(record.get(AI_CHAT_STEP.STEP_SEQUENCE).intValue(), role,
                 Objects.requireNonNullElse(content, ""), requestId, requestId,
                 toolCallId != null ? requestId : null, toolCallId, toolCallSequence,
-                toolStatus, record.get(AI_CHAT_STEP.VISIBILITY), metadata);
+                "agent_event".equals(role) ? string(extra, "lifecycle_subtype") : toolStatus,
+                record.get(AI_CHAT_STEP.VISIBILITY), metadata);
+    }
+
+    private ChatHistoryMessage withIndex(ChatHistoryMessage message, int index) {
+        return new ChatHistoryMessage(index, message.role(), message.content(), message.requestId(),
+                message.turnId(), message.groupId(), message.toolCallId(), message.toolCallSequence(),
+                message.subtype(), message.visibility(), message.metadata());
     }
 
     private TrajectoryRow trajectoryRow(Record record) {

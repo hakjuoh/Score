@@ -1,5 +1,11 @@
 import {Component, EventEmitter, Input, OnChanges, Output, SimpleChanges} from '@angular/core';
 import {
+  AiAgentActivity,
+  AiAgentActivityEvent,
+  agentActivityElapsedLabel,
+  agentActivitySummary
+} from './domain/ai-agent-activity';
+import {
   AiChatAttachment,
   AiChatMessage,
   AiChatModelInfo,
@@ -8,6 +14,7 @@ import {
   AiMutationInteraction,
   AiMutationPermissionMode,
   AiChatRuntimeSettingInfo,
+  AiChatToolStatus,
   AiReasoningEffortInfo
 } from './domain/ai-chat-panel.model';
 
@@ -35,6 +42,7 @@ type AiChatMessageDisplayItem =
     './ai-chat-panel.component.css',
     './ai-chat-panel-history.css',
     './ai-chat-panel-messages.css',
+    './ai-chat-panel-agents.css',
     './ai-chat-panel-composer.css'
   ]
 })
@@ -57,6 +65,7 @@ export class AiChatMessageListComponent implements OnChanges {
   @Input() selectedRuntime = '';
   @Input() permissionMode: AiMutationPermissionMode = 'ask';
   @Input() permissionDraft: AiMutationPermissionMode = 'ask';
+  @Input() agentFocus?: AiAgentActivity;
   @Input() modelChangePending = false;
   @Input() mutationInteraction?: AiMutationInteraction;
   @Input() elicitation?: AiElicitationNotice;
@@ -90,6 +99,8 @@ export class AiChatMessageListComponent implements OnChanges {
   @Output() permissionDraftChange = new EventEmitter<AiMutationPermissionMode>();
   @Output() permissionSettingsApplied = new EventEmitter<void>();
   @Output() permissionSettingsCancelled = new EventEmitter<void>();
+  @Output() agentFocusRequested = new EventEmitter<string>();
+  @Output() agentFocusClosed = new EventEmitter<void>();
   @Output() mutationApproved = new EventEmitter<void>();
   @Output() mutationDenied = new EventEmitter<void>();
   @Output() mutationChangeRequested = new EventEmitter<void>();
@@ -148,12 +159,16 @@ export class AiChatMessageListComponent implements OnChanges {
       const finalRelativeIndex = this.finalMessageIndex(turnMessages);
 
       if (finalRelativeIndex > 0) {
+        const workingMessages = turnMessages.slice(0, finalRelativeIndex);
         items.push({
           kind: 'turn',
           trackKey: `turn-${index}`,
           userIndex: index,
           userMessage: message,
-          historyMessages: turnMessages.slice(0, finalRelativeIndex),
+          // Keep every execution event in its original position. In
+          // particular, moving the agent group outside the folded history
+          // makes a completed turn appear to have run tools before agents.
+          historyMessages: workingMessages,
           finalMessage: turnMessages[finalRelativeIndex],
           trailingMessages: turnMessages.slice(finalRelativeIndex + 1)
         });
@@ -187,15 +202,20 @@ export class AiChatMessageListComponent implements OnChanges {
     this.expandedHistoryUserIndexes.add(userIndex);
   }
 
-  toolCallStatusLabel(message: AiChatMessage): string {
-    if (message.toolStatus === 'failed') {
-      return 'Tool failed';
-    }
-    return message.toolStatus === 'completed' ? 'Tool completed' : 'Tool result';
+  agentToolMessage(event: AiAgentActivityEvent, agentInProgress: boolean): AiChatMessage {
+    const toolStatus: AiChatToolStatus | undefined = event.toolStatus === 'completed'
+      || event.toolStatus === 'failed' ? event.toolStatus : undefined;
+    return {
+      role: 'tool_call',
+      content: event.content,
+      ...(event.detail ? {toolDetail: event.detail} : {}),
+      ...(toolStatus ? {toolStatus} : {}),
+      inProgress: event.toolStatus === 'started' && agentInProgress
+    };
   }
 
-  hasToolDetail(message: AiChatMessage): boolean {
-    return typeof message.toolDetail === 'string' && message.toolDetail.trim().length > 0;
+  agentConversationMessage(event: AiAgentActivityEvent): AiChatMessage {
+    return {role: 'guide', content: event.content};
   }
 
   get modelDraftReasoningEfforts(): AiReasoningEffortInfo[] {
@@ -247,6 +267,89 @@ export class AiChatMessageListComponent implements OnChanges {
       value = numberValue;
     }
     this.runtimeDraftOptionChange.emit({name: setting.name, value});
+  }
+
+  agentGroupSummary(message: AiChatMessage): string {
+    return agentActivitySummary(message.activities || []);
+  }
+
+  agentGroupPhase(message: AiChatMessage): string {
+    const activities = message.activities || [];
+    const lead = activities.find(activity => activity.isLead);
+    if (lead?.status === 'synthesizing') return this.activePhase(lead.activeVerb);
+    if (lead?.status === 'completed') return lead.completedVerb || 'Completed';
+    if (lead?.status === 'failed' || lead?.status === 'cancelled') {
+      return `${lead.activeVerb || 'Workflow'} stopped`;
+    }
+    const specialists = activities.filter(activity => !activity.isLead);
+    if (specialists.length > 0 && specialists.every(activity => !activity.inProgress)) {
+      const completed = specialists.find(activity => activity.completedVerb)?.completedVerb || lead?.completedVerb;
+      return specialists.some(activity => activity.status === 'failed' || activity.status === 'cancelled')
+        ? `${completed || 'Completed'} with issues` : completed || 'Completed';
+    }
+    return this.activePhase(lead?.activeVerb
+      || specialists.find(activity => activity.activeVerb)?.activeVerb);
+  }
+
+  agentGroupPlan(message: AiChatMessage): string {
+    return message.activities?.find(activity => activity.isLead)?.content
+      || (message.role === 'workflow_group'
+        ? 'Running independent workflow tasks before synthesizing their results.'
+        : 'Starting specialist agents before the lead synthesizes their findings.');
+  }
+
+  agentGroupActivities(message: AiChatMessage): AiAgentActivity[] {
+    return (message.activities || []).filter(activity => !activity.isLead);
+  }
+
+  agentGroupCount(message: AiChatMessage): number {
+    const activities = message.activities || [];
+    const actual = activities.filter(activity => !activity.isLead).length;
+    const planned = activities.find(activity => activity.isLead)?.plannedAgentCount || 0;
+    return Math.max(actual, planned);
+  }
+
+  agentGroupWorkflow(message: AiChatMessage): string | undefined {
+    const activities = message.activities || [];
+    return activities.find(activity => activity.isLead)?.workflow
+      || activities.find(activity => activity.workflow)?.workflow;
+  }
+
+  agentGroupExecutionKind(message: AiChatMessage): string | undefined {
+    const activities = message.activities || [];
+    return activities.find(activity => activity.isLead)?.executionKind
+      || activities.find(activity => activity.executionKind)?.executionKind;
+  }
+
+  agentGroupWorkflowLabel(message: AiChatMessage): string | undefined {
+    if (message.role === 'workflow_group') return 'Parallel workflow';
+    if (message.role === 'agent_group') return 'Multi-agent workflow';
+    const workflow = this.agentGroupWorkflow(message);
+    if (workflow === 'chain') return 'Chain workflow';
+    if (workflow === 'routing') return 'Routing workflow';
+    if (workflow === 'orchestrator_workers') return 'Agent workflow';
+    return undefined;
+  }
+
+  agentDisplayName(activity: AiAgentActivity): string {
+    return activity.taskLabel || activity.agentName;
+  }
+
+  agentDisplayRole(activity: AiAgentActivity): string | undefined {
+    return activity.taskLabel ? activity.agentName : activity.agentRole;
+  }
+
+  agentElapsed(activity: AiAgentActivity): string {
+    return agentActivityElapsedLabel(activity);
+  }
+
+  agentStatusLabel(activity: AiAgentActivity): string {
+    return activity.status === 'started' ? 'running' : activity.status;
+  }
+
+  private activePhase(verb?: string): string {
+    const value = verb?.trim() || 'Working';
+    return /\.{3}$/.test(value) ? value : `${value}...`;
   }
 
   private nextUserIndex(startIndex: number): number {

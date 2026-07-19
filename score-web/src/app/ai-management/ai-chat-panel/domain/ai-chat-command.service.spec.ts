@@ -13,6 +13,7 @@ describe('AiChatCommandService', () => {
     expect(service.decide('/model')).toEqual({kind: 'local', command: 'model'});
     expect(service.decide('/runtime')).toEqual({kind: 'local', command: 'runtime'});
     expect(service.decide('/permissions')).toEqual({kind: 'local', command: 'permissions'});
+    expect(service.decide('/agents')).toEqual({kind: 'none'});
     expect(service.decide('/compact')).toEqual({kind: 'backend'});
     expect(service.decide('/compact preserve import IDs')).toEqual({kind: 'backend'});
     expect(service.isKnownCommand('/compact preserve import IDs')).toBe(true);
@@ -28,6 +29,7 @@ describe('AiChatCommandService', () => {
     expect(service.suggestions('/').map(command => command.name)).toContain('/model');
     expect(service.suggestions('/').map(command => command.name)).toContain('/runtime');
     expect(service.suggestions('/').map(command => command.name)).toContain('/permissions');
+    expect(service.suggestions('/').map(command => command.name)).not.toContain('/agents');
     expect(service.suggestions('/').map(command => command.name)).not.toContain('/cancel');
     expect(service.suggestions('/', true).map(command => command.name)).toEqual(['/cancel']);
   });
