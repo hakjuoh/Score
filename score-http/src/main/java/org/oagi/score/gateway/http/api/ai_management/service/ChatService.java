@@ -14,6 +14,7 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConv
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.MutationConfirmation;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatLatestUsage;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
@@ -65,13 +66,15 @@ public class ChatService {
     private final ObjectMapper objectMapper;
     private final AiRequestRegistry requests;
     private final AiContextBudgetService contextBudgets;
+    private final AiMultiAgentManager multiAgents;
 
     @Autowired
     public ChatService(ScoreAiModelRegistry models, AiRuntimeRegistry runtimes,
                        ToolSearchToolCallingAdvisor toolSearchAdvisor,
                        ChatMemory chatMemory, ScoreChatMemoryRepository memoryRepository,
                        ObjectMapper objectMapper, AiRequestRegistry requests,
-                       AiContextBudgetService contextBudgets) {
+                       AiContextBudgetService contextBudgets,
+                       AiMultiAgentManager multiAgents) {
         this.models = models;
         this.runtimes = runtimes;
         this.toolSearchAdvisor = toolSearchAdvisor;
@@ -80,6 +83,18 @@ public class ChatService {
         this.objectMapper = objectMapper;
         this.requests = requests;
         this.contextBudgets = contextBudgets;
+        this.multiAgents = multiAgents;
+    }
+
+    ChatService(ScoreAiModelRegistry models, AiRuntimeRegistry runtimes,
+                ToolSearchToolCallingAdvisor toolSearchAdvisor,
+                ChatMemory chatMemory, ScoreChatMemoryRepository memoryRepository,
+                ObjectMapper objectMapper, AiRequestRegistry requests,
+                AiContextBudgetService contextBudgets) {
+        // The fallback manager must share this service's budget and request
+        // collaborators so budget checks and the distributed-stop fence stay active.
+        this(models, runtimes, toolSearchAdvisor, chatMemory, memoryRepository, objectMapper,
+                requests, contextBudgets, new AiMultiAgentManager(runtimes, contextBudgets, requests));
     }
 
     ChatService(ScoreAiModelRegistry models, AiRuntimeRegistry runtimes,
@@ -107,14 +122,19 @@ public class ChatService {
     @Transactional
     public ChatRequest prepare(ChatRequest request, ScoreUser requester) {
         validate(request);
+        Optional<AiMultiAgentIntent.PersistentWorkflowCommand> workflowCommand =
+                AiMultiAgentIntent.persistentWorkflowCommand(request.prompt());
         String requestedModelName = request.modelName();
         String requestedReasoningEffort = request.reasoningEffort();
         String requestedRuntime = request.runtime();
         Map<String, Object> requestedRuntimeOptions = request.runtimeOptions();
         boolean runtimeOptionsWereOmitted = requestedRuntimeOptions == null;
         AiChatConversationSettings previousSettings = null;
+        String storedActiveWorkflow = null;
         if (StringUtils.hasText(request.conversationId())) {
             previousSettings = memoryRepository.settingsForUpdate(requester, request.conversationId());
+            Optional<String> stored = memoryRepository.activeWorkflow(requester, request.conversationId());
+            storedActiveWorkflow = stored != null ? stored.orElse(null) : null;
             if (!StringUtils.hasText(requestedModelName)) {
                 requestedModelName = previousSettings.modelName();
             }
@@ -124,6 +144,14 @@ public class ChatService {
             if (!StringUtils.hasText(requestedRuntime)) {
                 requestedRuntime = previousSettings.runtime();
             }
+        }
+        String activeWorkflow = workflowCommand.isPresent()
+                ? workflowCommand.orElseThrow().activeWorkflow() : storedActiveWorkflow;
+        request = request.withActiveWorkflow(activeWorkflow);
+        request = AiMultiAgentIntent.applyExplicitDelegation(request);
+        if (request.mutationConfirmation() != null) {
+            request = request.withActiveWorkflow("direct")
+                    .withMultiAgent(AiMultiAgentOptions.single());
         }
         String modelName = models.resolveModelName(requestedModelName);
         if (previousSettings != null && !modelName.equals(previousSettings.modelName())) {
@@ -142,6 +170,10 @@ public class ChatService {
         recordSettingsChange(requester, conversationId, request.requestId(), previousSettings,
                 new AiChatConversationSettings(
                         modelName, reasoningEffort, runtime, runtimeOptions));
+        if (workflowCommand.isPresent()) {
+            recordWorkflowPreference(requester, conversationId, request.requestId(),
+                    workflowCommand.orElseThrow(), modelName, reasoningEffort, runtime, runtimeOptions);
+        }
         return request.withConversation(conversationId, modelName, reasoningEffort, runtime, runtimeOptions);
     }
 
@@ -150,6 +182,8 @@ public class ChatService {
         List<String> progressMessages = new ArrayList<>();
         CompactCommand compactCommand = compactCommand(prepared.prompt());
         boolean manualCompact = compactCommand != null;
+        Optional<AiMultiAgentIntent.PersistentWorkflowCommand> workflowCommand =
+                AiMultiAgentIntent.persistentWorkflowCommand(prepared.prompt());
         UserMessage userMessage = manualCompact
                 ? compactMessage(compactCommand.instructions()) : userMessage(prepared);
         List<Message> initialHistory = conversationHistory(prepared.conversationId());
@@ -169,10 +203,17 @@ public class ChatService {
 
         String visiblePrompt = visiblePrompt(prepared);
         String permissionMode = AiMutationPermissionMode.resolve(prepared.permissionMode()).value();
+        Map<String, Object> userExtra = new LinkedHashMap<>();
+        userExtra.put("ui_projection", true);
+        userExtra.put("permission_mode", permissionMode);
+        userExtra.put("multi_agent", prepared.multiAgent().asMap());
+        if (prepared.activeWorkflow() != null) {
+            userExtra.put("active_workflow", prepared.activeWorkflow());
+        }
         memoryRepository.append(requester, prepared.conversationId(), new AiChatTrajectoryStep(
                 prepared.requestId(), "user", "user", "visible", visiblePrompt, null, prepared.modelName(),
                 prepared.reasoningEffort(), prepared.runtime(), prepared.runtimeOptions(),
-                null, null, null, Map.of("ui_projection", true, "permission_mode", permissionMode),
+                null, null, null, Map.copyOf(userExtra),
                 null, null, null));
         List<Message> conversationHistory = initialHistory;
 
@@ -181,10 +222,17 @@ public class ChatService {
         String[] automaticSummary = new String[1];
         long[] automaticBeforeTokens = new long[1];
         long[] automaticAfterTokens = new long[1];
-        String answer;
-        if (manualCompact) {
+        final String answer;
+        final Map<String, Object> finalTraceMetadata;
+        if (workflowCommand.isPresent()) {
+            answer = workflowCommand.orElseThrow().acknowledgement();
+            finalTraceMetadata = Map.of(
+                    "workflow", "configuration",
+                    "active_workflow", Objects.toString(prepared.activeWorkflow(), "automatic"));
+        } else if (manualCompact) {
             collectingProgress.accept("Compacting the conversation context.");
             answer = executeSummary(prepared, conversationHistory, userMessage, requester, recorder, true);
+            finalTraceMetadata = Map.of();
         } else {
             if (!conversationHistory.isEmpty() && budget.isPresent()
                     && budget.get().shouldCompact(projectedInputTokens)) {
@@ -203,9 +251,10 @@ public class ChatService {
             if (budget.isPresent() && budget.get().exceedsSafeInput(projectedInputTokens)) {
                 throw new IllegalArgumentException("The request is too large for the selected model's safe context budget.");
             }
-            collectingProgress.accept("Processing the request.");
-            answer = runtimes.execute(runtime, new AiRuntime.Context(
-                    prepared, conversationHistory, userMessage, requester, recorder, true, true)).answer();
+            AiRuntime.Result execution = multiAgents.execute(new AiRuntime.Context(
+                    prepared, conversationHistory, userMessage, requester, recorder, true, true));
+            answer = execution.answer();
+            finalTraceMetadata = execution.traceMetadata();
         }
         if (Thread.currentThread().isInterrupted()
                 || requests != null && requests.shouldDiscardResult(prepared.requestId())) {
@@ -236,11 +285,18 @@ public class ChatService {
                 }
                 memoryRepository.markExpanded(requester, prepared.conversationId());
             }
+            Map<String, Object> answerExtra = new LinkedHashMap<>(finalTraceMetadata);
+            answerExtra.put("ui_projection", true);
+            answerExtra.put("runtime", runtime);
+            answerExtra.put("permission_mode", permissionMode);
+            answerExtra.put("multi_agent", prepared.multiAgent().asMap());
+            if (prepared.activeWorkflow() != null) {
+                answerExtra.put("active_workflow", prepared.activeWorkflow());
+            }
             memoryRepository.append(requester, prepared.conversationId(), new AiChatTrajectoryStep(
                     prepared.requestId(), "agent", "assistant", "visible", answer, null, modelName,
                     prepared.reasoningEffort(), runtime, prepared.runtimeOptions(),
-                    null, null, null, Map.of("ui_projection", true, "runtime", runtime,
-                            "permission_mode", permissionMode), 0, null, null));
+                    null, null, null, Map.copyOf(answerExtra), 0, null, null));
         };
         if (requests != null) {
             if (!requests.commitResult(prepared.requestId(), persistence)) {
@@ -640,6 +696,25 @@ public class ChatService {
                 0, null, null));
     }
 
+    private void recordWorkflowPreference(
+            ScoreUser requester, String conversationId, String requestId,
+            AiMultiAgentIntent.PersistentWorkflowCommand command,
+            String modelName, String reasoningEffort, String runtime,
+            Map<String, Object> runtimeOptions) {
+        Map<String, Object> extra = new LinkedHashMap<>();
+        if (command.activeWorkflow() != null) {
+            extra.put("activeWorkflow", command.activeWorkflow());
+        }
+        extra.put("automatic", command.activeWorkflow() == null);
+        memoryRepository.append(requester, conversationId, new AiChatTrajectoryStep(
+                requestId, "system", "workflow_preference", "debug",
+                command.activeWorkflow() == null
+                        ? "Automatic workflow selection enabled."
+                        : "Active workflow set to " + command.activeWorkflow() + ".",
+                null, modelName, reasoningEffort, runtime, runtimeOptions,
+                null, null, null, Map.copyOf(extra), 0, null, null));
+    }
+
     private boolean sameSettings(AiChatConversationSettings left,
                                  AiChatConversationSettings right) {
         return Objects.equals(left.modelName(), right.modelName())
@@ -713,6 +788,10 @@ public class ChatService {
 
     private ChatRequest requirePrepared(ChatRequest request) {
         validate(request);
+        if (request.mutationConfirmation() != null) {
+            request = request.withActiveWorkflow("direct")
+                    .withMultiAgent(AiMultiAgentOptions.single());
+        }
         if (!StringUtils.hasText(request.conversationId())
                 || !StringUtils.hasText(request.modelName())
                 || !StringUtils.hasText(request.reasoningEffort())

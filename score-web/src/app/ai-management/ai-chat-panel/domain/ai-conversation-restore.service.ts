@@ -6,7 +6,18 @@ import {
   AiContextUsage,
   AiRuntimeOptions
 } from './ai-chat-panel.model';
-import {contextUsageValue} from './ai-chat-event-semantics';
+import {
+  contextUsageValue,
+  withoutTextualToolCallPlaceholder
+} from './ai-chat-event-semantics';
+import {
+  AiAgentActivity,
+  agentActivityUpdate,
+  isSpecialistToolEvent,
+  upsertAgentActivity,
+  upsertAgentGuideEvent,
+  upsertAgentToolEvent
+} from './ai-agent-activity';
 
 export interface AiConversationRestoreCallbacks {
   setConversationId(conversationId: string): void;
@@ -44,12 +55,19 @@ export class AiConversationRestoreService {
   private restoreConversationToken = 0;
   private restoreMessageQueue: AiChatMessage[] = [];
   private restoreMessageQueueRunning = false;
-  private restoreMessageBuffer = new Map<number, AiChatMessage | null>();
+  private restoreMessageBuffer = new Map<number, AiChatSocketEvent>();
   private nextRestoreMessageIndex = 0;
   private restoreServerDone = false;
   private restoreFinished = false;
   private restoreStarted = false;
   private expectedRestoreAttempt?: AiConversationRestoreAttempt;
+  private restoredAgentGroups = new Map<string, AiAgentActivity[]>();
+
+  projectStoredMessages(messages: AiChatHistoryMessage[]): AiChatMessage[] {
+    this.resetProjectionState();
+    return messages.map(message => this.projectStoredMessage(message))
+      .filter((message): message is AiChatMessage => message !== null);
+  }
 
   isRestoreEvent(event: AiChatSocketEvent): boolean {
     return event.type === 'HISTORY_START' ||
@@ -175,7 +193,6 @@ export class AiConversationRestoreService {
     }
 
     if (event.type === 'HISTORY_MESSAGE') {
-      const restoredMessage = this.restoredMessage(event);
       if (typeof event.index === 'number') {
         if (event.index < this.nextRestoreMessageIndex) {
           return;
@@ -183,11 +200,12 @@ export class AiConversationRestoreService {
         // Delivery is at-least-once. Preserve the first frame for an index so
         // a duplicate cannot replace already buffered canonical history.
         if (!this.restoreMessageBuffer.has(event.index)) {
-          this.restoreMessageBuffer.set(event.index, restoredMessage);
+          this.restoreMessageBuffer.set(event.index, event);
         }
         this.drainBufferedRestoreMessages(callbacks);
         return;
       }
+      const restoredMessage = this.restoredMessage(event);
       if (restoredMessage) {
         this.enqueueRestoredMessage(restoredMessage, callbacks);
       }
@@ -226,6 +244,12 @@ export class AiConversationRestoreService {
     if (role === 'assistant') {
       return 'assistant';
     }
+    if (role === 'guide') {
+      return 'guide';
+    }
+    if (role === 'agent_event') {
+      return 'agent_group';
+    }
     return 'user';
   }
 
@@ -233,6 +257,15 @@ export class AiConversationRestoreService {
     const role = this.restoredRole(event.message);
     const content = this.nonBlankText(event.response)
       || this.nonBlankText(event.content) || '';
+    if (event.message === 'agent_event') {
+      return this.restoredAgentEvent(event, content);
+    }
+    if (event.message === 'guide') {
+      const guideEvent: AiChatSocketEvent = {...event, type: 'system', subtype: 'guide', content};
+      for (const activities of this.restoredAgentGroups.values()) {
+        if (upsertAgentGuideEvent(activities, guideEvent)) return null;
+      }
+    }
     // The durable trajectory contains audit-only progress, model reasoning,
     // and orchestration rows that are never retained in the completed live
     // transcript. Replaying them would make a restored request expose a
@@ -241,7 +274,19 @@ export class AiConversationRestoreService {
       return null;
     }
     if (role !== 'tool_call') {
+      if (role === 'assistant') {
+        const visibleContent = withoutTextualToolCallPlaceholder(content);
+        return visibleContent ? {role, content: visibleContent} : null;
+      }
       return {role, content};
+    }
+
+    const toolEvent: AiChatSocketEvent = {...event, type: 'tool_call'};
+    if (isSpecialistToolEvent(toolEvent)) {
+      for (const activities of this.restoredAgentGroups.values()) {
+        if (upsertAgentToolEvent(activities, toolEvent)) break;
+      }
+      return null;
     }
 
     const groupId = this.nonBlankText(event.groupId);
@@ -259,7 +304,7 @@ export class AiConversationRestoreService {
     const toolDetail = this.restoredToolDetail(event, content);
     return {
       role,
-      content: this.restoredToolContent(event, content, toolName, toolStatus),
+      content: this.restoredToolContent(toolStatus, toolName),
       ...(turnId ? {turnId} : {}),
       groupId,
       toolCallId,
@@ -275,21 +320,30 @@ export class AiConversationRestoreService {
     };
   }
 
-  private restoredToolContent(event: AiChatSocketEvent, content: string,
-                              toolName: string,
-                              toolStatus: 'completed' | 'failed'): string {
-    const statusMessage = this.nonBlankText(event.metadata?.['statusMessage']);
-    if (statusMessage) {
-      return statusMessage;
+  private restoredToolContent(toolStatus: 'completed' | 'failed', toolName: string): string {
+    return toolStatus === 'completed' ? `${toolName} completed.` : `${toolName} failed.`;
+  }
+
+  private restoredAgentEvent(event: AiChatSocketEvent, content: string): AiChatMessage | null {
+    const lifecycleEvent: AiChatSocketEvent = {...event, type: 'system', content};
+    const update = agentActivityUpdate(lifecycleEvent);
+    if (!update) return null;
+    const metadata = event.metadata || {};
+    const groupId = this.nonBlankText(metadata['fanoutId'])
+      || this.nonBlankText(metadata['fanout_id']) || event.requestId;
+    let activities = this.restoredAgentGroups.get(groupId);
+    const first = !activities;
+    if (!activities) {
+      activities = [];
+      this.restoredAgentGroups.set(groupId, activities);
     }
-    // Current trajectory rows persist the full audit payload as
-    // "<tool>\nArguments: ...\nResult/Error: ..." while the live UI receives
-    // the concise terminal status. Keep the summary consistent between both
-    // paths; the full payload is exposed separately through toolDetail.
-    if (/\nArguments:\s*/.test(content)) {
-      return `${toolName} ${toolStatus}.`;
-    }
-    return content || `${toolName} ${toolStatus}.`;
+    upsertAgentActivity(activities, update);
+    const parallel = update.executionKind === 'parallel';
+    return first ? {
+      role: parallel ? 'workflow_group' : 'agent_group',
+      content: parallel ? 'Parallel workflow' : 'Multi-agent workflow',
+      activities
+    } : null;
   }
 
   private restoredToolDetail(event: AiChatSocketEvent, content: string): string | undefined {
@@ -325,6 +379,11 @@ export class AiConversationRestoreService {
     this.restoreServerDone = false;
     this.restoreFinished = false;
     this.restoreStarted = false;
+    this.resetProjectionState();
+  }
+
+  private resetProjectionState(): void {
+    this.restoredAgentGroups.clear();
   }
 
   private enqueueRestoredMessage(message: AiChatMessage, callbacks: AiConversationRestoreCallbacks): void {
@@ -336,9 +395,10 @@ export class AiConversationRestoreService {
 
   private drainBufferedRestoreMessages(callbacks: AiConversationRestoreCallbacks): void {
     while (this.restoreMessageBuffer.has(this.nextRestoreMessageIndex)) {
-      const message = this.restoreMessageBuffer.get(this.nextRestoreMessageIndex) ?? null;
+      const event = this.restoreMessageBuffer.get(this.nextRestoreMessageIndex);
       this.restoreMessageBuffer.delete(this.nextRestoreMessageIndex);
       this.nextRestoreMessageIndex++;
+      const message = event ? this.restoredMessage(event) : null;
       if (message) {
         this.enqueueRestoredMessage(message, callbacks);
       }

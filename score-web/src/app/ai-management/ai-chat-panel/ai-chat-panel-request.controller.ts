@@ -11,6 +11,7 @@ import {
   AiChatSocketEvent,
   AiMutationConfirmationAuthorization
 } from './domain/ai-chat-panel.model';
+import {isExecutionActivityEvent, isSpecialistToolEvent} from './domain/ai-agent-activity';
 
 export abstract class AiChatPanelRequestController extends AiChatPanelControllerBase {
   protected startChatRequest(prompt: string, attachments: AiChatAttachment[]): void {
@@ -20,6 +21,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     this.activeRequestId = requestId;
     this.activeRequestPublished = false;
     this.clearToolCallTracking();
+    this.state.resetAgentActivity();
     const destination = '/user/queue/ai/chat/' + requestId;
     this.state.pending = true;
     this.state.currentStatus = 'Sending request';
@@ -59,7 +61,10 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       '/user/queue/ai/chat/' + requestId
     ).subscribe((message: Message) => {
       const event = JSON.parse(message.body) as AiChatSocketEvent;
-      if (event.type === 'system' && (event.subtype === 'elicitation_required'
+      if (isExecutionActivityEvent(event)
+        || isSpecialistToolEvent(event)
+        || event.type === 'system' && event.subtype === 'guide'
+        || event.type === 'system' && (event.subtype === 'elicitation_required'
         || event.subtype === 'elicitation_decision_accepted'
         || event.subtype === 'elicitation_decision_rejected')) {
         this.handleSocketEvent(event);
@@ -125,8 +130,17 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           } else if (event.type === 'system'
             && (event.subtype === 'context_usage' || event.subtype === 'context_compacted')) {
             this.handleSystemEvent(event);
+          } else if (isExecutionActivityEvent(event)) {
+            this.handleSystemEvent(event);
+          } else if (event.type === 'system' && event.subtype === 'guide') {
+            this.handleSystemEvent(event);
+          } else if (event.type === 'tool_call' || event.type === 'tool_group') {
+            // Replayed specialist tool activity lands in the agent timeline;
+            // lead tool rows are not replayed here (unchanged behavior).
+            this.divertSpecialistToolEvent(event);
           }
         });
+        this.settleAgentActivity('completed');
         this.confirmContextUpdate();
         this.state.elicitation = undefined;
         this.state.elicitationBusy = false;
@@ -170,6 +184,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           error, requestId
         );
         this.completeProgressMessages();
+        this.settleAgentActivity('failed');
         this.clearTimers();
         this.clearStatusMessage();
         if (!confirmationConversationId) {
@@ -262,6 +277,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       return;
     }
     this.completeProgressMessages();
+    this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
     this.clearMutationRepeatDraft(requestId);
@@ -304,11 +320,19 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     });
   }
 
+  protected clearResponseTimeout(): void {
+    if (this.responseTimeout !== undefined) {
+      window.clearTimeout(this.responseTimeout);
+      this.responseTimeout = undefined;
+    }
+  }
+
   protected failStompReconnect(): void {
     if (!this.state.pending) {
       return;
     }
     this.completeProgressMessages();
+    this.settleAgentActivity('failed');
     this.clearStatusMessage();
     this.state.messages.push({
       role: 'error',
@@ -360,6 +384,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     this.acknowledgementTimeout = window.setTimeout(() => {
       if (this.state.pending) {
         this.completeProgressMessages();
+        this.settleAgentActivity('failed');
         this.clearStatusMessage();
         this.state.messages.push({
           role: 'error',
@@ -381,6 +406,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
 
   protected failChatPublish(): void {
     this.completeProgressMessages();
+    this.settleAgentActivity('failed');
     this.clearStatusMessage();
     this.state.messages.push({role: 'error', content: 'Could not send the WebSocket chat request.'});
     this.state.pending = false;

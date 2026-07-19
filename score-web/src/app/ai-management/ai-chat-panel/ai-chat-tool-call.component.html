@@ -1,0 +1,38 @@
+<span class="tool-call-a11y-status" role="status" aria-live="polite" aria-atomic="true">
+  {{ statusLabel }}: {{ content }}
+</span>
+@if (hasDetail) {
+  <details class="tool-call-disclosure">
+    <summary class="tool-call-summary">
+      <mat-icon class="tool-call-expand-icon" aria-hidden="true">chevron_right</mat-icon>
+      <span class="tool-call-status">
+        @if (inProgress) {
+          <mat-progress-spinner class="message-progress-spinner"
+                                mode="indeterminate"
+                                [diameter]="12"></mat-progress-spinner>
+        } @else if (status === 'failed') {
+          <mat-icon class="message-prefix-icon" aria-hidden="true">error_outline</mat-icon>
+        } @else {
+          <mat-icon class="message-prefix-icon agent-focus-tool-icon" aria-hidden="true">build</mat-icon>
+        }
+      </span>
+      <span class="message-text">{{ content }}</span>
+    </summary>
+    <pre class="tool-call-detail">{{ detail }}</pre>
+  </details>
+} @else {
+  <div class="tool-call-summary tool-call-summary-static">
+    <span class="tool-call-status">
+      @if (inProgress) {
+        <mat-progress-spinner class="message-progress-spinner"
+                              mode="indeterminate"
+                              [diameter]="12"></mat-progress-spinner>
+      } @else if (status === 'failed') {
+        <mat-icon class="message-prefix-icon" aria-hidden="true">error_outline</mat-icon>
+      } @else {
+        <mat-icon class="message-prefix-icon agent-focus-tool-icon" aria-hidden="true">build</mat-icon>
+      }
+    </span>
+    <span class="message-text">{{ content }}</span>
+  </div>
+}
