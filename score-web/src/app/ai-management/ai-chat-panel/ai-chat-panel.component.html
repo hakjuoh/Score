@@ -1,4 +1,22 @@
-@if (!state.isOpen) {
+@if (state.popoutActive && !popoutMode) {
+  <button class="ai-chat-fab detached"
+          matTooltip="Focus separate Assistant window"
+          aria-label="Focus separate AI assistant window"
+          type="button"
+          (click)="focusPopout($event)">
+    <mat-icon>smart_toy</mat-icon>
+    <mat-icon class="popout-focus-indicator" aria-hidden="true">center_focus_strong</mat-icon>
+  </button>
+  <button class="ai-chat-fab detached-reattach"
+          matTooltip="Move Assistant back to this window"
+          aria-label="Move AI assistant back to this window"
+          type="button"
+          (click)="reattachPopout($event)">
+    <mat-icon>move_to_inbox</mat-icon>
+  </button>
+}
+
+@if (!state.isOpen && !state.popoutActive && !popoutMode) {
   <button class="ai-chat-fab"
           matTooltip="AI assistant"
           aria-label="Open AI assistant"
@@ -8,8 +26,9 @@
   </button>
 }
 
-@if (state.isOpen) {
+@if (state.isOpen && (!state.popoutActive || popoutMode)) {
   <aside class="ai-chat-panel"
+         [class.popout-window]="popoutMode"
          [class.dock-right]="state.dock === 'right'"
          [class.dock-left]="state.dock === 'left'"
          [class.dock-bottom]="state.dock === 'bottom'"
@@ -30,7 +49,10 @@
     <score-ai-chat-panel-header
       [assistantBrand]="state.assistantBrand"
       [dock]="state.dock"
+      [popoutMode]="popoutMode"
       (dockChanged)="setDock($event)"
+      (popoutRequested)="openPopout($event)"
+      (reattachRequested)="reattachPopout($event)"
       (closeRequested)="close($event)">
     </score-ai-chat-panel-header>
 
@@ -58,7 +80,6 @@
             [messages]="state.messages"
             [attachments]="state.attachments"
             [pending]="state.pending"
-            [isInitialPrompt]="isInitialPrompt"
             [modelSettingsOpen]="state.modelSettingsOpen"
             [runtimeSettingsOpen]="state.runtimeSettingsOpen"
             [permissionSettingsOpen]="state.permissionSettingsOpen"
@@ -216,6 +237,8 @@
         [activeConversationId]="state.conversationId"
         [loading]="state.conversationHistoryLoading"
         [loadFailed]="state.conversationHistoryLoadFailed"
+        [scrollTop]="state.historyScrollTop"
+        (scrollTopChange)="onHistoryScrollTopChange($event)"
         (conversationSelected)="loadConversation($event)"
         (conversationDeleted)="deleteConversation($event)">
       </score-ai-chat-history-list>

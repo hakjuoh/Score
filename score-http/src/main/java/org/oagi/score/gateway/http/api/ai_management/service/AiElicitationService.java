@@ -1,6 +1,8 @@
 package org.oagi.score.gateway.http.api.ai_management.service;
 
 import io.modelcontextprotocol.spec.McpSchema;
+import org.oagi.score.gateway.http.api.ai_management.model.AiElicitationNotice;
+import org.oagi.score.gateway.http.api.ai_management.model.AiElicitationPending;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.springframework.security.access.AccessDeniedException;
@@ -26,7 +28,7 @@ public class AiElicitationService {
 
     private static final int MAX_PENDING = 10_000;
 
-    private final Map<String, Pending> pending = new ConcurrentHashMap<>();
+    private final Map<String, AiElicitationPending> pending = new ConcurrentHashMap<>();
     private final Duration requestTimeout;
 
     public AiElicitationService(ScoreAiProperties properties) {
@@ -35,7 +37,7 @@ public class AiElicitationService {
 
     public McpSchema.ElicitResult await(ScoreUser requester, String conversationId, String requestId,
                                        McpSchema.ElicitFormRequest request,
-                                       Consumer<Notice> noticeConsumer) {
+                                       Consumer<AiElicitationNotice> noticeConsumer) {
         if (request == null || !StringUtils.hasText(request.message())
                 || request.requestedSchema() == null) {
             return cancelled();
@@ -45,14 +47,14 @@ public class AiElicitationService {
         }
         String elicitationId = UUID.randomUUID().toString();
         Instant expiresAt = Instant.now().plus(requestTimeout);
-        Pending interaction = new Pending(
+        AiElicitationPending interaction = new AiElicitationPending(
                 elicitationId, requester.userId().value().toString(), conversationId, requestId,
                 new CompletableFuture<>(), expiresAt);
         if (pending.putIfAbsent(elicitationId, interaction) != null) {
             throw new IllegalStateException("Could not reserve an AI user interaction.");
         }
         try {
-            noticeConsumer.accept(new Notice(elicitationId, requestId, conversationId,
+            noticeConsumer.accept(new AiElicitationNotice(elicitationId, requestId, conversationId,
                     request.message(), request.requestedSchema(), expiresAt));
             return interaction.response().get(
                     Math.max(1L, requestTimeout.toMillis()), TimeUnit.MILLISECONDS);
@@ -71,7 +73,7 @@ public class AiElicitationService {
 
     public void decide(ScoreUser requester, String requestId, String conversationId,
                        String elicitationId, String action, Map<String, Object> content) {
-        Pending interaction = pending.get(elicitationId);
+        AiElicitationPending interaction = pending.get(elicitationId);
         if (interaction == null) {
             throw new IllegalArgumentException("The AI user interaction is no longer pending.");
         }
@@ -120,16 +122,4 @@ public class AiElicitationService {
                 ? Collections.unmodifiableMap(new LinkedHashMap<>(source)) : Map.of();
     }
 
-    private record Pending(String elicitationId, String appUserId, String conversationId,
-                           String requestId, CompletableFuture<McpSchema.ElicitResult> response,
-                           Instant expiresAt) {}
-
-    public record Notice(String elicitationId, String requestId, String conversationId,
-                         String message, Map<String, Object> requestedSchema,
-                         Instant expiresAt) {
-        public Notice {
-            requestedSchema = requestedSchema != null
-                    ? Collections.unmodifiableMap(new LinkedHashMap<>(requestedSchema)) : Map.of();
-        }
-    }
 }

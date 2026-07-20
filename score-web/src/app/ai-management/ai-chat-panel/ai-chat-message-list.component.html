@@ -1,5 +1,34 @@
 <div class="message-list" (click)="messageListClicked.emit($event)">
   <div class="terminal-flow">
+    @if (selectedModel) {
+      <section class="session-summary" aria-label="Current assistant session settings">
+        <div class="session-summary-title">
+          <span class="session-summary-mark" aria-hidden="true">*</span>
+          <span>Session status</span>
+        </div>
+        <dl class="session-summary-details">
+          <div>
+            <dt>model</dt>
+            <dd>{{ selectedModel?.displayName }}</dd>
+          </div>
+          <div>
+            <dt>reasoning</dt>
+            <dd>{{ selectedReasoningEffortDisplayName }}</dd>
+          </div>
+          <div>
+            <dt>runtime</dt>
+            <dd>{{ selectedRuntimeDisplayName }}</dd>
+          </div>
+          <div>
+            <dt>permissions</dt>
+            <dd>{{ permissionDisplayName }}</dd>
+          </div>
+        </dl>
+        <p class="session-summary-tip">
+          Change with <code>/model</code>, <code>/runtime</code>, or <code>/permissions</code>.
+        </p>
+      </section>
+    }
     @if (agentFocus; as focus) {
     <div class="agent-focus-view" role="region"
          [attr.aria-label]="focus.agentName + ' agent activity'">

@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.model.AiSharedRequestState;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 

@@ -1,4 +1,5 @@
 import {
+  AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY,
   AiContextBudgetDialogComponent,
   AiConversationRestoreService,
   HttpErrorResponse,
@@ -8,17 +9,159 @@ import {
   dialog,
   lastConversationStorageKey,
   of,
+  panelDockStorageKey,
+  panelVisibilityStorageKey,
   setCurrentUsername,
   setupAiChatPanelSpec,
   snackBar,
   teardownAiChatPanelSpec,
   throwError,
-  transport
+  transport,
+  windowCoordinator,
+  windowModeStorageKey,
+  workspaceStorageKey
 } from './ai-chat-panel.component.spec-support';
 
 describe('AiChatPanelComponent conversation restore and attachments', () => {
   beforeEach(setupAiChatPanelSpec);
   afterEach(teardownAiChatPanelSpec);
+
+  it('restores an open assistant panel when the page initializes again', () => {
+    localStorage.setItem(panelVisibilityStorageKey(), 'open');
+
+    component.ngOnInit();
+
+    expect(component.state.isOpen).toBe(true);
+    expect(api.getConversationHistory).toHaveBeenCalledOnce();
+    expect(api.getActiveRequest).toHaveBeenCalledOnce();
+  });
+
+  it('persists both open and closed assistant panel states', () => {
+    component.open();
+
+    expect(localStorage.getItem(panelVisibilityStorageKey())).toBe('open');
+
+    component.close();
+
+    expect(component.state.isOpen).toBe(false);
+    expect(localStorage.getItem(panelVisibilityStorageKey())).toBe('closed');
+  });
+
+  it('restores the saved assistant dock when the page initializes again', () => {
+    localStorage.setItem(panelDockStorageKey(), 'left');
+    localStorage.setItem(panelVisibilityStorageKey(), 'open');
+
+    component.ngOnInit();
+
+    expect(component.state.dock).toBe('left');
+    expect(component.state.isOpen).toBe(true);
+  });
+
+  it('persists a changed assistant dock', () => {
+    component.setDock('bottom');
+
+    expect(component.state.dock).toBe('bottom');
+    expect(localStorage.getItem(panelDockStorageKey())).toBe('bottom');
+  });
+
+  it('ignores an invalid saved assistant dock', () => {
+    localStorage.setItem(panelDockStorageKey(), 'center');
+
+    component.ngOnInit();
+
+    expect(component.state.dock).toBe('right');
+  });
+
+  it('restores the detailed workspace without losing its draft or selected tab', () => {
+    localStorage.setItem(workspaceStorageKey(), JSON.stringify({
+      version: 1,
+      activePanelTab: 'history',
+      sideSize: 610,
+      horizontalSize: 455,
+      prompt: 'Keep this unfinished request',
+      chatScrollTop: 380,
+      historyScrollTop: 125
+    }));
+    localStorage.setItem(panelVisibilityStorageKey(), 'open');
+    localStorage.setItem(lastConversationStorageKey(), 'conversation-last');
+    api.getConversation.mockReturnValueOnce(of({
+      conversationId: 'conversation-last', title: 'Last conversation',
+      modelName: 'claude-fable-5', reasoningEffort: 'high', runtime: 'default',
+      messages: [{index: 0, role: 'assistant', content: 'Previous response'}]
+    }));
+
+    component.ngOnInit();
+
+    expect(component.state.activePanelTab).toBe('history');
+    expect(component.state.sideSize).toBe(610);
+    expect(component.state.horizontalSize).toBe(455);
+    expect(component.state.prompt).toBe('Keep this unfinished request');
+    expect(component.state.chatScrollTop).toBe(380);
+    expect(component.state.historyScrollTop).toBe(125);
+    expect(component.state.messages).toEqual([{role: 'assistant', content: 'Previous response'}]);
+  });
+
+  it('persists detailed workspace changes detected during interaction', () => {
+    component.ngOnInit();
+    component.state.activePanelTab = 'history';
+    component.state.sideSize = 540;
+    component.state.horizontalSize = 410;
+    component.state.prompt = 'Draft after initialization';
+    component.state.chatScrollTop = 222;
+    component.state.historyScrollTop = 91;
+
+    component.ngDoCheck();
+
+    expect(JSON.parse(localStorage.getItem(workspaceStorageKey())!)).toEqual({
+      version: 1,
+      activePanelTab: 'history',
+      sideSize: 540,
+      horizontalSize: 410,
+      prompt: 'Draft after initialization',
+      chatScrollTop: 222,
+      historyScrollTop: 91
+    });
+  });
+
+  it('opens the Assistant in a separate window and remembers that mode', () => {
+    component.open();
+
+    component.openPopout();
+
+    expect(windowCoordinator.openPopout).toHaveBeenCalledOnce();
+    expect(component.state.popoutActive).toBe(true);
+    expect(localStorage.getItem(windowModeStorageKey())).toBe('popout');
+  });
+
+  it('restores detached mode without also reconnecting the docked panel', () => {
+    localStorage.setItem(panelVisibilityStorageKey(), 'open');
+    localStorage.setItem(windowModeStorageKey(), 'popout');
+
+    component.ngOnInit();
+
+    expect(component.state.popoutActive).toBe(true);
+    expect(component.state.isOpen).toBe(true);
+    expect(api.getActiveRequest).not.toHaveBeenCalled();
+  });
+
+  it('blocks pop-out while a request is active', () => {
+    component.state.pending = true;
+
+    component.openPopout();
+
+    expect(windowCoordinator.openPopout).not.toHaveBeenCalled();
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Finish the active assistant interaction before opening a separate window.',
+      'Dismiss', {duration: 3500}
+    );
+  });
+
+  it('keeps the assistant closed by default when no open state was saved', () => {
+    component.ngOnInit();
+
+    expect(component.state.isOpen).toBe(false);
+    expect(api.getActiveRequest).not.toHaveBeenCalled();
+  });
 
   it('ignores delayed history frames after the active restore has finished', () => {
     const restoreService = (component as any).conversationRestoreService;
@@ -281,6 +424,61 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
 
     expect(transport.watch).toHaveBeenCalledWith('/user/queue/ai/chat/request-1');
     expect(localStorage.getItem(lastConversationStorageKey())).toBe('conversation-1');
+  });
+
+  it('restores conversation settings without replacing the next-chat preference', () => {
+    (component as any).conversationRestoreService = new AiConversationRestoreService();
+    (component as any).loadAvailableModels();
+    localStorage.setItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      modelName: 'gpt-5_6-sol',
+      reasoningEffort: 'high',
+      runtime: 'openai',
+      runtimeOptions: {},
+      permissionMode: 'full_access'
+    }));
+    component.state.selectedModelName = 'gpt-5_6-sol';
+    component.state.selectedReasoningEffort = 'high';
+    component.state.selectRuntime('openai');
+    component.state.permissionMode = 'full_access';
+
+    const restoreToken = '00000000-0000-4000-8000-000000000002';
+    vi.spyOn(component as any, 'createRestoreToken').mockReturnValue(restoreToken);
+    component.loadConversation('conversation-original');
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+    const metadata = {
+      restoreToken,
+      restoreSequence: 1,
+      modelName: 'claude-fable-5',
+      reasoningEffort: 'medium',
+      runtime: 'claude',
+      runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true},
+      permissionMode: 'auto'
+    };
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-original',
+      type: 'HISTORY_START', metadata
+    });
+
+    expect(component.state.selectedModelName).toBe('claude-fable-5');
+    expect(component.state.selectedReasoningEffort).toBe('medium');
+    expect(component.state.selectedRuntime).toBe('claude');
+    expect(component.state.selectedRuntimeOptions).toEqual({
+      permissionMode: 'auto', maxTurns: 40, verbose: true
+    });
+    expect(component.state.permissionMode).toBe('auto');
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-original',
+      type: 'HISTORY_FINAL', metadata
+    });
+    component.startNewChat();
+
+    expect(component.state.selectedModelName).toBe('gpt-5_6-sol');
+    expect(component.state.selectedReasoningEffort).toBe('high');
+    expect(component.state.selectedRuntime).toBe('openai');
+    expect(component.state.permissionMode).toBe('full_access');
   });
 
   it('clears the draft prompt and attachments when switching conversations', () => {

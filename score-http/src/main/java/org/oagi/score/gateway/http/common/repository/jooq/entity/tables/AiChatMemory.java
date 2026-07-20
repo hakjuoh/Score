@@ -80,10 +80,11 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
     public final TableField<AiChatMemoryRecord, Long> MEMORY_SEQUENCE = createField(DSL.name("memory_sequence"), SQLDataType.BIGINT.nullable(false), this, "The zero-based sequence of the message in the bounded model context.");
 
     /**
-     * The column <code>oagi.ai_chat_memory.message_type</code>. The message
-     * role in the model context: USER, ASSISTANT, SYSTEM, or TOOL.
+     * The column <code>oagi.ai_chat_memory.message_type</code>. Expected
+     * model-context roles are USER, ASSISTANT, SYSTEM, and TOOL; other values
+     * are handled by the application.
      */
-    public final TableField<AiChatMemoryRecord, String> MESSAGE_TYPE = createField(DSL.name("message_type"), SQLDataType.VARCHAR(16).nullable(false), this, "The message role in the model context: USER, ASSISTANT, SYSTEM, or TOOL.");
+    public final TableField<AiChatMemoryRecord, String> MESSAGE_TYPE = createField(DSL.name("message_type"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Expected model-context roles are USER, ASSISTANT, SYSTEM, and TOOL; other values are handled by the application.");
 
     /**
      * The column <code>oagi.ai_chat_memory.content</code>. The text content
@@ -206,7 +207,6 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
     @Override
     public List<Check<AiChatMemoryRecord>> getChecks() {
         return Arrays.asList(
-            Internal.createCheck(this, DSL.name("ai_chat_memory_type_ck"), "`message_type` in ('USER','ASSISTANT','SYSTEM','TOOL')", true),
             Internal.createCheck(this, DSL.name("metadata_json"), "json_valid(`metadata_json`)", true)
         );
     }

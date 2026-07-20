@@ -52,6 +52,42 @@
   color: #09090b;
 }
 
+.ai-chat-panel.popout-window {
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.ai-chat-panel.popout-window .resize-handle {
+  display: none;
+}
+
+.ai-chat-fab.detached {
+  display: inline-flex;
+}
+
+.ai-chat-fab .popout-focus-indicator {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 10px;
+  height: 10px;
+  padding: 1px;
+  border-radius: 3px;
+  background: #09090b;
+  font-size: 10px;
+  line-height: 10px;
+}
+
+.ai-chat-fab.detached-reattach {
+  display: none;
+  right: 66px;
+  background: #ffffff;
+  border-color: #075985;
+  color: #075985;
+}
+
 .ai-chat-panel.drag-active {
   background: #f8fdff;
   outline: 2px solid #bae6fd;
@@ -252,6 +288,18 @@
 
 ::ng-deep .ai-chat-menu mat-divider {
   margin: 6px -6px;
+}
+
+::ng-deep .ai-chat-menu .popout-menu-item.mat-mdc-menu-item {
+  min-height: 34px;
+  padding: 0 10px;
+  --mat-menu-item-leading-spacing: 0;
+  --mat-menu-item-trailing-spacing: 0;
+}
+
+::ng-deep .ai-chat-menu .popout-menu-item .mat-mdc-menu-item-text {
+  font-size: 12px;
+  line-height: 18px;
 }
 
 ::ng-deep .cdk-overlay-container {

@@ -41,4 +41,20 @@ describe('AiChatHistoryListComponent', () => {
     expect((fixture.nativeElement.querySelector('.history-delete-button') as HTMLButtonElement)
       .getAttribute('aria-label')).toBe(`Delete conversation ${title}`);
   });
+
+  it('restores and reports the history scroll position', async () => {
+    fixture.componentInstance.scrollTop = 140;
+    fixture.detectChanges();
+    await new Promise(resolve => window.setTimeout(resolve));
+
+    const panel = fixture.nativeElement.querySelector('.chat-history-panel') as HTMLElement;
+    expect(panel.scrollTop).toBe(140);
+
+    const positions: number[] = [];
+    fixture.componentInstance.scrollTopChange.subscribe(value => positions.push(value));
+    panel.scrollTop = 75;
+    panel.dispatchEvent(new Event('scroll'));
+
+    expect(positions).toEqual([75]);
+  });
 });

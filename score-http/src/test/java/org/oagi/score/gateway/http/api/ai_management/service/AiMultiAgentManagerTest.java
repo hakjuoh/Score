@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
-import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
+import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDefinition;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntimeRegistry;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -73,9 +74,9 @@ class AiMultiAgentManagerTest {
         AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
         AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
         when(root.fork(any())).thenReturn(lead);
+        when(child.conversationId()).thenReturn("child-1");
         when(root.forkSubagent(eq(agent.id()), eq(task.instruction()), any()))
-                .thenReturn(new AiTrajectoryRecorder.ChildExecutionRecorder(
-                        "child-1", AiChatConversationKind.SUBAGENT, child));
+                .thenReturn(child);
         when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
             AiRuntime.Context candidate = invocation.getArgument(1);
             return new AiRuntime.Result(candidate.agentDepth() == 1 ? "worker answer" : "final answer");
@@ -181,12 +182,12 @@ class AiMultiAgentManagerTest {
         AiTrajectoryRecorder childOne = mock(AiTrajectoryRecorder.class);
         AiTrajectoryRecorder childTwo = mock(AiTrajectoryRecorder.class);
         when(root.fork(any())).thenReturn(lead);
+        when(childOne.conversationId()).thenReturn("child-1");
+        when(childTwo.conversationId()).thenReturn("child-2");
         when(root.forkParallelExecution(eq(researcher.id()), eq(first.instruction()), any()))
-                .thenReturn(new AiTrajectoryRecorder.ChildExecutionRecorder(
-                        "child-1", AiChatConversationKind.PARALLEL, childOne));
+                .thenReturn(childOne);
         when(root.forkParallelExecution(eq(researcher.id()), eq(second.instruction()), any()))
-                .thenReturn(new AiTrajectoryRecorder.ChildExecutionRecorder(
-                        "child-2", AiChatConversationKind.PARALLEL, childTwo));
+                .thenReturn(childTwo);
         when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
             AiRuntime.Context candidate = invocation.getArgument(1);
             if (candidate.agentDepth() == 1) {
@@ -258,9 +259,9 @@ class AiMultiAgentManagerTest {
         AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
         AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
         when(root.fork(any())).thenReturn(lead);
+        when(child.conversationId()).thenReturn("subagent-1");
         when(root.forkSubagent(eq(agent.id()), eq(task.instruction()), any()))
-                .thenReturn(new AiTrajectoryRecorder.ChildExecutionRecorder(
-                        "subagent-1", AiChatConversationKind.SUBAGENT, child));
+                .thenReturn(child);
         when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
             AiRuntime.Context candidate = invocation.getArgument(1);
             return new AiRuntime.Result(candidate.agentDepth() == 1 ? "evidence" : "answer");
@@ -298,12 +299,14 @@ class AiMultiAgentManagerTest {
                 "I’ll synthesize the results.", "Synthesizing", "Synthesized", List.of(first, second)));
         AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
         AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder childOne = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder childTwo = mock(AiTrajectoryRecorder.class);
         when(root.fork(any())).thenReturn(lead);
+        when(childOne.conversationId()).thenReturn("child-1");
+        when(childTwo.conversationId()).thenReturn("child-2");
         when(root.forkSubagent(eq(agent.id()), any(), any()))
-                .thenReturn(new AiTrajectoryRecorder.ChildExecutionRecorder(
-                        "child-1", AiChatConversationKind.SUBAGENT, mock(AiTrajectoryRecorder.class)))
-                .thenReturn(new AiTrajectoryRecorder.ChildExecutionRecorder(
-                        "child-2", AiChatConversationKind.SUBAGENT, mock(AiTrajectoryRecorder.class)));
+                .thenReturn(childOne)
+                .thenReturn(childTwo);
         AtomicInteger workers = new AtomicInteger();
         when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
             AiRuntime.Context candidate = invocation.getArgument(1);

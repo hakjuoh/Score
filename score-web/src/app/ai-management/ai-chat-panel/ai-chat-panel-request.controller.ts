@@ -15,6 +15,8 @@ import {isExecutionActivityEvent, isSpecialistToolEvent} from './domain/ai-agent
 
 export abstract class AiChatPanelRequestController extends AiChatPanelControllerBase {
   protected startChatRequest(prompt: string, attachments: AiChatAttachment[]): void {
+    this.invalidateDraftAttachmentRestore();
+    this.restoreChatScrollPending = false;
     this.state.activePanelTab = 'chat';
     const requestId = this.createRequestId();
     this.beginMutationRepeatDraft(requestId, prompt, attachments);
@@ -27,6 +29,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     this.state.currentStatus = 'Sending request';
     this.state.prompt = '';
     this.state.attachments = [];
+    this.flushWorkspacePersistence();
     this.resizePromptInput();
     this.state.messages.push({role: 'user', content: this.attachmentService.userMessageContent(prompt, attachments)});
 

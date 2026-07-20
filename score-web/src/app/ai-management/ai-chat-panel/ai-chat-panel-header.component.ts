@@ -17,9 +17,19 @@ export class AiChatPanelHeaderComponent {
 
   @Input() assistantBrand?: SafeHtml;
   @Input() dock: AiChatDock = 'right';
+  @Input() popoutMode = false;
 
   @Output() dockChanged = new EventEmitter<AiChatDock>();
+  @Output() popoutRequested = new EventEmitter<Event>();
+  @Output() reattachRequested = new EventEmitter<Event>();
   @Output() closeRequested = new EventEmitter<MouseEvent>();
+
+  get reattachIcon(): string {
+    if (this.dock === 'left') return 'align_horizontal_left';
+    if (this.dock === 'top') return 'vertical_align_top';
+    if (this.dock === 'bottom') return 'vertical_align_bottom';
+    return 'align_horizontal_right';
+  }
 
   selectDock(dock: AiChatDock): void {
     this.dockChanged.emit(dock);

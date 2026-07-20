@@ -6,11 +6,13 @@ import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationState;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationConfirmationQueryRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
-import org.springframework.stereotype.Repository;
+import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;
+import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AI_CHAT_CONVERSATION;
@@ -21,37 +23,35 @@ import static org.oagi.score.gateway.http.common.repository.jooq.entity.tables.A
  * Ownership predicates and {@code FOR UPDATE} locks are applied in the same query
  * so confirmation state cannot be disclosed or transitioned across users.
  */
-@Repository
-public class JooqAiMutationConfirmationQueryRepository
+public class JooqAiMutationConfirmationQueryRepository extends JooqBaseRepository
         implements AiMutationConfirmationQueryRepository {
 
-    private final DSLContext dslContext;
-
     /**
-     * Creates the repository with the application JOOQ context.
+     * Creates a requester-bound repository with the application JOOQ context.
      *
      * @param dslContext context used to execute generated-model queries
+     * @param requester signed-in conversation owner
+     * @param repositoryFactory factory for related database repositories
      */
-    public JooqAiMutationConfirmationQueryRepository(DSLContext dslContext) {
-        this.dslContext = dslContext;
+    public JooqAiMutationConfirmationQueryRepository(
+            DSLContext dslContext, ScoreUser requester, RepositoryFactory repositoryFactory) {
+        super(dslContext, Objects.requireNonNull(requester, "requester"), repositoryFactory);
     }
 
     @Override
     public Optional<AiMutationConfirmationState> findOwnedForUpdate(
-            ScoreUser requester,
             String conversationId,
             String confirmationRequestId) {
         return selectState()
                 .where(AI_CHAT_MUTATION_CONFIRMATION.GUID.eq(confirmationRequestId)
                         .and(AI_CHAT_CONVERSATION.GUID.eq(conversationId))
-                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId(requester))))
+                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId())))
                 .forUpdate()
                 .fetchOptional(this::state);
     }
 
     @Override
     public Optional<AiMutationConfirmationState> findReusableForUpdate(
-            ScoreUser requester,
             String conversationId,
             String requestId,
             String toolName,
@@ -59,7 +59,7 @@ public class JooqAiMutationConfirmationQueryRepository
             Instant now) {
         return selectState()
                 .where(AI_CHAT_CONVERSATION.GUID.eq(conversationId)
-                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId(requester)))
+                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId()))
                         .and(AI_CHAT_MUTATION_CONFIRMATION.REQUEST_ID.eq(requestId))
                         .and(AI_CHAT_MUTATION_CONFIRMATION.TOOL_NAME.eq(toolName))
                         .and(AI_CHAT_MUTATION_CONFIRMATION.ARGUMENTS_DIGEST.eq(argumentsDigest))
@@ -72,7 +72,7 @@ public class JooqAiMutationConfirmationQueryRepository
     }
 
     private org.jooq.SelectJoinStep<? extends Record> selectState() {
-        return dslContext.select(
+        return dslContext().select(
                         AI_CHAT_MUTATION_CONFIRMATION.AI_CHAT_MUTATION_CONFIRMATION_ID,
                         AI_CHAT_MUTATION_CONFIRMATION.GUID,
                         AI_CHAT_MUTATION_CONFIRMATION.STATUS,
@@ -105,8 +105,8 @@ public class JooqAiMutationConfirmationQueryRepository
                 record.get(AI_CHAT_MUTATION_CONFIRMATION.GRANT_DIGEST));
     }
 
-    private ULong userId(ScoreUser requester) {
-        return ULong.valueOf(requester.userId().value());
+    private ULong userId() {
+        return ULong.valueOf(requester().userId().value());
     }
 
     private LocalDateTime localDateTime(Instant value) {

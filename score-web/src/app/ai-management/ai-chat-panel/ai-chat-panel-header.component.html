@@ -6,6 +6,16 @@
     <span class="assistant-title-label">Assistant</span>
   </div>
   <div class="chat-actions">
+    @if (popoutMode) {
+      <button class="chat-icon-button"
+              type="button"
+              matTooltip="Move back to main window"
+              aria-label="Move AI assistant back to main window"
+              (click)="reattachRequested.emit($event)">
+        <mat-icon>{{ reattachIcon }}</mat-icon>
+      </button>
+    }
+    @if (!popoutMode) {
     <button class="chat-icon-button"
             type="button"
             matTooltip="Panel options"
@@ -40,7 +50,13 @@
           </button>
         </div>
       </div>
+      <mat-divider></mat-divider>
+      <button mat-menu-item type="button" class="popout-menu-item"
+              (click)="popoutRequested.emit($event); dockMenuTrigger.closeMenu()">
+        <span>Open in separate window</span>
+      </button>
     </mat-menu>
+    }
     <button class="chat-icon-button"
             type="button"
             matTooltip="Close"

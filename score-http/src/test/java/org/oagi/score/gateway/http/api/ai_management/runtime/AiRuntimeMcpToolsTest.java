@@ -12,7 +12,7 @@ import org.oagi.score.gateway.http.api.ai_management.service.AiMutationConfirmat
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationToolGuard;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.service.AiTrajectoryRecorder;
-import org.oagi.score.gateway.http.api.ai_management.repository.ScoreChatMemoryRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.configuration.ai.ConnectCenterMcpClientFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
@@ -120,7 +120,7 @@ class AiRuntimeMcpToolsTest {
                 "configured-model", "high", ScoreAiModelRegistry.CLAUDE, java.util.Map.of(), "ask");
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
-                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(AiChatConversationRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
                 requester, "conversation-1", "request-1", ignored -> {});
         AiRuntime runtime = new ClaudeRuntime(models, mcpClients, toolSearchAdvisor,
                 systemPrompt, mutationGuard, runtimeOptions);
@@ -210,7 +210,7 @@ class AiRuntimeMcpToolsTest {
                 "configured-model", "high", ScoreAiModelRegistry.CLAUDE, java.util.Map.of(), "ask");
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
-                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(AiChatConversationRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
                 requester, "conversation-1", "request-1", ignored -> {});
         AiRuntime runtime = new ClaudeRuntime(models, mcpClients, toolSearchAdvisor,
                 systemPrompt, mutationGuard, runtimeOptions);
@@ -225,7 +225,7 @@ class AiRuntimeMcpToolsTest {
         // A whitespace-only tail after the tool boundary must not reset the
         // answer: the accumulated narration remains instead of a hard failure.
         AiTrajectoryRecorder whitespaceRecorder = new AiTrajectoryRecorder(
-                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(AiChatConversationRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
                 requester, "conversation-1", "request-2", ignored -> {});
         AiRuntime.Result whitespaceTail = runtime.execute(new AiRuntime.Context(
                 request, List.of(), new UserMessage("Verify it"), requester, whitespaceRecorder));
@@ -278,7 +278,7 @@ class AiRuntimeMcpToolsTest {
                 "configured-model", "high", ScoreAiModelRegistry.CLAUDE, java.util.Map.of(), "auto");
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
-                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(AiChatConversationRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
                 requester, "conversation-1", "request-1", ignored -> {});
         AiRuntime runtime = new ClaudeRuntime(models, mcpClients, toolSearchAdvisor,
                 systemPrompt, runtimeOptions);
@@ -366,7 +366,7 @@ class AiRuntimeMcpToolsTest {
                 "configured-model", "high", ScoreAiModelRegistry.CLAUDE, java.util.Map.of(), "ask");
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
-                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(AiChatConversationRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
                 requester, "conversation-1", "request-1", ignored -> {});
         AiRuntime runtime = new ClaudeRuntime(models, mcpClients, toolSearchAdvisor,
                 systemPrompt, mutationGuard, runtimeOptions);
@@ -458,7 +458,7 @@ class AiRuntimeMcpToolsTest {
                 java.util.Map.of(), "ask");
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
-                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(AiChatConversationRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
                 requester, "conversation-1", "request-2", ignored -> {});
         AiRuntime runtime = new ClaudeRuntime(models, mcpClients, toolSearchAdvisor,
                 systemPrompt, mutationGuard, runtimeOptions);
@@ -530,7 +530,7 @@ class AiRuntimeMcpToolsTest {
 
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
-                mock(ScoreChatMemoryRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(AiChatConversationRepository.class), new com.fasterxml.jackson.databind.ObjectMapper(),
                 requester, "conversation-1", "request-1", ignored -> {});
         ChatRequest request = new ChatRequest(
                 "hello", "request-1", null, "conversation-1", "test page", List.of(), null,

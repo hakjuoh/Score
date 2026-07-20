@@ -1,10 +1,11 @@
 package org.oagi.score.gateway.http.api.ai_management.runtime;
 
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
+import org.oagi.score.gateway.http.api.ai_management.model.AiApprovedExecution;
+import org.oagi.score.gateway.http.api.ai_management.model.AiMutationPermissionMode;
 import org.oagi.score.gateway.http.api.ai_management.service.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationToolGuard;
-import org.oagi.score.gateway.http.api.ai_management.service.AiMutationPermissionMode;
 import org.oagi.score.gateway.http.configuration.ai.ConnectCenterMcpClientFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiSystemPrompt;
@@ -292,7 +293,7 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
     }
 
     private void addApprovedExecution(List<Message> messages,
-                                      AiMutationToolGuard.ApprovedExecution execution,
+                                      AiApprovedExecution execution,
                                       AiTrajectoryRecorder recorder, long toolOutputTokenLimit) {
         String callId = "approved-" + UUID.randomUUID();
         messages.add(AssistantMessage.builder().content("").toolCalls(List.of(

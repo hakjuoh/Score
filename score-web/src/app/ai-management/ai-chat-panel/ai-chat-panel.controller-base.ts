@@ -34,6 +34,7 @@ import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.servic
 import {AiChatSessionPersistenceService} from './domain/ai-chat-session-persistence.service';
 import {AiChatSettingsService} from './domain/ai-chat-settings.service';
 import {AiChatTransportService} from './domain/ai-chat-transport.service';
+import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
 import {
   AiMutationInteractionCallbacks,
   AiMutationInteractionService,
@@ -86,6 +87,7 @@ export abstract class AiChatPanelControllerBase {
   protected sessionPersistence = inject(AiChatSessionPersistenceService);
   protected settingsService = inject(AiChatSettingsService);
   protected transportService = inject(AiChatTransportService);
+  protected windowCoordinator = inject(AiChatWindowCoordinatorService);
   protected sanitizer = inject(DomSanitizer);
   protected webPageInfo = inject(WebPageInfoService);
   protected auth = inject(AuthService);
@@ -118,6 +120,11 @@ export abstract class AiChatPanelControllerBase {
   protected rejectedMutationConfirmationRequestId?: string;
   protected destroyed = false;
   protected readonly destroyed$ = new Subject<void>();
+  private workspacePersistenceReady = false;
+  private workspacePersistenceSignature = '';
+  private attachmentPersistenceSignature = '';
+  private attachmentRestoreGeneration = 0;
+  protected restoreChatScrollPending = false;
 
   abstract composer?: AiChatComposerComponent;
   abstract chatTerminalPane?: ElementRef<HTMLDivElement>;
@@ -233,12 +240,83 @@ export abstract class AiChatPanelControllerBase {
     return this.state.cancellation.phase === 'delayed';
   }
 
+  get popoutMode(): boolean {
+    return this.windowCoordinator.popoutMode;
+  }
+
+  protected initializeWorkspacePersistence(workspaceRestored: boolean): void {
+    this.restoreChatScrollPending = workspaceRestored;
+    this.workspacePersistenceSignature = this.currentWorkspacePersistenceSignature();
+    this.attachmentPersistenceSignature = this.currentAttachmentPersistenceSignature();
+    this.workspacePersistenceReady = true;
+    this.restorePersistedDraftAttachments();
+  }
+
+  protected restorePersistedDraftAttachments(): void {
+    const generation = ++this.attachmentRestoreGeneration;
+    void this.sessionPersistence.restoreDraftAttachments().then(attachments => {
+      if (this.destroyed || generation !== this.attachmentRestoreGeneration
+        || this.state.attachments.length > 0) {
+        return;
+      }
+      this.state.attachments = attachments;
+    });
+  }
+
+  protected persistWorkspaceIfChanged(): void {
+    if (!this.workspacePersistenceReady || this.destroyed
+      || this.state.popoutActive && !this.popoutMode) return;
+    const workspaceSignature = this.currentWorkspacePersistenceSignature();
+    if (workspaceSignature !== this.workspacePersistenceSignature) {
+      this.workspacePersistenceSignature = workspaceSignature;
+      this.sessionPersistence.persistWorkspace(this.state);
+    }
+    const attachmentSignature = this.currentAttachmentPersistenceSignature();
+    if (attachmentSignature !== this.attachmentPersistenceSignature) {
+      this.attachmentPersistenceSignature = attachmentSignature;
+      this.attachmentRestoreGeneration += 1;
+      void this.sessionPersistence.persistDraftAttachments(this.state.attachments);
+    }
+  }
+
+  protected flushWorkspacePersistence(): void {
+    this.sessionPersistence.persistWorkspace(this.state);
+    this.workspacePersistenceSignature = this.currentWorkspacePersistenceSignature();
+    this.attachmentPersistenceSignature = this.currentAttachmentPersistenceSignature();
+    this.attachmentRestoreGeneration += 1;
+    void this.sessionPersistence.persistDraftAttachments(this.state.attachments);
+  }
+
+  protected invalidateDraftAttachmentRestore(): void {
+    this.attachmentRestoreGeneration += 1;
+  }
+
+  private currentWorkspacePersistenceSignature(): string {
+    return JSON.stringify([
+      this.state.activePanelTab,
+      this.state.sideSize,
+      this.state.horizontalSize,
+      this.state.prompt,
+      this.state.chatScrollTop,
+      this.state.historyScrollTop
+    ]);
+  }
+
+  private currentAttachmentPersistenceSignature(): string {
+    return JSON.stringify(this.state.attachments.map(attachment => [
+      attachment.name, attachment.mediaType, attachment.size, attachment.data.length
+    ]));
+  }
+
   abstract get panelStyle(): {[key: string]: string};
 
   abstract ngOnInit(): void;
   abstract ngOnDestroy(): void;
   abstract open(event?: MouseEvent): void;
   abstract close(event?: MouseEvent): void;
+  abstract openPopout(event?: Event): void;
+  abstract focusPopout(event?: Event): void;
+  abstract reattachPopout(event?: Event): void;
   abstract setDock(dock: AiChatDock): void;
   abstract setPanelTab(tab: AiChatPanelTab, event?: Event): void;
   abstract send(): void;
@@ -334,7 +412,9 @@ export abstract class AiChatPanelControllerBase {
   protected abstract normalizedDisplayText(value?: string): string;
   abstract scrollChatToBottom(event?: MouseEvent): void;
   abstract onChatPaneScroll(): void;
+  abstract onHistoryScrollTopChange(scrollTop: number): void;
   protected abstract scrollToBottom(force?: boolean): void;
+  protected abstract restoreChatScrollPosition(consumePending?: boolean): void;
   protected abstract updateScrollToBottomButton(): void;
   abstract focusPrompt(): void;
   abstract focusPromptIfNoSelection(): void;

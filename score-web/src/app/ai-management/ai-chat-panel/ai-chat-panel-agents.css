@@ -1,6 +1,9 @@
 .message-row.agent_group .message-bubble,
 .message-row.workflow_group .message-bubble {
   display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .message-row.workflow_group .agent-group-block {
@@ -10,6 +13,7 @@
 
 .agent-group-block {
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   padding: 5px 6px;
   border: 1px solid #e4e4e7;

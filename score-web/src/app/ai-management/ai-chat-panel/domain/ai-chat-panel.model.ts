@@ -339,6 +339,7 @@ export interface AiChatConversationDetails {
   reasoningEffort?: string;
   runtime?: string;
   runtimeOptions?: AiRuntimeOptions;
+  permissionMode?: AiMutationPermissionMode;
   contextUsage?: AiContextUsage;
   updatedAt?: string | number;
   messages: AiChatHistoryMessage[];

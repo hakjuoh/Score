@@ -2,6 +2,8 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDefinition;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntimeRegistry;
@@ -36,9 +38,7 @@ public final class AiWorkflowPlanner {
             "(?iu)^\\s*(?:(?:please|also|now|then)\\s+)*(?:"
                     + "add|create|change|update|delete|remove|clean(?:\\s+up)?|proceed|continue|"
                     + "apply|set|assign|link|associate|include|replace|rename|modify|"
-                    + "show|list|get|find|search|check|verify|read|retrieve|"
-                    + "추가|생성|변경|수정|삭제|제거|정리|진행|계속|적용|설정|할당|연결|"
-                    + "보여|조회|검색|확인|검증|읽어)(?:\\b|줘|해|하|를|을|고|\\s)");
+                    + "show|list|get|find|search|check|verify|read|retrieve)\\b");
     private final AiRuntimeRegistry runtimes;
     private final AiAgentCatalog agents;
     private final ObjectMapper objectMapper;

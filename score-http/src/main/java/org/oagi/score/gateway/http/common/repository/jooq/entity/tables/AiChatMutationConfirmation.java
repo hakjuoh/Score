@@ -104,11 +104,11 @@ public class AiChatMutationConfirmation extends TableImpl<AiChatMutationConfirma
     public final TableField<AiChatMutationConfirmationRecord, String> ARGUMENTS_DIGEST = createField(DSL.name("arguments_digest"), SQLDataType.CHAR(64).nullable(false), this, "The SHA-256 digest binding the tool name to its canonicalized arguments.");
 
     /**
-     * The column <code>oagi.ai_chat_mutation_confirmation.status</code>. The
-     * confirmation lifecycle status: REQUESTED, APPROVED, DENIED, CONSUMED, or
-     * EXPIRED.
+     * The column <code>oagi.ai_chat_mutation_confirmation.status</code>.
+     * Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED,
+     * and EXPIRED; other values are handled by the application.
      */
-    public final TableField<AiChatMutationConfirmationRecord, String> STATUS = createField(DSL.name("status"), SQLDataType.VARCHAR(16).nullable(false), this, "The confirmation lifecycle status: REQUESTED, APPROVED, DENIED, CONSUMED, or EXPIRED.");
+    public final TableField<AiChatMutationConfirmationRecord, String> STATUS = createField(DSL.name("status"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("'REQUESTED'"), SQLDataType.VARCHAR)), this, "Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and EXPIRED; other values are handled by the application.");
 
     /**
      * The column <code>oagi.ai_chat_mutation_confirmation.grant_digest</code>.
@@ -263,9 +263,7 @@ public class AiChatMutationConfirmation extends TableImpl<AiChatMutationConfirma
 
     @Override
     public List<Check<AiChatMutationConfirmationRecord>> getChecks() {
-        return Arrays.asList(
-            Internal.createCheck(this, DSL.name("ai_chat_mutation_confirmation_status_ck"), "`status` in ('REQUESTED','APPROVED','DENIED','CONSUMED','EXPIRED')", true)
-        );
+        return Arrays.asList();
     }
 
     @Override

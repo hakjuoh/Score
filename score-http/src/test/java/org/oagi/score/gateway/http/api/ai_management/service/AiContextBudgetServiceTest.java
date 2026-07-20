@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
 import org.springframework.ai.chat.messages.UserMessage;
 
@@ -22,7 +23,7 @@ class AiContextBudgetServiceTest {
         when(models.runtimeModel("gpt-5_6-sol")).thenReturn(runtimeModel);
         AiContextBudgetService service = new AiContextBudgetService(models);
 
-        AiContextBudgetService.Budget budget = service.budget("gpt-5_6-sol").orElseThrow();
+        AiContextBudget budget = service.budget("gpt-5_6-sol").orElseThrow();
 
         assertThat(budget.safeInputLimit()).isEqualTo(159040L);
         assertThat(budget.shouldCompact(149999L)).isFalse();
@@ -44,7 +45,7 @@ class AiContextBudgetServiceTest {
 
     @Test
     void clampsUsageAtOneHundredPercentAndNeverReportsNegativeRemainingTokens() {
-        AiContextBudgetService.Budget budget = new AiContextBudgetService.Budget(
+        AiContextBudget budget = new AiContextBudget(
                 "model", 1000L, 200L, 600L, 100L, 100L, false);
 
         var usage = budget.usage(Long.MAX_VALUE, true, "adversarial-estimate");

@@ -1,4 +1,15 @@
-import {Component, EventEmitter, Input, Output, inject} from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  ElementRef,
+  EventEmitter,
+  Input,
+  OnChanges,
+  Output,
+  SimpleChanges,
+  ViewChild,
+  inject
+} from '@angular/core';
 import {AiChatHistoryService} from './domain/ai-chat-history.service';
 import {AiChatConversationSummary} from './domain/ai-chat-panel.model';
 
@@ -13,7 +24,7 @@ import {AiChatConversationSummary} from './domain/ai-chat-panel.model';
     './ai-chat-panel-composer.css'
   ]
 })
-export class AiChatHistoryListComponent {
+export class AiChatHistoryListComponent implements AfterViewInit, OnChanges {
 
   private historyService = inject(AiChatHistoryService);
 
@@ -21,9 +32,27 @@ export class AiChatHistoryListComponent {
   @Input() activeConversationId?: string;
   @Input() loading = false;
   @Input() loadFailed = false;
+  @Input() scrollTop = 0;
 
   @Output() conversationSelected = new EventEmitter<string>();
   @Output() conversationDeleted = new EventEmitter<string>();
+  @Output() scrollTopChange = new EventEmitter<number>();
+
+  @ViewChild('historyPanel') historyPanel?: ElementRef<HTMLDivElement>;
+
+  ngAfterViewInit(): void {
+    this.restoreScrollTop();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['conversations'] || changes['scrollTop']) this.restoreScrollTop();
+  }
+
+  private restoreScrollTop(): void {
+    window.setTimeout(() => {
+      if (this.historyPanel) this.historyPanel.nativeElement.scrollTop = this.scrollTop;
+    });
+  }
 
   conversationAge(conversation: AiChatConversationSummary): string {
     return this.historyService.conversationAge(conversation);
@@ -33,5 +62,9 @@ export class AiChatHistoryListComponent {
     event.preventDefault();
     event.stopPropagation();
     this.conversationDeleted.emit(conversationId);
+  }
+
+  onScroll(): void {
+    this.scrollTopChange.emit(this.historyPanel?.nativeElement.scrollTop || 0);
   }
 }

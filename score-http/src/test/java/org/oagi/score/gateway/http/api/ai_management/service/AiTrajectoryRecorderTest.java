@@ -6,7 +6,10 @@ import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
-import org.oagi.score.gateway.http.api.ai_management.repository.ScoreChatMemoryRepository;
+import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
+import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
+import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
@@ -40,27 +43,28 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void forkParallelExecutionCreatesADurableParallelConversationAndWritesItsOwnSteps() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
-        when(repository.openChild(requester, "conversation-1", "request-1",
+        when(repository.openChild("conversation-1", "request-1",
                 AiChatConversationKind.PARALLEL, "evidence-researcher",
                 "Inspect Sync Purchase Order"))
                 .thenReturn("child-conversation-1");
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
-                "conversation-1", "request-1", ignored -> {});
+                "conversation-1", "request-1", "model", "high", "default", Map.of(),
+                ignored -> {});
 
-        AiTrajectoryRecorder.ChildExecutionRecorder child = root.forkParallelExecution(
+        AiTrajectoryRecorder child = root.forkParallelExecution(
                 "evidence-researcher", "Inspect Sync Purchase Order", Map.of(
                         "fanout_id", "fanout-1", "node_id", "fanout-1-agent-01",
                         "parent_node_id", "fanout-1-lead", "depth", 1,
                         "workflow", "parallel"));
-        child.recorder().lifecycle("parallel_task_started", "Reviewing Sync Purchase Order.",
+        child.lifecycle("parallel_task_started", "Reviewing Sync Purchase Order.",
                 Map.of("status", "started"));
 
         assertThat(child.conversationId()).isEqualTo("child-conversation-1");
-        assertThat(child.kind()).isEqualTo(AiChatConversationKind.PARALLEL);
+        assertThat(child.conversationKind()).isEqualTo(AiChatConversationKind.PARALLEL);
         ArgumentCaptor<AiChatTrajectoryStep> steps = ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository, times(3)).append(eq(requester), eq("child-conversation-1"), steps.capture());
+        verify(repository, times(3)).append(eq("child-conversation-1"), steps.capture());
         assertThat(steps.getAllValues()).extracting(AiChatTrajectoryStep::messageKind)
                 .containsExactly("settings_change", "parallel_assignment", "agent_lifecycle");
         assertThat(steps.getAllValues()).allSatisfy(step -> assertThat(step.extra())
@@ -76,7 +80,7 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void forkNamespacesLifecycleTrajectoryAndRealtimeEventsWithTheSameAgentIds() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
@@ -96,7 +100,7 @@ class AiTrajectoryRecorderTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> steps =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository, times(2)).append(eq(requester), eq("conversation-1"), steps.capture());
+        verify(repository, times(2)).append(eq("conversation-1"), steps.capture());
         assertThat(steps.getAllValues()).allSatisfy(step -> assertThat(step.extra())
                 .containsEntry("fanout_id", "fanout-abc")
                 .containsEntry("node_id", "fanout-abc-agent-01")
@@ -117,7 +121,7 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void terminalLifecycleRejectsEveryLateProviderAndToolCallback() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
@@ -135,14 +139,14 @@ class AiTrajectoryRecorderTest {
                 .getToolCallbacks()[0].call("{}", new ToolContext(Map.of()));
 
         assertThat(output).isEqualTo("{\"items\":[]}");
-        verify(repository, times(1)).append(eq(requester), eq("conversation-1"), any());
+        verify(repository, times(1)).append(eq("conversation-1"), any());
         assertThat(events).extracting(AiExecutionEvent::subtype)
                 .containsExactly("subagent_failed");
     }
 
     @Test
     void terminalLifecycleStillSealsWhenRealtimeDeliveryFails() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", ignored -> {
@@ -153,12 +157,12 @@ class AiTrajectoryRecorderTest {
                 "subagent_failed", "Specialist failed.", Map.of("status", "failed"));
         recorder.progress("late progress");
 
-        verify(repository, times(1)).append(eq(requester), eq("conversation-1"), any());
+        verify(repository, times(1)).append(eq("conversation-1"), any());
     }
 
     @Test
     void doesNotRecordTheSyntheticApprovedContextResponseTwice() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", ignored -> {});
@@ -173,7 +177,7 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void excludesToolDiscoveryFromTheCompletedDomainToolCount() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", ignored -> {});
@@ -191,9 +195,9 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void correlatesModelToolCallWithItsObservationAndUiDetail() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
-        when(repository.append(eq(requester), eq("conversation-1"), any()))
+        when(repository.append(eq("conversation-1"), any()))
                 .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
@@ -220,10 +224,10 @@ class AiTrajectoryRecorderTest {
 
         assertThat(output).isEqualTo("{\"count\":12}");
         assertThat(recorder.completedDomainToolCallCount()).isEqualTo(1);
-        verify(repository).updateObservation(eq(requester), eq("conversation-1"), eq(42L), any());
+        verify(repository).updateObservation(eq("conversation-1"), eq(42L), any());
         ArgumentCaptor<AiChatTrajectoryStep> steps =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository, times(3)).append(eq(requester), eq("conversation-1"), steps.capture());
+        verify(repository, times(3)).append(eq("conversation-1"), steps.capture());
         assertThat(steps.getAllValues().get(0).toolCalls()).singleElement()
                 .satisfies(tool -> assertThat(tool.get("tool_call_id")).isEqualTo("call-1"));
         assertThat(steps.getAllValues().get(0).metrics())
@@ -243,7 +247,7 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void recordsTheGuardReadOnlyClassificationOnEveryToolStep() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", ignored -> {});
@@ -263,7 +267,7 @@ class AiTrajectoryRecorderTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> steps =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository, times(4)).append(eq(requester), eq("conversation-1"), steps.capture());
+        verify(repository, times(4)).append(eq("conversation-1"), steps.capture());
         List<AiChatTrajectoryStep> terminal = steps.getAllValues().stream()
                 .filter(step -> "tool_call".equals(step.messageKind())).toList();
         assertThat(terminal.get(0).extra())
@@ -276,7 +280,7 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void redactsSecretsFromPersistedToolArgumentsAndResults() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", ignored -> {});
@@ -296,7 +300,7 @@ class AiTrajectoryRecorderTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> step =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository, times(2)).append(eq(requester), eq("conversation-1"), step.capture());
+        verify(repository, times(2)).append(eq("conversation-1"), step.capture());
         AiChatTrajectoryStep terminal = step.getAllValues().stream()
                 .filter(candidate -> "tool_call".equals(candidate.messageKind())).findFirst().orElseThrow();
         assertThat(terminal.message()).contains("[REDACTED]")
@@ -309,7 +313,7 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void storesOnlyASafeMessageWhenAToolFailureContainsInternalDetails() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
@@ -327,7 +331,7 @@ class AiTrajectoryRecorderTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> step =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository, times(2)).append(eq(requester), eq("conversation-1"), step.capture());
+        verify(repository, times(2)).append(eq("conversation-1"), step.capture());
         AiChatTrajectoryStep terminal = step.getAllValues().stream()
                 .filter(candidate -> "tool_call".equals(candidate.messageKind())).findFirst().orElseThrow();
         assertThat(terminal.message())
@@ -339,12 +343,12 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void emitsAValidatedContextSnapshotAndUsesTheEstimateFloorForBrokenProviderUsage() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
-        when(repository.append(eq(requester), eq("conversation-1"), any()))
+        when(repository.append(eq("conversation-1"), any()))
                 .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
-        AiContextBudgetService.Budget budget = new AiContextBudgetService.Budget(
+        AiContextBudget budget = new AiContextBudget(
                 "claude-fable-5", 200000L, 16000L, 150000L, 8192L, 32000L, false);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", "claude-fable-5", "high", "claude", Map.of(),
@@ -356,7 +360,7 @@ class AiTrajectoryRecorderTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> step =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository).append(eq(requester), eq("conversation-1"), step.capture());
+        verify(repository).append(eq("conversation-1"), step.capture());
         assertThat(step.getValue().metrics())
                 .containsEntry("prompt_tokens", 2L)
                 .containsEntry("context_input_tokens", 5000L)
@@ -370,12 +374,12 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void forkedRecorderScopesMetricsAndDoesNotDriveTheConversationContextUsage() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
-        when(repository.append(eq(requester), eq("conversation-1"), any()))
+        when(repository.append(eq("conversation-1"), any()))
                 .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
-        AiContextBudgetService.Budget budget = new AiContextBudgetService.Budget(
+        AiContextBudget budget = new AiContextBudget(
                 "model", 200000L, 16000L, 150000L, 8192L, 32000L, false);
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", "model", "high", "default", Map.of(),
@@ -392,7 +396,7 @@ class AiTrajectoryRecorderTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> step =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository).append(eq(requester), eq("conversation-1"), step.capture());
+        verify(repository).append(eq("conversation-1"), step.capture());
         assertThat(step.getValue().metrics()).containsEntry("context_scope", "subagent");
         assertThat(events).isEmpty();
         assertThat(child.usageSnapshot().nodeId()).isEqualTo("fanout-abc-agent-01");
@@ -404,24 +408,24 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void recordFanOutUsageAggregatesChildSnapshotsIntoOneAuthoritativeStep() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         List<AiExecutionEvent> events = new ArrayList<>();
-        AiContextBudgetService.Budget budget = new AiContextBudgetService.Budget(
+        AiContextBudget budget = new AiContextBudget(
                 "model", 200000L, 16000L, 150000L, 8192L, 32000L, false);
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", "model", "high", "default", Map.of(),
                 events::add, budget, 5000L);
 
         root.recordFanOutUsage("fanout-abc", java.util.Arrays.asList(
-                new AiTrajectoryRecorder.UsageSnapshot("fanout-abc-lead", "lead", 100L, 10L, 1L),
-                new AiTrajectoryRecorder.UsageSnapshot("fanout-abc-agent-01", "data-investigator",
+                new AiUsageSnapshot("fanout-abc-lead", "lead", 100L, 10L, 1L),
+                new AiUsageSnapshot("fanout-abc-agent-01", "data-investigator",
                         200L, 20L, 2L),
                 null));
 
         ArgumentCaptor<AiChatTrajectoryStep> step =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository).append(eq(requester), eq("conversation-1"), step.capture());
+        verify(repository).append(eq("conversation-1"), step.capture());
         assertThat(step.getValue().messageKind()).isEqualTo(AiTrajectoryRecorder.FANOUT_USAGE_STEP_KIND);
         assertThat(step.getValue().metrics())
                 .containsEntry("fanout_prompt_tokens", 300L)
@@ -439,18 +443,18 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void recordsParallelUsageAsParallelTrajectoryMetadata() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", ignored -> {});
 
         root.recordFanOutUsage("fanout-parallel", "parallel", List.of(
-                new AiTrajectoryRecorder.UsageSnapshot(
+                new AiUsageSnapshot(
                         "fanout-parallel-agent-01", "worker", 10L, 2L, 1L)));
 
         ArgumentCaptor<AiChatTrajectoryStep> step =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository).append(eq(requester), eq("conversation-1"), step.capture());
+        verify(repository).append(eq("conversation-1"), step.capture());
         assertThat(step.getValue().message()).isEqualTo("Parallel workflow usage settled.");
         assertThat(step.getValue().extra())
                 .containsEntry("fanout_id", "fanout-parallel")
@@ -459,10 +463,10 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void forkedRecorderSuppressesToolOutputContextUsageEvents() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         List<AiExecutionEvent> events = new ArrayList<>();
-        AiContextBudgetService.Budget budget = new AiContextBudgetService.Budget(
+        AiContextBudget budget = new AiContextBudget(
                 "model", 200000L, 16000L, 150000L, 8192L, 32000L, false);
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", "model", "high", "default", Map.of(),
@@ -483,21 +487,21 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void sealedRecorderIgnoresFanOutUsage() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", ignored -> {});
 
         recorder.terminalLifecycle("multi_agent_failed", "Fan-out failed.", Map.of("status", "failed"));
         recorder.recordFanOutUsage("fanout-abc", List.of(
-                new AiTrajectoryRecorder.UsageSnapshot(null, null, 100L, 10L, 1L)));
+                new AiUsageSnapshot(null, null, 100L, 10L, 1L)));
 
-        verify(repository, times(1)).append(eq(requester), eq("conversation-1"), any());
+        verify(repository, times(1)).append(eq("conversation-1"), any());
     }
 
     @Test
     void truncatesAdversarialUnicodeToolOutputAtAValidUtf8Boundary() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
@@ -518,12 +522,12 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void capsToolOutputByTheRemainingContextBudgetAcrossTheActiveToolLoop() {
-        ScoreChatMemoryRepository repository = mock(ScoreChatMemoryRepository.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ToolCallback callback = mock(ToolCallback.class);
         when(callback.getToolDefinition()).thenReturn(ToolDefinition.builder()
                 .name("get_large_result").description("test").inputSchema("{\"type\":\"object\"}").build());
         when(callback.call(anyString(), any(ToolContext.class))).thenReturn("x".repeat(1000));
-        AiContextBudgetService.Budget budget = new AiContextBudgetService.Budget(
+        AiContextBudget budget = new AiContextBudget(
                 "model", 120L, 10L, 90L, 10L, 100L, false);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
                 mock(ScoreUser.class), "conversation-1", "request-1", "model", "high", "default",
@@ -537,10 +541,10 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void appliesTheRemainingContextBudgetToApprovedMutationResults() {
-        AiContextBudgetService.Budget budget = new AiContextBudgetService.Budget(
+        AiContextBudget budget = new AiContextBudget(
                 "model", 120L, 10L, 90L, 10L, 100L, false);
         List<AiExecutionEvent> events = new ArrayList<>();
-        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(mock(ScoreChatMemoryRepository.class),
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(mock(AiChatConversationRepository.class),
                 new ObjectMapper(), mock(ScoreUser.class), "conversation-1", "request-1", "model",
                 "high", "default", Map.of(), events::add, budget, 90L);
 
@@ -556,9 +560,9 @@ class AiTrajectoryRecorderTest {
 
     @Test
     void returnsNoToolBytesWhenTheSafeInputBudgetIsAlreadyExhausted() {
-        AiContextBudgetService.Budget budget = new AiContextBudgetService.Budget(
+        AiContextBudget budget = new AiContextBudget(
                 "model", 120L, 10L, 90L, 10L, 100L, false);
-        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(mock(ScoreChatMemoryRepository.class),
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(mock(AiChatConversationRepository.class),
                 new ObjectMapper(), mock(ScoreUser.class), "conversation-1", "request-1", "model",
                 "high", "default", Map.of(), ignored -> {}, budget, budget.safeInputLimit());
 

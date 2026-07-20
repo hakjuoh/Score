@@ -46,11 +46,13 @@ class AiMutationConfirmationServiceDatabaseTest {
                 new TransactionAwareDataSourceProxy(dataSource),
                 SQLDialect.H2,
                 new Settings().withRenderSchema(false));
-        service = new AiMutationConfirmationService(
-                new JooqAiMutationConfirmationQueryRepository(dslContext),
-                new JooqAiMutationConfirmationCommandRepository(dslContext),
-                new ObjectMapper());
         owner = user(1L, "owner");
+        service = new AiMutationConfirmationService(
+                requester -> new JooqAiMutationConfirmationQueryRepository(
+                        dslContext, requester, null),
+                requester -> new JooqAiMutationConfirmationCommandRepository(
+                        dslContext, requester, null),
+                new ObjectMapper());
         jdbc.execute("""
                 CREATE TABLE ai_chat_conversation (
                     ai_chat_conversation_id BIGINT AUTO_INCREMENT PRIMARY KEY,

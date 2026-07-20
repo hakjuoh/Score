@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.buffer.ByteBuf;
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.model.AiSharedRequestState;
 import org.redisson.codec.TypedJsonJacksonCodec;
 
 import java.time.Duration;

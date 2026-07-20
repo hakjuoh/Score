@@ -394,6 +394,9 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
   }
 
   protected updateMainPanelInset(): void {
-    this.layoutService.updateMainPanelInset(this.state.isOpen, this.state.dock, this.state.sideSize, this.state.horizontalSize);
+    this.layoutService.updateMainPanelInset(
+      this.state.isOpen && !this.state.popoutActive && !this.popoutMode,
+      this.state.dock, this.state.sideSize, this.state.horizontalSize
+    );
   }
 }
