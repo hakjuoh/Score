@@ -17,12 +17,21 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.Mutation
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatLatestUsage;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryData;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
-import org.oagi.score.gateway.http.api.ai_management.repository.ScoreChatMemoryRepository;
+import org.oagi.score.gateway.http.api.ai_management.model.AiCompactCommand;
+import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
+import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
+import org.oagi.score.gateway.http.api.ai_management.model.AiMutationPermissionMode;
+import org.oagi.score.gateway.http.api.ai_management.model.AiPersistentWorkflowCommand;
+import org.oagi.score.gateway.http.api.ai_management.memory.ScoreChatMemoryFactory;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntimeRegistry;
 import org.oagi.score.gateway.http.api.info_management.model.AiAssistantInfoRecord;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
+import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
 import org.springframework.ai.chat.client.advisor.toolsearch.ToolSearchToolCallingAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -47,6 +56,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.concurrent.CancellationException;
 
 @Service
@@ -61,56 +71,95 @@ public class ChatService {
     private final ScoreAiModelRegistry models;
     private final AiRuntimeRegistry runtimes;
     private final ToolSearchToolCallingAdvisor toolSearchAdvisor;
-    private final ChatMemory chatMemory;
-    private final ScoreChatMemoryRepository memoryRepository;
+    private final Function<ScoreUser, ChatMemory> chatMemories;
+    private final Function<ScoreUser, AiChatConversationRepository> conversationRepositories;
     private final ObjectMapper objectMapper;
     private final AiRequestRegistry requests;
     private final AiContextBudgetService contextBudgets;
     private final AiMultiAgentManager multiAgents;
+    private final AtifTrajectoryService atifTrajectoryService;
 
     @Autowired
     public ChatService(ScoreAiModelRegistry models, AiRuntimeRegistry runtimes,
                        ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                       ChatMemory chatMemory, ScoreChatMemoryRepository memoryRepository,
+                       ScoreChatMemoryFactory chatMemoryFactory, RepositoryFactory repositoryFactory,
                        ObjectMapper objectMapper, AiRequestRegistry requests,
                        AiContextBudgetService contextBudgets,
-                       AiMultiAgentManager multiAgents) {
+                       AiMultiAgentManager multiAgents,
+                       AtifTrajectoryService atifTrajectoryService) {
+        this(models, runtimes, toolSearchAdvisor, chatMemoryFactory::create,
+                requester -> repositoryFactory.aiChatConversationRepository(
+                        requester, AiChatJsonSerializer.getInstance()), objectMapper, requests,
+                contextBudgets, multiAgents, atifTrajectoryService);
+    }
+
+    private ChatService(ScoreAiModelRegistry models, AiRuntimeRegistry runtimes,
+                        ToolSearchToolCallingAdvisor toolSearchAdvisor,
+                        Function<ScoreUser, ChatMemory> chatMemories,
+                        Function<ScoreUser, AiChatConversationRepository> conversationRepositories,
+                        ObjectMapper objectMapper, AiRequestRegistry requests,
+                        AiContextBudgetService contextBudgets,
+                        AiMultiAgentManager multiAgents,
+                        AtifTrajectoryService atifTrajectoryService) {
         this.models = models;
         this.runtimes = runtimes;
         this.toolSearchAdvisor = toolSearchAdvisor;
-        this.chatMemory = chatMemory;
-        this.memoryRepository = memoryRepository;
+        this.chatMemories = chatMemories;
+        this.conversationRepositories = conversationRepositories;
         this.objectMapper = objectMapper;
         this.requests = requests;
         this.contextBudgets = contextBudgets;
         this.multiAgents = multiAgents;
+        this.atifTrajectoryService = atifTrajectoryService;
     }
 
     ChatService(ScoreAiModelRegistry models, AiRuntimeRegistry runtimes,
                 ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                ChatMemory chatMemory, ScoreChatMemoryRepository memoryRepository,
+                ChatMemory chatMemory, AiChatConversationRepository conversationRepository,
                 ObjectMapper objectMapper, AiRequestRegistry requests,
                 AiContextBudgetService contextBudgets) {
         // The fallback manager must share this service's budget and request
         // collaborators so budget checks and the distributed-stop fence stay active.
-        this(models, runtimes, toolSearchAdvisor, chatMemory, memoryRepository, objectMapper,
-                requests, contextBudgets, new AiMultiAgentManager(runtimes, contextBudgets, requests));
+        this(models, runtimes, toolSearchAdvisor, chatMemory, conversationRepository, objectMapper,
+                requests, contextBudgets, new AiMultiAgentManager(runtimes, contextBudgets, requests),
+                new AtifTrajectoryService());
     }
 
     ChatService(ScoreAiModelRegistry models, AiRuntimeRegistry runtimes,
                 ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                ChatMemory chatMemory, ScoreChatMemoryRepository memoryRepository,
+                ChatMemory chatMemory, AiChatConversationRepository conversationRepository,
                 ObjectMapper objectMapper) {
-        this(models, runtimes, toolSearchAdvisor, chatMemory, memoryRepository, objectMapper, null,
+        this(models, runtimes, toolSearchAdvisor, chatMemory, conversationRepository, objectMapper, null,
                 new AiContextBudgetService(models));
     }
 
     ChatService(ScoreAiModelRegistry models, AiRuntimeRegistry runtimes,
                 ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                ChatMemory chatMemory, ScoreChatMemoryRepository memoryRepository,
+                ChatMemory chatMemory, AiChatConversationRepository conversationRepository,
                 ObjectMapper objectMapper, AiRequestRegistry requests) {
-        this(models, runtimes, toolSearchAdvisor, chatMemory, memoryRepository, objectMapper, requests,
+        this(models, runtimes, toolSearchAdvisor, chatMemory, conversationRepository, objectMapper, requests,
                 new AiContextBudgetService(models));
+    }
+
+    ChatService(ScoreAiModelRegistry models, AiRuntimeRegistry runtimes,
+                ToolSearchToolCallingAdvisor toolSearchAdvisor,
+                ChatMemory chatMemory, AiChatConversationRepository conversationRepository,
+                ObjectMapper objectMapper, AiRequestRegistry requests,
+                AiContextBudgetService contextBudgets, AiMultiAgentManager multiAgents,
+                AtifTrajectoryService atifTrajectoryService) {
+        this(models, runtimes, toolSearchAdvisor, ignored -> chatMemory,
+                ignored -> conversationRepository,
+                objectMapper, requests, contextBudgets, multiAgents, atifTrajectoryService);
+    }
+
+    ChatService(ScoreAiModelRegistry models, AiRuntimeRegistry runtimes,
+                ToolSearchToolCallingAdvisor toolSearchAdvisor,
+                ChatMemory chatMemory, AiChatConversationRepository conversationRepository,
+                ObjectMapper objectMapper, AiRequestRegistry requests,
+                AiContextBudgetService contextBudgets, AiMultiAgentManager multiAgents) {
+        this(models, runtimes, toolSearchAdvisor, chatMemory, conversationRepository,
+                objectMapper, requests, contextBudgets, multiAgents,
+                new AtifTrajectoryService());
     }
 
     public AiAssistantInfoRecord aiAssistantInfo() {
@@ -122,7 +171,8 @@ public class ChatService {
     @Transactional
     public ChatRequest prepare(ChatRequest request, ScoreUser requester) {
         validate(request);
-        Optional<AiMultiAgentIntent.PersistentWorkflowCommand> workflowCommand =
+        AiChatConversationRepository conversationRepository = conversationRepository(requester);
+        Optional<AiPersistentWorkflowCommand> workflowCommand =
                 AiMultiAgentIntent.persistentWorkflowCommand(request.prompt());
         String requestedModelName = request.modelName();
         String requestedReasoningEffort = request.reasoningEffort();
@@ -132,8 +182,8 @@ public class ChatService {
         AiChatConversationSettings previousSettings = null;
         String storedActiveWorkflow = null;
         if (StringUtils.hasText(request.conversationId())) {
-            previousSettings = memoryRepository.settingsForUpdate(requester, request.conversationId());
-            Optional<String> stored = memoryRepository.activeWorkflow(requester, request.conversationId());
+            previousSettings = conversationRepository.settingsForUpdate(request.conversationId());
+            Optional<String> stored = conversationRepository.activeWorkflow(request.conversationId());
             storedActiveWorkflow = stored != null ? stored.orElse(null) : null;
             if (!StringUtils.hasText(requestedModelName)) {
                 requestedModelName = previousSettings.modelName();
@@ -166,7 +216,7 @@ public class ChatService {
         }
         Map<String, Object> runtimeOptions = runtimes.normalizeOptions(
                 runtime, modelName, requestedRuntimeOptions != null ? requestedRuntimeOptions : Map.of());
-        String conversationId = memoryRepository.open(requester, request.conversationId(), request.prompt());
+        String conversationId = conversationRepository.open(request.conversationId(), request.prompt());
         recordSettingsChange(requester, conversationId, request.requestId(), previousSettings,
                 new AiChatConversationSettings(
                         modelName, reasoningEffort, runtime, runtimeOptions));
@@ -179,18 +229,19 @@ public class ChatService {
 
     public ChatResponse chat(ChatRequest request, ScoreUser requester, Consumer<AiExecutionEvent> progress) {
         ChatRequest prepared = requirePrepared(request);
+        AiChatConversationRepository conversationRepository = conversationRepository(requester);
         List<String> progressMessages = new ArrayList<>();
-        CompactCommand compactCommand = compactCommand(prepared.prompt());
+        AiCompactCommand compactCommand = compactCommand(prepared.prompt());
         boolean manualCompact = compactCommand != null;
-        Optional<AiMultiAgentIntent.PersistentWorkflowCommand> workflowCommand =
+        Optional<AiPersistentWorkflowCommand> workflowCommand =
                 AiMultiAgentIntent.persistentWorkflowCommand(prepared.prompt());
         UserMessage userMessage = manualCompact
                 ? compactMessage(compactCommand.instructions()) : userMessage(prepared);
-        List<Message> initialHistory = conversationHistory(prepared.conversationId());
-        Optional<AiContextBudgetService.Budget> budget = contextBudgets.budget(prepared.modelName());
+        List<Message> initialHistory = conversationHistory(requester, prepared.conversationId());
+        Optional<AiContextBudget> budget = contextBudgets.budget(prepared.modelName());
         long projectedInputTokens = projectedInputTokens(requester, prepared, initialHistory, userMessage, budget);
         long initialProjectedInputTokens = projectedInputTokens;
-        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(memoryRepository, objectMapper, requester,
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(conversationRepository, objectMapper, requester,
                 prepared.conversationId(), prepared.requestId(), prepared.modelName(),
                 prepared.reasoningEffort(), prepared.runtime(), prepared.runtimeOptions(), progress,
                 budget.orElse(null), projectedInputTokens);
@@ -210,7 +261,7 @@ public class ChatService {
         if (prepared.activeWorkflow() != null) {
             userExtra.put("active_workflow", prepared.activeWorkflow());
         }
-        memoryRepository.append(requester, prepared.conversationId(), new AiChatTrajectoryStep(
+        conversationRepository.append(prepared.conversationId(), new AiChatTrajectoryStep(
                 prepared.requestId(), "user", "user", "visible", visiblePrompt, null, prepared.modelName(),
                 prepared.reasoningEffort(), prepared.runtime(), prepared.runtimeOptions(),
                 null, null, null, Map.copyOf(userExtra),
@@ -275,15 +326,16 @@ public class ChatService {
                         afterTokens, answer, false);
             } else {
                 if (automaticSummary[0] != null) {
-                    memoryRepository.saveAll(prepared.conversationId(), List.of(
+                    replaceChatMemory(requester, prepared.conversationId(), List.of(
                             summaryMessage(automaticSummary[0]), userMessage, assistantMessage));
                     recordCompaction(requester, prepared, automaticBeforeTokens[0],
                             automaticAfterTokens[0], automaticSummary[0], true);
                 } else {
-                    chatMemory.add(prepared.conversationId(), userMessage);
-                    chatMemory.add(prepared.conversationId(), assistantMessage);
+                    ChatMemory memory = chatMemory(requester);
+                    memory.add(prepared.conversationId(), userMessage);
+                    memory.add(prepared.conversationId(), assistantMessage);
                 }
-                memoryRepository.markExpanded(requester, prepared.conversationId());
+                conversationRepository.markExpanded(prepared.conversationId());
             }
             Map<String, Object> answerExtra = new LinkedHashMap<>(finalTraceMetadata);
             answerExtra.put("ui_projection", true);
@@ -293,7 +345,7 @@ public class ChatService {
             if (prepared.activeWorkflow() != null) {
                 answerExtra.put("active_workflow", prepared.activeWorkflow());
             }
-            memoryRepository.append(requester, prepared.conversationId(), new AiChatTrajectoryStep(
+            conversationRepository.append(prepared.conversationId(), new AiChatTrajectoryStep(
                     prepared.requestId(), "agent", "assistant", "visible", answer, null, modelName,
                     prepared.reasoningEffort(), runtime, prepared.runtimeOptions(),
                     null, null, null, Map.copyOf(answerExtra), 0, null, null));
@@ -324,17 +376,17 @@ public class ChatService {
 
     @Transactional(readOnly = true)
     public List<ChatConversationSummary> conversations(ScoreUser requester) {
-        return memoryRepository.list(requester);
+        return conversationRepository(requester).list();
     }
 
     @Transactional(readOnly = true)
     public ChatConversationDetails conversation(ScoreUser requester, String conversationId) {
-        ChatConversationDetails details = memoryRepository.get(requester, conversationId);
+        ChatConversationDetails details = conversationRepository(requester).get(conversationId);
         String runtime = models.normalizeRuntime(details.runtime());
         AiContextUsageInfo contextUsage = currentContextUsage(requester, conversationId, details.modelName());
         return new ChatConversationDetails(details.conversationId(), details.title(), details.modelName(),
                 details.reasoningEffort(), runtime, details.runtimeOptions(), details.updatedAt(),
-                details.messages(), details.contextMessages(), contextUsage);
+                details.messages(), details.contextMessages(), contextUsage, details.permissionMode());
     }
 
     public List<AiChatModelInfo> availableModels() {
@@ -371,8 +423,9 @@ public class ChatService {
                                                                String requestedReasoningEffort,
                                                                String requestedRuntime,
                                                                Map<String, Object> requestedRuntimeOptions) {
+        AiChatConversationRepository conversationRepository = conversationRepository(requester);
         AiChatConversationSettings previous =
-                memoryRepository.settingsForUpdate(requester, conversationId);
+                conversationRepository.settingsForUpdate(conversationId);
         String modelName = models.resolveModelName(requestedModelName);
         String reasoningEffort = models.resolveReasoningEffort(modelName, requestedReasoningEffort);
         String runtime = models.resolveRuntime(modelName, requestedRuntime);
@@ -385,8 +438,8 @@ public class ChatService {
                 optionSource != null ? optionSource : Map.of());
         boolean modelChanged = !modelName.equals(previous.modelName());
         boolean contextCompacted = false;
-        List<Message> history = conversationHistory(conversationId);
-        Optional<AiContextBudgetService.Budget> targetBudget = contextBudgets.budget(modelName);
+        List<Message> history = conversationHistory(requester, conversationId);
+        Optional<AiContextBudget> targetBudget = contextBudgets.budget(modelName);
         long targetInputTokens = contextBudgets.estimateInputTokens(history, null, null);
         Optional<AiChatLatestUsage> latest = latestUsage(requester, conversationId);
         if (latest.isPresent() && (modelChanged || modelName.equals(latest.get().modelName()))) {
@@ -395,9 +448,9 @@ public class ChatService {
         if (modelChanged && !history.isEmpty() && targetBudget.isPresent()
                 && targetBudget.get().shouldCompact(targetInputTokens)) {
             String compactionRequestId = "model-switch-" + UUID.randomUUID();
-            Optional<AiContextBudgetService.Budget> sourceBudget = contextBudgets.budget(previous.modelName());
+            Optional<AiContextBudget> sourceBudget = contextBudgets.budget(previous.modelName());
             long sourceEstimate = contextBudgets.estimateInputTokens(history, compactMessage(null), null);
-            AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(memoryRepository, objectMapper, requester,
+            AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(conversationRepository, objectMapper, requester,
                     conversationId, compactionRequestId, previous.modelName(), previous.reasoningEffort(),
                     models.normalizeRuntime(previous.runtime()), previous.runtimeOptions(), ignored -> {},
                     sourceBudget.orElse(null), sourceEstimate);
@@ -441,15 +494,17 @@ public class ChatService {
     @Transactional(readOnly = true)
     public Map<String, Object> trajectory(ScoreUser requester, String conversationId) {
         String version = ChatService.class.getPackage().getImplementationVersion();
-        return memoryRepository.trajectory(requester, conversationId,
+        AiChatConversationRepository repository = conversationRepository(requester);
+        AiChatTrajectoryData data = repository.getTrajectoryData(conversationId);
+        return atifTrajectoryService.export(data,
                 StringUtils.hasText(version) ? version : "3.6.0-dev",
-                memoryRepository.modelName(requester, conversationId));
+                repository.modelName(conversationId));
     }
 
     public boolean deleteConversation(ScoreUser requester, String conversationId) {
-        boolean deleted = memoryRepository.delete(requester, conversationId);
+        boolean deleted = conversationRepository(requester).delete(conversationId);
         if (deleted) {
-            chatMemory.clear(conversationId);
+            chatMemory(requester).clear(conversationId);
             toolSearchAdvisor.evictSession(conversationId);
         }
         return deleted;
@@ -459,7 +514,7 @@ public class ChatService {
         if (request == null || !StringUtils.hasText(request.conversationId())) {
             return;
         }
-        memoryRepository.append(requester, request.conversationId(), new AiChatTrajectoryStep(
+        conversationRepository(requester).append(request.conversationId(), new AiChatTrajectoryStep(
                 request.requestId(), "system", "error", "visible",
                 StringUtils.hasText(message) ? message : "The assistant request failed.",
                 null, null, null, null, null, Map.of("terminal", true), 0, null, null));
@@ -521,23 +576,40 @@ public class ChatService {
         return UserMessage.builder().text(text.toString()).media(media).build();
     }
 
-    private List<Message> conversationHistory(String conversationId) {
-        if (chatMemory == null || !StringUtils.hasText(conversationId)) return List.of();
-        List<Message> messages = chatMemory.get(conversationId);
+    private List<Message> conversationHistory(ScoreUser requester, String conversationId) {
+        ChatMemory memory = chatMemory(requester);
+        if (memory == null || !StringUtils.hasText(conversationId)) return List.of();
+        List<Message> messages = memory.get(conversationId);
         return messages != null ? List.copyOf(messages) : List.of();
+    }
+
+    private ChatMemory chatMemory(ScoreUser requester) {
+        return chatMemories != null ? chatMemories.apply(requester) : null;
+    }
+
+    private AiChatConversationRepository conversationRepository(ScoreUser requester) {
+        return conversationRepositories.apply(requester);
+    }
+
+    private void replaceChatMemory(ScoreUser requester, String conversationId,
+                                   List<Message> messages) {
+        ChatMemory memory = chatMemory(requester);
+        memory.clear(conversationId);
+        messages.forEach(message -> memory.add(conversationId, message));
     }
 
     private Optional<AiChatLatestUsage> latestUsage(
             ScoreUser requester, String conversationId) {
-        if (memoryRepository == null) return Optional.empty();
+        AiChatConversationRepository conversationRepository = conversationRepository(requester);
+        if (conversationRepository == null) return Optional.empty();
         Optional<AiChatLatestUsage> usage =
-                memoryRepository.latestUsage(requester, conversationId);
+                conversationRepository.latestUsage(conversationId);
         return usage != null ? usage : Optional.empty();
     }
 
     private long projectedInputTokens(ScoreUser requester, ChatRequest request,
                                       List<Message> history, UserMessage userMessage,
-                                      Optional<AiContextBudgetService.Budget> budget) {
+                                      Optional<AiContextBudget> budget) {
         long estimate = contextBudgets.estimateInputTokens(history, userMessage, request.pageContext());
         if (budget.isEmpty()) return estimate;
         Optional<AiChatLatestUsage> latest = latestUsage(requester, request.conversationId());
@@ -550,13 +622,14 @@ public class ChatService {
 
     private AiContextUsageInfo currentContextUsage(ScoreUser requester, String conversationId,
                                                    String modelName) {
-        Optional<AiContextBudgetService.Budget> budget = contextBudgets.budget(modelName);
+        Optional<AiContextBudget> budget = contextBudgets.budget(modelName);
         if (budget.isEmpty()) return null;
         Optional<AiChatLatestUsage> latest = latestUsage(requester, conversationId);
         if (latest.isPresent() && modelName.equals(latest.get().modelName())) {
             return budget.get().usage(latest.get().inputTokens(), latest.get().estimated(), "stored_provider");
         }
-        long estimate = contextBudgets.estimateInputTokens(conversationHistory(conversationId), null, null);
+        long estimate = contextBudgets.estimateInputTokens(
+                conversationHistory(requester, conversationId), null, null);
         return budget.get().usage(estimate, true, "restore_estimate");
     }
 
@@ -568,8 +641,8 @@ public class ChatService {
     }
 
     private void replaceMemoryWithSummary(ScoreUser requester, String conversationId, String summary) {
-        memoryRepository.saveAll(conversationId, List.of(summaryMessage(summary)));
-        memoryRepository.markCompacted(requester, conversationId);
+        replaceChatMemory(requester, conversationId, List.of(summaryMessage(summary)));
+        conversationRepository(requester).markCompacted(conversationId);
     }
 
     private AssistantMessage summaryMessage(String summary) {
@@ -582,7 +655,7 @@ public class ChatService {
     private void recordCompaction(ScoreUser requester, ChatRequest request,
                                   long beforeTokens, long afterTokens,
                                   String summary, boolean automatic) {
-        memoryRepository.append(requester, request.conversationId(), new AiChatTrajectoryStep(
+        conversationRepository(requester).append(request.conversationId(), new AiChatTrajectoryStep(
                 request.requestId(), "system", "context_compaction", "debug",
                 automatic ? "Conversation context compacted automatically."
                         : "Conversation context compacted.", null, request.modelName(),
@@ -594,7 +667,7 @@ public class ChatService {
                 0, null, null));
     }
 
-    private CompactCommand compactCommand(String prompt) {
+    private AiCompactCommand compactCommand(String prompt) {
         String value = Objects.requireNonNullElse(prompt, "").strip();
         if (!value.regionMatches(true, 0, "/compact", 0, "/compact".length())) return null;
         if (value.length() > "/compact".length()
@@ -605,7 +678,7 @@ public class ChatService {
             throw new IllegalArgumentException("Compact instructions must not exceed "
                     + MAX_COMPACT_INSTRUCTION_CHARS + " characters.");
         }
-        return new CompactCommand(instructions);
+        return new AiCompactCommand(instructions);
     }
 
     private UserMessage compactMessage(String instructions) {
@@ -619,8 +692,6 @@ public class ChatService {
         }
         return UserMessage.builder().text(prompt.toString()).build();
     }
-
-    private record CompactCommand(String instructions) {}
 
     private String json(Object value) {
         try {
@@ -688,7 +759,7 @@ public class ChatService {
             extra.put("before", settingsSnapshot(previous));
         }
         extra.put("after", settingsSnapshot(updated));
-        memoryRepository.append(requester, conversationId, new AiChatTrajectoryStep(
+        conversationRepository(requester).append(conversationId, new AiChatTrajectoryStep(
                 requestId, "system", "settings_change", "debug",
                 previous == null ? "Assistant settings initialized." : "Assistant settings changed.",
                 null, updated.modelName(), updated.reasoningEffort(), updated.runtime(),
@@ -698,7 +769,7 @@ public class ChatService {
 
     private void recordWorkflowPreference(
             ScoreUser requester, String conversationId, String requestId,
-            AiMultiAgentIntent.PersistentWorkflowCommand command,
+            AiPersistentWorkflowCommand command,
             String modelName, String reasoningEffort, String runtime,
             Map<String, Object> runtimeOptions) {
         Map<String, Object> extra = new LinkedHashMap<>();
@@ -706,7 +777,7 @@ public class ChatService {
             extra.put("activeWorkflow", command.activeWorkflow());
         }
         extra.put("automatic", command.activeWorkflow() == null);
-        memoryRepository.append(requester, conversationId, new AiChatTrajectoryStep(
+        conversationRepository(requester).append(conversationId, new AiChatTrajectoryStep(
                 requestId, "system", "workflow_preference", "debug",
                 command.activeWorkflow() == null
                         ? "Automatic workflow selection enabled."

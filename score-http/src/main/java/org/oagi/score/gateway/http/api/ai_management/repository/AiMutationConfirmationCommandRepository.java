@@ -1,7 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.repository;
 
 import org.oagi.score.gateway.http.api.ai_management.model.CreateAiMutationConfirmationArguments;
-import org.oagi.score.gateway.http.common.model.ScoreUser;
 
 import java.time.Instant;
 
@@ -11,14 +10,13 @@ import java.time.Instant;
 public interface AiMutationConfirmationCommandRepository {
 
     /**
-     * Creates a confirmation only when the requester owns the target conversation.
+     * Creates a confirmation only when the repository's requester owns the target conversation.
      *
-     * @param requester signed-in conversation owner
      * @param conversationId public conversation identifier
      * @param arguments creation values
      * @return {@code true} when exactly one confirmation was created
      */
-    boolean create(ScoreUser requester, String conversationId,
+    boolean create(String conversationId,
                    CreateAiMutationConfirmationArguments arguments);
 
     /**

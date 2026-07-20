@@ -168,6 +168,55 @@ describe('AiChatMessageListComponent', () => {
     expect(remove.getAttribute('aria-label')).toBe('Remove attachment purchase-order.json');
   });
 
+  it('shows the selected session settings at the top of an empty chat', () => {
+    fixture.componentInstance.availableModels = [{
+      name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
+      provider: 'azure-openai', defaultModel: true, defaultRuntime: 'openai', runtimes: [
+        {name: 'openai', displayName: 'OpenAI', description: 'OpenAI runtime.', settings: []}
+      ], defaultReasoningEffort: 'high', reasoningEfforts: [
+        {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
+      ]
+    }];
+    fixture.componentInstance.selectedModelName = 'gpt-5_6-sol';
+    fixture.componentInstance.selectedReasoningEffort = 'high';
+    fixture.componentInstance.selectedRuntime = 'openai';
+    fixture.componentInstance.permissionMode = 'full_access';
+    fixture.detectChanges();
+
+    const flow = fixture.nativeElement.querySelector('.terminal-flow') as HTMLElement;
+    const summary = flow.querySelector('.session-summary') as HTMLElement;
+    const values = summary.querySelectorAll('dd') as NodeListOf<HTMLElement>;
+
+    expect(flow.firstElementChild).toBe(summary);
+    expect(summary.getAttribute('aria-label')).toBe('Current assistant session settings');
+    expect(Array.from(values, value => value.textContent?.trim())).toEqual([
+      'GPT-5.6 SOL', 'High', 'OpenAI', 'Full access'
+    ]);
+    expect(summary.textContent).toContain('/model');
+    expect(summary.textContent).toContain('/runtime');
+    expect(summary.textContent).toContain('/permissions');
+  });
+
+  it('keeps the session settings at the top after the conversation starts', () => {
+    fixture.componentInstance.messages = [{role: 'user', content: '/model'}];
+    fixture.componentInstance.availableModels = [{
+      name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
+      provider: 'azure-openai', defaultModel: true, defaultRuntime: 'default', runtimes: [],
+      defaultReasoningEffort: 'high', reasoningEfforts: [
+        {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
+      ]
+    }];
+    fixture.componentInstance.selectedModelName = 'gpt-5_6-sol';
+    fixture.detectChanges();
+
+    const flow = fixture.nativeElement.querySelector('.terminal-flow') as HTMLElement;
+    const summary = flow.querySelector('.session-summary') as HTMLElement;
+
+    expect(summary).not.toBeNull();
+    expect(flow.firstElementChild).toBe(summary);
+    expect(flow.textContent).toContain('/model');
+  });
+
   it('ignores a stale in-progress row from an older turn when guarding the current request', () => {
     fixture.componentInstance.messages = [
       {role: 'user', content: 'Old request'},
@@ -257,7 +306,8 @@ describe('AiChatMessageListComponent', () => {
     expect(sections[1].textContent).toContain('(current)');
     expect(sections[1].textContent).toContain('Low');
     expect(sections[1].textContent).toContain('High');
-    expect(fixture.nativeElement.textContent).not.toContain('OpenAI');
+    const panel = fixture.nativeElement.querySelector('.model-command-panel') as HTMLElement;
+    expect(panel.textContent).not.toContain('OpenAI');
   });
 
   it('shows compatible runtimes only for the runtime command', async () => {
@@ -329,7 +379,7 @@ describe('AiChatMessageListComponent', () => {
     ) as NodeListOf<HTMLButtonElement>;
     expect(options).toHaveLength(3);
     expect(options[0].textContent).toContain('Ask for approval');
-    expect(options[1].textContent).toContain('Approve for me');
+    expect(options[1].textContent).toContain('Ask only for risky actions');
     expect(options[2].textContent).toContain('Full access');
     expect(options[0].textContent).toContain('(current)');
 

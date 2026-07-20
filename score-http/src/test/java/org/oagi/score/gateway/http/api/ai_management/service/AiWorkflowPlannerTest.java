@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntimeRegistry;
 import org.oagi.score.gateway.http.common.model.ScoreUser;

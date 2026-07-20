@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.model.AiElicitationNotice;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
@@ -25,11 +26,11 @@ class AiElicitationServiceTest {
     @Test
     void resumesTheSameMcpElicitationWithStructuredUserContent() throws Exception {
         AiElicitationService service = service();
-        ArrayBlockingQueue<AiElicitationService.Notice> notices = new ArrayBlockingQueue<>(1);
+        ArrayBlockingQueue<AiElicitationNotice> notices = new ArrayBlockingQueue<>(1);
         CompletableFuture<McpSchema.ElicitResult> result = CompletableFuture.supplyAsync(() ->
                 service.await(user, "conversation-1", "request-1", request(), notices::add));
 
-        AiElicitationService.Notice notice = notices.poll(1, TimeUnit.SECONDS);
+        AiElicitationNotice notice = notices.poll(1, TimeUnit.SECONDS);
         assertThat(notice).isNotNull();
         assertThat(notice.requestedSchema()).containsEntry("type", "object");
 
@@ -45,10 +46,10 @@ class AiElicitationServiceTest {
     @Test
     void rejectsAResponseFromAnotherUserWithoutReleasingThePendingRequest() throws Exception {
         AiElicitationService service = service();
-        ArrayBlockingQueue<AiElicitationService.Notice> notices = new ArrayBlockingQueue<>(1);
+        ArrayBlockingQueue<AiElicitationNotice> notices = new ArrayBlockingQueue<>(1);
         CompletableFuture<McpSchema.ElicitResult> result = CompletableFuture.supplyAsync(() ->
                 service.await(user, "conversation-1", "request-1", request(), notices::add));
-        AiElicitationService.Notice notice = notices.poll(1, TimeUnit.SECONDS);
+        AiElicitationNotice notice = notices.poll(1, TimeUnit.SECONDS);
 
         assertThatThrownBy(() -> service.decide(user(2L, "other"), "request-1",
                 "conversation-1", notice.elicitationId(), "ACCEPT", Map.of()))

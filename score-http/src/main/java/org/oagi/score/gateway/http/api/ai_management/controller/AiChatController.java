@@ -19,7 +19,7 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConv
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
-import org.oagi.score.gateway.http.api.ai_management.service.AiExecutionEvent;
+import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.service.ChatService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationConfirmationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
@@ -316,6 +316,7 @@ public class AiChatController {
             metadata.put("reasoningEffort", details.reasoningEffort());
             metadata.put("runtime", details.runtime());
             metadata.put("runtimeOptions", details.runtimeOptions());
+            metadata.put("permissionMode", details.permissionMode());
             if (details.contextUsage() != null) metadata.put("contextUsage", details.contextUsage());
             send(requester, destination, AiChatSocketEvent.system(request.requestId(), request.conversationId(),
                     null, "accepted", "Restoring conversation.", metadata));

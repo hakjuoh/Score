@@ -1,6 +1,8 @@
 package org.oagi.score.gateway.http.api.ai_management.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.oagi.score.gateway.http.api.ai_management.model.AiRequestStopSignal;
+import org.oagi.score.gateway.http.api.ai_management.model.AiSharedRequestState;
 import org.redisson.api.RLock;
 import org.redisson.api.RMapCache;
 import org.redisson.api.RTopic;
@@ -34,7 +36,7 @@ interface AiRequestStateStore {
 
     void publishStop(String requestId, long generation);
 
-    void addStopListener(Consumer<StopSignal> listener);
+    void addStopListener(Consumer<AiRequestStopSignal> listener);
 
     interface Storage {
         AiSharedRequestState get(String requestId);
@@ -46,7 +48,6 @@ interface AiRequestStateStore {
         void removeMaintenance(String conversationId, String owner);
     }
 
-    record StopSignal(String requestId, long generation) {}
 }
 
 @Component
@@ -90,14 +91,14 @@ final class RedisAiRequestStateStore implements AiRequestStateStore {
     }
 
     @Override
-    public void addStopListener(Consumer<StopSignal> listener) {
+    public void addStopListener(Consumer<AiRequestStopSignal> listener) {
         stopTopic.addListener(String.class, (channel, message) -> {
             int separator = message.lastIndexOf('\n');
             if (separator <= 0) {
                 return;
             }
             try {
-                listener.accept(new StopSignal(message.substring(0, separator),
+                listener.accept(new AiRequestStopSignal(message.substring(0, separator),
                         Long.parseLong(message.substring(separator + 1))));
             } catch (NumberFormatException ignored) {
                 // Ignore malformed messages from an incompatible publisher.
@@ -150,7 +151,7 @@ final class InMemoryAiRequestStateStore implements AiRequestStateStore {
     private final Map<String, ReentrantLock> requestLocks = new ConcurrentHashMap<>();
     private final Map<String, AiSharedRequestState> requests = new ConcurrentHashMap<>();
     private final Map<String, String> maintenance = new ConcurrentHashMap<>();
-    private final List<Consumer<StopSignal>> stopListeners = new ArrayList<>();
+    private final List<Consumer<AiRequestStopSignal>> stopListeners = new ArrayList<>();
 
     @Override
     public <T> T withGlobalLock(Function<Storage, T> operation) {
@@ -172,11 +173,12 @@ final class InMemoryAiRequestStateStore implements AiRequestStateStore {
 
     @Override
     public void publishStop(String requestId, long generation) {
-        List.copyOf(stopListeners).forEach(listener -> listener.accept(new StopSignal(requestId, generation)));
+        List.copyOf(stopListeners).forEach(
+                listener -> listener.accept(new AiRequestStopSignal(requestId, generation)));
     }
 
     @Override
-    public void addStopListener(Consumer<StopSignal> listener) {
+    public void addStopListener(Consumer<AiRequestStopSignal> listener) {
         stopListeners.add(listener);
     }
 

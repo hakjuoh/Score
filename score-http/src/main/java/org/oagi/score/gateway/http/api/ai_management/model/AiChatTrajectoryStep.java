@@ -4,8 +4,10 @@ import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Complete, persistence-ready representation of one AI conversation trajectory step.
@@ -49,12 +51,33 @@ public record AiChatTrajectoryStep(
         Boolean isCopiedContext,
         Instant createdAt) {
 
+    private static final Set<String> SOURCES = Set.of("system", "user", "agent");
+    private static final Set<String> VISIBILITIES = Set.of("visible", "debug");
+
     public AiChatTrajectoryStep {
-        source = Objects.requireNonNull(source, "source");
+        source = normalizeSource(source);
         messageKind = Objects.requireNonNull(messageKind, "messageKind");
-        visibility = StringUtils.hasText(visibility) ? visibility : "visible";
+        visibility = normalizeVisibility(visibility);
+        if ("settings_change".equals(messageKind)
+                && (modelName == null || reasoningEffort == null || runtime == null)) {
+            throw new IllegalArgumentException(
+                    "settings_change requires modelName, reasoningEffort, and runtime; "
+                            + "no safe defaults are available.");
+        }
         message = Objects.requireNonNullElse(message, "");
         runtimeOptions = runtimeOptions != null ? Map.copyOf(runtimeOptions) : Map.of();
+    }
+
+    public static String normalizeSource(String value) {
+        if (!StringUtils.hasText(value)) return "system";
+        String normalized = value.strip().toLowerCase(Locale.ROOT);
+        return SOURCES.contains(normalized) ? normalized : "system";
+    }
+
+    public static String normalizeVisibility(String value) {
+        if (!StringUtils.hasText(value)) return "visible";
+        String normalized = value.strip().toLowerCase(Locale.ROOT);
+        return VISIBILITIES.contains(normalized) ? normalized : "debug";
     }
 
     /**

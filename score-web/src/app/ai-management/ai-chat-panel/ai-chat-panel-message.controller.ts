@@ -347,14 +347,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         this.state.conversationId = conversationId;
         this.sessionPersistence.rememberLastConversation(conversationId);
       },
-      setModelName: modelName => this.state.selectedModelName = modelName,
-      setReasoningEffort: reasoningEffort => this.state.selectedReasoningEffort = reasoningEffort,
-      setRuntime: runtime => this.state.selectRuntime(
-        this.settingsService.availableRuntime(this.state, runtime)
-      ),
-      setRuntimeOptions: runtimeOptions => this.state.selectRuntime(
-        this.state.selectedRuntime, runtimeOptions
-      ),
+      setSettings: settings => this.state.restoreConversationSettings(settings),
       setContextUsage: contextUsage => this.state.setContextUsage(contextUsage),
       resetMessages: () => {
         this.state.messages = [];
@@ -493,13 +486,37 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   }
 
   onChatPaneScroll(): void {
-    this.viewport.onChatPaneScroll(this.state, this.chatTerminalPane?.nativeElement);
+    const element = this.chatTerminalPane?.nativeElement;
+    if (element) this.state.chatScrollTop = element.scrollTop;
+    this.viewport.onChatPaneScroll(this.state, element);
+  }
+
+  onHistoryScrollTopChange(scrollTop: number): void {
+    this.state.historyScrollTop = scrollTop;
   }
 
   protected scrollToBottom(force = false): void {
     this.viewport.scrollToBottom(
       this.state, () => this.chatTerminalPane?.nativeElement, force
     );
+  }
+
+  protected restoreChatScrollPosition(consumePending = true): void {
+    const scrollTop = this.state.chatScrollTop;
+    window.setTimeout(() => {
+      window.requestAnimationFrame(() => {
+        const element = this.chatTerminalPane?.nativeElement;
+        if (!element) return;
+        element.scrollTop = Math.min(
+          scrollTop, Math.max(0, element.scrollHeight - element.clientHeight)
+        );
+        this.state.chatScrollTop = element.scrollTop;
+        this.state.shouldFollowChatScroll =
+          element.scrollHeight - element.scrollTop - element.clientHeight <= 48;
+        this.updateScrollToBottomButton();
+      });
+    });
+    if (consumePending) this.restoreChatScrollPending = false;
   }
 
   protected updateScrollToBottomButton(): void {

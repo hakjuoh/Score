@@ -20,7 +20,7 @@ export class AiChatNavigationService {
     if (!route) {
       return false;
     }
-    this.router.navigateByUrl(route);
+    this.navigateByUrl(route);
     return true;
   }
 
@@ -68,7 +68,7 @@ export class AiChatNavigationService {
       {duration: 10000}
     );
     snackBarRef.onAction().subscribe(() => {
-      this.router.navigateByUrl(targetPath);
+      this.navigateByUrl(targetPath);
     });
   }
 
@@ -85,6 +85,35 @@ export class AiChatNavigationService {
   }
 
   private refreshCurrentRoute(): void {
+    const sourceWindow = this.mainApplicationWindow();
+    if (sourceWindow) {
+      sourceWindow.location.reload();
+      sourceWindow.focus();
+      return;
+    }
     this.router.navigateByUrl(this.router.url);
+  }
+
+  private navigateByUrl(route: string): void {
+    const sourceWindow = this.mainApplicationWindow();
+    if (sourceWindow) {
+      sourceWindow.location.assign(route);
+      sourceWindow.focus();
+      return;
+    }
+    this.router.navigateByUrl(route);
+  }
+
+  private mainApplicationWindow(): Window | undefined {
+    try {
+      if (new URLSearchParams(window.location.search).get('aiAssistantPopout') === '1'
+        && window.opener && !window.opener.closed
+        && window.opener.location.origin === window.location.origin) {
+        return window.opener;
+      }
+    } catch {
+      // Cross-origin opener access is intentionally ignored.
+    }
+    return undefined;
   }
 }

@@ -1,17 +1,23 @@
-@if (isAuthenticated()) {
-  <score-navbar></score-navbar>
-}
+@if (isAuthenticated() && assistantPopoutMode) {
+  @if (aiAssistantAvailable()) {
+    <score-ai-chat-panel></score-ai-chat-panel>
+  }
+} @else {
+  @if (isAuthenticated()) {
+    <score-navbar></score-navbar>
+  }
 
-<div class="body">
-  <section class="container-fluid p-0">
-    <router-outlet></router-outlet>
-  </section>
-</div>
+  <div class="body">
+    <section class="container-fluid p-0">
+      <router-outlet></router-outlet>
+    </section>
+  </div>
 
-@if (isAuthenticated()) {
-  <score-footer></score-footer>
-}
+  @if (isAuthenticated()) {
+    <score-footer></score-footer>
+  }
 
-@if (isAuthenticated() && aiAssistantAvailable()) {
-  <score-ai-chat-panel></score-ai-chat-panel>
+  @if (isAuthenticated() && aiAssistantAvailable()) {
+    <score-ai-chat-panel></score-ai-chat-panel>
+  }
 }

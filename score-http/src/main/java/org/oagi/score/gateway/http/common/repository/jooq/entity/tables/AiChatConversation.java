@@ -35,6 +35,7 @@ import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory.AiChatMemoryPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMutationConfirmation.AiChatMutationConfirmationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatStep.AiChatStepPath;
@@ -81,6 +82,32 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
      * key to the APP_USER table identifying the owner of the conversation.
      */
     public final TableField<AiChatConversationRecord, ULong> APP_USER_ID = createField(DSL.name("app_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table identifying the owner of the conversation.");
+
+    /**
+     * The column
+     * <code>oagi.ai_chat_conversation.parent_ai_chat_conversation_id</code>.
+     * Self-reference to the root conversation that owns this child execution.
+     */
+    public final TableField<AiChatConversationRecord, ULong> PARENT_AI_CHAT_CONVERSATION_ID = createField(DSL.name("parent_ai_chat_conversation_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Self-reference to the root conversation that owns this child execution.");
+
+    /**
+     * The column <code>oagi.ai_chat_conversation.conversation_kind</code>.
+     * Expected conversation kinds are ROOT, SUBAGENT, and PARALLEL; other
+     * values are handled by the application.
+     */
+    public final TableField<AiChatConversationRecord, String> CONVERSATION_KIND = createField(DSL.name("conversation_kind"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("'ROOT'"), SQLDataType.VARCHAR)), this, "Expected conversation kinds are ROOT, SUBAGENT, and PARALLEL; other values are handled by the application.");
+
+    /**
+     * The column <code>oagi.ai_chat_conversation.agent_id</code>. Registered
+     * worker identifier for a child execution conversation.
+     */
+    public final TableField<AiChatConversationRecord, String> AGENT_ID = createField(DSL.name("agent_id"), SQLDataType.VARCHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Registered worker identifier for a child execution conversation.");
+
+    /**
+     * The column <code>oagi.ai_chat_conversation.parent_request_id</code>. Root
+     * request that created this child execution conversation.
+     */
+    public final TableField<AiChatConversationRecord, String> PARENT_REQUEST_ID = createField(DSL.name("parent_request_id"), SQLDataType.VARCHAR(128).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Root request that created this child execution conversation.");
 
     /**
      * The column <code>oagi.ai_chat_conversation.title</code>. The display
@@ -176,7 +203,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
 
     @Override
     public List<Index> getIndexes() {
-        return Arrays.asList(Indexes.AI_CHAT_CONVERSATION_AI_CHAT_CONVERSATION_OWNER_UPDATED_IDX);
+        return Arrays.asList(Indexes.AI_CHAT_CONVERSATION_AI_CHAT_CONVERSATION_OWNER_UPDATED_IDX, Indexes.AI_CHAT_CONVERSATION_AI_CHAT_CONVERSATION_PARENT_IDX, Indexes.AI_CHAT_CONVERSATION_AI_CHAT_CONVERSATION_PARENT_REQUEST_IDX);
     }
 
     @Override
@@ -196,7 +223,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
 
     @Override
     public List<ForeignKey<AiChatConversationRecord, ?>> getReferences() {
-        return Arrays.asList(Keys.AI_CHAT_CONVERSATION_APP_USER_FK);
+        return Arrays.asList(Keys.AI_CHAT_CONVERSATION_APP_USER_FK, Keys.AI_CHAT_CONVERSATION_PARENT_FK);
     }
 
     private transient AppUserPath _appUser;
@@ -209,6 +236,19 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
             _appUser = new AppUserPath(this, Keys.AI_CHAT_CONVERSATION_APP_USER_FK, null);
 
         return _appUser;
+    }
+
+    private transient AiChatConversationPath _aiChatConversation;
+
+    /**
+     * Get the implicit join path to the <code>oagi.ai_chat_conversation</code>
+     * table.
+     */
+    public AiChatConversationPath aiChatConversation() {
+        if (_aiChatConversation == null)
+            _aiChatConversation = new AiChatConversationPath(this, Keys.AI_CHAT_CONVERSATION_PARENT_FK, null);
+
+        return _aiChatConversation;
     }
 
     private transient AiChatMemoryPath _aiChatMemory;
