@@ -88,10 +88,10 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
     public final TableField<AiChatStepRecord, String> REQUEST_ID = createField(DSL.name("request_id"), SQLDataType.VARCHAR(128).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "The request identifier used to correlate steps produced by the same chat request.");
 
     /**
-     * The column <code>oagi.ai_chat_step.source</code>. The ATIF source of the
-     * step: system, user, or agent.
+     * The column <code>oagi.ai_chat_step.source</code>. Expected ATIF sources
+     * are system, user, and agent; other values are handled by the application.
      */
-    public final TableField<AiChatStepRecord, String> SOURCE = createField(DSL.name("source"), SQLDataType.VARCHAR(16).nullable(false), this, "The ATIF source of the step: system, user, or agent.");
+    public final TableField<AiChatStepRecord, String> SOURCE = createField(DSL.name("source"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("'system'"), SQLDataType.VARCHAR)), this, "Expected ATIF sources are system, user, and agent; other values are handled by the application.");
 
     /**
      * The column <code>oagi.ai_chat_step.message_kind</code>. The
@@ -100,10 +100,11 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
     public final TableField<AiChatStepRecord, String> MESSAGE_KIND = createField(DSL.name("message_kind"), SQLDataType.VARCHAR(32).nullable(false), this, "The application-specific kind of trajectory event represented by the step.");
 
     /**
-     * The column <code>oagi.ai_chat_step.visibility</code>. The presentation
-     * scope of the step: visible or debug.
+     * The column <code>oagi.ai_chat_step.visibility</code>. Expected
+     * presentation scopes are visible and debug; other values are handled by
+     * the application.
      */
-    public final TableField<AiChatStepRecord, String> VISIBILITY = createField(DSL.name("visibility"), SQLDataType.VARCHAR(16).nullable(false).defaultValue(DSL.field(DSL.raw("'visible'"), SQLDataType.VARCHAR)), this, "The presentation scope of the step: visible or debug.");
+    public final TableField<AiChatStepRecord, String> VISIBILITY = createField(DSL.name("visibility"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("'visible'"), SQLDataType.VARCHAR)), this, "Expected presentation scopes are visible and debug; other values are handled by the application.");
 
     /**
      * The column <code>oagi.ai_chat_step.message</code>. The textual message or
@@ -291,9 +292,6 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
     @Override
     public List<Check<AiChatStepRecord>> getChecks() {
         return Arrays.asList(
-            Internal.createCheck(this, DSL.name("ai_chat_step_settings_change_ck"), "`message_kind` <> 'settings_change' or `model_name` is not null and `reasoning_effort` is not null and `agent_runtime` is not null", true),
-            Internal.createCheck(this, DSL.name("ai_chat_step_source_ck"), "`source` in ('system','user','agent')", true),
-            Internal.createCheck(this, DSL.name("ai_chat_step_visibility_ck"), "`visibility` in ('visible','debug')", true),
             Internal.createCheck(this, DSL.name("extra_json"), "json_valid(`extra_json`)", true),
             Internal.createCheck(this, DSL.name("metrics_json"), "json_valid(`metrics_json`)", true),
             Internal.createCheck(this, DSL.name("observation_json"), "json_valid(`observation_json`)", true),

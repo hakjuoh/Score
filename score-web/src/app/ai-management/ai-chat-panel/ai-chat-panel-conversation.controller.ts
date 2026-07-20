@@ -41,7 +41,6 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
           onIdle?.();
           return;
         }
-        this.state.activePanelTab = 'chat';
         this.state.activeRequest = {
           requestId: status.requestId,
           conversationId: status.conversationId,
@@ -66,10 +65,13 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
     }
     const conversationId = this.sessionPersistence.readLastConversation();
     if (!conversationId) {
+      if (this.restoreChatScrollPending) this.restoreChatScrollPosition();
       return;
     }
 
-    this.state.prepareConversationRestore(conversationId);
+    this.state.prepareConversationRestore(
+      conversationId, this.state.activePanelTab, true
+    );
     this.lastConversationRestoreSubscription?.unsubscribe();
     this.lastConversationRestoreSubscription = this.api.getConversation(conversationId)
       .pipe(take(1)).subscribe({
@@ -82,29 +84,34 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
             [...(details.messages || [])].sort((left, right) => left.index - right.index));
           this.state.agentActivities = [];
           this.state.conversationId = details.conversationId;
-          if (details.modelName) this.state.selectedModelName = details.modelName;
-          if (details.reasoningEffort) this.state.selectedReasoningEffort = details.reasoningEffort;
-          if (details.runtime) {
-            this.state.selectRuntime(
-              this.settingsService.availableRuntime(this.state, details.runtime),
-              details.runtimeOptions || {}
-            );
-          }
+          this.state.restoreConversationSettings(details);
           if (details.contextUsage) this.state.setContextUsage(details.contextUsage);
-          this.state.activePanelTab = 'chat';
           this.state.restoringConversation = false;
           this.state.currentStatus = 'Ready';
           this.state.shouldFollowChatScroll = true;
           this.sessionPersistence.rememberLastConversation(details.conversationId);
-          this.scrollToBottom(true);
-          this.focusPrompt();
+          this.restoreChatScrollPosition();
+          if (this.state.activePanelTab === 'chat') this.focusPrompt();
         },
         error: error => {
           if (this.state.conversationId !== conversationId || this.activeRequestId) {
             return;
           }
+          const draft = {
+            prompt: this.state.prompt,
+            attachments: this.state.attachments,
+            activePanelTab: this.state.activePanelTab,
+            chatScrollTop: this.state.chatScrollTop,
+            historyScrollTop: this.state.historyScrollTop
+          };
           this.state.resetForNewChat();
+          this.state.prompt = draft.prompt;
+          this.state.attachments = draft.attachments;
+          this.state.activePanelTab = draft.activePanelTab;
+          this.state.chatScrollTop = draft.chatScrollTop;
+          this.state.historyScrollTop = draft.historyScrollTop;
           this.sessionPersistence.restoreSelection(this.state);
+          this.restoreChatScrollPosition();
           if (error instanceof HttpErrorResponse && (error.status === 403 || error.status === 404)) {
             this.sessionPersistence.clearLastConversation();
           }
@@ -181,17 +188,14 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
         && message.activities?.some(activity => activity.inProgress))?.activities || [];
     this.state.conversationId = details.conversationId;
     this.sessionPersistence.rememberLastConversation(details.conversationId);
-    if (details.modelName) this.state.selectedModelName = details.modelName;
-    if (details.reasoningEffort) this.state.selectedReasoningEffort = details.reasoningEffort;
-    if (details.runtime) {
-      this.state.selectRuntime(
-        this.settingsService.availableRuntime(this.state, details.runtime),
-        details.runtimeOptions || {}
-      );
-    }
+    this.state.restoreConversationSettings(details);
     this.state.currentStatus = this.isTerminalExecutionStatus(status.status)
       ? status.status : 'Request in progress';
-    this.scrollToBottom();
+    if (this.restoreChatScrollPending) {
+      this.restoreChatScrollPosition();
+    } else {
+      this.scrollToBottom();
+    }
   }
 
   protected finishRecoveredRequest(status: AiPublicExecutionRequestStatus): void {

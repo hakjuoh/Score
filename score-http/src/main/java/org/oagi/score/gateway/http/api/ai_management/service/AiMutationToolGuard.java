@@ -2,9 +2,11 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationAuthorization;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
+import org.oagi.score.gateway.http.api.ai_management.model.AiMutationPermissionMode;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
+import org.oagi.score.gateway.http.api.ai_management.model.AiApprovedExecution;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
@@ -174,12 +176,12 @@ public class AiMutationToolGuard {
         private final ToolCallback[] callbacks;
         private final Set<String> readOnlyToolNames;
         private final AtomicLong sequence = new AtomicLong();
-        private final CopyOnWriteArrayList<ApprovedExecution> completedMutations =
+        private final CopyOnWriteArrayList<AiApprovedExecution> completedMutations =
                 new CopyOnWriteArrayList<>();
         private volatile long lastMutationSequence = -1L;
         private volatile long lastReadSequence = -1L;
         private volatile boolean confirmationRequired;
-        private volatile ApprovedExecution approvedExecution;
+        private volatile AiApprovedExecution approvedExecution;
 
         private GuardedToolSession(ChatRequest request, ToolCallback[] callbacks,
                                    Set<String> readOnlyToolNames) {
@@ -197,7 +199,7 @@ public class AiMutationToolGuard {
             return callbacks;
         }
 
-        public Optional<ApprovedExecution> executeApproved(ToolCallbackProvider executableTools) {
+        public Optional<AiApprovedExecution> executeApproved(ToolCallbackProvider executableTools) {
             var supplied = request.mutationConfirmation();
             if (supplied == null || supplied.revised()
                     || !StringUtils.hasText(supplied.toolName())
@@ -217,7 +219,7 @@ public class AiMutationToolGuard {
             if (lastMutationSequence == mutationsBefore) {
                 return Optional.empty();
             }
-            ApprovedExecution execution = new ApprovedExecution(
+            AiApprovedExecution execution = new AiApprovedExecution(
                     supplied.toolName(), supplied.arguments(), result);
             approvedExecution = execution;
             return Optional.of(execution);
@@ -235,7 +237,7 @@ public class AiMutationToolGuard {
             return confirmationRequired;
         }
 
-        public List<ApprovedExecution> completedMutations() {
+        public List<AiApprovedExecution> completedMutations() {
             return List.copyOf(completedMutations);
         }
 
@@ -249,12 +251,12 @@ public class AiMutationToolGuard {
 
         private void mutationCompleted(String toolName, String input, String result) {
             lastMutationSequence = sequence.incrementAndGet();
-            approvedExecution = new ApprovedExecution(toolName, input, result);
+            approvedExecution = new AiApprovedExecution(toolName, input, result);
             completedMutations.add(approvedExecution);
         }
 
         private Optional<String> cachedResult(String toolName, String input) {
-            ApprovedExecution execution = approvedExecution;
+            AiApprovedExecution execution = approvedExecution;
             return execution != null && execution.toolName().equals(toolName)
                     && Objects.equals(confirmations.argumentsDigest(toolName, execution.arguments()),
                     confirmations.argumentsDigest(toolName, input))
@@ -262,5 +264,4 @@ public class AiMutationToolGuard {
         }
     }
 
-    public record ApprovedExecution(String toolName, String arguments, String result) {}
 }

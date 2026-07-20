@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.service;
+package org.oagi.score.gateway.http.api.ai_management.model;
 
 import org.springframework.util.StringUtils;
 

@@ -10,7 +10,11 @@ import {WebPageInfoService} from '../../basis/basis.service';
 import {ConfirmDialogService} from '../../common/confirm-dialog/confirm-dialog.service';
 import {
   AI_CHAT_LAST_CONVERSATION_STORAGE_KEY_PREFIX,
+  AI_CHAT_PANEL_DOCK_STORAGE_KEY_PREFIX,
+  AI_CHAT_PANEL_VISIBILITY_STORAGE_KEY_PREFIX,
   AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY,
+  AI_CHAT_WINDOW_MODE_STORAGE_KEY_PREFIX,
+  AI_CHAT_WORKSPACE_STORAGE_KEY_PREFIX,
   AiChatPanelComponent
 } from './ai-chat-panel.component';
 import {AiContextBudgetDialogComponent} from './ai-context-budget-dialog.component';
@@ -28,6 +32,7 @@ import {AiChatMessageTrackerService} from './domain/ai-chat-message-tracker.serv
 import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.service';
 import {AiChatSettingsService} from './domain/ai-chat-settings.service';
 import {AiChatTransportService} from './domain/ai-chat-transport.service';
+import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
 import {AiMutationInteractionService} from './domain/ai-mutation-interaction.service';
 import {
   AiCancellationResponse,
@@ -98,6 +103,16 @@ export let confirmDialog: {
   newConfig: ReturnType<typeof vi.fn>;
   open: ReturnType<typeof vi.fn>;
 };
+export let windowCoordinator: {
+  popoutMode: boolean;
+  connect: ReturnType<typeof vi.fn>;
+  openPopout: ReturnType<typeof vi.fn>;
+  focusPopout: ReturnType<typeof vi.fn>;
+  closePopoutForReattach: ReturnType<typeof vi.fn>;
+  requestReattach: ReturnType<typeof vi.fn>;
+  notifyAssistantClosed: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn>;
+};
 
 const defaultTestUsername = 'test_eu';
 let currentUsername = defaultTestUsername;
@@ -107,6 +122,10 @@ export function setupAiChatPanelSpec(): void {
   currentUsername = defaultTestUsername;
   localStorage.removeItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY);
   localStorage.removeItem(lastConversationStorageKey());
+  localStorage.removeItem(panelDockStorageKey());
+  localStorage.removeItem(panelVisibilityStorageKey());
+  localStorage.removeItem(windowModeStorageKey());
+  localStorage.removeItem(workspaceStorageKey());
   api = {
     sendChat: vi.fn(() => NEVER),
     cancelRequest: vi.fn(() => NEVER),
@@ -161,6 +180,16 @@ export function setupAiChatPanelSpec(): void {
     cancelReconnect: vi.fn()
   };
   navigation = {handleDataChanged: vi.fn()};
+  windowCoordinator = {
+    popoutMode: false,
+    connect: vi.fn(),
+    openPopout: vi.fn(() => true),
+    focusPopout: vi.fn(),
+    closePopoutForReattach: vi.fn(),
+    requestReattach: vi.fn(),
+    notifyAssistantClosed: vi.fn(),
+    destroy: vi.fn()
+  };
   attachmentService = {
     userMessageContent: vi.fn((prompt: string) => prompt),
     attachmentMediaType: vi.fn(() => 'text/plain'),
@@ -187,13 +216,16 @@ export function setupAiChatPanelSpec(): void {
       }},
       {provide: AiChatNavigationService, useValue: navigation},
       {provide: AiChatPanelLayoutService, useValue: {
-        clearMainPanelInset: vi.fn(), updateMainPanelInset: vi.fn()
+        clearMainPanelInset: vi.fn(), updateMainPanelInset: vi.fn(),
+        clamp: (value: number, minimum: number, maximum: number) =>
+          Math.min(maximum, Math.max(minimum, value))
       }},
       AiChatMessageTrackerService,
       AiMutationInteractionService,
       AiChatPanelViewportService,
       AiChatSettingsService,
       {provide: AiChatTransportService, useValue: transport},
+      {provide: AiChatWindowCoordinatorService, useValue: windowCoordinator},
       {provide: DomSanitizer, useValue: {bypassSecurityTrustHtml: (value: string) => value}},
       {provide: WebPageInfoService, useValue: {brand: undefined}},
       {provide: AuthService, useValue: {getUserToken: () => ({username: currentUsername})}},
@@ -224,6 +256,14 @@ export function teardownAiChatPanelSpec(): void {
   destroyComponent();
   localStorage.removeItem(lastConversationStorageKey());
   localStorage.removeItem(lastConversationStorageKey(defaultTestUsername));
+  localStorage.removeItem(panelDockStorageKey());
+  localStorage.removeItem(panelDockStorageKey(defaultTestUsername));
+  localStorage.removeItem(panelVisibilityStorageKey());
+  localStorage.removeItem(panelVisibilityStorageKey(defaultTestUsername));
+  localStorage.removeItem(windowModeStorageKey());
+  localStorage.removeItem(windowModeStorageKey(defaultTestUsername));
+  localStorage.removeItem(workspaceStorageKey());
+  localStorage.removeItem(workspaceStorageKey(defaultTestUsername));
   vi.useRealTimers();
 }
 
@@ -313,6 +353,22 @@ export function storageText(storage: Storage): string {
 
 export function lastConversationStorageKey(username = currentUsername): string {
   return `${AI_CHAT_LAST_CONVERSATION_STORAGE_KEY_PREFIX}:${encodeURIComponent(username)}`;
+}
+
+export function panelVisibilityStorageKey(username = currentUsername): string {
+  return `${AI_CHAT_PANEL_VISIBILITY_STORAGE_KEY_PREFIX}:${encodeURIComponent(username)}`;
+}
+
+export function panelDockStorageKey(username = currentUsername): string {
+  return `${AI_CHAT_PANEL_DOCK_STORAGE_KEY_PREFIX}:${encodeURIComponent(username)}`;
+}
+
+export function windowModeStorageKey(username = currentUsername): string {
+  return `${AI_CHAT_WINDOW_MODE_STORAGE_KEY_PREFIX}:${encodeURIComponent(username)}`;
+}
+
+export function workspaceStorageKey(username = currentUsername): string {
+  return `${AI_CHAT_WORKSPACE_STORAGE_KEY_PREFIX}:${encodeURIComponent(username)}`;
 }
 
 export function consumedDecisionResponse() {

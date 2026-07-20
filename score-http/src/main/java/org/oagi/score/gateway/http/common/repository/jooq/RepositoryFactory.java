@@ -15,6 +15,17 @@ import org.oagi.score.gateway.http.api.application_management.repository.Configu
 import org.oagi.score.gateway.http.api.application_management.repository.ConfigurationQueryRepository;
 import org.oagi.score.gateway.http.api.application_management.repository.jooq.JooqConfigurationCommandRepository;
 import org.oagi.score.gateway.http.api.application_management.repository.jooq.JooqConfigurationQueryRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMaintenanceRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMemoryStorageRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationConfirmationCommandRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationConfirmationQueryRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChatConversationRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChatMaintenanceRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChatMemoryStorageRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiMutationConfirmationCommandRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiMutationConfirmationQueryRepository;
 import org.oagi.score.gateway.http.api.bie_management.repository.*;
 import org.oagi.score.gateway.http.api.bie_management.repository.jooq.*;
 import org.oagi.score.gateway.http.api.business_term_management.repository.BusinessTermCommandRepository;
@@ -93,6 +104,32 @@ public class RepositoryFactory {
 
     public RepositoryFactory(@Autowired DSLContext dslContext) {
         this.dslContext = dslContext;
+    }
+
+    public AiChatConversationRepository aiChatConversationRepository(
+            ScoreUser requester, AiChatJsonSerializer serializer) {
+        return new JooqAiChatConversationRepository(
+                dslContext, requester, this, serializer);
+    }
+
+    public AiChatMemoryStorageRepository aiChatMemoryStorageRepository(
+            ScoreUser requester, AiChatJsonSerializer serializer) {
+        return new JooqAiChatMemoryStorageRepository(
+                dslContext, requester, this, serializer);
+    }
+
+    public AiChatMaintenanceRepository aiChatMaintenanceRepository(ScoreUser requester) {
+        return new JooqAiChatMaintenanceRepository(dslContext, requester, this);
+    }
+
+    public AiMutationConfirmationQueryRepository aiMutationConfirmationQueryRepository(
+            ScoreUser requester) {
+        return new JooqAiMutationConfirmationQueryRepository(dslContext, requester, this);
+    }
+
+    public AiMutationConfirmationCommandRepository aiMutationConfirmationCommandRepository(
+            ScoreUser requester) {
+        return new JooqAiMutationConfirmationCommandRepository(dslContext, requester, this);
     }
 
     public ScoreUserQueryRepository scoreUserQueryRepository() {

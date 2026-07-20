@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDefinition;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
 import org.springframework.core.io.DefaultResourceLoader;
 

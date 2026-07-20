@@ -12,6 +12,8 @@ import org.oagi.score.gateway.http.api.ai_management.model.CreateAiMutationConfi
 import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationConfirmationCommandRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationConfirmationQueryRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
+import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * Coordinates server-authoritative, one-time approval for mutation tool invocations.
@@ -44,24 +47,39 @@ public class AiMutationConfirmationService {
     private static final int MAX_ARGUMENT_SUMMARY_CHARS = 2000;
     private static final int MAX_REVISION_PROMPT_CHARS = 32_768;
 
-    private final AiMutationConfirmationQueryRepository queryRepository;
-    private final AiMutationConfirmationCommandRepository commandRepository;
+    private final Function<ScoreUser, AiMutationConfirmationQueryRepository> queryRepositories;
+    private final Function<ScoreUser, AiMutationConfirmationCommandRepository> commandRepositories;
     private final ObjectMapper objectMapper;
     private final SecureRandom secureRandom = new SecureRandom();
 
     /**
      * Creates the mutation-confirmation coordinator.
      *
-     * @param queryRepository owner-scoped confirmation queries
-     * @param commandRepository atomic confirmation lifecycle commands
+     * @param repositoryFactory factory that binds repositories to the signed-in requester
      * @param objectMapper mapper used to canonicalize tool arguments
      */
+    @Autowired
     public AiMutationConfirmationService(
+            RepositoryFactory repositoryFactory,
+            ObjectMapper objectMapper) {
+        this(repositoryFactory::aiMutationConfirmationQueryRepository,
+                repositoryFactory::aiMutationConfirmationCommandRepository,
+                objectMapper);
+    }
+
+    AiMutationConfirmationService(
             AiMutationConfirmationQueryRepository queryRepository,
             AiMutationConfirmationCommandRepository commandRepository,
             ObjectMapper objectMapper) {
-        this.queryRepository = queryRepository;
-        this.commandRepository = commandRepository;
+        this(ignored -> queryRepository, ignored -> commandRepository, objectMapper);
+    }
+
+    AiMutationConfirmationService(
+            Function<ScoreUser, AiMutationConfirmationQueryRepository> queryRepositories,
+            Function<ScoreUser, AiMutationConfirmationCommandRepository> commandRepositories,
+            ObjectMapper objectMapper) {
+        this.queryRepositories = queryRepositories;
+        this.commandRepositories = commandRepositories;
         this.objectMapper = objectMapper;
     }
 
@@ -72,6 +90,8 @@ public class AiMutationConfirmationService {
     public AiMutationAuthorization authorize(
             ScoreUser requester, String conversationId, String requestId,
             MutationConfirmation supplied, String toolName, String input) {
+        AiMutationConfirmationQueryRepository queryRepository = queryRepository(requester);
+        AiMutationConfirmationCommandRepository commandRepository = commandRepository(requester);
         String actualArgumentsDigest = argumentsDigest(toolName, input);
         String suppliedDigest = supplied != null && supplied.revised()
                 ? revisionDigest(toolName, supplied.revisionPrompt())
@@ -79,11 +99,12 @@ public class AiMutationConfirmationService {
         if (supplied != null && StringUtils.hasText(supplied.confirmationRequestId())
                 && StringUtils.hasText(supplied.confirmationGrant())
                 && (!supplied.revised() || Objects.equals(supplied.toolName(), toolName))
-                && consume(requester, conversationId, supplied, toolName, suppliedDigest)) {
+                && consume(queryRepository, commandRepository, conversationId,
+                supplied, toolName, suppliedDigest)) {
             return AiMutationAuthorization.permitted();
         }
-        return AiMutationAuthorization.required(issue(requester, conversationId, requestId, toolName,
-                actualArgumentsDigest, input));
+        return AiMutationAuthorization.required(issue(queryRepository, commandRepository,
+                conversationId, requestId, toolName, actualArgumentsDigest, input));
     }
 
     /**
@@ -103,13 +124,15 @@ public class AiMutationConfirmationService {
     public AiMutationDecision decide(
             ScoreUser requester, String conversationId, String confirmationRequestId,
             String requestedDecision, String revisionPrompt) {
+        AiMutationConfirmationQueryRepository queryRepository = queryRepository(requester);
+        AiMutationConfirmationCommandRepository commandRepository = commandRepository(requester);
         String decision = StringUtils.hasText(requestedDecision)
                 ? requestedDecision.strip().toUpperCase() : "";
         if (!"APPROVE".equals(decision) && !"DENY".equals(decision)) {
             throw new IllegalArgumentException("Mutation confirmation decision must be APPROVE or DENY.");
         }
         AiMutationConfirmationState row = ownedForUpdate(
-                requester, conversationId, confirmationRequestId);
+                queryRepository, conversationId, confirmationRequestId);
         Instant now = Instant.now();
         if (("REQUESTED".equals(row.status()) || "APPROVED".equals(row.status()))
                 && !row.expiresAt().isAfter(now)) {
@@ -152,15 +175,18 @@ public class AiMutationConfirmationService {
         return new AiMutationDecision(response(row, "DENIED", null), HttpStatus.OK);
     }
 
-    private boolean consume(ScoreUser requester, String conversationId, MutationConfirmation supplied,
-                            String toolName, String argumentsDigest) {
+    private boolean consume(
+            AiMutationConfirmationQueryRepository queryRepository,
+            AiMutationConfirmationCommandRepository commandRepository,
+            String conversationId, MutationConfirmation supplied,
+            String toolName, String argumentsDigest) {
         /*
          * request_id identifies the original blocked turn. The approved follow-up
          * intentionally has a fresh request ID, so redemption is bound instead to
          * owner + conversation + tool + canonical arguments + one-time grant.
          */
         AiMutationConfirmationState row = queryRepository.findOwnedForUpdate(
-                        requester, conversationId, supplied.confirmationRequestId())
+                        conversationId, supplied.confirmationRequestId())
                 .orElse(null);
         if (row == null) {
             return false;
@@ -179,11 +205,13 @@ public class AiMutationConfirmationService {
     }
 
     private AiMutationConfirmationNotice issue(
-            ScoreUser requester, String conversationId, String requestId,
+            AiMutationConfirmationQueryRepository queryRepository,
+            AiMutationConfirmationCommandRepository commandRepository,
+            String conversationId, String requestId,
             String toolName, String argumentsDigest, String input) {
         Instant now = Instant.now();
         AiMutationConfirmationState existing = queryRepository.findReusableForUpdate(
-                        requester, conversationId, requestId, toolName, argumentsDigest, now)
+                        conversationId, requestId, toolName, argumentsDigest, now)
                 .orElse(null);
         if (existing != null) {
             return new AiMutationConfirmationNotice(
@@ -192,7 +220,7 @@ public class AiMutationConfirmationService {
         }
         String guid = UUID.randomUUID().toString();
         Instant expiresAt = now.plus(CONFIRMATION_TTL);
-        boolean inserted = commandRepository.create(requester, conversationId,
+        boolean inserted = commandRepository.create(conversationId,
                 new CreateAiMutationConfirmationArguments(
                         guid, requestId, toolName, argumentsDigest, expiresAt, now));
         if (!inserted) {
@@ -203,10 +231,23 @@ public class AiMutationConfirmationService {
     }
 
     private AiMutationConfirmationState ownedForUpdate(
-            ScoreUser requester, String conversationId, String confirmationRequestId) {
-        return queryRepository.findOwnedForUpdate(requester, conversationId, confirmationRequestId)
+            AiMutationConfirmationQueryRepository queryRepository,
+            String conversationId, String confirmationRequestId) {
+        return queryRepository.findOwnedForUpdate(conversationId, confirmationRequestId)
                 .orElseThrow(() -> new AccessDeniedException(
                         "Mutation confirmation does not exist or is not owned by the signed-in user."));
+    }
+
+    private AiMutationConfirmationQueryRepository queryRepository(ScoreUser requester) {
+        ScoreUser requiredRequester = Objects.requireNonNull(requester, "requester");
+        return Objects.requireNonNull(
+                queryRepositories.apply(requiredRequester), "queryRepository");
+    }
+
+    private AiMutationConfirmationCommandRepository commandRepository(ScoreUser requester) {
+        ScoreUser requiredRequester = Objects.requireNonNull(requester, "requester");
+        return Objects.requireNonNull(
+                commandRepositories.apply(requiredRequester), "commandRepository");
     }
 
     private AiMutationConfirmationDecisionResponse response(

@@ -2,6 +2,9 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDefinition;
+import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDescriptor;
+import org.oagi.score.gateway.http.api.ai_management.model.AiAgentFile;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -30,8 +33,8 @@ public final class AiAgentCatalog {
         try {
             Map<String, AiAgentDefinition> loaded = new LinkedHashMap<>();
             for (Resource resource : resources.getResources(AGENTS)) {
-                AgentFile agentFile = read(resource);
-                Descriptor descriptor = agentFile.descriptor();
+                AiAgentFile agentFile = read(resource);
+                AiAgentDescriptor descriptor = agentFile.descriptor();
                 validate(descriptor);
                 String id = descriptor.id().strip().toLowerCase(Locale.ROOT);
                 AiAgentDefinition previous = loaded.put(id, new AiAgentDefinition(
@@ -67,7 +70,7 @@ public final class AiAgentCatalog {
                 .collect(java.util.stream.Collectors.joining("\n"));
     }
 
-    private AgentFile read(Resource resource) throws IOException {
+    private AiAgentFile read(Resource resource) throws IOException {
         String markdown;
         try (var input = resource.getInputStream()) {
             markdown = new String(input.readAllBytes(), StandardCharsets.UTF_8)
@@ -79,18 +82,18 @@ public final class AiAgentCatalog {
         }
         int end = markdown.indexOf("\n---\n", 4);
         if (end < 0) throw invalid(resource, "missing closing YAML frontmatter delimiter");
-        Descriptor descriptor;
+        AiAgentDescriptor descriptor;
         try {
-            descriptor = YAML.readValue(markdown.substring(4, end), Descriptor.class);
+            descriptor = YAML.readValue(markdown.substring(4, end), AiAgentDescriptor.class);
         } catch (IOException failure) {
             throw invalid(resource, "invalid YAML frontmatter", failure);
         }
         String prompt = markdown.substring(end + 5).strip();
         if (!StringUtils.hasText(prompt)) throw invalid(resource, "empty prompt body");
-        return new AgentFile(descriptor, prompt);
+        return new AiAgentFile(descriptor, prompt);
     }
 
-    private void validate(Descriptor descriptor) {
+    private void validate(AiAgentDescriptor descriptor) {
         if (descriptor == null || !StringUtils.hasText(descriptor.id())
                 || !descriptor.id().matches("[a-z0-9][a-z0-9-]{1,63}")
                 || !StringUtils.hasText(descriptor.name())
@@ -110,7 +113,4 @@ public final class AiAgentCatalog {
         return cause == null ? new IllegalStateException(message) : new IllegalStateException(message, cause);
     }
 
-    private record Descriptor(String id, String name, String description, String toolPolicy) {}
-
-    private record AgentFile(Descriptor descriptor, String prompt) {}
 }

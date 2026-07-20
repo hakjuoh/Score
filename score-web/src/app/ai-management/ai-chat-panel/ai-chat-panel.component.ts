@@ -1,5 +1,6 @@
 import {
   Component,
+  DoCheck,
   ElementRef,
   HostListener,
   OnDestroy,
@@ -15,10 +16,15 @@ import {AiChatMessageTrackerService} from './domain/ai-chat-message-tracker.serv
 import {AiMutationInteractionService} from './domain/ai-mutation-interaction.service';
 import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.service';
 import {AiChatSettingsService} from './domain/ai-chat-settings.service';
+import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
 
 export {
   AI_CHAT_LAST_CONVERSATION_STORAGE_KEY_PREFIX,
-  AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY
+  AI_CHAT_PANEL_DOCK_STORAGE_KEY_PREFIX,
+  AI_CHAT_PANEL_VISIBILITY_STORAGE_KEY_PREFIX,
+  AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY,
+  AI_CHAT_WINDOW_MODE_STORAGE_KEY_PREFIX,
+  AI_CHAT_WORKSPACE_STORAGE_KEY_PREFIX
 } from './domain/ai-chat-session-persistence.service';
 
 @Component({
@@ -39,11 +45,12 @@ export {
     AiChatMessageTrackerService,
     AiMutationInteractionService,
     AiChatPanelViewportService,
-    AiChatSettingsService
+    AiChatSettingsService,
+    AiChatWindowCoordinatorService
   ]
 })
 export class AiChatPanelComponent extends AiChatPanelLifecycleController
-  implements OnDestroy, OnInit {
+  implements DoCheck, OnDestroy, OnInit {
 
   @ViewChild(AiChatComposerComponent) override composer?: AiChatComposerComponent;
   @ViewChild('chatTerminalPane') override chatTerminalPane?: ElementRef<HTMLDivElement>;
@@ -56,5 +63,9 @@ export class AiChatPanelComponent extends AiChatPanelLifecycleController
   @HostListener('document:mouseup')
   override stopResize(): void {
     super.stopResize();
+  }
+
+  ngDoCheck(): void {
+    this.persistWorkspaceIfChanged();
   }
 }

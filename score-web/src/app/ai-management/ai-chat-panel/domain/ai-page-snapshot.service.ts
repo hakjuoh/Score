@@ -12,15 +12,19 @@ export class AiPageSnapshotService {
   private routeRegistryContext = inject(AiRouteRegistryContextService);
 
   currentPageContext(route?: AiResourceRoute): string {
-    const mainPanel = document.querySelector('div.body') as HTMLElement | null;
-    const scope = mainPanel || document.body;
+    const sourceWindow = this.contextSourceWindow();
+    const sourceDocument = sourceWindow.document;
+    const mainPanel = sourceDocument.querySelector('div.body') as HTMLElement | null;
+    const scope = mainPanel || sourceDocument.body;
     const headings = this.visibleTexts(scope.querySelectorAll('h1, h2, h3, h4, .title, .page-title, .mat-mdc-card-title'), 8);
     const actions = this.visibleTexts(scope.querySelectorAll('button, a[routerlink], a[href], [role="button"]'), 24, true);
     const labels = this.visibleTexts(scope.querySelectorAll('label, mat-label, .mat-mdc-form-field-label, .mat-mdc-floating-label'), 16);
 
     return [
-      `URL path: ${this.router.url || window.location.pathname}`,
-      `Document title: ${document.title || 'connectCenter'}`,
+      `URL path: ${sourceWindow === window
+        ? this.router.url || window.location.pathname
+        : sourceWindow.location.pathname + sourceWindow.location.search + sourceWindow.location.hash}`,
+      `Document title: ${sourceDocument.title || 'connectCenter'}`,
       route ? `Current resource: ${route.label}` : undefined,
       route ? `List URL: ${route.listPath}` : undefined,
       route?.detailPattern ? `Detail URL pattern: ${route.detailPattern}` : undefined,
@@ -63,5 +67,18 @@ export class AiPageSnapshotService {
       return '';
     }
     return normalized;
+  }
+
+  private contextSourceWindow(): Window {
+    try {
+      if (new URLSearchParams(window.location.search).get('aiAssistantPopout') === '1'
+        && window.opener && !window.opener.closed
+        && window.opener.location.origin === window.location.origin) {
+        return window.opener;
+      }
+    } catch {
+      // Cross-origin opener access is intentionally ignored.
+    }
+    return window;
   }
 }

@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.model.AiSharedRequestState;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 

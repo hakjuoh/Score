@@ -5,6 +5,7 @@ import {
   AiActiveRequestIdentity,
   AiCancellationUiState,
   AiChatConversationSummary,
+  AiChatConversationDetails,
   AiChatDock,
   AiChatModelInfo,
   AiChatMessage,
@@ -24,6 +25,9 @@ export class AiChatPanelState {
   dock: AiChatDock = 'right';
   sideSize = 420;
   horizontalSize = 320;
+  chatScrollTop = 0;
+  historyScrollTop = 0;
+  popoutActive = false;
   prompt = '';
   attachments: AiChatAttachment[] = [];
   dragActive = false;
@@ -70,6 +74,8 @@ export class AiChatPanelState {
     this.cancellation = this.idleCancellation();
     this.prompt = '';
     this.attachments = [];
+    this.chatScrollTop = 0;
+    this.historyScrollTop = 0;
     this.conversationId = undefined;
     this.selectedModelName = this.defaultModelName;
     this.selectedReasoningEffort = this.defaultModel()?.defaultReasoningEffort || '';
@@ -139,6 +145,43 @@ export class AiChatPanelState {
     this.selectedRuntimeOptions = this.runtimeOptionsFor(runtime, options);
   }
 
+  restoreConversationSettings(settings: Pick<AiChatConversationDetails,
+    'modelName' | 'reasoningEffort' | 'runtime' | 'runtimeOptions' | 'permissionMode'>): void {
+    const previousModelName = this.selectedModelName;
+    const model = settings.modelName
+      ? this.availableModels.find(candidate => candidate.name === settings.modelName)
+      : this.selectedModel();
+    if (!model && settings.modelName) {
+      this.selectedModelName = settings.modelName;
+      if (settings.reasoningEffort) this.selectedReasoningEffort = settings.reasoningEffort;
+      if (settings.runtime) {
+        this.selectedRuntime = settings.runtime;
+        this.selectedRuntimeOptions = {...(settings.runtimeOptions || {})};
+      }
+    } else if (model) {
+      this.selectedModelName = model.name;
+      const modelChanged = previousModelName !== model.name;
+      if (settings.reasoningEffort || modelChanged) {
+        this.selectedReasoningEffort = model.reasoningEfforts
+          .some(effort => effort.name === settings.reasoningEffort)
+          ? settings.reasoningEffort! : model.defaultReasoningEffort;
+      }
+      const runtime = settings.runtime
+        ? model.runtimes.some(candidate => candidate.name === settings.runtime)
+          ? settings.runtime : model.defaultRuntime || 'default'
+        : modelChanged ? model.defaultRuntime || 'default' : this.selectedRuntime;
+      this.selectRuntime(runtime, this.runtimeOptionsFor(
+        runtime, settings.runtimeOptions || (modelChanged ? {} : this.selectedRuntimeOptions), model
+      ));
+    }
+    if (settings.permissionMode === 'ask' || settings.permissionMode === 'auto'
+      || settings.permissionMode === 'full_access') {
+      this.permissionMode = settings.permissionMode;
+    }
+    this.permissionDraft = this.permissionMode;
+    this.resetContextUsageForSelectedModel();
+  }
+
   draftRuntime(runtime: string, options?: AiRuntimeOptions): void {
     this.runtimeDraft = runtime;
     this.runtimeDraftOptions = this.runtimeOptionsFor(
@@ -205,9 +248,13 @@ export class AiChatPanelState {
     return this.availableModels.find(model => model.name === this.defaultModelName);
   }
 
-  prepareConversationRestore(conversationId: string): void {
-    this.prompt = '';
-    this.attachments = [];
+  prepareConversationRestore(conversationId: string, activePanelTab: AiChatPanelTab = 'chat',
+                             preserveDraft = false): void {
+    if (!preserveDraft) {
+      this.prompt = '';
+      this.attachments = [];
+      this.chatScrollTop = 0;
+    }
     this.conversationId = conversationId;
     this.modelSettingsOpen = false;
     this.modelDraftName = '';
@@ -222,7 +269,7 @@ export class AiChatPanelState {
     this.elicitationBusy = false;
     this.modelChangePending = false;
     this.contextUsage = undefined;
-    this.activePanelTab = 'chat';
+    this.activePanelTab = activePanelTab;
     this.currentStatus = 'Restoring';
     this.restoringConversation = true;
     this.shouldFollowChatScroll = false;

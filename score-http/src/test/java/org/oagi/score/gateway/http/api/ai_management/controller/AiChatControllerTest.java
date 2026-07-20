@@ -6,7 +6,7 @@ import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
-import org.oagi.score.gateway.http.api.ai_management.service.AiExecutionEvent;
+import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationConfirmationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.service.ChatService;
