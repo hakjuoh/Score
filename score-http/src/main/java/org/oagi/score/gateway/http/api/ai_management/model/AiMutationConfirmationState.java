@@ -1,6 +1,8 @@
 package org.oagi.score.gateway.http.api.ai_management.model;
 
 import java.time.Instant;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Persisted lifecycle state of a one-time mutation confirmation.
@@ -31,6 +33,19 @@ public record AiMutationConfirmationState(
         Instant expiredAt,
         Instant consumedAt,
         String grantDigest) {
+
+    private static final Set<String> STATUSES =
+            Set.of("REQUESTED", "APPROVED", "DENIED", "CONSUMED", "EXPIRED");
+
+    public AiMutationConfirmationState {
+        status = normalizeStatus(status);
+    }
+
+    public static String normalizeStatus(String value) {
+        if (value == null || value.isBlank()) return "EXPIRED";
+        String normalized = value.strip().toUpperCase(Locale.ROOT);
+        return STATUSES.contains(normalized) ? normalized : "EXPIRED";
+    }
 
     /**
      * Returns the approved projection of this state.

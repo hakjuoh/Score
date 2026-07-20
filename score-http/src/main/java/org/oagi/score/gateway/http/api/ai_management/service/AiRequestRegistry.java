@@ -2,6 +2,9 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancellationResponse;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiPublicExecutionRequestStatus;
+import org.oagi.score.gateway.http.api.ai_management.model.AiCancellationOutcome;
+import org.oagi.score.gateway.http.api.ai_management.model.AiRequestStopSignal;
+import org.oagi.score.gateway.http.api.ai_management.model.AiSharedRequestState;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -411,22 +414,22 @@ public class AiRequestRegistry {
                                          String conversationId, Long expectedGeneration,
                                          ScoreUser requester) {
         String appUserId = requester.userId().value().toString();
-        CancelOutcome outcome = stateStore.withRequestLock(requestId, storage -> {
+        AiCancellationOutcome outcome = stateStore.withRequestLock(requestId, storage -> {
             AiSharedRequestState state = ownedState(storage, requestId, appUserId);
             state = reconcileOverdue(storage, state, Instant.now());
             if (conversationId != null || expectedGeneration != null) {
                 if (!java.util.Objects.equals(state.conversationId(), conversationId)
                         || expectedGeneration == null || expectedGeneration != state.generation()) {
-                    return new CancelOutcome(cancellationResponse(state, cancellationRequestId,
+                    return new AiCancellationOutcome(cancellationResponse(state, cancellationRequestId,
                             "STALE_GENERATION", false), false);
                 }
             }
             if (state.terminal()) {
-                return new CancelOutcome(cancellationResponse(state, cancellationRequestId,
+                return new AiCancellationOutcome(cancellationResponse(state, cancellationRequestId,
                         "ALREADY_TERMINAL", false), false);
             }
             if ("CANCELLING".equals(state.status())) {
-                return new CancelOutcome(cancellationResponse(state, cancellationRequestId,
+                return new AiCancellationOutcome(cancellationResponse(state, cancellationRequestId,
                         "ALREADY_CANCELLING", true), true);
             }
             Instant now = Instant.now();
@@ -435,11 +438,11 @@ public class AiRequestRegistry {
             if ("REGISTERED".equals(state.status())) {
                 cancelling = cancelling.terminal("CANCELLED", null, now);
                 storage.put(cancelling);
-                return new CancelOutcome(cancellationResponse(cancelling, cancellationRequestId,
+                return new AiCancellationOutcome(cancellationResponse(cancelling, cancellationRequestId,
                         "CANCELLED", true), true);
             }
             storage.put(cancelling);
-            return new CancelOutcome(cancellationResponse(cancelling, cancellationRequestId,
+            return new AiCancellationOutcome(cancellationResponse(cancelling, cancellationRequestId,
                     "ACKNOWLEDGED", true), true);
         });
         if (outcome.signalOwner()) {
@@ -478,7 +481,7 @@ public class AiRequestRegistry {
         return sharedState(entry).map(AiSharedRequestState::cancellationRequestId).orElse(null);
     }
 
-    private void stopRequested(AiRequestStateStore.StopSignal signal) {
+    private void stopRequested(AiRequestStopSignal signal) {
         Entry entry = localRequests.get(signal.requestId());
         if (entry == null || entry.generation != signal.generation()) {
             return;
@@ -622,8 +625,6 @@ public class AiRequestRegistry {
                 state.cancellationRequestedAt(), state.cancellationAcknowledgedAt(),
                 state.deadline(), state.terminalAt());
     }
-
-    private record CancelOutcome(AiCancellationResponse response, boolean signalOwner) {}
 
     public static final class Entry {
         private final String requestId;

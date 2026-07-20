@@ -4,11 +4,19 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiContextUsageInfo;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
+import org.oagi.score.gateway.http.api.ai_management.model.AiBoundedToolOutput;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
-import org.oagi.score.gateway.http.api.ai_management.repository.ScoreChatMemoryRepository;
+import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
+import org.oagi.score.gateway.http.api.ai_management.model.AiElicitationNotice;
+import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
+import org.oagi.score.gateway.http.api.ai_management.model.AiMetricsSnapshot;
+import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
+import org.oagi.score.gateway.http.api.ai_management.model.AiObservationAccumulator;
+import org.oagi.score.gateway.http.api.ai_management.model.AiPendingTool;
+import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +60,7 @@ public final class AiTrajectoryRecorder {
     private static final String SAFE_TOOL_FAILURE_MESSAGE =
             "Tool execution failed. Details were recorded in the server log.";
 
-    private final ScoreChatMemoryRepository repository;
+    private final AiChatConversationRepository repository;
     private final ObjectMapper objectMapper;
     private final ScoreUser requester;
     private final String conversationId;
@@ -62,30 +70,31 @@ public final class AiTrajectoryRecorder {
     private final String runtime;
     private final Map<String, Object> runtimeOptions;
     private final Consumer<AiExecutionEvent> events;
-    private final AiContextBudgetService.Budget contextBudget;
+    private final AiContextBudget contextBudget;
     private final AtomicLong estimatedInputFloor;
     private final AtomicLong eventSequence;
     private final AtomicLong toolSequence;
     private final Map<String, Object> traceContext;
     private final boolean subagentScope;
+    private final AiChatConversationKind conversationKind;
     private final AtomicLong ownPromptTokens = new AtomicLong();
     private final AtomicLong ownCompletionTokens = new AtomicLong();
     private final AtomicLong ownModelCalls = new AtomicLong();
-    private final Map<String, ConcurrentLinkedQueue<PendingTool>> pendingTools = new ConcurrentHashMap<>();
+    private final Map<String, ConcurrentLinkedQueue<AiPendingTool>> pendingTools = new ConcurrentHashMap<>();
     private final Set<String> completedToolCallIds = ConcurrentHashMap.newKeySet();
     private final AtomicLong completedToolCalls = new AtomicLong();
     private final AtomicLong completedDomainToolCalls = new AtomicLong();
     private volatile Set<String> readOnlyToolNames = Set.of();
     private volatile boolean sealed;
 
-    public AiTrajectoryRecorder(ScoreChatMemoryRepository repository, ObjectMapper objectMapper,
+    public AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
                                 ScoreUser requester, String conversationId, String requestId,
                                 Consumer<AiExecutionEvent> events) {
         this(repository, objectMapper, requester, conversationId, requestId,
                 null, null, null, Map.of(), events, null, 0L);
     }
 
-    public AiTrajectoryRecorder(ScoreChatMemoryRepository repository, ObjectMapper objectMapper,
+    public AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
                                 ScoreUser requester, String conversationId, String requestId,
                                 String modelName, String reasoningEffort, String runtime,
                                 Map<String, Object> runtimeOptions,
@@ -94,27 +103,29 @@ public final class AiTrajectoryRecorder {
                 reasoningEffort, runtime, runtimeOptions, events, null, 0L);
     }
 
-    public AiTrajectoryRecorder(ScoreChatMemoryRepository repository, ObjectMapper objectMapper,
+    public AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
                                 ScoreUser requester, String conversationId, String requestId,
                                 String modelName, String reasoningEffort, String runtime,
                                 Map<String, Object> runtimeOptions,
                                 Consumer<AiExecutionEvent> events,
-                                AiContextBudgetService.Budget contextBudget,
+                                AiContextBudget contextBudget,
                                 long estimatedInputFloor) {
         this(repository, objectMapper, requester, conversationId, requestId, modelName,
                 reasoningEffort, runtime, runtimeOptions, events, contextBudget,
-                estimatedInputFloor, new AtomicLong(), new AtomicLong(), Map.of(), false);
+                estimatedInputFloor, new AtomicLong(), new AtomicLong(), Map.of(), false,
+                AiChatConversationKind.ROOT);
     }
 
-    private AiTrajectoryRecorder(ScoreChatMemoryRepository repository, ObjectMapper objectMapper,
+    private AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
                                  ScoreUser requester, String conversationId, String requestId,
                                  String modelName, String reasoningEffort, String runtime,
                                  Map<String, Object> runtimeOptions,
                                  Consumer<AiExecutionEvent> events,
-                                 AiContextBudgetService.Budget contextBudget,
+                                 AiContextBudget contextBudget,
                                  long estimatedInputFloor,
                                  AtomicLong eventSequence, AtomicLong toolSequence,
-                                 Map<String, Object> traceContext, boolean subagentScope) {
+                                 Map<String, Object> traceContext, boolean subagentScope,
+                                 AiChatConversationKind conversationKind) {
         this.repository = repository;
         this.objectMapper = objectMapper;
         this.requester = requester;
@@ -131,6 +142,7 @@ public final class AiTrajectoryRecorder {
         this.toolSequence = toolSequence;
         this.traceContext = traceContext != null ? Map.copyOf(traceContext) : Map.of();
         this.subagentScope = subagentScope;
+        this.conversationKind = conversationKind;
     }
 
     /**
@@ -143,25 +155,26 @@ public final class AiTrajectoryRecorder {
         Map<String, Object> childContext = traceMetadata(namespace);
         return new AiTrajectoryRecorder(repository, objectMapper, requester, conversationId, requestId,
                 modelName, reasoningEffort, runtime, runtimeOptions, events, contextBudget,
-                estimatedInputFloor.get(), eventSequence, toolSequence, childContext, true);
+                estimatedInputFloor.get(), eventSequence, toolSequence, childContext, true,
+                conversationKind);
     }
 
     /** Creates a durable SUBAGENT conversation for a delegated agent. */
-    public ChildExecutionRecorder forkSubagent(String agentId, String assignment,
-                                                Map<String, Object> namespace) {
+    public AiTrajectoryRecorder forkSubagent(String agentId, String assignment,
+                                              Map<String, Object> namespace) {
         return forkChild(AiChatConversationKind.SUBAGENT, agentId, assignment, namespace);
     }
 
     /** Creates a durable PARALLEL conversation for one parallel workflow task. */
-    public ChildExecutionRecorder forkParallelExecution(String workerId, String assignment,
-                                                         Map<String, Object> namespace) {
+    public AiTrajectoryRecorder forkParallelExecution(String workerId, String assignment,
+                                                       Map<String, Object> namespace) {
         return forkChild(AiChatConversationKind.PARALLEL, workerId, assignment, namespace);
     }
 
-    private ChildExecutionRecorder forkChild(AiChatConversationKind kind, String workerId,
-                                               String assignment, Map<String, Object> namespace) {
+    private AiTrajectoryRecorder forkChild(AiChatConversationKind kind, String workerId,
+                                           String assignment, Map<String, Object> namespace) {
         String childConversationId = repository.openChild(
-                requester, conversationId, requestId, kind, workerId, assignment);
+                conversationId, requestId, kind, workerId, assignment);
         Map<String, Object> childNamespace = new LinkedHashMap<>(
                 namespace != null ? namespace : Map.of());
         childNamespace.put("child_conversation_id", childConversationId);
@@ -172,25 +185,33 @@ public final class AiTrajectoryRecorder {
                 repository, objectMapper, requester, childConversationId, requestId,
                 modelName, reasoningEffort, runtime, runtimeOptions, events, contextBudget,
                 estimatedInputFloor.get(), eventSequence, toolSequence,
-                traceMetadata(childNamespace), true);
-        repository.append(requester, childConversationId, new AiChatTrajectoryStep(
+                traceMetadata(childNamespace), true, kind);
+        repository.append(childConversationId, new AiChatTrajectoryStep(
                 requestId, "system", "settings_change", "debug",
                 "Child execution settings initialized.", null, modelName, reasoningEffort,
                 runtime, runtimeOptions, null, null, null,
                 child.traceMetadata(Map.of("agent_id", workerId)), 0, null, Instant.now()));
-        repository.append(requester, childConversationId, new AiChatTrajectoryStep(
+        repository.append(childConversationId, new AiChatTrajectoryStep(
                 requestId, "user",
                 kind == AiChatConversationKind.PARALLEL ? "parallel_assignment" : "assignment",
                 "visible",
                 Objects.requireNonNullElse(assignment, ""), null, modelName, reasoningEffort,
                 runtime, runtimeOptions, null, null, null,
                 child.traceMetadata(Map.of("copied_from_parent", true)), 0, true, Instant.now()));
-        return new ChildExecutionRecorder(childConversationId, kind, child);
+        return child;
+    }
+
+    public String conversationId() {
+        return conversationId;
+    }
+
+    public AiChatConversationKind conversationKind() {
+        return conversationKind;
     }
 
     /** Snapshot of the model usage this recorder observed, keyed by its fan-out namespace. */
-    public UsageSnapshot usageSnapshot() {
-        return new UsageSnapshot(
+    public AiUsageSnapshot usageSnapshot() {
+        return new AiUsageSnapshot(
                 traceContext.get("node_id") != null ? traceContext.get("node_id").toString() : null,
                 traceContext.get("agent_name") != null ? traceContext.get("agent_name").toString() : null,
                 ownPromptTokens.get(), ownCompletionTokens.get(), ownModelCalls.get());
@@ -202,23 +223,23 @@ public final class AiTrajectoryRecorder {
      * may drive the conversation's context floor: context_input_tokens reflects the root
      * conversation projection, not any transient synthesis prompt.
      */
-    public synchronized void recordFanOutUsage(String fanoutId, List<UsageSnapshot> agents) {
+    public synchronized void recordFanOutUsage(String fanoutId, List<AiUsageSnapshot> agents) {
         recordFanOutUsage(fanoutId, "multi_agent", agents);
     }
 
     public synchronized void recordFanOutUsage(String fanoutId, String executionKind,
-                                                List<UsageSnapshot> agents) {
+                                                List<AiUsageSnapshot> agents) {
         if (sealed) {
             return;
         }
-        List<UsageSnapshot> settled = agents != null
+        List<AiUsageSnapshot> settled = agents != null
                 ? agents.stream().filter(Objects::nonNull).toList() : List.of();
         Map<String, Object> metrics = new LinkedHashMap<>();
         // Fan-out totals use dedicated keys: every child model call already persisted
         // its own prompt/completion metrics, so reusing the standard keys would
         // double-count fan-out tokens in exported trajectory totals.
-        metrics.put("fanout_prompt_tokens", settled.stream().mapToLong(UsageSnapshot::promptTokens).sum());
-        metrics.put("fanout_completion_tokens", settled.stream().mapToLong(UsageSnapshot::completionTokens).sum());
+        metrics.put("fanout_prompt_tokens", settled.stream().mapToLong(AiUsageSnapshot::promptTokens).sum());
+        metrics.put("fanout_completion_tokens", settled.stream().mapToLong(AiUsageSnapshot::completionTokens).sum());
         metrics.put("context_input_tokens", estimatedInputFloor.get());
         metrics.put("context_estimated", true);
         Map<String, Object> extra = new LinkedHashMap<>();
@@ -237,7 +258,7 @@ public final class AiTrajectoryRecorder {
             item.put("model_calls", agent.modelCalls());
             return Map.copyOf(item);
         }).toList());
-        repository.append(requester, conversationId, new AiChatTrajectoryStep(
+        repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "system", FANOUT_USAGE_STEP_KIND, "debug",
                 "parallel".equals(executionKind)
                         ? "Parallel workflow usage settled." : "Multi-agent fan-out usage settled.",
@@ -271,7 +292,7 @@ public final class AiTrajectoryRecorder {
         Map<String, Object> lifecycle = new LinkedHashMap<>(metadata != null ? metadata : Map.of());
         lifecycle.put("lifecycle_subtype", subtype);
         Map<String, Object> extra = traceMetadata(lifecycle);
-        repository.append(requester, conversationId, new AiChatTrajectoryStep(
+        repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "agent", "agent_lifecycle", "debug", content, null,
                 modelName, reasoningEffort, runtime, runtimeOptions,
                 null, null, null, extra, 0, null, Instant.now()));
@@ -282,7 +303,7 @@ public final class AiTrajectoryRecorder {
     public synchronized void guide(String content, Map<String, Object> metadata) {
         if (sealed || !StringUtils.hasText(content)) return;
         Map<String, Object> extra = traceMetadata(metadata);
-        repository.append(requester, conversationId, new AiChatTrajectoryStep(
+        repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "agent", "guide", "visible", content.strip(), null,
                 modelName, reasoningEffort, runtime, runtimeOptions,
                 null, null, null, extra, 0, null, Instant.now()));
@@ -293,7 +314,7 @@ public final class AiTrajectoryRecorder {
         if (sealed || !StringUtils.hasText(content)) {
             return;
         }
-        repository.append(requester, conversationId, new AiChatTrajectoryStep(
+        repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "system", "progress", "debug", content, null, null,
                 null, null, null, traceMetadata(
                         Map.of("event_sequence", eventSequence.incrementAndGet())),
@@ -321,7 +342,7 @@ public final class AiTrajectoryRecorder {
                         "argumentsSummary", notice.argumentsSummary())));
     }
 
-    public synchronized void elicitationRequired(AiElicitationService.Notice notice) {
+    public synchronized void elicitationRequired(AiElicitationNotice notice) {
         if (sealed || notice == null) {
             return;
         }
@@ -344,7 +365,7 @@ public final class AiTrajectoryRecorder {
         String message = visibleMessage(response.getResults());
         List<Map<String, Object>> toolCalls = toolCalls(response.getResults());
         List<Map<String, Object>> auditedToolCalls = auditToolCalls(toolCalls);
-        MetricsSnapshot metricsSnapshot = metrics(response);
+        AiMetricsSnapshot metricsSnapshot = metrics(response);
         Map<String, Object> metrics = metricsSnapshot != null ? metricsSnapshot.metrics() : null;
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("phase", normalizedPhase);
@@ -364,19 +385,19 @@ public final class AiTrajectoryRecorder {
             guide(message, Map.of("phase", normalizedPhase));
         }
 
-        AiChatStoredStep stored = repository.append(requester, conversationId,
+        AiChatStoredStep stored = repository.append(conversationId,
                 new AiChatTrajectoryStep(requestId, "agent", "model_call", "debug",
                         Objects.requireNonNullElse(message, ""), null,
                         StringUtils.hasText(modelName) ? modelName : response.getMetadata().getModel(),
                         reasoningEffort, runtime, runtimeOptions,
                         auditedToolCalls, null, metrics, extra, 1, null, Instant.now()));
 
-        ObservationAccumulator observations = new ObservationAccumulator(stored.id(), toolCalls);
+        AiObservationAccumulator observations = new AiObservationAccumulator(stored.id(), toolCalls);
         for (Map<String, Object> call : toolCalls) {
             String name = Objects.toString(call.get("function_name"), "tool");
             String callId = Objects.toString(call.get("tool_call_id"), UUID.randomUUID().toString());
             pendingTools.computeIfAbsent(name, ignored -> new ConcurrentLinkedQueue<>())
-                    .add(new PendingTool(callId, name, call.get("arguments"), observations,
+                    .add(new AiPendingTool(callId, name, call.get("arguments"), observations,
                             toolSequence.getAndIncrement()));
         }
         if (metricsSnapshot != null) {
@@ -413,11 +434,11 @@ public final class AiTrajectoryRecorder {
                 if (completedToolCallIds.contains(response.id())) {
                     continue;
                 }
-                PendingTool pending = pendingTools.computeIfAbsent(response.name(), ignored -> new ConcurrentLinkedQueue<>())
+                AiPendingTool pending = pendingTools.computeIfAbsent(response.name(), ignored -> new ConcurrentLinkedQueue<>())
                         .poll();
                 if (pending == null) {
-                    pending = new PendingTool(response.id(), response.name(), Map.of(),
-                            new ObservationAccumulator(0L, List.of()), toolSequence.getAndIncrement());
+                    pending = new AiPendingTool(response.id(), response.name(), Map.of(),
+                            new AiObservationAccumulator(0L, List.of()), toolSequence.getAndIncrement());
                 }
                 toolStarted(pending);
                 toolCompleted(pending, response.responseData(), null, Duration.ZERO);
@@ -465,7 +486,7 @@ public final class AiTrajectoryRecorder {
     }
 
     public String limitToolOutput(String output, long toolOutputTokenLimit, String toolName) {
-        BoundedToolOutput bounded = reserveToolOutput(output,
+        AiBoundedToolOutput bounded = reserveToolOutput(output,
                 toolOutputTokenLimit > 0 ? toolOutputTokenLimit : Long.MAX_VALUE);
         emitToolOutputTruncated(bounded, toolOutputTokenLimit, toolName);
         emitToolOutputUsage(bounded);
@@ -552,7 +573,7 @@ public final class AiTrajectoryRecorder {
         }
     }
 
-    private MetricsSnapshot metrics(ChatResponse response) {
+    private AiMetricsSnapshot metrics(ChatResponse response) {
         Usage usage = response.getMetadata().getUsage();
         if (usage == null) {
             return null;
@@ -576,7 +597,7 @@ public final class AiTrajectoryRecorder {
             // Marks the row so the conversation's latest-usage lookup skips it.
             metrics.put("context_scope", "subagent");
         }
-        return new MetricsSnapshot(Map.copyOf(metrics), contextInputTokens, estimated);
+        return new AiMetricsSnapshot(Map.copyOf(metrics), contextInputTokens, estimated);
     }
 
     private void emitContextUsage(AiContextUsageInfo usage) {
@@ -584,10 +605,10 @@ public final class AiTrajectoryRecorder {
                 Map.of("contextUsage", usage)));
     }
 
-    private PendingTool pending(String toolName, String input) {
-        ConcurrentLinkedQueue<PendingTool> queue = pendingTools.get(toolName);
+    private AiPendingTool pending(String toolName, String input) {
+        ConcurrentLinkedQueue<AiPendingTool> queue = pendingTools.get(toolName);
         Object parsedArguments = arguments(input);
-        PendingTool pending = null;
+        AiPendingTool pending = null;
         if (queue != null) {
             pending = queue.stream()
                     .filter(candidate -> Objects.equals(candidate.arguments(), parsedArguments))
@@ -602,11 +623,11 @@ public final class AiTrajectoryRecorder {
         if (pending != null) {
             return pending;
         }
-        return new PendingTool(UUID.randomUUID().toString(), toolName, parsedArguments,
-                new ObservationAccumulator(0L, List.of()), toolSequence.getAndIncrement());
+        return new AiPendingTool(UUID.randomUUID().toString(), toolName, parsedArguments,
+                new AiObservationAccumulator(0L, List.of()), toolSequence.getAndIncrement());
     }
 
-    private synchronized void toolStarted(PendingTool pending) {
+    private synchronized void toolStarted(AiPendingTool pending) {
         if (sealed) return;
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("tool_call_id", pending.id());
@@ -615,7 +636,7 @@ public final class AiTrajectoryRecorder {
         extra.put("read_only", readOnlyToolNames.contains(pending.name()));
         extra.put("tool_call_sequence", pending.sequence());
         extra.put("arguments", boundedRedactedValue(pending.arguments()));
-        repository.append(requester, conversationId, new AiChatTrajectoryStep(
+        repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "agent", "tool_call_update", "debug",
                 "Calling " + pending.name() + ".", null, modelName,
                 reasoningEffort, runtime, runtimeOptions,
@@ -624,7 +645,7 @@ public final class AiTrajectoryRecorder {
                 pending.id(), pending.name(), pending.sequence()));
     }
 
-    private synchronized void toolCompleted(PendingTool pending, String output,
+    private synchronized void toolCompleted(AiPendingTool pending, String output,
                                             Throwable failure, Duration duration) {
         if (sealed) return;
         if (!completedToolCallIds.add(pending.id())) {
@@ -642,7 +663,7 @@ public final class AiTrajectoryRecorder {
                 "success", failure == null));
         pending.observations().results().put(pending.id(), result);
         if (pending.observations().stepId() > 0) {
-            repository.updateObservation(requester, conversationId, pending.observations().stepId(),
+            repository.updateObservation(conversationId, pending.observations().stepId(),
                     Map.of("results", pending.observations().orderedResults()));
         }
 
@@ -658,7 +679,7 @@ public final class AiTrajectoryRecorder {
         extra.put("duration_ms", duration.toMillis());
         extra.put("success", failure == null);
         extra = new LinkedHashMap<>(traceMetadata(extra));
-        repository.append(requester, conversationId, new AiChatTrajectoryStep(
+        repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "agent", "tool_call", "debug", detail, null, modelName,
                 reasoningEffort, runtime, runtimeOptions,
                 null, null, null, extra, 0, null, Instant.now()));
@@ -667,7 +688,7 @@ public final class AiTrajectoryRecorder {
                 pending.id(), pending.name(), pending.sequence(), Map.of("toolDetail", detail)));
     }
 
-    private String toolDetail(PendingTool pending, String output, Throwable failure) {
+    private String toolDetail(AiPendingTool pending, String output, Throwable failure) {
         StringBuilder detail = new StringBuilder(pending.name())
                 .append("\nArguments: ").append(toJson(boundedRedactedValue(pending.arguments())));
         if (failure == null) {
@@ -776,13 +797,13 @@ public final class AiTrajectoryRecorder {
 
         @Override
         public String call(String input, ToolContext context) {
-            PendingTool pending = pending(getToolDefinition().name(), input);
+            AiPendingTool pending = pending(getToolDefinition().name(), input);
             toolStarted(pending);
             Instant started = Instant.now();
             try {
                 String output = delegate.call(input, context);
                 toolCompleted(pending, output, null, Duration.between(started, Instant.now()));
-                BoundedToolOutput bounded = reserveToolOutput(output, toolOutputTokenLimit);
+                AiBoundedToolOutput bounded = reserveToolOutput(output, toolOutputTokenLimit);
                 emitToolOutputTruncated(bounded, toolOutputTokenLimit, pending.name());
                 emitToolOutputUsage(bounded);
                 return bounded.value();
@@ -794,20 +815,20 @@ public final class AiTrajectoryRecorder {
         }
     }
 
-    private BoundedToolOutput boundedToolOutput(String output, long tokenLimit) {
+    private AiBoundedToolOutput boundedToolOutput(String output, long tokenLimit) {
         String source = Objects.requireNonNullElse(output, "");
         byte[] bytes = source.getBytes(StandardCharsets.UTF_8);
         long byteLimit = tokenLimit == Long.MAX_VALUE || tokenLimit > Integer.MAX_VALUE / 3L
                 ? Integer.MAX_VALUE : Math.max(0L, tokenLimit) * 3L;
         if (bytes.length <= byteLimit) {
-            return new BoundedToolOutput(source, false, bytes.length, bytes.length);
+            return new AiBoundedToolOutput(source, false, bytes.length, bytes.length);
         }
         int maximumBytes = (int) byteLimit;
         String suffix = "\n[TOOL OUTPUT TRUNCATED: rerun the tool with narrower filters or pagination.]";
         int suffixBytes = suffix.getBytes(StandardCharsets.UTF_8).length;
         if (maximumBytes <= suffixBytes) {
             String marker = suffix.substring(0, Math.min(maximumBytes, suffix.length()));
-            return new BoundedToolOutput(marker, true, bytes.length,
+            return new AiBoundedToolOutput(marker, true, bytes.length,
                     marker.getBytes(StandardCharsets.UTF_8).length);
         }
         int prefixBudget = Math.max(0, maximumBytes - suffixBytes);
@@ -823,21 +844,21 @@ public final class AiTrajectoryRecorder {
         }
         String bounded = source.substring(0, chars) + suffix;
         int returnedBytes = bounded.getBytes(StandardCharsets.UTF_8).length;
-        return new BoundedToolOutput(bounded, true, bytes.length, returnedBytes);
+        return new AiBoundedToolOutput(bounded, true, bytes.length, returnedBytes);
     }
 
-    private synchronized BoundedToolOutput reserveToolOutput(String output, long configuredLimit) {
+    private synchronized AiBoundedToolOutput reserveToolOutput(String output, long configuredLimit) {
         long effectiveLimit = configuredLimit;
         if (contextBudget != null) {
             long remaining = Math.max(0L, contextBudget.safeInputLimit() - estimatedInputFloor.get());
             effectiveLimit = Math.min(effectiveLimit, remaining);
         }
-        BoundedToolOutput bounded = boundedToolOutput(output, effectiveLimit);
+        AiBoundedToolOutput bounded = boundedToolOutput(output, effectiveLimit);
         growEstimatedInputFloor(bounded.returnedBytes());
         return bounded;
     }
 
-    private void emitToolOutputTruncated(BoundedToolOutput bounded, long configuredLimit,
+    private void emitToolOutputTruncated(AiBoundedToolOutput bounded, long configuredLimit,
                                          String toolName) {
         if (!bounded.truncated()) return;
         String safeToolName = StringUtils.hasText(toolName) ? toolName : "tool";
@@ -849,7 +870,7 @@ public final class AiTrajectoryRecorder {
                         "toolOutputTokenLimit", configuredLimit)));
     }
 
-    private void emitToolOutputUsage(BoundedToolOutput bounded) {
+    private void emitToolOutputUsage(AiBoundedToolOutput bounded) {
         // Subagent tool outputs grow only the child's floor; the conversation's
         // visible context usage is settled by the container on fan-out completion.
         if (contextBudget == null || bounded.returnedBytes() <= 0 || subagentScope) return;
@@ -908,40 +929,4 @@ public final class AiTrajectoryRecorder {
         }
     }
 
-    public record UsageSnapshot(String nodeId, String agentName, long promptTokens,
-                                long completionTokens, long modelCalls) {}
-
-    public record ChildExecutionRecorder(String conversationId, AiChatConversationKind kind,
-                                         AiTrajectoryRecorder recorder) {}
-
-    private record PendingTool(String id, String name, Object arguments,
-                               ObservationAccumulator observations, long sequence) {}
-
-    private record MetricsSnapshot(Map<String, Object> metrics, long contextInputTokens,
-                                   boolean estimated) {}
-
-    private record BoundedToolOutput(String value, boolean truncated, int originalBytes,
-                                     int returnedBytes) {}
-
-    private record ObservationAccumulator(long stepId, List<Map<String, Object>> toolCalls,
-                                           Map<String, Map<String, Object>> results) {
-
-        private ObservationAccumulator(long stepId, List<Map<String, Object>> toolCalls) {
-            this(stepId, List.copyOf(toolCalls), new ConcurrentHashMap<>());
-        }
-
-        private List<Map<String, Object>> orderedResults() {
-            List<Map<String, Object>> ordered = new ArrayList<>();
-            for (Map<String, Object> call : toolCalls) {
-                Map<String, Object> result = results.get(Objects.toString(call.get("tool_call_id"), ""));
-                if (result != null) {
-                    ordered.add(result);
-                }
-            }
-            if (ordered.isEmpty()) {
-                ordered.addAll(results.values());
-            }
-            return ordered;
-        }
-    }
 }

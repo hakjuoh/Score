@@ -1,6 +1,8 @@
 package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationAuthorization;
+import org.oagi.score.gateway.http.api.ai_management.model.AiApprovedExecution;
+import org.oagi.score.gateway.http.api.ai_management.model.AiMutationPermissionMode;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
 
 import org.junit.jupiter.api.Test;
@@ -156,7 +158,7 @@ class AiMutationToolGuardTest {
                 approved, requester, ignored -> {}, () -> new ToolCallback[]{delegate},
                 SERVER_READ_ONLY_TOOLS);
 
-        AiMutationToolGuard.ApprovedExecution execution = session.executeApproved(session).orElseThrow();
+        AiApprovedExecution execution = session.executeApproved(session).orElseThrow();
 
         assertThat(execution.toolName()).isEqualTo("create_business_context");
         assertThat(execution.arguments()).isEqualTo(arguments);
@@ -204,7 +206,7 @@ class AiMutationToolGuardTest {
         session.getToolCallbacks()[0].call("{}", new ToolContext(Map.of()));
         assertThat(session.readAfterLastMutation()).isFalse();
         assertThat(session.completedMutations()).singleElement()
-                .extracting(AiMutationToolGuard.ApprovedExecution::toolName)
+                .extracting(AiApprovedExecution::toolName)
                 .isEqualTo("create_business_context");
 
         session.getToolCallbacks()[1].call("{}", new ToolContext(Map.of()));

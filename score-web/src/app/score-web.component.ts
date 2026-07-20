@@ -28,6 +28,8 @@ export class ScoreWebComponent implements OnInit, DoCheck {
   webPageInfoService = inject(WebPageInfoService);
 
   private wasAuthenticated = false;
+  readonly assistantPopoutMode = new URLSearchParams(window.location.search)
+    .get('aiAssistantPopout') === '1';
 
 
   constructor() {

@@ -2,7 +2,6 @@ package org.oagi.score.gateway.http.configuration.ai;
 
 import com.anthropic.models.messages.OutputConfig;
 import com.openai.azure.AzureOpenAIServiceVersion;
-import org.oagi.score.gateway.http.api.ai_management.repository.ScoreChatMemoryRepository;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AnthropicRuntimeProperties;
 import org.oagi.score.gateway.http.api.ai_management.runtime.OpenAiRuntimeProperties;
 import org.springframework.ai.anthropic.AnthropicCacheOptions;
@@ -10,8 +9,6 @@ import org.springframework.ai.anthropic.AnthropicCacheStrategy;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.chat.client.advisor.toolsearch.ToolSearchToolCallingAdvisor;
-import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.toolsearch.ToolIndex;
@@ -79,14 +76,6 @@ public class ScoreAiConfiguration {
             default -> throw new IllegalArgumentException("Unsupported AI provider type '"
                     + provider.getType() + "' for model '" + configuredName + "'");
         };
-    }
-
-    @Bean
-    public ChatMemory scoreAiChatMemory(ScoreChatMemoryRepository repository, ScoreAiProperties properties) {
-        return MessageWindowChatMemory.builder()
-                .chatMemoryRepository(repository)
-                .maxMessages(Math.max(4, properties.getMemory().getMaxMessages()))
-                .build();
     }
 
     @Bean

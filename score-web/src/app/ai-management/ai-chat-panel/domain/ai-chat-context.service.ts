@@ -15,6 +15,8 @@ export class AiChatContextService {
   private routeRegistryContext = inject(AiRouteRegistryContextService);
 
   currentPath(): string {
+    const sourceWindow = this.contextSourceWindow();
+    if (sourceWindow !== window) return sourceWindow.location.pathname;
     return this.router.url.split('?')[0];
   }
 
@@ -79,5 +81,18 @@ export class AiChatContextService {
 
   private longestDetailPrefix(route: AiResourceRoute): number {
     return Math.max(...(route.detailPrefixes || ['']).map(prefix => prefix.length));
+  }
+
+  private contextSourceWindow(): Window {
+    try {
+      if (new URLSearchParams(window.location.search).get('aiAssistantPopout') === '1'
+        && window.opener && !window.opener.closed
+        && window.opener.location.origin === window.location.origin) {
+        return window.opener;
+      }
+    } catch {
+      // Cross-origin opener access is intentionally ignored.
+    }
+    return window;
   }
 }

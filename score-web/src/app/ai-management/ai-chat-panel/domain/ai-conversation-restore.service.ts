@@ -2,6 +2,7 @@ import {Injectable} from '@angular/core';
 import {
   AiChatHistoryMessage,
   AiChatMessage,
+  AiChatConversationDetails,
   AiChatSocketEvent,
   AiContextUsage,
   AiRuntimeOptions
@@ -21,6 +22,8 @@ import {
 
 export interface AiConversationRestoreCallbacks {
   setConversationId(conversationId: string): void;
+  setSettings?(settings: Pick<AiChatConversationDetails,
+    'modelName' | 'reasoningEffort' | 'runtime' | 'runtimeOptions' | 'permissionMode'>): void;
   setModelName?(modelName: string): void;
   setReasoningEffort?(reasoningEffort: string): void;
   setRuntime?(runtime: string): void;
@@ -156,20 +159,18 @@ export class AiConversationRestoreService {
         callbacks.setConversationId(event.conversationId);
       }
       const modelName = this.nonBlankText(event.metadata?.['modelName']);
-      if (modelName) {
-        callbacks.setModelName?.(modelName);
-      }
       const reasoningEffort = this.nonBlankText(event.metadata?.['reasoningEffort']);
-      if (reasoningEffort) {
-        callbacks.setReasoningEffort?.(reasoningEffort);
-      }
       const runtime = this.nonBlankText(event.metadata?.['runtime']);
-      if (runtime) {
-        callbacks.setRuntime?.(runtime);
-      }
       const runtimeOptions = this.runtimeOptions(event.metadata?.['runtimeOptions']);
-      if (runtimeOptions) {
-        callbacks.setRuntimeOptions?.(runtimeOptions);
+      const permissionMode = this.permissionMode(event.metadata?.['permissionMode']);
+      if (callbacks.setSettings && (modelName || reasoningEffort || runtime
+        || runtimeOptions || permissionMode)) {
+        callbacks.setSettings({modelName, reasoningEffort, runtime, runtimeOptions, permissionMode});
+      } else {
+        if (modelName) callbacks.setModelName?.(modelName);
+        if (reasoningEffort) callbacks.setReasoningEffort?.(reasoningEffort);
+        if (runtime) callbacks.setRuntime?.(runtime);
+        if (runtimeOptions) callbacks.setRuntimeOptions?.(runtimeOptions);
       }
       const contextUsage = contextUsageValue(event.metadata?.['contextUsage'], modelName);
       if (contextUsage) {
@@ -475,6 +476,11 @@ export class AiConversationRestoreService {
   private runtimeOptions(value: unknown): AiRuntimeOptions | undefined {
     return value !== null && typeof value === 'object' && !Array.isArray(value)
       ? {...value as AiRuntimeOptions} : undefined;
+  }
+
+  private permissionMode(value: unknown) {
+    return value === 'ask' || value === 'auto' || value === 'full_access'
+      ? value : undefined;
   }
 
   private validRestoreSequence(sequence: number): boolean {

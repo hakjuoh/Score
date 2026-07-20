@@ -37,16 +37,14 @@ CREATE TABLE `ai_chat_memory`
     `ai_chat_memory_id`       bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'The primary key of the AI chat memory record.',
     `ai_chat_conversation_id` bigint(20) unsigned NOT NULL COMMENT 'Foreign key to the AI_CHAT_CONVERSATION table identifying the owning conversation.',
     `memory_sequence`         bigint      NOT NULL COMMENT 'The zero-based sequence of the message in the bounded model context.',
-    `message_type`            varchar(16) NOT NULL COMMENT 'The message role in the model context: USER, ASSISTANT, SYSTEM, or TOOL.',
+    `message_type`            varchar(16) NULL COMMENT 'Expected model-context roles are USER, ASSISTANT, SYSTEM, and TOOL; other values are handled by the application.',
     `content`                 longtext    NOT NULL COMMENT 'The text content supplied to the model as conversation memory.',
     `metadata_json`           JSON NULL COMMENT 'Optional JSON metadata associated with the model-context message.',
     `created_at`              datetime(6) NOT NULL COMMENT 'The timestamp when the memory record was created.',
     PRIMARY KEY (`ai_chat_memory_id`),
     UNIQUE KEY `ai_chat_memory_conversation_sequence_uk` (`ai_chat_conversation_id`, `memory_sequence`),
     CONSTRAINT `ai_chat_memory_conversation_fk`
-        FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE,
-    CONSTRAINT `ai_chat_memory_type_ck`
-        CHECK (`message_type` IN ('USER', 'ASSISTANT', 'SYSTEM', 'TOOL'))
+        FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci
@@ -58,9 +56,9 @@ CREATE TABLE `ai_chat_step`
     `ai_chat_conversation_id` bigint(20) unsigned NOT NULL COMMENT 'Foreign key to the AI_CHAT_CONVERSATION table identifying the owning conversation.',
     `step_sequence`           bigint      NOT NULL COMMENT 'The zero-based sequence of the step within the complete conversation trajectory.',
     `request_id`              varchar(128) COLLATE utf8mb4_bin NULL COMMENT 'The request identifier used to correlate steps produced by the same chat request.',
-    `source`                  varchar(16) NOT NULL COMMENT 'The ATIF source of the step: system, user, or agent.',
+    `source`                  varchar(16) NULL DEFAULT 'system' COMMENT 'Expected ATIF sources are system, user, and agent; other values are handled by the application.',
     `message_kind`            varchar(32) NOT NULL COMMENT 'The application-specific kind of trajectory event represented by the step.',
-    `visibility`              varchar(16) NOT NULL DEFAULT 'visible' COMMENT 'The presentation scope of the step: visible or debug.',
+    `visibility`              varchar(16) NULL DEFAULT 'visible' COMMENT 'Expected presentation scopes are visible and debug; other values are handled by the application.',
     `message`                 longtext    NOT NULL COMMENT 'The textual message or event content recorded for the step.',
     `reasoning_content`       longtext NULL COMMENT 'Optional model reasoning content associated with the step.',
     `model_name`              varchar(240) NULL COMMENT 'The model used for the inference represented by the step.',
@@ -80,13 +78,7 @@ CREATE TABLE `ai_chat_step`
     KEY                       `ai_chat_step_settings_idx` (`ai_chat_conversation_id`, `message_kind`, `step_sequence`),
     KEY                       `ai_chat_step_created_idx` (`ai_chat_conversation_id`, `created_at`),
     CONSTRAINT `ai_chat_step_conversation_fk`
-        FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE,
-    CONSTRAINT `ai_chat_step_source_ck` CHECK (`source` IN ('system', 'user', 'agent')),
-    CONSTRAINT `ai_chat_step_visibility_ck` CHECK (`visibility` IN ('visible', 'debug')),
-    CONSTRAINT `ai_chat_step_settings_change_ck` CHECK (
-        `message_kind` <> 'settings_change'
-            OR (`model_name` IS NOT NULL AND `reasoning_effort` IS NOT NULL AND `agent_runtime` IS NOT NULL)
-        )
+        FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci
@@ -100,7 +92,7 @@ CREATE TABLE `ai_chat_mutation_confirmation`
     `request_id`                       varchar(128) COLLATE utf8mb4_bin NOT NULL COMMENT 'The chat request identifier that originally requested the data-changing tool call.',
     `tool_name`                        varchar(240)                     NOT NULL COMMENT 'The name of the data-changing tool that requires explicit user approval.',
     `arguments_digest`                 char(64) COLLATE ascii_bin       NOT NULL COMMENT 'The SHA-256 digest binding the tool name to its canonicalized arguments.',
-    `status`                           varchar(16)                      NOT NULL COMMENT 'The confirmation lifecycle status: REQUESTED, APPROVED, DENIED, CONSUMED, or EXPIRED.',
+    `status`                           varchar(16)                      NULL DEFAULT 'REQUESTED' COMMENT 'Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and EXPIRED; other values are handled by the application.',
     `grant_digest`                     char(64) COLLATE ascii_bin NULL COMMENT 'The SHA-256 digest of the one-time approval grant; cleared after consumption, denial, or expiration.',
     `expires_at`                       datetime(6) NOT NULL COMMENT 'The timestamp after which the confirmation request or approval grant is invalid.',
     `approved_at`                      datetime(6) NULL COMMENT 'The timestamp when the mutation request was approved.',
@@ -114,9 +106,7 @@ CREATE TABLE `ai_chat_mutation_confirmation`
     KEY                                `ai_chat_mutation_confirmation_request_idx` (`ai_chat_conversation_id`, `request_id`, `tool_name`, `arguments_digest`),
     KEY                                `ai_chat_mutation_confirmation_expiry_idx` (`status`, `expires_at`),
     CONSTRAINT `ai_chat_mutation_confirmation_conversation_fk`
-        FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE,
-    CONSTRAINT `ai_chat_mutation_confirmation_status_ck`
-        CHECK (`status` IN ('REQUESTED', 'APPROVED', 'DENIED', 'CONSUMED', 'EXPIRED'))
+        FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci

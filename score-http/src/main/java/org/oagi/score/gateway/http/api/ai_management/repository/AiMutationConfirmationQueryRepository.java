@@ -1,7 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.repository;
 
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationState;
-import org.oagi.score.gateway.http.common.model.ScoreUser;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -16,20 +15,17 @@ public interface AiMutationConfirmationQueryRepository {
     /**
      * Finds an owner-scoped confirmation and locks it for a lifecycle transition.
      *
-     * @param requester signed-in conversation owner
      * @param conversationId public conversation identifier
      * @param confirmationRequestId public confirmation identifier
      * @return locked confirmation state, or empty when it is absent or not owned
      */
     Optional<AiMutationConfirmationState> findOwnedForUpdate(
-            ScoreUser requester,
             String conversationId,
             String confirmationRequestId);
 
     /**
      * Finds the newest unexpired confirmation that can be reused for an identical request.
      *
-     * @param requester signed-in conversation owner
      * @param conversationId public conversation identifier
      * @param requestId request that attempted the mutation
      * @param toolName guarded tool name
@@ -38,7 +34,6 @@ public interface AiMutationConfirmationQueryRepository {
      * @return locked reusable confirmation state, if one exists
      */
     Optional<AiMutationConfirmationState> findReusableForUpdate(
-            ScoreUser requester,
             String conversationId,
             String requestId,
             String toolName,

@@ -51,7 +51,6 @@ export class AiChatMessageListComponent implements OnChanges {
   @Input() messages: AiChatMessage[] = [];
   @Input() attachments: AiChatAttachment[] = [];
   @Input() pending = false;
-  @Input() isInitialPrompt = false;
   @Input() modelSettingsOpen = false;
   @Input() runtimeSettingsOpen = false;
   @Input() permissionSettingsOpen = false;
@@ -120,7 +119,7 @@ export class AiChatMessageListComponent implements OnChanges {
     },
     {
       value: 'auto',
-      name: 'Approve for me',
+      name: 'Ask only for risky actions',
       description: 'Automatically allow additive changes; ask before potentially unsafe actions.'
     },
     {
@@ -229,6 +228,22 @@ export class AiChatMessageListComponent implements OnChanges {
 
   get selectedModel(): AiChatModelInfo | undefined {
     return this.availableModels.find(model => model.name === this.selectedModelName);
+  }
+
+  get selectedReasoningEffortDisplayName(): string {
+    return this.selectedModel?.reasoningEfforts
+      .find(effort => effort.name === this.selectedReasoningEffort)?.displayName
+      || this.selectedReasoningEffort;
+  }
+
+  get selectedRuntimeDisplayName(): string {
+    return this.runtimeOptions.find(runtime => runtime.name === this.selectedRuntime)?.displayName
+      || this.selectedRuntime;
+  }
+
+  get permissionDisplayName(): string {
+    return this.permissionOptions.find(option => option.value === this.permissionMode)?.name
+      || this.permissionMode;
   }
 
   get runtimeOptions() {
