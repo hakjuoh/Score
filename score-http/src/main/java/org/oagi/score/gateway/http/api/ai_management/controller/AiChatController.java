@@ -131,17 +131,13 @@ public class AiChatController {
                 throw new CancellationException("The request was cancelled before execution started.");
             }
             ChatResponse response = chatService.chat(prepared, requester, event -> {
-                if ("detail".equals(event.type())
-                        && ("mutation_confirmation_required".equals(event.subtype())
-                        || "elicitation_required".equals(event.subtype())
-                        || "context_usage".equals(event.subtype())
-                        || "context_compacted".equals(event.subtype())
-                        || isWorkflowLifecycleEvent(event.subtype()))) {
+                if (isRestResponseEvent(event)) {
                     AiChatSocketEvent socketEvent = socketEvent(
                             prepared, sequence.incrementAndGet(), event);
                     responseEvents.add(socketEvent);
-                    if ("elicitation_required".equals(event.subtype())
-                            || isWorkflowLifecycleEvent(event.subtype())) {
+                    // Interaction events must arrive while the HTTP request is still
+                    // running so failed tool rows and retry narration remain ordered.
+                    if (isRestLiveEvent(event)) {
                         try {
                             send(requester, queue(prepared.requestId()), socketEvent);
                         } catch (RuntimeException exception) {
@@ -155,7 +151,8 @@ public class AiChatController {
         return future.handle((response, throwable) -> {
             String status = requests.finish(entry, throwable);
             if ("FAILED".equals(status) || "TIMED_OUT".equals(status)) {
-                chatService.recordFailure(prepared, requester, terminalMessage(status, throwable));
+                chatService.recordFailure(prepared, requester,
+                        terminalMessage(status, throwable), failureClass(throwable));
             }
             if ("COMPLETED".equals(status)) {
                 return ResponseEntity.ok(response);
@@ -266,7 +263,17 @@ public class AiChatController {
     public void chat(AiChatSocketRequest socketRequest, Principal principal,
                      SimpMessageHeaderAccessor headers) {
         ScoreUser requester = webSocketUsers.resolve(principal, headers.getSessionAttributes());
-        Admission admission = prepare(socketRequest.toChatRequest(), requester);
+        ChatRequest chatRequest = socketRequest.toChatRequest();
+        Admission admission;
+        try {
+            admission = prepare(chatRequest, requester);
+        } catch (RuntimeException failure) {
+            // Without a terminal event on the reply queue the web client can only
+            // report a generic acknowledgement timeout instead of the actual
+            // validation or admission problem.
+            sendAdmissionFailure(requester, chatRequest, failure);
+            throw failure;
+        }
         ChatRequest prepared = admission.request();
         String destination = queue(prepared.requestId());
         Instant deadline = admission.deadline();
@@ -295,7 +302,7 @@ public class AiChatController {
                         prepared.conversationId(), entry.generation()));
             } else {
                 String message = terminalMessage(status, throwable);
-                chatService.recordFailure(prepared, requester, message);
+                chatService.recordFailure(prepared, requester, message, failureClass(throwable));
                 send(requester, destination, AiChatSocketEvent.terminalError(prepared.requestId(),
                         prepared.conversationId(), entry.generation(), status, message));
             }
@@ -317,6 +324,9 @@ public class AiChatController {
             metadata.put("runtime", details.runtime());
             metadata.put("runtimeOptions", details.runtimeOptions());
             metadata.put("permissionMode", details.permissionMode());
+            if (StringUtils.hasText(details.activeWorkflow())) {
+                metadata.put("activeWorkflow", details.activeWorkflow());
+            }
             if (details.contextUsage() != null) metadata.put("contextUsage", details.contextUsage());
             send(requester, destination, AiChatSocketEvent.system(request.requestId(), request.conversationId(),
                     null, "accepted", "Restoring conversation.", metadata));
@@ -402,6 +412,20 @@ public class AiChatController {
 
     private record Admission(ChatRequest request, AiRequestRegistry.Entry entry, Instant deadline) {}
 
+    private void sendAdmissionFailure(ScoreUser requester, ChatRequest request, RuntimeException failure) {
+        if (!StringUtils.hasText(request.requestId())) {
+            // Without a client-chosen request identifier there is no reply queue
+            // the client could be listening on.
+            return;
+        }
+        try {
+            send(requester, queue(request.requestId()), AiChatSocketEvent.error(
+                    request.requestId(), request.conversationId(), safeMessage(failure)));
+        } catch (RuntimeException sendFailure) {
+            LOGGER.warn("Could not report an AI chat admission failure to the user", sendFailure);
+        }
+    }
+
     private void send(ScoreUser requester, String destination, AiChatSocketEvent event) {
         messagingTemplate.convertAndSendToUser(requester.username(), destination, event);
     }
@@ -413,6 +437,15 @@ public class AiChatController {
     private String safeMessage(Throwable throwable) {
         if (throwable == null) {
             return "The assistant request failed. Details were recorded in the server log.";
+        }
+        // The provider retry loop already classified the failure and bounded the
+        // provider's own message for display; it wraps the raw provider exception,
+        // so it must be found before the root-cause walk skips past it.
+        for (Throwable candidate = throwable; candidate != null; candidate = candidate.getCause()) {
+            if (candidate instanceof org.oagi.score.gateway.http.api.ai_management.runtime.AiProviderException provider) {
+                LOGGER.warn("AI chat request failed at the model provider", provider);
+                return provider.getMessage();
+            }
         }
         Throwable current = throwable;
         while (current.getCause() != null) {
@@ -428,7 +461,29 @@ public class AiChatController {
         if (current instanceof java.util.concurrent.TimeoutException) {
             return "The assistant request deadline was exceeded.";
         }
+        String failureClass = current.getClass().getName();
+        if (failureClass.startsWith("io.modelcontextprotocol.")) {
+            return failureClass.contains("Authorization")
+                    ? "The assistant could not authorize with the connectCenter tool service."
+                    + " Data changes that already completed remain applied. Please retry."
+                    : "The assistant's connection to the connectCenter tool service failed."
+                    + " Data changes that already completed remain applied. Please retry.";
+        }
+        if (failureClass.startsWith("org.springframework.ai.retry.")
+                || failureClass.startsWith("org.springframework.web.reactive.function.client.")
+                || failureClass.startsWith("org.springframework.web.client.")) {
+            return "The assistant's model provider could not complete the request. Please retry.";
+        }
         return "The assistant request failed. Details were recorded in the server log.";
+    }
+
+    private String failureClass(Throwable throwable) {
+        if (throwable == null) return null;
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getClass().getName();
     }
 
     private String terminalMessage(String status, Throwable throwable) {
@@ -507,6 +562,25 @@ public class AiChatController {
 
     private static boolean isWorkflowLifecycleEvent(String subtype) {
         return WORKFLOW_LIFECYCLE_EVENT_TYPES.contains(subtype);
+    }
+
+    private static boolean isRestResponseEvent(AiExecutionEvent event) {
+        return "tool_call".equals(event.type()) || "detail".equals(event.type())
+                && ("mutation_confirmation_required".equals(event.subtype())
+                || "elicitation_required".equals(event.subtype())
+                || "context_usage".equals(event.subtype())
+                || "context_compacted".equals(event.subtype())
+                || "provider_retry".equals(event.subtype())
+                || "guide".equals(event.subtype())
+                || isWorkflowLifecycleEvent(event.subtype()));
+    }
+
+    private static boolean isRestLiveEvent(AiExecutionEvent event) {
+        return "tool_call".equals(event.type())
+                || "guide".equals(event.subtype())
+                || "elicitation_required".equals(event.subtype())
+                || "provider_retry".equals(event.subtype())
+                || isWorkflowLifecycleEvent(event.subtype());
     }
 
     static List<AiChatSocketEvent> orderedResponseEvents(List<AiChatSocketEvent> events) {

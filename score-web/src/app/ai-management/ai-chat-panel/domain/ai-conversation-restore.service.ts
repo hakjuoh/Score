@@ -23,7 +23,8 @@ import {
 export interface AiConversationRestoreCallbacks {
   setConversationId(conversationId: string): void;
   setSettings?(settings: Pick<AiChatConversationDetails,
-    'modelName' | 'reasoningEffort' | 'runtime' | 'runtimeOptions' | 'permissionMode'>): void;
+    'modelName' | 'reasoningEffort' | 'runtime' | 'runtimeOptions' | 'permissionMode'
+    | 'activeWorkflow'>): void;
   setModelName?(modelName: string): void;
   setReasoningEffort?(reasoningEffort: string): void;
   setRuntime?(runtime: string): void;
@@ -163,9 +164,12 @@ export class AiConversationRestoreService {
       const runtime = this.nonBlankText(event.metadata?.['runtime']);
       const runtimeOptions = this.runtimeOptions(event.metadata?.['runtimeOptions']);
       const permissionMode = this.permissionMode(event.metadata?.['permissionMode']);
+      const activeWorkflow = this.nonBlankText(event.metadata?.['activeWorkflow']);
       if (callbacks.setSettings && (modelName || reasoningEffort || runtime
-        || runtimeOptions || permissionMode)) {
-        callbacks.setSettings({modelName, reasoningEffort, runtime, runtimeOptions, permissionMode});
+        || runtimeOptions || permissionMode || activeWorkflow)) {
+        callbacks.setSettings({
+          modelName, reasoningEffort, runtime, runtimeOptions, permissionMode, activeWorkflow
+        });
       } else {
         if (modelName) callbacks.setModelName?.(modelName);
         if (reasoningEffort) callbacks.setReasoningEffort?.(reasoningEffort);
@@ -294,6 +298,7 @@ export class AiConversationRestoreService {
     const toolCallId = this.nonBlankText(event.toolCallId);
     const toolName = this.nonBlankText(event.metadata?.['toolName']);
     const toolStatus = event.subtype === 'completed' || event.subtype === 'failed'
+      || event.subtype === 'blocked' || event.subtype === 'cancelled'
       ? event.subtype : undefined;
     if (!groupId || !toolCallId || !toolName || !toolStatus) {
       // Old projected tool rows had no durable execution evidence. Skipping
@@ -321,7 +326,15 @@ export class AiConversationRestoreService {
     };
   }
 
-  private restoredToolContent(toolStatus: 'completed' | 'failed', toolName: string): string {
+  private restoredToolContent(
+    toolStatus: 'completed' | 'failed' | 'blocked' | 'cancelled', toolName: string
+  ): string {
+    if (toolStatus === 'blocked') {
+      return `${toolName} is awaiting approval.`;
+    }
+    if (toolStatus === 'cancelled') {
+      return `${toolName} was stopped before execution.`;
+    }
     return toolStatus === 'completed' ? `${toolName} completed.` : `${toolName} failed.`;
   }
 
@@ -342,7 +355,7 @@ export class AiConversationRestoreService {
     const parallel = update.executionKind === 'parallel';
     return first ? {
       role: parallel ? 'workflow_group' : 'agent_group',
-      content: parallel ? 'Parallel workflow' : 'Multi-agent workflow',
+      content: parallel ? 'Parallel workflow' : 'Delegated workflow',
       activities
     } : null;
   }

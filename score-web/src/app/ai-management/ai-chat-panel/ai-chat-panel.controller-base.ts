@@ -107,6 +107,7 @@ export abstract class AiChatPanelControllerBase {
   protected deferredNewChatTab?: AiChatPanelTab;
   protected responseTimeout?: number;
   protected acknowledgementTimeout?: number;
+  protected providerRetryInterval?: number;
   protected resizeState?: ResizeState;
   protected routeRegistrySent = false;
   protected lastPageContextPath?: string;
@@ -324,7 +325,6 @@ export abstract class AiChatPanelControllerBase {
   protected abstract sendHttpChat(prompt: string, attachments: AiChatAttachment[],
                                   mutationConfirmation?: AiMutationConfirmationAuthorization): void;
   protected abstract attachmentFailureMessage(error: unknown): string;
-  protected abstract captureRestErrorMutationNotice(error: unknown, requestId: string): string | undefined;
   protected abstract completeUnknownConfirmedRequest(requestId: string): void;
   protected abstract connectAndPublishWhenReady(requestId: string, prompt: string,
                                                 attachments: AiChatAttachment[],
@@ -386,6 +386,8 @@ export abstract class AiChatPanelControllerBase {
   ): boolean;
   protected abstract clearMutationRepeatDraft(requestId?: string): void;
   protected abstract handleSystemEvent(event: AiChatSocketEvent): void;
+  protected abstract handleProviderRetryEvent(event: AiChatSocketEvent): boolean;
+  protected abstract clearProviderRetryCountdown(): void;
   protected abstract completeCancelledRequest(content?: string): void;
   protected abstract completeAuthenticationFailure(content?: string): void;
   protected abstract completeFailedRequest(content?: string,
@@ -452,7 +454,7 @@ export abstract class AiChatPanelControllerBase {
   protected abstract isTerminalExecutionStatus(status: AiExecutionStatus): boolean;
   abstract deleteConversation(conversationId: string, event?: Event): void;
   protected abstract deleteConversationNow(conversationId: string): void;
-  protected abstract showStatus(content: string, inProgress?: boolean): void;
+  protected abstract showStatus(content: string, inProgress?: boolean, alertSuffix?: string): void;
   protected abstract completeProgressMessages(): void;
   protected abstract completeToolGroupMessages(): void;
   protected abstract clearToolCallTracking(): void;

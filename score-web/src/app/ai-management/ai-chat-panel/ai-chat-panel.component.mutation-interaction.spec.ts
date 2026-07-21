@@ -17,26 +17,7 @@ describe('AiChatPanelComponent elicitation and mutation interaction', () => {
   afterEach(teardownAiChatPanelSpec);
 
   it('shows an MCP elicitation inline and sends the structured choice back on the same request', () => {
-    component.state.conversationId = 'conversation-1';
-    component.state.prompt = 'Perform the complex operation';
-    component.send();
-    transport.publishWhenConnected.mock.calls[0][0].publish();
-
-    (component as any).handleSocketEvent({
-      requestId: 'request-1', conversationId: 'conversation-1',
-      type: 'system', subtype: 'elicitation_required', visibility: 'visible',
-      content: 'The assistant needs your input before it can continue.',
-      metadata: {
-        elicitationId: 'elicitation-1', mode: 'form',
-        expiresAt: '2099-07-15T00:00:00Z',
-        message: 'Choose an import strategy.',
-        requestedSchema: {
-          type: 'object', properties: {
-            strategy: {type: 'string', enum: ['merge', 'replace']}
-          }, required: ['strategy']
-        }
-      }
-    });
+    startElicitation();
 
     expect(component.state.elicitation).toMatchObject({
       elicitationId: 'elicitation-1', message: 'Choose an import strategy.'
@@ -61,6 +42,108 @@ describe('AiChatPanelComponent elicitation and mutation interaction', () => {
     });
     expect(component.state.elicitation).toBeUndefined();
     expect(component.state.pending).toBe(true);
+  });
+
+  it('shows a rejected elicitation response as a retryable chat error', () => {
+    startElicitation();
+    component.respondToElicitation({
+      action: 'ACCEPT', content: {strategy: 'merge'}
+    });
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'elicitation_decision_rejected',
+      content: '  That import strategy is no longer available.  ',
+      metadata: {elicitationId: 'elicitation-1'}
+    });
+
+    expect(component.state.elicitation).toMatchObject({elicitationId: 'elicitation-1'});
+    expect(component.state.elicitationBusy).toBe(false);
+    expect(component.state.currentStatus).toBe('Waiting for your input');
+    expect(component.state.messages.at(-1)).toEqual({
+      role: 'error', content: 'That import strategy is no longer available.'
+    });
+    expect(snackBar.open).not.toHaveBeenCalled();
+
+    component.respondToElicitation({
+      action: 'ACCEPT', content: {strategy: 'replace'}
+    });
+    expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/elicitation', {
+      requestId: 'request-1', conversationId: 'conversation-1',
+      elicitationId: 'elicitation-1', action: 'ACCEPT',
+      content: {strategy: 'replace'}
+    });
+    expect(component.state.elicitationBusy).toBe(true);
+  });
+
+  it.each([
+    ['no message', undefined],
+    ['only whitespace', '   ']
+  ])('uses the standard chat error when an elicitation rejection has %s', (_label, content) => {
+    startElicitation();
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'elicitation_decision_rejected',
+      content,
+      metadata: {elicitationId: 'elicitation-1'}
+    });
+
+    expect(component.state.messages.at(-1)).toEqual({
+      role: 'error',
+      content: 'The assistant could not accept that response. Please try again.'
+    });
+    expect(snackBar.open).not.toHaveBeenCalled();
+  });
+
+  it('ignores an elicitation rejection for a different interaction', () => {
+    startElicitation();
+    component.respondToElicitation({
+      action: 'ACCEPT', content: {strategy: 'merge'}
+    });
+    const messagesBeforeStaleEvent = [...component.state.messages];
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'elicitation_decision_rejected',
+      content: 'A stale failure.',
+      metadata: {elicitationId: 'different-elicitation'}
+    });
+
+    expect(component.state.elicitation).toMatchObject({elicitationId: 'elicitation-1'});
+    expect(component.state.elicitationBusy).toBe(true);
+    expect(component.state.currentStatus).toBe('Sending your response');
+    expect(component.state.messages).toEqual(messagesBeforeStaleEvent);
+    expect(snackBar.open).not.toHaveBeenCalled();
+  });
+
+  it('shows a synchronous elicitation publish failure as a retryable chat error', () => {
+    startElicitation();
+    transport.publish.mockImplementationOnce(() => {
+      throw new Error('WebSocket publish failed');
+    });
+
+    component.respondToElicitation({
+      action: 'ACCEPT', content: {strategy: 'merge'}
+    });
+
+    expect(component.state.elicitation).toMatchObject({elicitationId: 'elicitation-1'});
+    expect(component.state.elicitationBusy).toBe(false);
+    expect(component.state.currentStatus).toBe('Waiting for your input');
+    expect(component.state.messages.at(-1)).toEqual({
+      role: 'error', content: 'Could not send your response.'
+    });
+    expect(snackBar.open).not.toHaveBeenCalled();
+
+    component.respondToElicitation({
+      action: 'ACCEPT', content: {strategy: 'replace'}
+    });
+    expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/elicitation', {
+      requestId: 'request-1', conversationId: 'conversation-1',
+      elicitationId: 'elicitation-1', action: 'ACCEPT',
+      content: {strategy: 'replace'}
+    });
+    expect(component.state.elicitationBusy).toBe(true);
   });
 
   it('waits for the original terminal event, then publishes one confirmed repeat without leaking its grant', () => {
@@ -290,13 +373,40 @@ describe('AiChatPanelComponent elicitation and mutation interaction', () => {
     );
   });
 
-  it('invalidates duplicate notices instead of opening a decision', () => {
+  it('keeps the first bound notice when an exact duplicate notice repeats', () => {
     startMutationConfirmation();
     sendMutationConfirmationNotice();
 
     finishMutationConfirmationRequest();
 
-    expect(component.mutationInteraction).toBeUndefined();
+    expect(component.mutationInteraction).toEqual({
+      mode: 'confirm', busy: false,
+      toolName: 'create_business_context', argumentsSummary: '{"name":"Example"}'
+    });
+    expect(api.decideMutationConfirmation).not.toHaveBeenCalled();
+    expect(api.sendChat).not.toHaveBeenCalled();
+  });
+
+  it('ignores a second-mutation notice on the same request and still offers the first approval', () => {
+    startMutationConfirmation();
+    sendMutationConfirmationNotice({metadata: {
+      confirmationRequestId: 'confirmation-2',
+      status: 'REQUESTED',
+      expiresAt: '2099-07-15T00:00:00Z',
+      toolName: 'update_business_context',
+      argumentsSummary: '{"id":2}'
+    }});
+
+    expect((component as any).pendingMutationConfirmation).toMatchObject({
+      conversationId: 'conversation-1',
+      notice: {confirmationRequestId: 'confirmation-1'}
+    });
+    finishMutationConfirmationRequest();
+
+    expect(component.mutationInteraction).toEqual({
+      mode: 'confirm', busy: false,
+      toolName: 'create_business_context', argumentsSummary: '{"name":"Example"}'
+    });
     expect(api.decideMutationConfirmation).not.toHaveBeenCalled();
     expect(api.sendChat).not.toHaveBeenCalled();
   });
@@ -393,3 +503,25 @@ describe('AiChatPanelComponent elicitation and mutation interaction', () => {
   });
 
 });
+
+function startElicitation(): void {
+  component.state.conversationId = 'conversation-1';
+  component.state.prompt = 'Perform the complex operation';
+  component.send();
+  transport.publishWhenConnected.mock.calls[0][0].publish();
+  (component as any).handleSocketEvent({
+    requestId: 'request-1', conversationId: 'conversation-1',
+    type: 'system', subtype: 'elicitation_required', visibility: 'visible',
+    content: 'The assistant needs your input before it can continue.',
+    metadata: {
+      elicitationId: 'elicitation-1', mode: 'form',
+      expiresAt: '2099-07-15T00:00:00Z',
+      message: 'Choose an import strategy.',
+      requestedSchema: {
+        type: 'object', properties: {
+          strategy: {type: 'string', enum: ['merge', 'replace']}
+        }, required: ['strategy']
+      }
+    }
+  });
+}

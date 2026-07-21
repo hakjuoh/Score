@@ -692,6 +692,139 @@ test('ignores the fan-out usage accounting step in graph and final checks', () =
   assert.equal(result.success, true);
 });
 
+// Request-scoped orchestration wire shapes recorded by the backend's
+// required-tool recovery path and the internal workflow planner/evaluator.
+function orchestrationModelCall(agent, nodeId, role, extra = {}) {
+  return {
+    message: `${agent} model call`,
+    extra: {
+      message_kind: 'model_call',
+      request_id: requestId,
+      node_id: nodeId,
+      agent_name: agent,
+      agent_role: role,
+      depth: 0,
+      ...extra
+    }
+  };
+}
+
+function plannerModelCall() {
+  return orchestrationModelCall(
+    'workflow-planner', `${requestId}:workflow-planner`, 'workflow selection');
+}
+
+function evaluatorModelCall() {
+  return orchestrationModelCall('workflow-evaluator',
+    `${requestId}:workflow-evaluator:1`, 'completion evaluation', {iteration: 1});
+}
+
+function evaluationFallback(extra = {}) {
+  return {
+    message: 'The workflow evaluator failed; accepting the current bounded result.',
+    extra: {
+      message_kind: 'agent_lifecycle',
+      lifecycle_subtype: 'workflow_evaluation_fallback',
+      node_id: `${requestId}:workflow-evaluator:1`,
+      agent_name: 'workflow-evaluator',
+      agent_role: 'completion evaluation',
+      depth: 0,
+      iteration: 1,
+      status: 'fallback',
+      reason: 'IllegalArgumentException',
+      ...extra
+    }
+  };
+}
+
+function singleModeTrajectory(orchestrationSteps) {
+  const steps = [
+    plannerModelCall(),
+    {...tool('get_libraries', [{library_id: 3}], {request_id: requestId})},
+    ...orchestrationSteps,
+    {...assistant(requestId, 'Observed library ID 3.')}
+  ].map((step, index) => ({...step, step_id: index + 1}));
+  return {
+    session_id: 'single-session',
+    final_metrics: {total_steps: steps.length},
+    steps
+  };
+}
+
+function evaluateSingleMode(trajectory) {
+  return evaluateMultiAgentCase({
+    testCase: {mode: 'single', strategy: 'balanced', combo: {}},
+    task: {expectedMutation: null, expectedReads: ['get_libraries']},
+    trajectory,
+    response: {conversationId: 'single-session', response: 'Observed library ID 3.'},
+    sourceResponses: [{conversationId: 'single-session', response: 'Observed library ID 3.'}],
+    evidenceSchemaVersion: 4
+  });
+}
+
+test('exempts request-scoped orchestration steps from single-mode graph checks', () => {
+  const result = evaluateSingleMode(singleModeTrajectory([
+    {
+      message: 'The assistant answered without a connectCenter domain tool call.',
+      extra: {
+        message_kind: 'agent_lifecycle',
+        lifecycle_subtype: 'required_tool_unfulfilled',
+        status: 'degraded',
+        recovery_attempts: 1
+      }
+    },
+    evaluatorModelCall()
+  ]));
+  assert.deepEqual(result.graph.violations, []);
+  assert.equal(result.graph.lifecycleSteps, 0);
+  assert.equal(result.graph.orchestrationSteps, 1);
+  assert.equal(result.success, true);
+});
+
+test('still rejects a non-exempt lifecycle step in single mode', () => {
+  const result = evaluateSingleMode(singleModeTrajectory([
+    lifecycle(leadNodeId, 0, 'started')
+  ]));
+  assert.equal(result.success, false);
+  assert.ok(result.graph.violations.includes('single mode emitted agent lifecycle steps'));
+});
+
+test('exempts orchestration lifecycle and planner/evaluator execution from fan-out checks', () => {
+  const trajectory = strictTrajectory();
+  trajectory.steps.unshift(plannerModelCall());
+  // The evaluator judges the workflow result after the lead terminates and
+  // before the final answer is projected.
+  trajectory.steps.splice(8, 0, evaluationFallback(), evaluatorModelCall());
+  trajectory.steps.forEach((step, index) => step.step_id = index + 1);
+  trajectory.final_metrics.total_steps = trajectory.steps.length;
+  const result = evaluate(trajectory);
+  assert.deepEqual(result.graph.violations, []);
+  assert.equal(result.graph.orchestrationSteps, 1);
+  assert.equal(result.success, true);
+});
+
+test('flags an exempt lifecycle step that leaks into a fan-out namespace', () => {
+  const leaked = strictTrajectory();
+  leaked.steps.splice(7, 0, evaluationFallback({fanout_id: fanoutId}));
+  leaked.steps.forEach((step, index) => step.step_id = index + 1);
+  leaked.final_metrics.total_steps = leaked.steps.length;
+  const leakedResult = evaluate(leaked);
+  assert.equal(leakedResult.success, false);
+  assert.ok(leakedResult.graph.violations.includes(
+    'orchestration lifecycle leaked into a fan-out namespace'));
+
+  const missingStatus = strictTrajectory();
+  const fallback = evaluationFallback();
+  delete fallback.extra.status;
+  missingStatus.steps.splice(7, 0, fallback);
+  missingStatus.steps.forEach((step, index) => step.step_id = index + 1);
+  missingStatus.final_metrics.total_steps = missingStatus.steps.length;
+  const missingStatusResult = evaluate(missingStatus);
+  assert.equal(missingStatusResult.success, false);
+  assert.ok(missingStatusResult.graph.violations.includes(
+    'every orchestration lifecycle step must carry status'));
+});
+
 test('does not count a trailing version number as a cited release ID', () => {
   const releaseTask = {expectedMutation: null, expectedReads: ['get_releases']};
   const run = text => evaluateMultiAgentCase({

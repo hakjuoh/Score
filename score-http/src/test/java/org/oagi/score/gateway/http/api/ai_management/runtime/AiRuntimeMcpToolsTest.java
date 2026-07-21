@@ -64,6 +64,8 @@ class AiRuntimeMcpToolsTest {
         assertThat(AbstractSpringAIRuntime.systemPromptParameters(request))
                 .containsEntry("mutationConfirmationRequired",
                         AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED)
+                .containsEntry("mutationApprovalPolicy",
+                        "ask: every data-changing tool call requires explicit user approval.")
                 .containsEntry("requestStopping", AiMutationToolGuard.REQUEST_STOPPING)
                 .containsEntry("pageContext",
                         "Supplied separately in the request-scoped user-context block.");
@@ -74,7 +76,7 @@ class AiRuntimeMcpToolsTest {
 
     @org.junit.jupiter.api.Test
     @SuppressWarnings({"unchecked", "rawtypes"})
-    void readOnlySpecialistUsesDirectFilteredToolsWithoutTheSharedSearchAdvisor() {
+    void readOnlySpecialistDefersOnlyTheServerFilteredReadTools() {
         ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
         ConnectCenterMcpClientFactory mcpClients = mock(ConnectCenterMcpClientFactory.class);
         ToolSearchToolCallingAdvisor toolSearchAdvisor = mock(ToolSearchToolCallingAdvisor.class);
@@ -143,7 +145,7 @@ class AiRuntimeMcpToolsTest {
         assertThat(messages.getValue().get(messages.getValue().size() - 2))
                 .isInstanceOfSatisfying(UserMessage.class,
                         user -> assertThat(user.getText()).isEqualTo("Inspect it"));
-        verify(builder, never()).defaultAdvisors(eq(toolSearchAdvisor));
+        verify(builder).defaultAdvisors(eq(toolSearchAdvisor));
         verify(create, never()).call(anyString(), any(org.springframework.ai.chat.model.ToolContext.class));
         verify(mcpClient).closeGracefully();
     }

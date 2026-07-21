@@ -40,6 +40,14 @@ const REGISTERED_AGENT_IDS = registeredAgentIds();
 const MUTATION_CONFIRMATION_MARKER = 'MUTATION_CONFIRMATION_REQUIRED';
 const REQUEST_STOPPING_MARKER = 'REQUEST_STOPPING';
 const USAGE_STEP_KIND = 'fanout_usage';
+// Request-scoped orchestration — the required-tool recovery path and the
+// internal workflow planner/evaluator (node IDs '<requestId>:workflow-planner'
+// and '<requestId>:workflow-evaluator:<iteration>') — runs outside any fan-out
+// graph, so graph and lead checks must not read those steps as fan-out nodes.
+// Matched on the known wire values, never a backend-provided exemption flag.
+const ORCHESTRATION_LIFECYCLE_SUBTYPES = new Set([
+  'required_tool_unfulfilled', 'workflow_plan_fallback', 'workflow_evaluation_fallback']);
+const ORCHESTRATION_AGENT_NAMES = new Set(['workflow-planner', 'workflow-evaluator']);
 const BASE64URL_32_BYTES = /^[A-Za-z0-9_-]{43}$/;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const TOOL_IDENTIFIER_KEYS = Object.freeze({
@@ -253,6 +261,17 @@ function lifecycleSteps(trajectory) {
   return (trajectory?.steps || []).filter(step => step?.extra?.message_kind === 'agent_lifecycle');
 }
 
+function stepIsOrchestrationLifecycle(step) {
+  return ORCHESTRATION_LIFECYCLE_SUBTYPES.has(step?.extra?.lifecycle_subtype)
+    || ORCHESTRATION_AGENT_NAMES.has(step?.extra?.agent_name);
+}
+
+// An orchestration execution step claiming a fanout_id is NOT exempt: it falls
+// through to the graph-linkage checks, which flag the leaked namespace.
+function stepIsOrchestrationExecution(step) {
+  return ORCHESTRATION_AGENT_NAMES.has(step?.extra?.agent_name) && !step?.extra?.fanout_id;
+}
+
 function expectedFanoutId(requestId) {
   return `fanout-${createHash('sha256').update(String(requestId)).digest('hex').slice(0, 20)}`;
 }
@@ -269,11 +288,22 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
     || stepIds.some((stepId, index) => index > 0 && stepId <= stepIds[index - 1])) {
     violations.push('step_id values must be unique and strictly increasing');
   }
+  const orchestrationLifecycle = lifecycle.filter(stepIsOrchestrationLifecycle);
+  const fanoutLifecycle = lifecycle.filter(step => !stepIsOrchestrationLifecycle(step));
+  if (orchestrationLifecycle.some(step => !step?.extra?.status)) {
+    violations.push('every orchestration lifecycle step must carry status');
+  }
+  if (orchestrationLifecycle.some(step => step?.extra?.fanout_id)) {
+    violations.push('orchestration lifecycle leaked into a fan-out namespace');
+  }
   // Fan-out usage steps are per-fan-out accounting records, not execution
   // steps; they carry a fanout_id but deliberately no depth or node_id.
+  // Planner/evaluator execution runs in a request-scoped namespace with no
+  // fanout_id and is orchestration, not a graph node.
   const namespacedExecutionSteps = allSteps.filter(step =>
     step?.extra?.message_kind !== 'agent_lifecycle'
       && step?.extra?.message_kind !== USAGE_STEP_KIND
+      && !stepIsOrchestrationExecution(step)
       && (step?.extra?.fanout_id || step?.extra?.node_id
         || step?.extra?.parent_node_id || step?.extra?.agent_name));
   const namespacedTools = tools.filter(step => step?.extra?.fanout_id
@@ -294,7 +324,7 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
   }
 
   if (testCase.mode === 'single') {
-    if (lifecycle.length !== 0) violations.push('single mode emitted agent lifecycle steps');
+    if (fanoutLifecycle.length !== 0) violations.push('single mode emitted agent lifecycle steps');
     if (namespacedExecutionSteps.length !== 0) {
       violations.push('single mode emitted agent-namespaced execution steps');
     }
@@ -302,7 +332,8 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
     return {
       valid: violations.length === 0,
       violations,
-      lifecycleSteps: lifecycle.length,
+      lifecycleSteps: fanoutLifecycle.length,
+      orchestrationSteps: orchestrationLifecycle.length,
       childNodes: 0,
       terminalChildren: 0,
       fanoutId: null,
@@ -312,14 +343,14 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
     };
   }
 
-  const fanoutIds = [...new Set(lifecycle.map(step => step?.extra?.fanout_id).filter(Boolean))];
-  const requestIds = [...new Set(lifecycle.map(step => step?.extra?.request_id).filter(Boolean))];
+  const fanoutIds = [...new Set(fanoutLifecycle.map(step => step?.extra?.fanout_id).filter(Boolean))];
+  const requestIds = [...new Set(fanoutLifecycle.map(step => step?.extra?.request_id).filter(Boolean))];
   if (fanoutIds.length !== 1) violations.push('lifecycle must have exactly one fanout_id');
   if (requestIds.length !== 1) violations.push('lifecycle must have exactly one request_id');
-  if (lifecycle.some(step => !step?.extra?.fanout_id || !step?.extra?.request_id)) {
+  if (fanoutLifecycle.some(step => !step?.extra?.fanout_id || !step?.extra?.request_id)) {
     violations.push('every lifecycle step must carry fanout_id and request_id');
   }
-  if (lifecycle.some(step => !step?.extra?.node_id || !step?.extra?.status)) {
+  if (fanoutLifecycle.some(step => !step?.extra?.node_id || !step?.extra?.status)) {
     violations.push('every lifecycle step must carry node_id and status');
   }
   const fanoutId = fanoutIds[0] || null;
@@ -327,7 +358,7 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
   if (fanoutId && requestId && fanoutId !== expectedFanoutId(requestId)) {
     violations.push('fanout_id is not the deterministic SHA-256 derivation of request_id');
   }
-  if (lifecycle.some(step => ![0, 1].includes(Number(step?.extra?.depth)))) {
+  if (fanoutLifecycle.some(step => ![0, 1].includes(Number(step?.extra?.depth)))) {
     violations.push('lifecycle contains a depth other than 0 or 1');
   }
   if (overDepthTools.length !== 0) violations.push('tool trace contains depth greater than 1');
@@ -338,7 +369,7 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
     violations.push('every namespaced tool must have depth 0 or 1');
   }
 
-  const lead = lifecycle.filter(step => Number(step?.extra?.depth) === 0);
+  const lead = fanoutLifecycle.filter(step => Number(step?.extra?.depth) === 0);
   const leadNodeIds = [...new Set(lead.map(step => step?.extra?.node_id).filter(Boolean))];
   const leadNodeId = leadNodeIds[0] || null;
   if (leadNodeIds.length !== 1 || leadNodeId !== `${fanoutId}-lead`) {
@@ -381,7 +412,7 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
     }
   }
 
-  const childSteps = lifecycle.filter(step => Number(step?.extra?.depth) === 1);
+  const childSteps = fanoutLifecycle.filter(step => Number(step?.extra?.depth) === 1);
   const childNodeIds = [...new Set(childSteps.map(step => step?.extra?.node_id).filter(Boolean))];
   const childGroups = new Map(childNodeIds.map(nodeId =>
     [nodeId, childSteps.filter(step => step?.extra?.node_id === nodeId)]));
@@ -444,9 +475,9 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
     violations.push('all child agents must start before any child reaches a terminal state');
   }
 
-  const synthesisIndex = lifecycle.findIndex(step => step?.extra?.status === 'synthesizing');
+  const synthesisIndex = fanoutLifecycle.findIndex(step => step?.extra?.status === 'synthesizing');
   const childTerminalLifecycleIndexes = childNodeIds.map(nodeId =>
-    lifecycle.findLastIndex(step => step?.extra?.node_id === nodeId));
+    fanoutLifecycle.findLastIndex(step => step?.extra?.node_id === nodeId));
   if (synthesisIndex < 0
     || childTerminalLifecycleIndexes.some(index => index < 0 || index >= synthesisIndex)) {
     violations.push('all child nodes must terminate before synthesis starts');
@@ -459,7 +490,8 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
   }
   const fanoutExecutionSteps = allSteps.filter((step, index) =>
     index > leadStartedIndex && index < leadTerminalIndex
-      && ['model_call', 'tool_call'].includes(step?.extra?.message_kind));
+      && ['model_call', 'tool_call'].includes(step?.extra?.message_kind)
+      && !stepIsOrchestrationExecution(step));
   const projectedFinal = visibleFinals.length === 1 ? visibleFinals[0] : null;
   const postHardeningTrace = evidenceSchemaVersion >= 2 || !!projectedFinal?.extra?.fanout_id;
   if (postHardeningTrace) {
@@ -528,7 +560,8 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
   return {
     valid: violations.length === 0,
     violations,
-    lifecycleSteps: lifecycle.length,
+    lifecycleSteps: fanoutLifecycle.length,
+    orchestrationSteps: orchestrationLifecycle.length,
     childNodes: childNodeIds.length,
     terminalChildren,
     fanoutId,

@@ -19,6 +19,10 @@ docs/user_guide/_build
 ###
 docker-compose.yml
 /docs
+!/docs/
+/docs/*
+!/docs/ai-workflow-architecture.md
+!/docs/ai-workflow-validation-2026-07-20.md
 misc
 ql-test
 *.sql

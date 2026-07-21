@@ -21,6 +21,7 @@ import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.ai.tool.execution.ToolExecutionException;
 
 import java.time.Instant;
 import java.nio.charset.StandardCharsets;
@@ -191,6 +192,112 @@ class AiTrajectoryRecorderTest {
 
         assertThat(recorder.completedToolCallCount()).isEqualTo(2);
         assertThat(recorder.completedDomainToolCallCount()).isEqualTo(1);
+        assertThat(recorder.successfulDomainToolCallCount()).isEqualTo(1);
+    }
+
+    @Test
+    void sharesRequestWideExecutionEvidenceAcrossForkedRecorders() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
+                "conversation-1", "request-1", ignored -> {});
+        AiTrajectoryRecorder worker = root.fork(Map.of("node_id", "request-1:worker"));
+        ToolResponseMessage responses = ToolResponseMessage.builder().responses(List.of(
+                new ToolResponseMessage.ToolResponse("read-1", "get_context_schemes",
+                        "{\"items\":[]}"),
+                new ToolResponseMessage.ToolResponse("blocked-1", "create_business_context",
+                        "{\"error\":\"MUTATION_CONFIRMATION_REQUIRED\",\"confirmationRequestId\":\"c-1\"}"),
+                new ToolResponseMessage.ToolResponse("stopped-1", "update_business_context",
+                        "{\"error\":\"REQUEST_STOPPING\"}"))).build();
+
+        worker.recordToolResponses(List.of(responses));
+
+        // Evidence counters are request-wide: a fork's executions are visible at
+        // the root, executed excludes intercepted calls, and a stop interception
+        // is neither an execution nor a pending approval.
+        assertThat(root.executedDomainToolCallCount()).isEqualTo(1);
+        assertThat(root.pendingApprovalCount()).isEqualTo(1);
+        // Answer-segment boundary counters stay local to the observing recorder.
+        assertThat(root.completedToolCallCount()).isZero();
+        assertThat(worker.completedToolCallCount()).isEqualTo(3);
+        assertThat(worker.successfulDomainToolCallCount()).isEqualTo(1);
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, times(6)).append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues().stream()
+                .filter(step -> "tool_call".equals(step.messageKind()))
+                .map(step -> step.extra().get("tool_status")))
+                .containsExactly("completed", "blocked", "cancelled");
+    }
+
+    @Test
+    void recognizesApprovalSentinelsOnlyAsExactTopLevelJsonErrors() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", events::add);
+        ToolResponseMessage responses = ToolResponseMessage.builder().responses(List.of(
+                new ToolResponseMessage.ToolResponse("text-1", "create_business_context",
+                        "{\"message\":\"example \\\"error\\\":\\\"MUTATION_CONFIRMATION_REQUIRED\\\"\"}"),
+                new ToolResponseMessage.ToolResponse("nested-1", "create_business_context",
+                        "{\"detail\":{\"error\":\"REQUEST_STOPPING\"}}"),
+                new ToolResponseMessage.ToolResponse("exact-1", "create_business_context",
+                        "{\"error\":\"MUTATION_CONFIRMATION_REQUIRED\"}"))).build();
+
+        recorder.recordToolResponses(List.of(responses));
+
+        assertThat(events.stream().filter(event -> "tool_call".equals(event.type()))
+                .filter(event -> !"started".equals(event.subtype()))
+                .map(AiExecutionEvent::subtype))
+                .containsExactly("completed", "completed", "blocked");
+    }
+
+    @Test
+    void narratesProviderRetriesWithCountdownMetadata() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
+                "conversation-1", "request-1", events::add);
+
+        recorder.providerRetry(2, 10, 15_000L, "Rate limited.",
+                "com.anthropic.errors.RateLimitException", 429);
+
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getValue().messageKind()).isEqualTo("provider_retry");
+        assertThat(steps.getValue().visibility()).isEqualTo("debug");
+        assertThat(steps.getValue().extra())
+                .containsEntry("attempt", 2)
+                .containsEntry("max_attempts", 10)
+                .containsEntry("delay_millis", 15_000L)
+                .containsEntry("reason", "Rate limited.")
+                .containsEntry("failure_class", "com.anthropic.errors.RateLimitException")
+                .containsEntry("status_code", 429);
+        assertThat(events).singleElement().satisfies(event -> {
+            assertThat(event.subtype()).isEqualTo("provider_retry");
+            assertThat(event.metadata())
+                    .containsEntry("attempt", 2)
+                    .containsEntry("max_attempts", 10)
+                    .containsEntry("delay_millis", 15_000L);
+        });
+    }
+
+    @Test
+    void reemitsAConsecutiveGuideAfterTheDeduplicationWindowReopens() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
+                "conversation-1", "request-1", events::add);
+
+        recorder.guide("Continuing with the remaining objective: verify.", Map.of());
+        recorder.guide("Continuing with the remaining objective: verify.", Map.of());
+        recorder.resetGuideDeduplication();
+        recorder.guide("Continuing with the remaining objective: verify.", Map.of());
+
+        assertThat(events.stream().filter(event -> "guide".equals(event.subtype()))).hasSize(2);
     }
 
     @Test
@@ -224,6 +331,7 @@ class AiTrajectoryRecorderTest {
 
         assertThat(output).isEqualTo("{\"count\":12}");
         assertThat(recorder.completedDomainToolCallCount()).isEqualTo(1);
+        assertThat(recorder.successfulDomainToolCallCount()).isEqualTo(1);
         verify(repository).updateObservation(eq("conversation-1"), eq(42L), any());
         ArgumentCaptor<AiChatTrajectoryStep> steps =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
@@ -243,6 +351,90 @@ class AiTrajectoryRecorderTest {
                 Result: {"count":12}""");
         assertThat(steps.getAllValues().get(0).reasoningContent()).isNull();
         assertThat(steps.getAllValues().get(0).extra()).containsEntry("reasoning_present", true);
+    }
+
+    @Test
+    void keepsSubagentPreToolNarrationOutOfTheVisibleGuideStream() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder root = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), requester,
+                "conversation-1", "request-1", events::add);
+        AiTrajectoryRecorder child = root.fork(Map.of(
+                "agent_id", "evidence-researcher", "depth", 1));
+        AssistantMessage.ToolCall call = new AssistantMessage.ToolCall(
+                "call-1", "function", "toolSearchTool", "{\"query\":\"context scheme\"}");
+        ChatResponse response = new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder()
+                        .content("I am read-only and cannot create records.")
+                        .toolCalls(List.of(call))
+                        .build())));
+
+        child.recordModelResponse(response, "assistant");
+
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getValue().messageKind()).isEqualTo("model_call");
+        assertThat(events).isEmpty();
+    }
+
+    @Test
+    void keepsConcurrentDirectBranchNarrationOutOfTheVisibleGuideStream() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder root = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), requester,
+                "conversation-1", "request-1", events::add);
+        AiTrajectoryRecorder branch = root.fork(Map.of(
+                "node_id", "request-1:lookup", "concurrent_branch", true, "depth", 1));
+        AssistantMessage.ToolCall call = new AssistantMessage.ToolCall(
+                "call-1", "function", "toolSearchTool", "{\"query\":\"context scheme\"}");
+        ChatResponse response = new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder()
+                        .content("I am read-only and cannot create records.")
+                        .toolCalls(List.of(call))
+                        .build())));
+
+        branch.recordModelResponse(response, "assistant");
+
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getValue().messageKind()).isEqualTo("model_call");
+        assertThat(events).isEmpty();
+    }
+
+    @Test
+    void keepsLeadPreToolNarrationInTheVisibleGuideStream() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder root = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), requester,
+                "conversation-1", "request-1", events::add);
+        AssistantMessage.ToolCall call = new AssistantMessage.ToolCall(
+                "call-1", "function", "get_context_schemes", "{}");
+        ChatResponse response = new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder()
+                        .content("I’ll verify the current context schemes.")
+                        .toolCalls(List.of(call))
+                        .build())));
+
+        root.recordModelResponse(response, "assistant");
+
+        assertThat(events).singleElement().satisfies(event -> {
+            assertThat(event.subtype()).isEqualTo("guide");
+            assertThat(event.content()).isEqualTo("I’ll verify the current context schemes.");
+        });
     }
 
     @Test
@@ -312,7 +504,7 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
-    void storesOnlyASafeMessageWhenAToolFailureContainsInternalDetails() {
+    void storesOnlyAGenericMessageWhenAToolFailureContainsInternalDetails() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         List<AiExecutionEvent> events = new ArrayList<>();
@@ -328,6 +520,7 @@ class AiTrajectoryRecorderTest {
         assertThatThrownBy(() -> recorder.recordingTools(() -> new ToolCallback[]{callback})
                 .getToolCallbacks()[0].call("{}", new ToolContext(Map.of())))
                 .isInstanceOf(IllegalStateException.class);
+        assertThat(recorder.successfulDomainToolCallCount()).isZero();
 
         ArgumentCaptor<AiChatTrajectoryStep> step =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
@@ -335,10 +528,318 @@ class AiTrajectoryRecorderTest {
         AiChatTrajectoryStep terminal = step.getAllValues().stream()
                 .filter(candidate -> "tool_call".equals(candidate.messageKind())).findFirst().orElseThrow();
         assertThat(terminal.message())
-                .contains("Tool execution failed. Details were recorded in the server log.")
+                .contains("The tool could not complete the request.")
+                .doesNotContain("Details were recorded in the server log")
                 .doesNotContain("SQL syntax", "app_user", "exposed-token");
         assertThat(events.getLast().metadata().get("toolDetail").toString())
                 .doesNotContain("SQL syntax", "app_user", "exposed-token");
+    }
+
+    @Test
+    void surfacesTheSanitizedValidationErrorReturnedByTheMcpTool() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
+                "conversation-1", "request-1", events::add);
+        ToolCallback callback = mock(ToolCallback.class);
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+        when(callback.getToolDefinition()).thenReturn(definition);
+        when(callback.call(anyString(), any(ToolContext.class)))
+                .thenThrow(mcpValidationFailure(definition));
+
+        assertThatThrownBy(() -> recorder.recordingTools(() -> new ToolCallback[]{callback})
+                .getToolCallbacks()[0].call("{\"biz_ctx_list\":\"[83]\"}",
+                        new ToolContext(Map.of())))
+                .isInstanceOf(ToolExecutionException.class);
+
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, times(2)).append(eq("conversation-1"), steps.capture());
+        AiChatTrajectoryStep terminal = steps.getAllValues().getLast();
+        assertThat(terminal.message())
+                .contains("Error: biz_ctx_list must be a comma-separated list of integers.")
+                .doesNotContain("TextContent", "Details were recorded in the server log");
+        assertThat(events.getLast().metadata().get("toolDetail").toString())
+                .contains("biz_ctx_list must be a comma-separated list of integers.");
+    }
+
+    @Test
+    void rejectsMcpErrorsThatContainCredentialsInsteadOfTreatingAuthorshipAsSafety() {
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+        ToolExecutionException failure = new ToolExecutionException(definition,
+                new IllegalStateException(
+                        "Error calling tool: [TextContent[annotations=null, "
+                                + "text=Validation failed; Authorization=Bearer exposed-token, "
+                                + "meta=null]]"));
+
+        assertThat(AiToolFailureMessage.userMessage(failure))
+                .isEqualTo(AiToolFailureMessage.GENERIC_MESSAGE)
+                .doesNotContain("exposed-token", "TextContent");
+    }
+
+    @Test
+    void rejectsWrappedMcpInternalErrorsForgedWrappersAndOversizedDetails() {
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+
+        assertThat(AiToolFailureMessage.userMessage(mcpFailure(definition,
+                "biz_ctx_list must be valid; SQL SELECT token_hash FROM app_user")))
+                .isEqualTo(AiToolFailureMessage.GENERIC_MESSAGE);
+        assertThat(AiToolFailureMessage.userMessage(mcpFailure(definition,
+                "biz_ctx_list must be valid; apiKey 'sk-super-secret-value'")))
+                .isEqualTo(AiToolFailureMessage.GENERIC_MESSAGE);
+        assertThat(AiToolFailureMessage.userMessage(new ToolExecutionException(definition,
+                new IllegalStateException("forged prefix Error calling tool: [TextContent[annotations=null, "
+                        + "text=biz_ctx_list must be an integer., meta=null]]"))))
+                .isEqualTo(AiToolFailureMessage.GENERIC_MESSAGE);
+        assertThat(AiToolFailureMessage.userMessage(mcpFailure(definition,
+                "biz_ctx_list must be " + "x".repeat(20_000))))
+                .isEqualTo(AiToolFailureMessage.GENERIC_MESSAGE);
+    }
+
+    @Test
+    void rejectsCompoundCredentialFieldsAndAuthenticationLanguage() {
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+
+        assertThat(List.of(
+                "userPassword must be hunter2.",
+                "authToken must be abcdefghijklmnop.",
+                "user must be authenticated.",
+                "user must be authorized."))
+                .allSatisfy(detail -> assertThat(AiToolFailureMessage.userMessage(
+                        mcpFailure(definition, detail)))
+                        .isEqualTo(AiToolFailureMessage.GENERIC_MESSAGE));
+    }
+
+    @Test
+    void rejectsOpaqueProviderCredentialsAndLongTokenLikeValues() {
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+
+        assertThat(List.of(
+                "value must be AKIAIOSFODNN7EXAMPLE.",
+                "value must be ghp_0123456789abcdef0123456789abcdef.",
+                "value must be " + "xoxb" + "-123456789012-abcdefghijklmnop.",
+                "value must be opaqueCredential1234567890abcd."))
+                .allSatisfy(detail -> assertThat(AiToolFailureMessage.userMessage(
+                        mcpFailure(definition, detail)))
+                        .isEqualTo(AiToolFailureMessage.GENERIC_MESSAGE));
+    }
+
+    @Test
+    void rejectsMalformedOrMultipleMcpTextContents() {
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+        ToolExecutionException multiple = new ToolExecutionException(definition,
+                new IllegalStateException("Error calling tool: [TextContent[annotations=null, "
+                        + "text=biz_ctx_list must be an integer., meta=null], "
+                        + "TextContent[annotations=null, text=SQL password leaked, meta=null]]"));
+        ToolExecutionException malformed = new ToolExecutionException(definition,
+                new IllegalStateException("Error calling tool: [TextContent[text=secret"));
+
+        assertThat(AiToolFailureMessage.userMessage(multiple))
+                .isEqualTo(AiToolFailureMessage.GENERIC_MESSAGE);
+        assertThat(AiToolFailureMessage.userMessage(malformed))
+                .isEqualTo(AiToolFailureMessage.GENERIC_MESSAGE);
+    }
+
+    @Test
+    void narratesACorrectedArgumentRetryWhenTheModelRetriesSilently() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
+                "conversation-1", "request-1", events::add);
+        ToolCallback callback = mock(ToolCallback.class);
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+        when(callback.getToolDefinition()).thenReturn(definition);
+        when(callback.call(anyString(), any(ToolContext.class)))
+                .thenThrow(mcpValidationFailure(definition))
+                .thenReturn("{\"top_level_asbiep_id\":3}");
+        ToolCallback recorded = recorder.recordingTools(() -> new ToolCallback[]{callback})
+                .getToolCallbacks()[0];
+
+        assertThatThrownBy(() -> recorded.call(
+                "{\"asccp_manifest_id\":722970,\"biz_ctx_list\":\"[83]\"}",
+                new ToolContext(Map.of())))
+                .isInstanceOf(ToolExecutionException.class);
+
+        AssistantMessage.ToolCall retry = new AssistantMessage.ToolCall(
+                "retry-call", "function", "create_top_level_asbiep",
+                "{\"asccp_manifest_id\":722970,\"biz_ctx_list\":\"83\"}");
+        recorder.recordModelResponse(new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder().toolCalls(List.of(retry)).build()))), "assistant");
+        assertThat(recorded.call(
+                "{\"asccp_manifest_id\":722970,\"biz_ctx_list\":\"83\"}",
+                new ToolContext(Map.of())))
+                .isEqualTo("{\"top_level_asbiep_id\":3}");
+
+        assertThat(events.stream().filter(event -> "guide".equals(event.subtype())))
+                .singleElement().satisfies(event -> {
+                    assertThat(event.content()).isEqualTo(
+                            "The previous create_top_level_asbiep call failed. "
+                                    + "I corrected the tool arguments and am retrying it.");
+                    assertThat(event.metadata())
+                            .containsEntry("tool_retry", true)
+                            .containsEntry("tool_name", "create_top_level_asbiep");
+                });
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, times(6)).append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues()).extracting(AiChatTrajectoryStep::messageKind)
+                .containsExactly("tool_call_update", "tool_call", "model_call", "guide",
+                        "tool_call_update", "tool_call");
+    }
+
+    @Test
+    void emitsFallbackRetryNarrationWhenTheModelsGuideWasDeduplicated() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", events::add);
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+        ToolCallback callback = mock(ToolCallback.class);
+        when(callback.getToolDefinition()).thenReturn(definition);
+        when(callback.call(anyString(), any(ToolContext.class)))
+                .thenThrow(mcpValidationFailure(definition))
+                .thenReturn("{\"top_level_asbiep_id\":3}");
+        ToolCallback recorded = recorder.recordingTools(() -> new ToolCallback[]{callback})
+                .getToolCallbacks()[0];
+        String repeatedGuide = "I’ll correct the business context argument and retry.";
+        assertThat(recorder.guide(repeatedGuide, Map.of())).isTrue();
+
+        assertThatThrownBy(() -> recorded.call("{\"biz_ctx_list\":\"[83]\"}",
+                new ToolContext(Map.of()))).isInstanceOf(ToolExecutionException.class);
+        AssistantMessage.ToolCall retry = new AssistantMessage.ToolCall(
+                "retry-call", "function", "create_top_level_asbiep",
+                "{\"biz_ctx_list\":\"83\"}");
+        recorder.recordModelResponse(new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder().content(repeatedGuide)
+                        .toolCalls(List.of(retry)).build()))), "assistant");
+        recorded.call("{\"biz_ctx_list\":\"83\"}", new ToolContext(Map.of()));
+
+        assertThat(events.stream().filter(event -> "guide".equals(event.subtype()))
+                .map(AiExecutionEvent::content)).containsExactly(
+                repeatedGuide,
+                "The previous create_top_level_asbiep call failed. "
+                        + "I corrected the tool arguments and am retrying it.");
+    }
+
+    @Test
+    void emitsTheMandatoryGuideBeforeEveryConsecutiveSilentRetry() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        java.util.concurrent.atomic.AtomicLong storedId =
+                new java.util.concurrent.atomic.AtomicLong(40L);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenAnswer(ignored -> new AiChatStoredStep(
+                        storedId.incrementAndGet(), 3L, Instant.now()));
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", events::add);
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+        ToolCallback callback = mock(ToolCallback.class);
+        when(callback.getToolDefinition()).thenReturn(definition);
+        when(callback.call(anyString(), any(ToolContext.class)))
+                .thenThrow(mcpValidationFailure(definition))
+                .thenThrow(mcpValidationFailure(definition))
+                .thenReturn("{\"top_level_asbiep_id\":3}");
+        ToolCallback recorded = recorder.recordingTools(() -> new ToolCallback[]{callback})
+                .getToolCallbacks()[0];
+
+        assertThatThrownBy(() -> recorded.call("{\"biz_ctx_list\":\"[83]\"}",
+                new ToolContext(Map.of()))).isInstanceOf(ToolExecutionException.class);
+        recordSilentToolCall(recorder, "retry-1", "{\"biz_ctx_list\":\"83\"}");
+        assertThatThrownBy(() -> recorded.call("{\"biz_ctx_list\":\"83\"}",
+                new ToolContext(Map.of()))).isInstanceOf(ToolExecutionException.class);
+        recordSilentToolCall(recorder, "retry-2", "{\"biz_ctx_list\":\"84\"}");
+        recorded.call("{\"biz_ctx_list\":\"84\"}", new ToolContext(Map.of()));
+
+        assertThat(events.stream().filter(event -> "guide".equals(event.subtype()))
+                .map(AiExecutionEvent::content)).containsExactly(
+                "The previous create_top_level_asbiep call failed. "
+                        + "I corrected the tool arguments and am retrying it.",
+                "The previous create_top_level_asbiep call failed. "
+                        + "I corrected the tool arguments and am retrying it.");
+    }
+
+    @Test
+    void usesTheCurrentPromptLanguageForSyntheticRetryNarration() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", events::add);
+        recorder.usePromptLanguage("호출 인자를 고쳐서 다시 시도해 줘");
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+        ToolCallback callback = mock(ToolCallback.class);
+        when(callback.getToolDefinition()).thenReturn(definition);
+        when(callback.call(anyString(), any(ToolContext.class)))
+                .thenThrow(mcpValidationFailure(definition))
+                .thenReturn("{\"top_level_asbiep_id\":3}");
+        ToolCallback recorded = recorder.recordingTools(() -> new ToolCallback[]{callback})
+                .getToolCallbacks()[0];
+
+        assertThatThrownBy(() -> recorded.call("{\"biz_ctx_list\":\"[83]\"}",
+                new ToolContext(Map.of()))).isInstanceOf(ToolExecutionException.class);
+        recordSilentToolCall(recorder, "retry-call", "{\"biz_ctx_list\":\"83\"}");
+        recorded.call("{\"biz_ctx_list\":\"83\"}", new ToolContext(Map.of()));
+
+        assertThat(events.stream().filter(event -> "guide".equals(event.subtype())))
+                .singleElement().extracting(AiExecutionEvent::content)
+                .isEqualTo("이전 create_top_level_asbiep 호출이 실패했습니다. "
+                        + "툴 호출 인자를 수정해 다시 시도합니다.");
+    }
+
+    @Test
+    void keepsWorkerRetryNarrationOutOfTheLeadConversation() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", events::add);
+        AiTrajectoryRecorder worker = root.fork(Map.of(
+                "node_id", "request-1:worker", "agent_id", "request-1:worker"));
+        ToolDefinition definition = ToolDefinition.builder()
+                .name("create_top_level_asbiep").description("test")
+                .inputSchema("{\"type\":\"object\"}").build();
+        ToolCallback callback = mock(ToolCallback.class);
+        when(callback.getToolDefinition()).thenReturn(definition);
+        when(callback.call(anyString(), any(ToolContext.class)))
+                .thenThrow(mcpValidationFailure(definition))
+                .thenReturn("{\"top_level_asbiep_id\":3}");
+        ToolCallback recorded = worker.recordingTools(() -> new ToolCallback[]{callback})
+                .getToolCallbacks()[0];
+
+        assertThatThrownBy(() -> recorded.call("{\"biz_ctx_list\":\"[83]\"}",
+                new ToolContext(Map.of()))).isInstanceOf(ToolExecutionException.class);
+        recordSilentToolCall(worker, "retry-call", "{\"biz_ctx_list\":\"83\"}");
+        recorded.call("{\"biz_ctx_list\":\"83\"}", new ToolContext(Map.of()));
+
+        assertThat(events).noneMatch(event -> "guide".equals(event.subtype()));
     }
 
     @Test
@@ -567,6 +1068,25 @@ class AiTrajectoryRecorderTest {
                 "high", "default", Map.of(), ignored -> {}, budget, budget.safeInputLimit());
 
         assertThat(recorder.limitToolOutput("must not fit", 100L, "get_result")).isEmpty();
+    }
+
+    private static ToolExecutionException mcpValidationFailure(ToolDefinition definition) {
+        return mcpFailure(definition,
+                "biz_ctx_list must be a comma-separated list of integers.");
+    }
+
+    private static ToolExecutionException mcpFailure(ToolDefinition definition, String detail) {
+        return new ToolExecutionException(definition, new IllegalStateException(
+                "Error calling tool: [TextContent[annotations=null, text=" + detail
+                        + ", meta=null]]"));
+    }
+
+    private static void recordSilentToolCall(AiTrajectoryRecorder recorder, String id,
+                                             String arguments) {
+        AssistantMessage.ToolCall retry = new AssistantMessage.ToolCall(
+                id, "function", "create_top_level_asbiep", arguments);
+        recorder.recordModelResponse(new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder().toolCalls(List.of(retry)).build()))), "assistant");
     }
 
     private static final class CountTool implements ToolCallback {

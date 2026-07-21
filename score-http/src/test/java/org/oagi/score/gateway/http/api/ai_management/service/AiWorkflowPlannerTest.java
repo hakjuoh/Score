@@ -282,4 +282,171 @@ class AiWorkflowPlannerTest {
         assertThat(plan.toolsNeeded()).isTrue();
         assertThat(plan.tasks()).isEmpty();
     }
+
+    @Test
+    void collapsesAnAutomaticSingleEvidenceWorkerFollowedByTheLead() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
+        AiWorkflowPlanner planner = new AiWorkflowPlanner(
+                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                {"root":{"id":"root","workflow":"chain","toolRequired":true,
+                  "guideMessage":"I’ll verify the records and create them only if missing.",
+                  "activeVerb":"Handling context records","completedVerb":"Handled context records",
+                  "synthesisGuideMessage":null,"synthesisActiveVerb":"Completing",
+                  "synthesisCompletedVerb":"Completed","task":null,"selectedRoute":null,
+                  "children":[
+                    {"id":"research","workflow":"direct","toolRequired":true,
+                     "guideMessage":"I’ll inspect the current context records.",
+                     "activeVerb":"Inspecting","completedVerb":"Inspected",
+                     "synthesisGuideMessage":null,"synthesisActiveVerb":"Inspecting",
+                     "synthesisCompletedVerb":"Inspected",
+                     "task":{"label":"Context evidence","agentId":"evidence-researcher",
+                       "instruction":"Read the exact context scheme and category.",
+                       "guideMessage":"Inspecting current records.",
+                       "activeVerb":"Inspecting","completedVerb":"Inspected"},
+                     "selectedRoute":null,"children":[],"routes":{}},
+                    {"id":"lead","workflow":"direct","toolRequired":true,
+                     "guideMessage":"I’ll create only records that are missing.",
+                     "activeVerb":"Completing","completedVerb":"Completed",
+                     "synthesisGuideMessage":null,"synthesisActiveVerb":"Completing",
+                     "synthesisCompletedVerb":"Completed","task":null,
+                     "selectedRoute":null,"children":[],"routes":{}}
+                  ],"routes":{}}}
+                """));
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
+        ChatRequest request = new ChatRequest(
+                "Create the context scheme and category if they are missing.",
+                "request-4", null, "conversation-1", null, List.of(), null,
+                "model", "medium", "default", Map.of(), "ask");
+        AiRuntime.Context context = new AiRuntime.Context(request,
+                List.of(new AssistantMessage("The prior result referenced scheme ID 34 and category ID 44.")),
+                new UserMessage(request.prompt()), mock(ScoreUser.class), root);
+
+        AiWorkflowPlan plan = planner.plan(context);
+
+        assertThat(plan.workflow()).isEqualTo("direct");
+        assertThat(plan.toolsNeeded()).isTrue();
+        assertThat(plan.root()).isNotNull();
+        assertThat(plan.root().task()).isNull();
+        assertThat(plan.root().children()).isEmpty();
+        assertThat(plan.guideMessage()).isEqualTo("I’ll inspect the current context records.")
+                .doesNotContain("create");
+    }
+
+    @Test
+    void normalizesARecursiveComposedWorkflowPlan() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
+        AiWorkflowPlanner planner = new AiWorkflowPlanner(
+                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                {"root":{"id":"root","workflow":"chain","toolRequired":true,
+                  "guideMessage":"I’ll gather and verify the current evidence.",
+                  "activeVerb":"Investigating","completedVerb":"Investigated",
+                  "synthesisGuideMessage":null,"synthesisActiveVerb":"Synthesizing",
+                  "synthesisCompletedVerb":"Synthesized","task":null,"selectedRoute":null,
+                  "children":[
+                    {"id":"research","workflow":"direct","toolRequired":true,
+                     "guideMessage":"I’ll research the record.","activeVerb":"Researching",
+                     "completedVerb":"Researched","synthesisGuideMessage":null,
+                     "synthesisActiveVerb":"Synthesizing","synthesisCompletedVerb":"Synthesized",
+                     "task":{"label":"Evidence","agentId":"evidence-researcher",
+                       "instruction":"Read the exact current record and return evidence only.",
+                       "guideMessage":"Researching the current record.",
+                       "activeVerb":"Researching","completedVerb":"Researched"},
+                     "selectedRoute":null,"children":[],"routes":{}},
+                    {"id":"answer","workflow":"direct","toolRequired":true,
+                     "guideMessage":null,"activeVerb":"Answering","completedVerb":"Answered",
+                     "synthesisGuideMessage":null,"synthesisActiveVerb":"Answering",
+                     "synthesisCompletedVerb":"Answered","task":null,"selectedRoute":null,
+                     "children":[],"routes":{}}
+                  ],"routes":{}}}
+                """));
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
+        ChatRequest request = new ChatRequest(
+                "Investigate this current record with agents.", "request-5", null,
+                "conversation-1", null, List.of(), null, "model", "medium", "default",
+                Map.of(), "ask", new AiMultiAgentOptions(true, 3, "balanced"));
+
+        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request, List.of(),
+                new UserMessage(request.prompt()), mock(ScoreUser.class), root));
+
+        assertThat(plan.root()).isNotNull();
+        assertThat(plan.workflow()).isEqualTo("chain");
+        assertThat(plan.root().children()).hasSize(2);
+        assertThat(plan.root().children().getFirst().task().agentId())
+                .isEqualTo("evidence-researcher");
+    }
+
+    @Test
+    void countsPlainParallelBranchesAgainstTheWorkerLimit() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = new AiWorkflowPlanner(
+                runtimes, new AiAgentCatalog(new DefaultResourceLoader()),
+                new ObjectMapper(), new DefaultResourceLoader());
+        // Four plain (non-worker) branches each consume a concurrent model
+        // execution, so a three-agent limit must reject the graph and fall back.
+        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                {"root":{"id":"root","workflow":"parallel","toolRequired":true,
+                  "guideMessage":null,"activeVerb":"Working","completedVerb":"Completed",
+                  "synthesisGuideMessage":null,"synthesisActiveVerb":"Synthesizing",
+                  "synthesisCompletedVerb":"Synthesized","task":null,"selectedRoute":null,
+                  "children":[%s],"routes":{}}}
+                """.formatted(String.join(",",
+                plainLeafJson("a"), plainLeafJson("b"), plainLeafJson("c"), plainLeafJson("d")))));
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
+        ChatRequest request = new ChatRequest(
+                "Investigate this current record.", "request-6", null,
+                "conversation-1", null, List.of(), null, "model", "medium", "default",
+                Map.of(), "ask", new AiMultiAgentOptions(true, 3, "balanced"));
+
+        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request, List.of(),
+                new UserMessage(request.prompt()), mock(ScoreUser.class), root));
+
+        assertThat(plan.root()).isNull();
+        assertThat(plan.workflow()).isEqualTo("direct");
+        assertThat(plan.toolsNeeded()).isTrue();
+    }
+
+    @Test
+    void acceptsPlainParallelBranchesWithinTheWorkerLimit() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = new AiWorkflowPlanner(
+                runtimes, new AiAgentCatalog(new DefaultResourceLoader()),
+                new ObjectMapper(), new DefaultResourceLoader());
+        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                {"root":{"id":"root","workflow":"parallel","toolRequired":true,
+                  "guideMessage":null,"activeVerb":"Working","completedVerb":"Completed",
+                  "synthesisGuideMessage":null,"synthesisActiveVerb":"Synthesizing",
+                  "synthesisCompletedVerb":"Synthesized","task":null,"selectedRoute":null,
+                  "children":[%s],"routes":{}}}
+                """.formatted(String.join(",",
+                plainLeafJson("a"), plainLeafJson("b"), plainLeafJson("c")))));
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
+        ChatRequest request = new ChatRequest(
+                "Investigate this current record.", "request-7", null,
+                "conversation-1", null, List.of(), null, "model", "medium", "default",
+                Map.of(), "ask", new AiMultiAgentOptions(true, 3, "balanced"));
+
+        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request, List.of(),
+                new UserMessage(request.prompt()), mock(ScoreUser.class), root));
+
+        assertThat(plan.root()).isNotNull();
+        assertThat(plan.workflow()).isEqualTo("parallel");
+        assertThat(plan.root().children()).hasSize(3);
+    }
+
+    private String plainLeafJson(String id) {
+        return """
+                {"id":"%s","workflow":"direct","toolRequired":true,"guideMessage":null,
+                 "activeVerb":"Working","completedVerb":"Completed","synthesisGuideMessage":null,
+                 "synthesisActiveVerb":"Synthesizing","synthesisCompletedVerb":"Synthesized",
+                 "task":null,"selectedRoute":null,"children":[],"routes":{}}
+                """.formatted(id);
+    }
 }
