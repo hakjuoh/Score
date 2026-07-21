@@ -6,7 +6,18 @@ import java.util.List;
 public record AiWorkflowPlan(String workflow, Boolean toolRequired, String guideMessage,
                              String activeVerb, String completedVerb,
                              String synthesisGuideMessage, String synthesisActiveVerb,
-                             String synthesisCompletedVerb, List<Task> tasks) {
+                             String synthesisCompletedVerb, List<Task> tasks,
+                             AiWorkflowNode root) {
+
+    /** Backward-compatible constructor for the original flat planner contract. */
+    public AiWorkflowPlan(String workflow, Boolean toolRequired, String guideMessage,
+                          String activeVerb, String completedVerb,
+                          String synthesisGuideMessage, String synthesisActiveVerb,
+                          String synthesisCompletedVerb, List<Task> tasks) {
+        this(workflow, toolRequired, guideMessage, activeVerb, completedVerb,
+                synthesisGuideMessage, synthesisActiveVerb, synthesisCompletedVerb,
+                tasks, null);
+    }
 
     public AiWorkflowPlan {
         tasks = tasks != null ? List.copyOf(tasks) : List.of();

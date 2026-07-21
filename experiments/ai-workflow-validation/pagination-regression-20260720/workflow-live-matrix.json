@@ -1,0 +1,33 @@
+{
+  "runId": "pagination-regression-20260720",
+  "createdAt": "2026-07-20T23:32:43.955Z",
+  "total": 1,
+  "passed": 1,
+  "failed": 0,
+  "results": [
+    {
+      "workflow": "direct",
+      "status": "PASS",
+      "durationMs": 16615,
+      "conversationId": "827e91b9-b637-4b73-b61e-b1f992c06b04",
+      "selectedWorkflow": "direct",
+      "controllerWorkflow": "evaluator_optimizer",
+      "evaluationStatus": "complete",
+      "workflowIterations": 1,
+      "plannerCalls": 1,
+      "evaluatorCalls": 1,
+      "subagentTrajectories": 0,
+      "subagentModelCalls": 0,
+      "toolSearchCalls": 2,
+      "dataToolCalls": [
+        "get_context_categories",
+        "get_context_schemes"
+      ],
+      "promptTokens": 7,
+      "completionTokens": 757,
+      "steps": 23,
+      "answer": "Here are the results of the read-only pagination check (page 1, limit 2, no data changed):\n\n**Context Categories**\n- Total items: **89**\n- Returned IDs: **5** (Business Process), **6** (AI ATIF Pilot Industry)\n\n**Context Schemes**\n- Total items: **75**\n- Returned IDs (ctx_scheme_id): **6** (ATIF-M0120260717bc, category 7), **7** (ATIF-M0120260717bc, category 8)\n\nBoth calls were plain reads — no create, update, or delete operations were performed.",
+      "error": null
+    }
+  ]
+}

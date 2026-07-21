@@ -69,12 +69,13 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
     private final ScoreAiSystemPrompt systemPrompt;
     private final AiMutationToolGuard mutationGuard;
     private final AiElicitationService elicitations;
+    private final AiProviderRetryExecutor providerRetry;
 
     AbstractSpringAIRuntime(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                             ToolSearchToolCallingAdvisor toolSearchAdvisor,
                             ScoreAiSystemPrompt systemPrompt,
                             AiMutationToolGuard mutationGuard) {
-        this(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, null);
+        this(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, null, null);
     }
 
     AbstractSpringAIRuntime(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
@@ -82,12 +83,22 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
                             ScoreAiSystemPrompt systemPrompt,
                             AiMutationToolGuard mutationGuard,
                             AiElicitationService elicitations) {
+        this(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, elicitations, null);
+    }
+
+    AbstractSpringAIRuntime(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
+                            ToolSearchToolCallingAdvisor toolSearchAdvisor,
+                            ScoreAiSystemPrompt systemPrompt,
+                            AiMutationToolGuard mutationGuard,
+                            AiElicitationService elicitations,
+                            AiProviderRetryExecutor providerRetry) {
         this.models = models;
         this.mcpClients = mcpClients;
         this.toolSearchAdvisor = toolSearchAdvisor;
         this.systemPrompt = systemPrompt;
         this.mutationGuard = mutationGuard;
         this.elicitations = elicitations;
+        this.providerRetry = providerRetry;
     }
 
     protected final ScoreAiModelRegistry models() {
@@ -98,6 +109,20 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
 
     @Override
     public final Result execute(Context context) {
+        if (context.toolPolicy() == ToolPolicy.NONE) {
+            // Tool-less calls (planner, evaluator, no-tool leaves) never consult the
+            // MCP registry, so they must not pay the per-call MCP handshake.
+            return execute(context, null);
+        }
+        try (ConnectCenterMcpClientFactory.McpSession mcp = elicitations != null
+                ? mcpClients.open(context.requester(), elicitation -> handleElicitation(
+                        context, context.request(), context.recorder(), elicitation))
+                : mcpClients.open(context.requester())) {
+            return execute(context, mcp);
+        }
+    }
+
+    private Result execute(Context context, ConnectCenterMcpClientFactory.McpSession mcp) {
         var request = context.request();
         AiTrajectoryRecorder recorder = context.recorder();
         ChatOptions options = requestOptions(context);
@@ -105,15 +130,12 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
         long toolOutputTokenLimit = runtimeModel != null && runtimeModel.contextBudget() != null
                 && runtimeModel.contextBudget().toolOutputTokenLimit() != null
                 ? runtimeModel.contextBudget().toolOutputTokenLimit() : Long.MAX_VALUE;
-        try (ConnectCenterMcpClientFactory.McpSession mcp = elicitations != null
-                ? mcpClients.open(context.requester(), elicitation -> handleElicitation(
-                        context, request, recorder, elicitation))
-                : mcpClients.open(context.requester())) {
+        {
             ChatClient.Builder assistantBuilder = models.clientBuilder(request.modelName())
                     .defaultAdvisors(new TrajectoryRecordingAdvisor(recorder));
             AiMutationToolGuard.GuardedToolSession guardedSession = null;
             org.springframework.ai.tool.ToolCallbackProvider executableTools = null;
-            if (mcp.client() != null && context.toolPolicy() != ToolPolicy.NONE) {
+            if (mcp != null && mcp.client() != null && context.toolPolicy() != ToolPolicy.NONE) {
                 recorder.readOnlyToolNames(mcp.readOnlyToolNames());
                 if (context.toolPolicy() == ToolPolicy.FULL) {
                     guardedSession = mutationGuard != null
@@ -134,10 +156,12 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
                 // Give the model the guarded callbacks directly so it can resume that
                 // invocation and read it back without rediscovering it through
                 // toolSearchTool. Other mutations remain protected by the guard.
-                if (context.toolPolicy() == ToolPolicy.READ_ONLY
-                        || request.mutationConfirmation() != null) {
+                if (request.mutationConfirmation() != null) {
                     assistantBuilder.defaultAdvisors(DIRECT_TOOL_CALLING_ADVISOR);
                 } else {
+                    // READ_ONLY sessions have already been reduced to the server-declared
+                    // read-only callback set above. Keep that private safe registry deferred too,
+                    // so delegated workers do not pay the context cost of every read schema.
                     assistantBuilder.defaultAdvisors(toolSearchAdvisor);
                 }
             }
@@ -159,9 +183,10 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
                                 messages, execution, recorder, toolOutputTokenLimit));
             }
             ChatClient assistant = assistantBuilder.build();
+            boolean internalPersona = internalPersona(context);
             long completedToolCallsBeforeAnswer = recorder.completedToolCallCount();
             String answer = invoke(assistant, options, request, messages, recorder,
-                    context.streamVisibleContent());
+                    context.streamVisibleContent(), internalPersona);
             int textualToolCallRecovery = 0;
             while (isTextualToolCallPlaceholder(answer)
                     && recorder.completedToolCallCount() == completedToolCallsBeforeAnswer
@@ -170,7 +195,7 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
                 recoveryMessages.add(new AssistantMessage(answer));
                 recoveryMessages.add(new UserMessage(TEXTUAL_TOOL_CALL_RECOVERY));
                 answer = invoke(assistant, options, request, recoveryMessages, recorder,
-                        context.streamVisibleContent());
+                        context.streamVisibleContent(), internalPersona);
             }
             if (isTextualToolCallPlaceholder(answer)) {
                 throw new IllegalStateException(
@@ -188,7 +213,8 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
                                 continuationMessages, execution, recorder, toolOutputTokenLimit));
                 continuationMessages.add(new AssistantMessage(answer));
                 continuationMessages.add(new UserMessage(READ_BACK_CONTINUATION));
-                answer = invoke(assistant, options, request, continuationMessages, recorder, false);
+                answer = invoke(assistant, options, request, continuationMessages, recorder,
+                        false, internalPersona);
             }
             if (guardedSession != null && guardedSession.mutationCompleted()
                     && !guardedSession.confirmationRequired()
@@ -198,6 +224,17 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
             }
             return new Result(answer);
         }
+    }
+
+    /**
+     * Planner, evaluator, and worker calls carry their own leading system prompt and
+     * never speak as the signed-in assistant, so the assistant persona and volatile
+     * page context must not be re-sent to them.
+     */
+    private boolean internalPersona(Context context) {
+        return !context.history().isEmpty()
+                && context.history().getFirst() instanceof SystemMessage
+                && (context.agentDepth() > 0 || context.toolPolicy() == ToolPolicy.NONE);
     }
 
     private McpSchema.ElicitResult handleElicitation(
@@ -226,6 +263,31 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
                           ChatRequest request,
                           List<Message> messages, AiTrajectoryRecorder recorder,
                           boolean streamVisibleContent) {
+        return invoke(assistant, options, request, messages, recorder,
+                streamVisibleContent, false);
+    }
+
+    private String invoke(ChatClient assistant, ChatOptions options,
+                          ChatRequest request,
+                          List<Message> messages, AiTrajectoryRecorder recorder,
+                          boolean streamVisibleContent, boolean internalPersona) {
+        if (providerRetry == null) {
+            return attemptInvoke(assistant, options, request, messages, recorder,
+                    streamVisibleContent, internalPersona);
+        }
+        // Transient provider failures are retried with visible backoff. An attempt
+        // that executed a data-changing tool is terminal: the recorder's mutation
+        // count is the executor's replay fence.
+        return providerRetry.execute(request, recorder,
+                recorder::executedMutationToolCallCount,
+                () -> attemptInvoke(assistant, options, request, messages, recorder,
+                        streamVisibleContent, internalPersona));
+    }
+
+    private String attemptInvoke(ChatClient assistant, ChatOptions options,
+                                 ChatRequest request,
+                                 List<Message> messages, AiTrajectoryRecorder recorder,
+                                 boolean streamVisibleContent, boolean internalPersona) {
         // Visible text emitted before a tool call is interim narration, not the
         // answer. Tool completions mark segment boundaries; the answer restarts
         // at the first substantive chunk after a boundary so it reflects the
@@ -234,16 +296,25 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
         // The UI splits its streamed bubbles at the same boundaries.
         StringBuilder answer = new StringBuilder();
         long[] toolBoundary = {recorder.completedToolCallCount()};
-        String stableSystemPrompt = systemPrompt.render(systemPromptParameters(request));
+        // Planner, evaluator, and worker calls supply their own leading system
+        // prompt; sending the assistant persona and page context to them wastes
+        // input tokens on every request.
+        String stableSystemPrompt = internalPersona
+                ? null : systemPrompt.render(systemPromptParameters(request));
         List<Message> requestMessages = new ArrayList<>(messages.size() + 1);
         requestMessages.addAll(messages);
         // Keep volatile page data out of every system block. Appending it as
         // untrusted turn context preserves the stable system-prompt prefix for
         // provider caching, matching Claude Code's user-context path.
-        requestMessages.add(new UserMessage(requestScopedInput(request)));
-        assistant.prompt()
-                    .options(options.mutate())
-                    .system(system -> system.text(stableSystemPrompt))
+        if (!internalPersona) {
+            requestMessages.add(new UserMessage(requestScopedInput(request)));
+        }
+        ChatClient.ChatClientRequestSpec prompt = assistant.prompt()
+                    .options(options.mutate());
+        if (stableSystemPrompt != null) {
+            prompt = prompt.system(system -> system.text(stableSystemPrompt));
+        }
+        prompt
                     .messages(requestMessages)
                     .advisors(advisor -> advisor
                             .param(ChatMemory.CONVERSATION_ID, request.conversationId())
@@ -279,6 +350,8 @@ abstract class AbstractSpringAIRuntime implements AiRuntime {
     static Map<String, Object> systemPromptParameters(ChatRequest request) {
         return Map.of(
                 "mutationConfirmationRequired", AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED,
+                "mutationApprovalPolicy", AiMutationPermissionMode.resolve(
+                        request != null ? request.permissionMode() : null).assistantPolicy(),
                 "requestStopping", AiMutationToolGuard.REQUEST_STOPPING,
                 // Preserve compatibility with externally mounted prompts that
                 // still contain ${pageContext}, without putting volatile page

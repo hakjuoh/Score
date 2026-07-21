@@ -25,9 +25,11 @@ public final class SpringAIRuntime extends AbstractSpringAIRuntime {
                            ScoreAiSystemPrompt systemPrompt,
                            AiMutationToolGuard mutationGuard,
                            AiElicitationService elicitations,
+                           AiProviderRetryExecutor providerRetry,
                            AnthropicRuntimeOptions anthropicOptions,
                            OpenAiRuntimeOptions openAiOptions) {
-        super(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, elicitations);
+        super(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, elicitations,
+                providerRetry);
         this.anthropicOptions = anthropicOptions;
         this.openAiOptions = openAiOptions;
     }
@@ -35,7 +37,7 @@ public final class SpringAIRuntime extends AbstractSpringAIRuntime {
     SpringAIRuntime(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                     ToolSearchToolCallingAdvisor toolSearchAdvisor, ScoreAiSystemPrompt systemPrompt,
                     AnthropicRuntimeOptions anthropicOptions, OpenAiRuntimeOptions openAiOptions) {
-        this(models, mcpClients, toolSearchAdvisor, systemPrompt, null, null,
+        this(models, mcpClients, toolSearchAdvisor, systemPrompt, null, null, null,
                 anthropicOptions, openAiOptions);
     }
 

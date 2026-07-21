@@ -23,7 +23,7 @@ export interface AiAgentActivityEvent {
   key?: string;
   /** Stable identity of one tool invocation, shared by its started/terminal events. */
   toolKey?: string;
-  toolStatus?: 'started' | 'completed' | 'failed';
+  toolStatus?: 'started' | 'completed' | 'failed' | 'blocked' | 'cancelled';
   detail?: string;
 }
 
@@ -179,6 +179,38 @@ export function specialistToolAgentId(event: AiChatSocketEvent): string | undefi
   return text(metadata['agentId']) || text(metadata['nodeId']) || text(metadata['node_id']);
 }
 
+/**
+ * Detects a narration recorded inside a fan-out execution namespace. Worker
+ * recorders share the lead's request identity, so only this metadata
+ * distinguishes a worker's event from the main conversation's.
+ */
+export function isFanoutNamespacedEvent(event: AiChatSocketEvent): boolean {
+  const metadata = event.metadata || {};
+  return !!(text(metadata['fanoutId']) || text(metadata['fanout_id'])
+    || text(metadata['parentNodeId']) || text(metadata['parent_node_id'])
+    || text(metadata['nodeId']) || text(metadata['node_id'])
+    || text(metadata['agentId']));
+}
+
+/** Reflects a worker's provider retry on its own agent timeline. */
+export function upsertAgentRetryEvent(activities: AiAgentActivity[],
+                                      event: AiChatSocketEvent,
+                                      now = Date.now()): boolean {
+  const metadata = event.metadata || {};
+  const agentId = text(metadata['agentId']) || text(metadata['nodeId']) || text(metadata['node_id']);
+  if (!agentId) return false;
+  const activity = activities.find(candidate => candidate.agentId === agentId);
+  const content = event.content || event.response || event.message || '';
+  if (!activity || !content.trim()) return false;
+  const last = activity.events[activity.events.length - 1];
+  if (!last || last.content !== content) {
+    activity.events.push({status: activity.status, content});
+  }
+  if (activity.inProgress) activity.content = content;
+  activity.lastUpdateAt = now;
+  return true;
+}
+
 export function upsertAgentGuideEvent(activities: AiAgentActivity[],
                                       event: AiChatSocketEvent,
                                       now = Date.now()): boolean {
@@ -207,6 +239,12 @@ export function agentToolEventContent(event: AiChatSocketEvent): string {
   }
   if (subtype === 'completed') return toolName ? `${toolName} completed.` : 'Executed';
   if (subtype === 'failed') return toolName ? `${toolName} failed.` : 'Execution failed';
+  if (subtype === 'blocked') {
+    return toolName ? `${toolName} is awaiting approval.` : 'Awaiting approval';
+  }
+  if (subtype === 'cancelled') {
+    return toolName ? `${toolName} was stopped before execution.` : 'Stopped before execution';
+  }
   return 'Executing...';
 }
 
@@ -225,14 +263,18 @@ export function agentToolInvocationKey(event: AiChatSocketEvent): string | undef
   return `${event.groupId}:${event.toolCallId}`;
 }
 
-export function agentToolEventStatus(event: AiChatSocketEvent): 'started' | 'completed' | 'failed' | undefined {
+export function agentToolEventStatus(
+  event: AiChatSocketEvent
+): 'started' | 'completed' | 'failed' | 'blocked' | 'cancelled' | undefined {
   if (event.type !== 'tool_call' && event.type !== 'tool_group') {
     return undefined;
   }
   if (event.subtype === 'started' || event.subtype === 'progress') {
     return 'started';
   }
-  return event.subtype === 'completed' || event.subtype === 'failed' ? event.subtype : undefined;
+  return event.subtype === 'completed' || event.subtype === 'failed'
+    || event.subtype === 'blocked' || event.subtype === 'cancelled'
+    ? event.subtype : undefined;
 }
 
 export function agentToolEventDetail(event: AiChatSocketEvent): string | undefined {

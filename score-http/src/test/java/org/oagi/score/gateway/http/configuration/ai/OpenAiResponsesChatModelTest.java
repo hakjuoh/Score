@@ -168,6 +168,44 @@ class OpenAiResponsesChatModelTest {
                 && item.asReasoning().id().equals("rs_stale"));
     }
 
+    @Test
+    void classifiesFailedResponsesForTheProviderRetryLoop() {
+        OpenAIClient client = mock(OpenAIClient.class);
+        ResponseService responses = mock(ResponseService.class);
+        when(client.responses()).thenReturn(responses);
+        Response transientFailure = mock(Response.class);
+        when(transientFailure.status()).thenReturn(Optional.of(ResponseStatus.FAILED));
+        when(transientFailure.error()).thenReturn(Optional.of(
+                com.openai.models.responses.ResponseError.builder()
+                        .code(com.openai.models.responses.ResponseError.Code.SERVER_ERROR)
+                        .message("The model had an internal error while generating.")
+                        .build()));
+        Response permanentFailure = mock(Response.class);
+        when(permanentFailure.status()).thenReturn(Optional.of(ResponseStatus.FAILED));
+        when(permanentFailure.error()).thenReturn(Optional.of(
+                com.openai.models.responses.ResponseError.builder()
+                        .code(com.openai.models.responses.ResponseError.Code.of("invalid_prompt"))
+                        .message("The prompt was rejected.")
+                        .build()));
+        when(responses.create(any(ResponseCreateParams.class)))
+                .thenReturn(transientFailure, permanentFailure);
+        OpenAiChatOptions options = OpenAiChatOptions.builder().model("gpt-5.6-sol").build();
+        OpenAiResponsesChatModel model = new OpenAiResponsesChatModel(client, options);
+        org.springframework.ai.chat.prompt.Prompt prompt =
+                new org.springframework.ai.chat.prompt.Prompt(List.of(
+                        new org.springframework.ai.chat.messages.UserMessage("Investigate")),
+                        options);
+
+        // A FAILED response arrives over HTTP 200; the retry markers decide whether
+        // the application-level provider retry loop may re-attempt it.
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> model.call(prompt))
+                .isInstanceOf(org.springframework.ai.retry.TransientAiException.class)
+                .hasMessageContaining("internal error");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> model.call(prompt))
+                .isInstanceOf(org.springframework.ai.retry.NonTransientAiException.class)
+                .hasMessageContaining("rejected");
+    }
+
     private Response response(String id, List<ResponseOutputItem> output) {
         Response response = mock(Response.class);
         when(response.id()).thenReturn(id);

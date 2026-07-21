@@ -117,6 +117,19 @@ describe('AiChatMessageListComponent', () => {
     expect(row.querySelector('mat-icon')?.textContent).toContain('error_outline');
   });
 
+  it('announces a chat error as an atomic alert', () => {
+    fixture.componentInstance.messages = [{
+      role: 'error', content: 'Could not send your response.'
+    }];
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('.message-row.error') as HTMLElement;
+    expect(row.getAttribute('role')).toBe('alert');
+    expect(row.getAttribute('aria-live')).toBe('assertive');
+    expect(row.getAttribute('aria-atomic')).toBe('true');
+    expect(row.textContent).toContain('Could not send your response.');
+  });
+
   it('does not label a completed tool row as failed', () => {
     fixture.componentInstance.messages = [{
       role: 'tool_call', content: 'Searched GitHub.', toolStatus: 'completed'
@@ -127,6 +140,57 @@ describe('AiChatMessageListComponent', () => {
     expect(row.classList.contains('tool_failed')).toBe(false);
     expect(row.textContent).toContain('Tool completed:');
     expect(row.querySelector('mat-icon')?.textContent).toContain('build');
+  });
+
+  it('labels a guard-blocked tool row as awaiting approval', () => {
+    fixture.componentInstance.messages = [{
+      role: 'tool_call',
+      content: 'create_business_context is awaiting approval.',
+      toolStatus: 'blocked'
+    }];
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('.message-row.tool_call') as HTMLElement;
+    expect(row.classList.contains('tool_failed')).toBe(false);
+    expect(row.textContent).toContain('Awaiting approval:');
+    expect(row.textContent).toContain('create_business_context is awaiting approval.');
+    expect(row.querySelector('mat-icon')?.textContent).toContain('build');
+  });
+
+  it('labels a stop-intercepted tool row as stopped', () => {
+    fixture.componentInstance.messages = [{
+      role: 'tool_call',
+      content: 'create_business_context was stopped before execution.',
+      toolStatus: 'cancelled'
+    }];
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('.message-row.tool_call') as HTMLElement;
+    expect(row.classList.contains('tool_failed')).toBe(false);
+    expect(row.textContent).toContain('Stopped:');
+    expect(row.textContent).toContain('create_business_context was stopped before execution.');
+    expect(row.querySelector('mat-icon')?.textContent).toContain('build');
+  });
+
+  it('renders a focused specialist blocked tool with the awaiting-approval status', () => {
+    fixture.componentInstance.agentFocus = {
+      agentId: 'request-1:agent:1', agentName: 'Verifier',
+      agentRole: 'Evidence and edge cases', status: 'started',
+      content: 'Creating the record...', inProgress: true, isLead: false,
+      firstSeenAt: 0, lastUpdateAt: 5000,
+      events: [{
+        status: 'tool', content: 'create_business_context is awaiting approval.',
+        toolKey: 'fanout-1:call-1', toolStatus: 'blocked'
+      }]
+    };
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector(
+      '.agent-focus-events .message-row.tool_call'
+    ) as HTMLElement;
+    expect(row.textContent).toContain('Awaiting approval:');
+    expect(row.textContent).toContain('create_business_context is awaiting approval.');
+    expect(row.querySelector('mat-progress-spinner')).toBeNull();
   });
 
   it('keeps a fallback spinner after tools complete until the request is terminal', () => {
@@ -185,10 +249,14 @@ describe('AiChatMessageListComponent', () => {
 
     const flow = fixture.nativeElement.querySelector('.terminal-flow') as HTMLElement;
     const summary = flow.querySelector('.session-summary') as HTMLElement;
+    const terms = summary.querySelectorAll('dt') as NodeListOf<HTMLElement>;
     const values = summary.querySelectorAll('dd') as NodeListOf<HTMLElement>;
 
     expect(flow.firstElementChild).toBe(summary);
     expect(summary.getAttribute('aria-label')).toBe('Current assistant session settings');
+    expect(Array.from(terms, term => term.textContent?.trim())).toEqual([
+      'model', 'reasoning', 'runtime', 'permissions'
+    ]);
     expect(Array.from(values, value => value.textContent?.trim())).toEqual([
       'GPT-5.6 SOL', 'High', 'OpenAI', 'Full access'
     ]);
@@ -488,6 +556,31 @@ describe('AiChatMessageListComponent', () => {
     fixture.componentInstance.agentFocusRequested.subscribe(focused);
     rows[0].click();
     expect(focused).toHaveBeenCalledWith('request-1:agent:1');
+  });
+
+  it('labels one delegated worker as a specialist instead of a multi-agent workflow', () => {
+    fixture.componentInstance.messages = [
+      {role: 'user', content: 'Inspect the current context records.'},
+      {
+        role: 'agent_group', content: 'Delegated workflow', activities: [{
+          agentId: 'request-1:worker:1', agentName: 'Evidence researcher',
+          status: 'started', content: 'Inspecting current records.', inProgress: true,
+          isLead: false, workflow: 'direct', executionKind: 'multi_agent',
+          firstSeenAt: 1000, lastUpdateAt: 2000,
+          events: [{status: 'started', content: 'Inspecting current records.'}]
+        }]
+      }
+    ];
+
+    fixture.detectChanges();
+
+    const block = fixture.nativeElement.querySelector('.agent-group-block') as HTMLElement;
+    expect(block.getAttribute('aria-label')).toContain('Specialist workflow');
+    expect(block.querySelector('.agent-group-workflow')?.textContent)
+      .toContain('Specialist workflow');
+    expect(block.textContent).toContain('· 1 specialist');
+    expect(block.textContent).toContain('A specialist is gathering evidence for the lead.');
+    expect(block.textContent).not.toContain('Multi-agent workflow');
   });
 
   it('keeps the settled group block in request history at its execution position', () => {

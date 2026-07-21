@@ -57,8 +57,6 @@ public final class AiTrajectoryRecorder {
     public static final String FANOUT_USAGE_STEP_KIND = "fanout_usage";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final int MAX_AUDIT_TEXT_CHARS = 32_768;
-    private static final String SAFE_TOOL_FAILURE_MESSAGE =
-            "Tool execution failed. Details were recorded in the server log.";
 
     private final AiChatConversationRepository repository;
     private final ObjectMapper objectMapper;
@@ -82,10 +80,19 @@ public final class AiTrajectoryRecorder {
     private final AtomicLong ownModelCalls = new AtomicLong();
     private final Map<String, ConcurrentLinkedQueue<AiPendingTool>> pendingTools = new ConcurrentHashMap<>();
     private final Set<String> completedToolCallIds = ConcurrentHashMap.newKeySet();
+    private final Set<String> narratedToolCallIds = ConcurrentHashMap.newKeySet();
+    private final AiToolRetryTracker toolRetryTracker = new AiToolRetryTracker();
     private final AtomicLong completedToolCalls = new AtomicLong();
     private final AtomicLong completedDomainToolCalls = new AtomicLong();
+    private final AtomicLong successfulDomainToolCalls = new AtomicLong();
+    private final AtomicLong requestExecutedDomainToolCalls;
+    private final AtomicLong requestPendingApprovals;
+    private final AtomicLong executedMutationToolCalls = new AtomicLong();
     private volatile Set<String> readOnlyToolNames = Set.of();
     private volatile boolean sealed;
+    private volatile String lastGuideContent;
+    private volatile AiToolRetryMessage.Language retryMessageLanguage =
+            AiToolRetryMessage.Language.ENGLISH;
 
     public AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
                                 ScoreUser requester, String conversationId, String requestId,
@@ -112,7 +119,8 @@ public final class AiTrajectoryRecorder {
                                 long estimatedInputFloor) {
         this(repository, objectMapper, requester, conversationId, requestId, modelName,
                 reasoningEffort, runtime, runtimeOptions, events, contextBudget,
-                estimatedInputFloor, new AtomicLong(), new AtomicLong(), Map.of(), false,
+                estimatedInputFloor, new AtomicLong(), new AtomicLong(),
+                new AtomicLong(), new AtomicLong(), Map.of(), false,
                 AiChatConversationKind.ROOT);
     }
 
@@ -124,6 +132,8 @@ public final class AiTrajectoryRecorder {
                                  AiContextBudget contextBudget,
                                  long estimatedInputFloor,
                                  AtomicLong eventSequence, AtomicLong toolSequence,
+                                 AtomicLong requestExecutedDomainToolCalls,
+                                 AtomicLong requestPendingApprovals,
                                  Map<String, Object> traceContext, boolean subagentScope,
                                  AiChatConversationKind conversationKind) {
         this.repository = repository;
@@ -140,6 +150,8 @@ public final class AiTrajectoryRecorder {
         this.estimatedInputFloor = new AtomicLong(Math.max(0L, estimatedInputFloor));
         this.eventSequence = eventSequence;
         this.toolSequence = toolSequence;
+        this.requestExecutedDomainToolCalls = requestExecutedDomainToolCalls;
+        this.requestPendingApprovals = requestPendingApprovals;
         this.traceContext = traceContext != null ? Map.copyOf(traceContext) : Map.of();
         this.subagentScope = subagentScope;
         this.conversationKind = conversationKind;
@@ -153,10 +165,14 @@ public final class AiTrajectoryRecorder {
      */
     public AiTrajectoryRecorder fork(Map<String, Object> namespace) {
         Map<String, Object> childContext = traceMetadata(namespace);
-        return new AiTrajectoryRecorder(repository, objectMapper, requester, conversationId, requestId,
+        AiTrajectoryRecorder child = new AiTrajectoryRecorder(
+                repository, objectMapper, requester, conversationId, requestId,
                 modelName, reasoningEffort, runtime, runtimeOptions, events, contextBudget,
-                estimatedInputFloor.get(), eventSequence, toolSequence, childContext, true,
+                estimatedInputFloor.get(), eventSequence, toolSequence,
+                requestExecutedDomainToolCalls, requestPendingApprovals, childContext, true,
                 conversationKind);
+        child.retryMessageLanguage = retryMessageLanguage;
+        return child;
     }
 
     /** Creates a durable SUBAGENT conversation for a delegated agent. */
@@ -185,7 +201,9 @@ public final class AiTrajectoryRecorder {
                 repository, objectMapper, requester, childConversationId, requestId,
                 modelName, reasoningEffort, runtime, runtimeOptions, events, contextBudget,
                 estimatedInputFloor.get(), eventSequence, toolSequence,
+                requestExecutedDomainToolCalls, requestPendingApprovals,
                 traceMetadata(childNamespace), true, kind);
+        child.retryMessageLanguage = retryMessageLanguage;
         repository.append(childConversationId, new AiChatTrajectoryStep(
                 requestId, "system", "settings_change", "debug",
                 "Child execution settings initialized.", null, modelName, reasoningEffort,
@@ -300,14 +318,66 @@ public final class AiTrajectoryRecorder {
     }
 
     /** Persists user-facing model narration as a normal chat row, not a progress pill. */
-    public synchronized void guide(String content, Map<String, Object> metadata) {
-        if (sealed || !StringUtils.hasText(content)) return;
+    public synchronized boolean guide(String content, Map<String, Object> metadata) {
+        return appendGuide(content, metadata, true);
+    }
+
+    private boolean appendGuide(String content, Map<String, Object> metadata,
+                                boolean deduplicateAdjacent) {
+        if (sealed || !StringUtils.hasText(content)) return false;
+        String stripped = content.strip();
+        // A composed plan and its sole direct leaf legitimately carry the same guide
+        // text; the user should read it once, not once per layer.
+        if (deduplicateAdjacent && stripped.equals(lastGuideContent)) return false;
+        lastGuideContent = stripped;
         Map<String, Object> extra = traceMetadata(metadata);
         repository.append(conversationId, new AiChatTrajectoryStep(
-                requestId, "agent", "guide", "visible", content.strip(), null,
+                requestId, "agent", "guide", "visible", stripped, null,
                 modelName, reasoningEffort, runtime, runtimeOptions,
                 null, null, null, extra, 0, null, Instant.now()));
-        emit(AiExecutionEvent.detail("guide", content.strip(), extra));
+        emit(AiExecutionEvent.detail("guide", stripped, extra));
+        return true;
+    }
+
+    /** Selects the deterministic retry fallback language from the current user turn. */
+    public synchronized void usePromptLanguage(String prompt) {
+        retryMessageLanguage = AiToolRetryMessage.languageOf(prompt);
+    }
+
+    /** A new planner iteration legitimately re-narrates identical objectives. */
+    public synchronized void resetGuideDeduplication() {
+        lastGuideContent = null;
+    }
+
+    /**
+     * Narrates one transient provider failure and the wait before the next attempt,
+     * so the user watches the recovery instead of a silent stall. The step is
+     * diagnostic; the live event drives the frontend's reconnecting countdown.
+     */
+    public synchronized void providerRetry(int attempt, int maxAttempts, long delayMillis,
+                                           String reason, String failureClass, int statusCode) {
+        if (sealed) return;
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("attempt", attempt);
+        metadata.put("max_attempts", maxAttempts);
+        metadata.put("delay_millis", delayMillis);
+        if (StringUtils.hasText(reason)) {
+            metadata.put("reason", reason);
+        }
+        if (StringUtils.hasText(failureClass)) {
+            metadata.put("failure_class", failureClass);
+        }
+        if (statusCode > 0) {
+            metadata.put("status_code", statusCode);
+        }
+        Map<String, Object> extra = traceMetadata(metadata);
+        String content = "The model provider request failed; retrying (attempt "
+                + attempt + " of " + maxAttempts + ").";
+        repository.append(conversationId, new AiChatTrajectoryStep(
+                requestId, "system", "provider_retry", "debug", content, null,
+                modelName, reasoningEffort, runtime, runtimeOptions,
+                null, null, null, extra, 0, null, Instant.now()));
+        emit(AiExecutionEvent.detail("provider_retry", content, extra));
     }
 
     public synchronized void progress(String content) {
@@ -380,9 +450,14 @@ public final class AiTrajectoryRecorder {
         }
         extra = new LinkedHashMap<>(traceMetadata(extra));
 
-        if (!toolCalls.isEmpty() && StringUtils.hasText(message)
+        if (!delegatedWorkerScope() && !toolCalls.isEmpty() && StringUtils.hasText(message)
                 && !"workflow_planner".equals(normalizedPhase)) {
-            guide(message, Map.of("phase", normalizedPhase));
+            if (guide(message, Map.of("phase", normalizedPhase))) {
+                toolCalls.stream()
+                        .map(call -> Objects.toString(call.get("tool_call_id"), null))
+                        .filter(Objects::nonNull)
+                        .forEach(narratedToolCallIds::add);
+            }
         }
 
         AiChatStoredStep stored = repository.append(conversationId,
@@ -415,6 +490,12 @@ public final class AiTrajectoryRecorder {
 
     private long longMetric(Object value) {
         return value instanceof Number number ? Math.max(0L, number.longValue()) : 0L;
+    }
+
+    private boolean delegatedWorkerScope() {
+        return conversationKind != AiChatConversationKind.ROOT
+                || traceContext.containsKey("agent_id")
+                || Boolean.TRUE.equals(traceContext.get("concurrent_branch"));
     }
 
     public synchronized void recordToolResponses(List<Message> messages) {
@@ -458,6 +539,34 @@ public final class AiTrajectoryRecorder {
     /** Number of completed connectCenter calls, excluding the tool-discovery helper. */
     public long completedDomainToolCallCount() {
         return completedDomainToolCalls.get();
+    }
+
+    /** Number of successful connectCenter calls local to this recorder, excluding tool discovery. */
+    public long successfulDomainToolCallCount() {
+        return successfulDomainToolCalls.get();
+    }
+
+    /**
+     * Request-wide count of connectCenter domain tool calls that executed successfully,
+     * shared across every forked worker and lead recorder. Guard-intercepted and failed
+     * calls are excluded: this is the evaluator's grounding evidence, not a boundary marker.
+     */
+    public long executedDomainToolCallCount() {
+        return requestExecutedDomainToolCalls.get();
+    }
+
+    /** Request-wide count of data-changing calls intercepted and awaiting user approval. */
+    public long pendingApprovalCount() {
+        return requestPendingApprovals.get();
+    }
+
+    /**
+     * Tool calls this recorder observed that actually ran a non-read-only tool.
+     * A model attempt whose count moved must never be replayed by the provider
+     * retry loop: re-running it could repeat the data change.
+     */
+    public long executedMutationToolCallCount() {
+        return executedMutationToolCalls.get();
     }
 
     /**
@@ -629,6 +738,14 @@ public final class AiTrajectoryRecorder {
 
     private synchronized void toolStarted(AiPendingTool pending) {
         if (sealed) return;
+        boolean retryAlreadyNarrated = narratedToolCallIds.remove(pending.id())
+                || delegatedWorkerScope();
+        toolRetryTracker.retry(pending, retryAlreadyNarrated)
+                .ifPresent(notice -> appendGuide(
+                        AiToolRetryMessage.format(notice, retryMessageLanguage),
+                        Map.of("phase", "assistant", "tool_retry", true,
+                                "tool_name", pending.name()),
+                        false));
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("tool_call_id", pending.id());
         extra.put("tool_name", pending.name());
@@ -651,9 +768,29 @@ public final class AiTrajectoryRecorder {
         if (!completedToolCallIds.add(pending.id())) {
             return;
         }
+        String status = failure != null ? "failed"
+                : awaitingApproval(output) ? "blocked"
+                : stoppedBeforeExecution(output) ? "cancelled" : "completed";
+        if (failure != null) {
+            toolRetryTracker.failed(pending);
+        }
         completedToolCalls.incrementAndGet();
         if (!"toolSearchTool".equals(pending.name())) {
             completedDomainToolCalls.incrementAndGet();
+            if ("completed".equals(status)) {
+                successfulDomainToolCalls.incrementAndGet();
+                requestExecutedDomainToolCalls.incrementAndGet();
+            }
+        }
+        if ("blocked".equals(status)) {
+            requestPendingApprovals.incrementAndGet();
+        }
+        // Guard-intercepted calls never executed; completed or failed calls on a
+        // tool without the read-only annotation may have changed data.
+        if (("completed".equals(status) || "failed".equals(status))
+                && !"toolSearchTool".equals(pending.name())
+                && !readOnlyToolNames.contains(pending.name())) {
+            executedMutationToolCalls.incrementAndGet();
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("source_call_id", pending.id());
@@ -667,7 +804,6 @@ public final class AiTrajectoryRecorder {
                     Map.of("results", pending.observations().orderedResults()));
         }
 
-        String status = failure == null ? "completed" : "failed";
         String detail = toolDetail(pending, output, failure);
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("tool_call_id", pending.id());
@@ -684,8 +820,36 @@ public final class AiTrajectoryRecorder {
                 reasoningEffort, runtime, runtimeOptions,
                 null, null, null, extra, 0, null, Instant.now()));
         emit(AiExecutionEvent.tool(status,
-                failure == null ? pending.name() + " completed." : pending.name() + " failed.",
+                switch (status) {
+                    case "failed" -> pending.name() + " failed.";
+                    case "blocked" -> pending.name() + " is awaiting approval.";
+                    case "cancelled" -> pending.name() + " was stopped before execution.";
+                    default -> pending.name() + " completed.";
+                },
                 pending.id(), pending.name(), pending.sequence(), Map.of("toolDetail", detail)));
+    }
+
+    /** The mutation guard returns this sentinel instead of executing an unapproved data change. */
+    private boolean awaitingApproval(String output) {
+        return hasTopLevelError(output, AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED);
+    }
+
+    /** The guard declines new data changes while the user is stopping the request. */
+    private boolean stoppedBeforeExecution(String output) {
+        return hasTopLevelError(output, AiMutationToolGuard.REQUEST_STOPPING);
+    }
+
+    private boolean hasTopLevelError(String output, String expected) {
+        if (!StringUtils.hasText(output)) {
+            return false;
+        }
+        try {
+            var root = objectMapper.readTree(output);
+            var error = root != null && root.isObject() ? root.get("error") : null;
+            return error != null && error.isTextual() && expected.equals(error.textValue());
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private String toolDetail(AiPendingTool pending, String output, Throwable failure) {
@@ -694,7 +858,7 @@ public final class AiTrajectoryRecorder {
         if (failure == null) {
             detail.append("\nResult: ").append(auditText(output));
         } else {
-            detail.append("\nError: ").append(SAFE_TOOL_FAILURE_MESSAGE);
+            detail.append("\nError: ").append(AiToolFailureMessage.userMessage(failure));
         }
         return detail.toString();
     }

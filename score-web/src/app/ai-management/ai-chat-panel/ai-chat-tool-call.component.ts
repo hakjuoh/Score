@@ -23,6 +23,12 @@ export class AiChatToolCallComponent {
     if (this.status === 'failed') {
       return 'Tool failed';
     }
+    if (this.status === 'blocked') {
+      return 'Awaiting approval';
+    }
+    if (this.status === 'cancelled') {
+      return 'Stopped';
+    }
     return this.status === 'completed' ? 'Tool completed' : 'Tool result';
   }
 

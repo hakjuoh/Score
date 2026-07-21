@@ -137,6 +137,32 @@
   color: #b91c1c;
 }
 
+.message-row.progress.alert .message-bubble {
+  background: transparent;
+  color: #b91c1c;
+}
+
+.message-row.progress.alert .message-text {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.message-row.progress.alert .alert-status-reason {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message-row.progress.alert .alert-status-wait {
+  flex: none;
+  white-space: pre;
+}
+
+::ng-deep score-ai-chat-panel .message-row.progress.alert .message-progress-spinner circle {
+  stroke: #b91c1c;
+}
+
 .message-row.debug .message-bubble {
   color: #52525b;
 }

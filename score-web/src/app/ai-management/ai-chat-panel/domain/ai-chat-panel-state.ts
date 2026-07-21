@@ -47,6 +47,8 @@ export class AiChatPanelState {
   permissionMode: AiMutationPermissionMode = 'ask';
   permissionSettingsOpen = false;
   permissionDraft: AiMutationPermissionMode = 'ask';
+  /** Persistent per-conversation workflow preference; empty means automatic selection. */
+  activeWorkflow = '';
   agentActivities: AiAgentActivity[] = [];
   agentListOpen = false;
   agentFocusId?: string;
@@ -89,6 +91,7 @@ export class AiChatPanelState {
     this.runtimeDraftOptions = {};
     this.permissionSettingsOpen = false;
     this.permissionDraft = this.permissionMode;
+    this.activeWorkflow = '';
     this.resetAgentActivity();
     this.elicitation = undefined;
     this.elicitationBusy = false;
@@ -146,7 +149,8 @@ export class AiChatPanelState {
   }
 
   restoreConversationSettings(settings: Pick<AiChatConversationDetails,
-    'modelName' | 'reasoningEffort' | 'runtime' | 'runtimeOptions' | 'permissionMode'>): void {
+    'modelName' | 'reasoningEffort' | 'runtime' | 'runtimeOptions' | 'permissionMode'
+    | 'activeWorkflow'>): void {
     const previousModelName = this.selectedModelName;
     const model = settings.modelName
       ? this.availableModels.find(candidate => candidate.name === settings.modelName)
@@ -179,6 +183,7 @@ export class AiChatPanelState {
       this.permissionMode = settings.permissionMode;
     }
     this.permissionDraft = this.permissionMode;
+    this.activeWorkflow = settings.activeWorkflow || '';
     this.resetContextUsageForSelectedModel();
   }
 
@@ -264,6 +269,7 @@ export class AiChatPanelState {
     this.runtimeDraftOptions = {};
     this.permissionSettingsOpen = false;
     this.permissionDraft = this.permissionMode;
+    this.activeWorkflow = '';
     this.resetAgentActivity();
     this.elicitation = undefined;
     this.elicitationBusy = false;

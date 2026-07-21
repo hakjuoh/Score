@@ -53,6 +53,31 @@ describe('AI chat event semantics', () => {
     });
   });
 
+  it('classifies a guard-blocked tool call as terminal with its reported content', () => {
+    expect(toolCallEventSemantics({
+      requestId: 'request-1', type: 'tool_call', subtype: 'blocked',
+      groupId: 'mcp', toolCallId: 'call-1',
+      content: 'create_business_context is awaiting approval.',
+      metadata: {toolName: 'create_business_context'}
+    })).toEqual(expect.objectContaining({
+      key: 'mcp:call-1', toolName: 'create_business_context',
+      content: 'create_business_context is awaiting approval.',
+      active: false, status: 'blocked'
+    }));
+  });
+
+  it('classifies a stop-intercepted tool call as terminal with a default stopped content', () => {
+    expect(toolCallEventSemantics({
+      requestId: 'request-1', type: 'tool_call', subtype: 'cancelled',
+      groupId: 'mcp', toolCallId: 'call-1',
+      metadata: {toolName: 'create_business_context'}
+    })).toEqual(expect.objectContaining({
+      key: 'mcp:call-1', toolName: 'create_business_context',
+      content: 'create_business_context was stopped before execution.',
+      active: false, status: 'cancelled'
+    }));
+  });
+
   it('shows a correlated tool discovery lifecycle with its tool name', () => {
     expect(toolCallEventSemantics({
       requestId: 'request-1', type: 'tool_call', subtype: 'started',

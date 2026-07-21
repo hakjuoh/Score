@@ -10,7 +10,6 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
-import org.springframework.ai.tool.toolsearch.index.regex.RegexToolIndex;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +29,7 @@ class ScoreToolSearchToolCallingAdvisorTest {
         ToolCallback getScheme = tool("get_context_scheme");
         ToolCallback mutation = tool("create_context_scheme");
         ScoreToolSearchToolCallingAdvisor advisor =
-                new ScoreToolSearchToolCallingAdvisor(new RegexToolIndex());
+                new ScoreToolSearchToolCallingAdvisor(new ScoreToolIndex());
         ChatClientRequest initialized = advisor.initializeSession(request(
                 List.of(new SystemMessage("system"),
                         new UserMessage("Use get_business_contexts/get_business_context and "
@@ -52,7 +51,7 @@ class ScoreToolSearchToolCallingAdvisorTest {
         ToolCallback createValue = tool("create_context_scheme_value");
         ToolCallback readScheme = tool("get_context_scheme");
         ScoreToolSearchToolCallingAdvisor advisor =
-                new ScoreToolSearchToolCallingAdvisor(new RegexToolIndex());
+                new ScoreToolSearchToolCallingAdvisor(new ScoreToolIndex());
         ChatClientRequest initialized = advisor.initializeSession(request(
                 List.of(new SystemMessage("system"), new UserMessage("Import everything")),
                 createCategory, createScheme, createValue, readScheme));
@@ -79,18 +78,20 @@ class ScoreToolSearchToolCallingAdvisorTest {
     @Test
     void asksEveryRuntimeModelToSearchForTheWholeWorkflowUpFront() {
         ScoreToolSearchToolCallingAdvisor advisor =
-                new ScoreToolSearchToolCallingAdvisor(new RegexToolIndex());
+                new ScoreToolSearchToolCallingAdvisor(new ScoreToolIndex());
 
         ChatClientRequest initialized = advisor.initializeSession(request(
                 List.of(new SystemMessage("base system"), new UserMessage("Import this file")),
                 tool("create_dt")));
 
         assertThat(initialized.prompt().getSystemMessage().getText())
-                .contains("comprehensive search with maxResults 10",
-                        "all necessary searches", "parallel in the same response",
+                .contains("tool-search agent", "select:name1,name2",
+                        "more than 10 tools", "searches in parallel in the same response",
                         "Never write or simulate `[Tool call: ...]`",
                         "`[Tool: ...]`",
-                        "structured tool interface");
+                        "structured tool interface",
+                        "<available-deferred-tools>", "create_dt",
+                        "</available-deferred-tools>");
     }
 
     private ChatClientRequest request(List<org.springframework.ai.chat.messages.Message> messages,

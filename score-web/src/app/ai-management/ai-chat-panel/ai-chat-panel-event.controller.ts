@@ -89,6 +89,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       this.acknowledgementTimeout = undefined;
     }
     if (event.type === 'assistant_update' && this.primaryContent(event)) {
+      this.clearProviderRetryCountdown();
       this.completeProgressMessages();
       this.clearStatusMessage();
       const content = this.primaryContent(event);
@@ -164,11 +165,9 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       this.showStatus('Response sent. Continuing.', true);
       return;
     }
-    this.state.elicitationBusy = false;
-    this.state.currentStatus = 'Waiting for your input';
-    this.snackBar.open(
-      'The assistant could not accept that response. Please try again.',
-      'Dismiss', {duration: 3500}
+    this.showElicitationResponseError(
+      this.primaryContent(event).trim()
+      || 'The assistant could not accept that response. Please try again.'
     );
   }
 
@@ -189,10 +188,15 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
         content: response.action === 'ACCEPT' ? response.content : {}
       });
     } catch {
-      this.state.elicitationBusy = false;
-      this.state.currentStatus = 'Waiting for your input';
-      this.snackBar.open('Could not send your response.', 'Dismiss', {duration: 3500});
+      this.showElicitationResponseError('Could not send your response.');
+      this.scrollToBottom();
     }
+  }
+
+  private showElicitationResponseError(content: string): void {
+    this.state.elicitationBusy = false;
+    this.state.currentStatus = 'Waiting for your input';
+    this.state.messages.push({role: 'error', content});
   }
 
   protected completeFinalEvent(event: AiChatSocketEvent): void {
@@ -285,9 +289,12 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       return;
     }
     if (this.pendingMutationConfirmation) {
-      // More than one notice for a single request is ambiguous even when the
-      // payloads happen to match. Invalidate the opportunity fail closed.
-      this.rejectedMutationConfirmationRequestId = requestId;
+      // First notice wins. Each confirmation is bound server-side to one
+      // exact tool-and-arguments digest, so a later notice on the same
+      // request (the model attempting a second mutation in one step) cannot
+      // change what this approval grants. Nothing is lost by ignoring it:
+      // after the approved repeat executes, the guard freshly re-blocks any
+      // remaining mutation and emits a new notice on that later turn.
       return;
     }
     const draft = this.mutationRepeatDraft;

@@ -7,6 +7,7 @@ import org.oagi.score.gateway.http.api.ai_management.runtime.AnthropicRuntimePro
 import org.oagi.score.gateway.http.api.ai_management.runtime.OpenAiRuntimeProperties;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.tool.toolsearch.ToolIndex;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.io.ClassPathResource;
@@ -34,6 +35,13 @@ import static org.mockito.Mockito.mock;
 class ScoreAiConfigurationTest {
 
     @Test
+    void usesTheConnectCenterEntityAwareToolIndex() {
+        ToolIndex index = new ScoreAiConfiguration().scoreAiToolIndex();
+
+        assertThat(index).isInstanceOf(ScoreToolIndex.class);
+    }
+
+    @Test
     void promptResourcesUsePlaceholdersForRuntimeProtocolValues() throws Exception {
         Resource[] prompts = new PathMatchingResourcePatternResolver()
                 .getResources("classpath*:prompts/*.md");
@@ -51,7 +59,9 @@ class ScoreAiConfigurationTest {
                         "## Output", "Workflow execution rules:", "Tool-use rules:",
                         "Evidence and identity rules:", "Mutation and interruption rules:",
                         "Safety rules:", "separate request-scoped user-context block",
-                        "${mutationConfirmationRequired}", "${requestStopping}");
+                        "${mutationConfirmationRequired}", "${mutationApprovalPolicy}",
+                        "${requestStopping}", "Never retry silently",
+                        "Never announce or imply that approval is required before making a tool call");
         assertThat(assistant).doesNotContain("${pageContext}", "## Request-scoped input");
     }
 

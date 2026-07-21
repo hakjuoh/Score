@@ -247,11 +247,21 @@ class AiMutationToolGuardTest {
     @Test
     void permissionModesFailClosedAndKeepUnsafeChangesOutOfAutomaticMode() {
         assertThat(AiMutationPermissionMode.resolve(null)).isEqualTo(AiMutationPermissionMode.ASK);
-        assertThat(AiMutationPermissionMode.resolve("auto").automaticallyAllows("create_acc")).isTrue();
+        assertThat(List.of("create_acc", "add_tag", "assign_context", "reuse_bie",
+                "copy_release", "import_library", "upload_file"))
+                .allMatch(AiMutationPermissionMode.resolve("auto")::automaticallyAllows);
+        assertThat(AiMutationPermissionMode.resolve("auto").assistantPolicy())
+                .isEqualTo("auto: tools whose names begin with create_, add_, assign_, reuse_, "
+                        + "copy_, import_, upload_ run without approval; other data-changing tools "
+                        + "require approval.");
         assertThat(AiMutationPermissionMode.resolve("auto").automaticallyAllows("delete_business_context"))
                 .isFalse();
         assertThat(AiMutationPermissionMode.resolve("full_access").automaticallyAllows("future_mutation"))
                 .isTrue();
+        assertThat(AiMutationPermissionMode.resolve("full_access").assistantPolicy())
+                .isEqualTo("full_access: data-changing tool calls run without approval.");
+        assertThat(AiMutationPermissionMode.resolve("ask").assistantPolicy())
+                .isEqualTo("ask: every data-changing tool call requires explicit user approval.");
         assertThatThrownBy(() -> AiMutationPermissionMode.resolve("unsafe-unknown"))
                 .isInstanceOf(IllegalArgumentException.class);
     }

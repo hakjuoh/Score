@@ -10,7 +10,8 @@ public record ChatConversationDetails(String conversationId, String title, Strin
                                       List<ChatHistoryMessage> messages,
                                       List<ChatContextMessage> contextMessages,
                                       AiContextUsageInfo contextUsage,
-                                      String permissionMode) {
+                                      String permissionMode,
+                                      String activeWorkflow) {
     public ChatConversationDetails(String conversationId, String title, String modelName,
                                    String reasoningEffort, String runtime, Instant updatedAt,
                                    List<ChatHistoryMessage> messages,
@@ -36,6 +37,17 @@ public record ChatConversationDetails(String conversationId, String title, Strin
                                    AiContextUsageInfo contextUsage) {
         this(conversationId, title, modelName, reasoningEffort, runtime, runtimeOptions, updatedAt,
                 messages, contextMessages, contextUsage, "ask");
+    }
+
+    public ChatConversationDetails(String conversationId, String title, String modelName,
+                                   String reasoningEffort, String runtime,
+                                   Map<String, Object> runtimeOptions, Instant updatedAt,
+                                   List<ChatHistoryMessage> messages,
+                                   List<ChatContextMessage> contextMessages,
+                                   AiContextUsageInfo contextUsage,
+                                   String permissionMode) {
+        this(conversationId, title, modelName, reasoningEffort, runtime, runtimeOptions, updatedAt,
+                messages, contextMessages, contextUsage, permissionMode, null);
     }
 
     public ChatConversationDetails {

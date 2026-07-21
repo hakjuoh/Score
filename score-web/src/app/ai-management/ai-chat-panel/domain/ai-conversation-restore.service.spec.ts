@@ -462,6 +462,40 @@ describe('AiConversationRestoreService', () => {
     }]);
   });
 
+  it('restores guard-intercepted tool rows with the same content as the live transcript', async () => {
+    handle({requestId: 'r1', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
+    handle({
+      requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'tool_call',
+      response: 'create_business_context\nArguments: {"name":"Example"}\nResult: {"error":"MUTATION_CONFIRMATION_REQUIRED"}',
+      subtype: 'blocked', groupId: 'mcp', toolCallId: 'call-1',
+      metadata: {toolName: 'create_business_context'}, index: 0
+    }, callbacks);
+    handle({
+      requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'tool_call',
+      response: 'update_business_context\nArguments: {"id":2}\nResult: {"error":"REQUEST_STOPPING"}',
+      subtype: 'cancelled', groupId: 'mcp', toolCallId: 'call-2',
+      metadata: {toolName: 'update_business_context'}, index: 1
+    }, callbacks);
+    handle({requestId: 'r1', type: 'HISTORY_FINAL', conversationId: 'c1'}, callbacks);
+
+    await vi.runAllTimersAsync();
+
+    expect(messages).toEqual([
+      {
+        role: 'tool_call', content: 'create_business_context is awaiting approval.',
+        groupId: 'mcp', toolCallId: 'call-1', toolName: 'create_business_context',
+        toolDetail: 'create_business_context\nArguments: {"name":"Example"}\nResult: {"error":"MUTATION_CONFIRMATION_REQUIRED"}',
+        toolStatus: 'blocked'
+      },
+      {
+        role: 'tool_call', content: 'update_business_context was stopped before execution.',
+        groupId: 'mcp', toolCallId: 'call-2', toolName: 'update_business_context',
+        toolDetail: 'update_business_context\nArguments: {"id":2}\nResult: {"error":"REQUEST_STOPPING"}',
+        toolStatus: 'cancelled'
+      }
+    ]);
+  });
+
   it('restores error messages with the error role', async () => {
     handle({requestId: 'r1', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
     handle({

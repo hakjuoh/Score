@@ -150,6 +150,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
   }
 
   protected loadTerminalRecoveredConversation(status: AiPublicExecutionRequestStatus): void {
+    this.clearProviderRetryCountdown();
     this.activeRecoverySubscription?.unsubscribe();
     this.activeRecoverySubscription = this.api.getConversation(status.conversationId).pipe(take(1)).subscribe({
       next: details => {
@@ -200,6 +201,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
 
   protected finishRecoveredRequest(status: AiPublicExecutionRequestStatus): void {
     this.clearActiveRecovery();
+    this.clearTimers();
     this.completeProgressMessages();
     this.settleAgentActivity(status.status === 'COMPLETED' ? 'completed'
       : status.status === 'CANCELLED' ? 'cancelled' : 'failed');

@@ -97,11 +97,15 @@ export class AiChatMessageTrackerService {
     return this.toolCallMessageIndexesByToolCallId.size > 0;
   }
 
-  showStatus(state: AiChatPanelState, content: string, inProgress = false): void {
+  showStatus(state: AiChatPanelState, content: string, inProgress = false,
+             alertSuffix?: string): void {
+    const status: AiChatMessage = {
+      role: 'progress', content, inProgress,
+      ...(alertSuffix ? {alertSuffix} : {})
+    };
     if (this.statusMessageIndex !== undefined) {
       const existing = state.messages[this.statusMessageIndex];
       if (existing?.role === 'progress') {
-        const status = {role: 'progress' as const, content, inProgress};
         if (this.statusMessageIndex === state.messages.length - 1) {
           state.messages[this.statusMessageIndex] = status;
         } else {
@@ -114,8 +118,26 @@ export class AiChatMessageTrackerService {
       this.statusMessageIndex = undefined;
     }
     this.completeProgressMessages(state);
-    state.messages.push({role: 'progress', content, inProgress});
+    state.messages.push(status);
     this.statusMessageIndex = state.messages.length - 1;
+  }
+
+  /**
+   * Drops the request's latest streamed assistant bubble. A retried provider
+   * call restarts its whole streamed answer, so the partial segment would
+   * otherwise be narrated twice. The bubble is located by identity because
+   * tool and status rows may already have been appended after it.
+   */
+  removeStreamedSegment(state: AiChatPanelState, requestId: string): boolean {
+    for (let index = state.messages.length - 1; index >= 0; index--) {
+      const message = state.messages[index];
+      if (message.role === 'progress' && message.eventType === 'assistant_update'
+        && message.requestId === requestId) {
+        this.removeMessageAt(state, index);
+        return true;
+      }
+    }
+    return false;
   }
 
   completeProgressMessages(state: AiChatPanelState): void {

@@ -3,7 +3,7 @@ import type {AiAgentActivity} from './ai-agent-activity';
 export type AiChatDock = 'right' | 'bottom' | 'left' | 'top';
 export type AiChatMessageRole = 'user' | 'assistant' | 'guide' | 'progress'
   | 'agent_group' | 'workflow_group' | 'tool_group' | 'tool_call' | 'error' | 'debug';
-export type AiChatToolStatus = 'completed' | 'failed';
+export type AiChatToolStatus = 'completed' | 'failed' | 'blocked' | 'cancelled';
 export type AiChatPanelTab = 'chat' | 'history';
 export type AiMutationPermissionMode = 'ask' | 'auto' | 'full_access';
 export type AiAgentExecutionStatus = 'started' | 'completed' | 'failed' | 'cancelled' | 'synthesizing';
@@ -18,6 +18,9 @@ export interface AiChatMessage {
   /** Owning request of a streamed assistant segment; identifies the live bubble
    *  without relying on array indexes that tool-row splices can shift. */
   requestId?: string;
+  /** Fixed tail of an alert status row (retry countdown and attempt); the
+   *  leading content ellipsizes so this segment stays visible on one line. */
+  alertSuffix?: string;
   turnId?: string;
   groupId?: string;
   toolCallId?: string;
@@ -340,6 +343,7 @@ export interface AiChatConversationDetails {
   runtime?: string;
   runtimeOptions?: AiRuntimeOptions;
   permissionMode?: AiMutationPermissionMode;
+  activeWorkflow?: string;
   contextUsage?: AiContextUsage;
   updatedAt?: string | number;
   messages: AiChatHistoryMessage[];

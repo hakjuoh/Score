@@ -245,6 +245,7 @@ public class ChatService {
                 prepared.conversationId(), prepared.requestId(), prepared.modelName(),
                 prepared.reasoningEffort(), prepared.runtime(), prepared.runtimeOptions(), progress,
                 budget.orElse(null), projectedInputTokens);
+        recorder.usePromptLanguage(prepared.prompt());
         budget.ifPresent(value -> recorder.contextUsage(value.usage(
                 initialProjectedInputTokens, true, "preflight_estimate")));
         Consumer<String> collectingProgress = message -> {
@@ -276,7 +277,14 @@ public class ChatService {
         final String answer;
         final Map<String, Object> finalTraceMetadata;
         if (workflowCommand.isPresent()) {
-            answer = workflowCommand.orElseThrow().acknowledgement();
+            AiPersistentWorkflowCommand command = workflowCommand.orElseThrow();
+            Map<String, Object> noticeExtra = new LinkedHashMap<>();
+            noticeExtra.put("workflow_preference", true);
+            if (command.activeWorkflow() != null) {
+                noticeExtra.put("active_workflow", command.activeWorkflow());
+            }
+            recorder.guide(command.notice(), Map.copyOf(noticeExtra));
+            answer = command.acknowledgement();
             finalTraceMetadata = Map.of(
                     "workflow", "configuration",
                     "active_workflow", Objects.toString(prepared.activeWorkflow(), "automatic"));
@@ -386,7 +394,8 @@ public class ChatService {
         AiContextUsageInfo contextUsage = currentContextUsage(requester, conversationId, details.modelName());
         return new ChatConversationDetails(details.conversationId(), details.title(), details.modelName(),
                 details.reasoningEffort(), runtime, details.runtimeOptions(), details.updatedAt(),
-                details.messages(), details.contextMessages(), contextUsage, details.permissionMode());
+                details.messages(), details.contextMessages(), contextUsage, details.permissionMode(),
+                details.activeWorkflow());
     }
 
     public List<AiChatModelInfo> availableModels() {
@@ -511,13 +520,21 @@ public class ChatService {
     }
 
     public void recordFailure(ChatRequest request, ScoreUser requester, String message) {
+        recordFailure(request, requester, message, null);
+    }
+
+    public void recordFailure(ChatRequest request, ScoreUser requester, String message,
+                              String failureClass) {
         if (request == null || !StringUtils.hasText(request.conversationId())) {
             return;
         }
+        Map<String, Object> extra = StringUtils.hasText(failureClass)
+                ? Map.of("terminal", true, "failure_class", failureClass)
+                : Map.of("terminal", true);
         conversationRepository(requester).append(request.conversationId(), new AiChatTrajectoryStep(
                 request.requestId(), "system", "error", "visible",
                 StringUtils.hasText(message) ? message : "The assistant request failed.",
-                null, null, null, null, null, Map.of("terminal", true), 0, null, null));
+                null, null, null, null, null, extra, 0, null, null));
     }
 
     private UserMessage userMessage(ChatRequest request) {
