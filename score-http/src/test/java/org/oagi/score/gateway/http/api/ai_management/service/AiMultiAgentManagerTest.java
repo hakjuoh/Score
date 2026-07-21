@@ -5,23 +5,34 @@ import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDefinition;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowEvaluation;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowNode;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
 import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntimeRegistry;
+import org.oagi.score.gateway.http.api.ai_management.workflow.DirectWorkflow;
+import org.oagi.score.gateway.http.api.ai_management.workflow.Workflow;
+import org.oagi.score.gateway.http.api.ai_management.workflow.WorkflowResult;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -96,6 +107,117 @@ class AiMultiAgentManagerTest {
     }
 
     @Test
+    void isolatesTheWorkerAssignmentAndRetriesUntilARealDomainReadCompletes() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition researcher = new AiAgentDefinition(
+                "evidence-researcher", "Evidence researcher", "current-data research",
+                "Research the assigned records.", AiRuntime.ToolPolicy.READ_ONLY);
+        AiWorkflowPlan.Task task = new AiWorkflowPlan.Task(
+                "Context evidence", researcher.id(),
+                "Read the exact context scheme and category and return their stable IDs.",
+                null, "Researching", "Researched");
+        when(catalog.require(researcher.id())).thenReturn(researcher);
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "orchestrator_workers", true, "I’ll verify the current records.",
+                "Researching", "Researched", "I’ll complete the requested action if needed.",
+                "Completing", "Completed", List.of(task)));
+
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
+        when(child.conversationId()).thenReturn("child-1");
+        when(root.forkSubagent(eq(researcher.id()), eq(task.instruction()), any()))
+                .thenReturn(child);
+        when(child.successfulDomainToolCallCount()).thenReturn(0L, 0L, 1L, 1L);
+        AtomicInteger workerCalls = new AtomicInteger();
+        when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
+            AiRuntime.Context candidate = invocation.getArgument(1);
+            if (candidate.agentDepth() == 0) return new AiRuntime.Result("final answer");
+            return new AiRuntime.Result(workerCalls.incrementAndGet() == 1
+                    ? "I cannot create records because I am read-only."
+                    : "Context Scheme ID 34; Context Category ID 44.");
+        });
+        ChatRequest request = new ChatRequest(
+                "You didn't create the context scheme and category. Create them too.",
+                "request-1", null, "conversation-1", null, List.of(), null,
+                "model", "high", "default", Map.of(), "ask",
+                new AiMultiAgentOptions(true, 2, "balanced"));
+        AiRuntime.Context context = new AiRuntime.Context(
+                request, List.of(), new UserMessage(request.prompt()), mock(ScoreUser.class),
+                root, true, true, AiRuntime.ToolPolicy.FULL, 0);
+
+        try (AiMultiAgentManager manager = manager(runtimes, planner, catalog)) {
+            assertThat(manager.execute(context).answer()).isEqualTo("final answer");
+        }
+
+        ArgumentCaptor<AiRuntime.Context> calls = ArgumentCaptor.forClass(AiRuntime.Context.class);
+        verify(runtimes, times(3)).execute(eq("default"), calls.capture());
+        List<AiRuntime.Context> workers = calls.getAllValues().stream()
+                .filter(candidate -> candidate.agentDepth() == 1).toList();
+        assertThat(workers).hasSize(2).allSatisfy(worker -> {
+            assertThat(worker.userMessage().getText()).isEqualTo(
+                    "WORKER_ASSIGNMENT\n" + task.instruction());
+            assertThat(worker.userMessage().getText()).doesNotContain("Create them too");
+        });
+        assertThat(workers.getFirst().history()).anySatisfy(message ->
+                assertThat(message.getText()).contains(
+                        "INTERNAL_ORIGINAL_REQUEST_REFERENCE", "Create them too"));
+        assertThat(workers.getLast().history())
+                .anySatisfy(message -> assertThat(message)
+                        .isInstanceOfSatisfying(AssistantMessage.class,
+                                assistant -> assertThat(assistant.getText()).contains("read-only")))
+                .anySatisfy(message -> assertThat(message)
+                        .isInstanceOfSatisfying(SystemMessage.class,
+                                system -> assertThat(system.getText()).contains(
+                                        "toolSearchTool call only discovers schemas",
+                                        "at least one relevant connectCenter get/list tool")));
+        verify(child).terminalLifecycle(eq("subagent_completed"), any(), any());
+    }
+
+    @Test
+    void failsAWorkerAfterItsRecoveryAlsoCompletesNoDomainRead() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition researcher = new AiAgentDefinition(
+                "evidence-researcher", "Evidence researcher", "current-data research",
+                "Research the assigned records.", AiRuntime.ToolPolicy.READ_ONLY);
+        AiWorkflowPlan.Task task = new AiWorkflowPlan.Task(
+                "Context evidence", researcher.id(), "Read the current context schemes.",
+                null, "Researching", "Researched");
+        when(catalog.require(researcher.id())).thenReturn(researcher);
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "orchestrator_workers", true, "I’ll verify the current records.",
+                "Researching", "Researched", "I’ll synthesize verified evidence.",
+                "Synthesizing", "Synthesized", List.of(task)));
+
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
+        when(child.conversationId()).thenReturn("child-1");
+        when(root.forkSubagent(eq(researcher.id()), eq(task.instruction()), any()))
+                .thenReturn(child);
+        when(child.successfulDomainToolCallCount()).thenReturn(0L);
+        when(runtimes.execute(eq("default"), any()))
+                .thenReturn(new AiRuntime.Result("I’ll look that up."));
+
+        try (AiMultiAgentManager manager = manager(runtimes, planner, catalog)) {
+            assertThatThrownBy(() -> manager.execute(
+                    context(root, new AiMultiAgentOptions(true, 2, "balanced"), 0)))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("All delegated agents failed.");
+        }
+
+        verify(runtimes, times(2)).execute(eq("default"), any());
+        verify(child).terminalLifecycle(eq("subagent_failed"), any(), any());
+        verify(child, never()).terminalLifecycle(eq("subagent_completed"), any(), any());
+    }
+
+    @Test
     void executesToolWorkflowWithModelAuthoredGuideAndVerbs() {
         AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
         AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
@@ -105,7 +227,7 @@ class AiMultiAgentManagerTest {
                 "chain", true, "I’ll review the current release and component.",
                 "Reviewing", "Reviewed", null, "Answering", "Answered", List.of()));
         when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("grounded answer"));
-        when(recorder.completedDomainToolCallCount()).thenReturn(0L, 1L, 1L);
+        when(recorder.successfulDomainToolCallCount()).thenReturn(0L, 1L, 1L);
 
         AiRuntime.Result result;
         try (AiMultiAgentManager manager = manager(runtimes, planner, catalog)) {
@@ -135,7 +257,7 @@ class AiMultiAgentManagerTest {
         when(runtimes.execute(eq("default"), any()))
                 .thenReturn(new AiRuntime.Result("I'll find the right tool."))
                 .thenReturn(new AiRuntime.Result("Found the current context schemes."));
-        when(recorder.completedDomainToolCallCount()).thenReturn(0L, 0L, 1L, 1L);
+        when(recorder.successfulDomainToolCallCount()).thenReturn(0L, 0L, 1L, 1L);
 
         AiRuntime.Result result;
         try (AiMultiAgentManager manager = manager(runtimes, planner, catalog)) {
@@ -155,6 +277,32 @@ class AiMultiAgentManagerTest {
                                 system -> assertThat(system.getText())
                                         .contains("completed no connectCenter domain tool call",
                                                 "structured tool API")));
+    }
+
+    @Test
+    void failsAToolRequiredWorkflowAfterItsRecoveryRemainsUngrounded() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "direct", true, "I’ll inspect the context schemes.",
+                "Inspecting", "Inspected", null, "Answering", "Answered", List.of()));
+        when(runtimes.execute(eq("default"), any()))
+                .thenReturn(new AiRuntime.Result("I'll find the right tool."))
+                .thenReturn(new AiRuntime.Result("I still have no current evidence."));
+        when(recorder.successfulDomainToolCallCount()).thenReturn(0L);
+
+        try (AiMultiAgentManager manager = manager(runtimes, planner, catalog)) {
+            assertThatThrownBy(() -> manager.execute(
+                    context(recorder, AiMultiAgentOptions.single(), 0)))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("no successful connectCenter domain tool call");
+        }
+
+        verify(runtimes, times(2)).execute(eq("default"), any());
+        verify(recorder).lifecycle(eq("required_tool_unfulfilled"), any(),
+                eq(Map.of("status", "failed", "recovery_attempts", 1)));
     }
 
     @Test
@@ -188,6 +336,8 @@ class AiMultiAgentManagerTest {
                 .thenReturn(childOne);
         when(root.forkParallelExecution(eq(researcher.id()), eq(second.instruction()), any()))
                 .thenReturn(childTwo);
+        when(childOne.successfulDomainToolCallCount()).thenReturn(0L, 1L, 1L);
+        when(childTwo.successfulDomainToolCallCount()).thenReturn(0L, 1L, 1L);
         when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
             AiRuntime.Context candidate = invocation.getArgument(1);
             if (candidate.agentDepth() == 1) {
@@ -228,16 +378,89 @@ class AiMultiAgentManagerTest {
         assertThat(children).allSatisfy(candidate -> {
             assertThat(candidate.toolPolicy()).isEqualTo(AiRuntime.ToolPolicy.READ_ONLY);
             assertThat(candidate.streamVisibleContent()).isFalse();
-            assertThat(candidate.history()).hasSize(1);
+            assertThat(candidate.history()).hasSize(2);
             assertThat(((SystemMessage) candidate.history().getFirst()).getText())
                     .contains("isolated workflow worker", "Research the assigned record precisely");
+            assertThat(candidate.history().get(1)).isInstanceOfSatisfying(UserMessage.class,
+                    reference -> assertThat(reference.getText())
+                            .contains("INTERNAL_ORIGINAL_REQUEST_REFERENCE"));
+            assertThat(candidate.userMessage().getText()).startsWith("WORKER_ASSIGNMENT")
+                    .doesNotContain("Investigate\n");
         });
-        String synthesis = calls.getAllValues().stream()
+        // Worker answers are untrusted evidence: they re-enter the lead synthesis
+        // call as user-role reference data, never with system-role authority.
+        Object synthesis = calls.getAllValues().stream()
                 .filter(candidate -> candidate.agentDepth() == 0).findFirst()
-                .map(candidate -> ((SystemMessage) candidate.history().getLast()).getText())
+                .map(candidate -> candidate.history().getLast())
                 .orElseThrow();
-        assertThat(synthesis).contains("sync evidence", "get evidence",
-                "Sync Purchase Order", "Get Purchase Order");
+        assertThat(synthesis).isInstanceOfSatisfying(UserMessage.class,
+                reference -> assertThat(reference.getText()).contains(
+                        "sync evidence", "get evidence",
+                        "Sync Purchase Order", "Get Purchase Order"));
+    }
+
+    @Test
+    void harvestsAParallelWorkerThatCompletedBeforeTheDeadlineWasExhausted() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition researcher = new AiAgentDefinition(
+                "evidence-researcher", "Evidence researcher", "current-data research",
+                "Research the assigned record precisely.", AiRuntime.ToolPolicy.READ_ONLY);
+        when(catalog.require(researcher.id())).thenReturn(researcher);
+        AiWorkflowPlan.Task blocked = new AiWorkflowPlan.Task(
+                "Blocked record", researcher.id(), "Read the first record.",
+                null, "Reading", "Read");
+        AiWorkflowPlan.Task fast = new AiWorkflowPlan.Task(
+                "Fast record", researcher.id(), "Read the second record.",
+                null, "Reading", "Read");
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "parallel", true, "I’ll review both records independently.",
+                "Reviewing", "Reviewed", "I’ll combine the results.",
+                "Combining", "Combined", List.of(blocked, fast)));
+
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder childOne = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder childTwo = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
+        when(childOne.conversationId()).thenReturn("child-1");
+        when(childTwo.conversationId()).thenReturn("child-2");
+        when(root.forkParallelExecution(eq(researcher.id()), eq(blocked.instruction()), any()))
+                .thenReturn(childOne);
+        when(root.forkParallelExecution(eq(researcher.id()), eq(fast.instruction()), any()))
+                .thenReturn(childTwo);
+        when(childTwo.successfulDomainToolCallCount()).thenReturn(0L, 1L, 1L);
+        CountDownLatch neverReleased = new CountDownLatch(1);
+        when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
+            AiRuntime.Context candidate = invocation.getArgument(1);
+            if (candidate.agentDepth() == 1) {
+                if ("child-1".equals(candidate.request().conversationId())) {
+                    try {
+                        neverReleased.await();
+                    } catch (InterruptedException failure) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("cancelled", failure);
+                    }
+                    return new AiRuntime.Result("late evidence");
+                }
+                return new AiRuntime.Result("fast evidence");
+            }
+            return new AiRuntime.Result("combined answer");
+        });
+
+        AiRuntime.Result result;
+        try (AiMultiAgentManager manager = new AiMultiAgentManager(
+                runtimes, planner, catalog, null, null, 16, 8, Duration.ofMillis(300))) {
+            result = manager.execute(context(root, AiMultiAgentOptions.single(), 0));
+        }
+
+        assertThat(result.answer()).isEqualTo("combined answer");
+        assertThat(result.traceMetadata())
+                .containsEntry("completed_agents", 1)
+                .containsEntry("failed_agents", 1);
+        verify(childTwo).terminalLifecycle(eq("parallel_task_completed"), any(), any());
+        verify(childOne).terminalLifecycle(eq("parallel_task_failed"), any(), any());
     }
 
     @Test
@@ -262,6 +485,7 @@ class AiMultiAgentManagerTest {
         when(child.conversationId()).thenReturn("subagent-1");
         when(root.forkSubagent(eq(agent.id()), eq(task.instruction()), any()))
                 .thenReturn(child);
+        when(child.successfulDomainToolCallCount()).thenReturn(0L, 1L, 1L);
         when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
             AiRuntime.Context candidate = invocation.getArgument(1);
             return new AiRuntime.Result(candidate.agentDepth() == 1 ? "evidence" : "answer");
@@ -307,6 +531,8 @@ class AiMultiAgentManagerTest {
         when(root.forkSubagent(eq(agent.id()), any(), any()))
                 .thenReturn(childOne)
                 .thenReturn(childTwo);
+        when(childOne.successfulDomainToolCallCount()).thenReturn(0L, 1L, 1L);
+        when(childTwo.successfulDomainToolCallCount()).thenReturn(0L, 1L, 1L);
         AtomicInteger workers = new AtomicInteger();
         when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
             AiRuntime.Context candidate = invocation.getArgument(1);
@@ -323,8 +549,15 @@ class AiMultiAgentManagerTest {
         verify(runtimes, atLeastOnce()).execute(eq("default"), calls.capture());
         List<AiRuntime.Context> children = calls.getAllValues().stream()
                 .filter(candidate -> candidate.agentDepth() == 1).toList();
+        // Prior chain evidence reaches the next worker as user-role reference
+        // data; the worker's system prompt itself stays free of model output.
         assertThat(((SystemMessage) children.get(1).history().getFirst()).getText())
-                .contains("Prior chain results", "located id 74");
+                .doesNotContain("located id 74");
+        assertThat(children.get(1).history().getLast())
+                .isInstanceOfSatisfying(UserMessage.class,
+                        reference -> assertThat(reference.getText()).contains(
+                                "INTERNAL_WORKFLOW_UPSTREAM",
+                                "prior chain results", "located id 74"));
     }
 
     @Test
@@ -337,6 +570,243 @@ class AiMultiAgentManagerTest {
                     .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Nested");
         }
         verify(planner, never()).plan(any());
+    }
+
+    @Test
+    void replansWithEvaluatorFeedbackUntilTheResultIsComplete() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiWorkflowEvaluator evaluator = mock(AiWorkflowEvaluator.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        AiWorkflowPlan direct = new AiWorkflowPlan(
+                "direct", false, null, "Answering", "Answered",
+                null, "Answering", "Answered", List.of());
+        when(planner.plan(any(), anyList())).thenReturn(direct);
+        when(runtimes.execute(eq("default"), any()))
+                .thenReturn(new AiRuntime.Result("first attempt"))
+                .thenReturn(new AiRuntime.Result("verified answer"));
+        when(evaluator.evaluate(any(), eq(direct), any(), eq(1), eq(3)))
+                .thenReturn(new AiWorkflowEvaluation(AiWorkflowEvaluation.Decision.CONTINUE,
+                        "The answer lacks verification.", "Verify against current evidence."));
+        when(evaluator.evaluate(any(), eq(direct), any(), eq(2), eq(3)))
+                .thenReturn(new AiWorkflowEvaluation(AiWorkflowEvaluation.Decision.COMPLETE,
+                        null, null));
+
+        AiRuntime.Result result;
+        try (AiMultiAgentManager manager = new AiMultiAgentManager(
+                runtimes, planner, evaluator, catalog, null, null,
+                16, 8, Duration.ofSeconds(2))) {
+            result = manager.execute(context(recorder, AiMultiAgentOptions.single(), 0));
+        }
+
+        assertThat(result.answer()).isEqualTo("verified answer");
+        assertThat(result.traceMetadata())
+                .containsEntry("workflow_iterations", 2)
+                .containsEntry("evaluation_status", "complete");
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<AiWorkflowFeedback>> feedback = ArgumentCaptor.forClass(List.class);
+        verify(planner, times(2)).plan(any(), feedback.capture());
+        assertThat(feedback.getAllValues().getFirst()).isEmpty();
+        assertThat(feedback.getAllValues().get(1)).singleElement().satisfies(item ->
+                assertThat(item.nextObjective()).isEqualTo("Verify against current evidence."));
+    }
+
+    @Test
+    void reportsTheIterationLimitWhenWorkStillRemains() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiWorkflowEvaluator evaluator = mock(AiWorkflowEvaluator.class);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        AiWorkflowPlan direct = new AiWorkflowPlan(
+                "direct", false, null, "Answering", "Answered",
+                null, "Answering", "Answered", List.of());
+        when(planner.plan(any(), anyList())).thenReturn(direct);
+        when(runtimes.execute(eq("default"), any()))
+                .thenReturn(new AiRuntime.Result("incomplete"));
+        when(evaluator.evaluate(any(), eq(direct), any(), anyInt(), eq(3)))
+                .thenReturn(new AiWorkflowEvaluation(AiWorkflowEvaluation.Decision.CONTINUE,
+                        "Evidence is missing.", "Retrieve the evidence."));
+
+        AiRuntime.Result result;
+        try (AiMultiAgentManager manager = new AiMultiAgentManager(
+                runtimes, planner, evaluator, mock(AiAgentCatalog.class), null, null,
+                16, 8, Duration.ofSeconds(2))) {
+            result = manager.execute(context(recorder, AiMultiAgentOptions.single(), 0));
+        }
+
+        assertThat(result.traceMetadata())
+                .containsEntry("workflow_iterations", 3)
+                .containsEntry("evaluation_status", "iteration_limit")
+                .containsEntry("remaining_objective", "Retrieve the evidence.");
+        verify(planner, times(3)).plan(any(), anyList());
+        // A CONTINUE verdict on the final iteration runs nothing further, so the
+        // user must not read a continuation promise; earlier iterations narrate
+        // after the dedup window reopens for their replanning round.
+        verify(recorder, times(2)).guide(
+                startsWith("Continuing with the remaining objective"), any());
+        verify(recorder, times(2)).resetGuideDeduplication();
+    }
+
+    @Test
+    void forcesReadOnlyAdmittedSynthesisForAContainerNestedInAParallelBranch() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.fork(any())).thenAnswer(ignored -> groundedBranchRecorder());
+        AiWorkflowNode inner = new AiWorkflowNode("inner", "parallel", true, null,
+                "Working", "Completed", null, "Synthesizing", "Synthesized",
+                null, null, List.of(directLeaf("inner-a"), directLeaf("inner-b")), Map.of());
+        AiWorkflowNode root = new AiWorkflowNode("root", "parallel", true, null,
+                "Working", "Completed", null, "Synthesizing", "Synthesized",
+                null, null, List.of(inner, directLeaf("outer-c")), Map.of());
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "parallel", true, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", List.of(), root));
+        when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
+            AiRuntime.Context candidate = invocation.getArgument(1);
+            return new AiRuntime.Result(candidate.agentDepth() == 0 ? "final" : "evidence");
+        });
+
+        AiRuntime.Result result;
+        try (AiMultiAgentManager manager = manager(runtimes, planner, mock(AiAgentCatalog.class))) {
+            result = manager.execute(context(recorder, AiMultiAgentOptions.single(), 0));
+        }
+
+        assertThat(result.answer()).isEqualTo("final");
+        ArgumentCaptor<AiRuntime.Context> calls = ArgumentCaptor.forClass(AiRuntime.Context.class);
+        verify(runtimes, times(5)).execute(eq("default"), calls.capture());
+        // The three concurrent leaves AND the nested container's synthesis all
+        // execute read-only at depth 1: a synthesis running while outer siblings
+        // are still executing is not the exclusive lead. Only the sequential
+        // root synthesis keeps the mutation-capable policy.
+        assertThat(calls.getAllValues().stream()
+                .filter(candidate -> candidate.agentDepth() == 1).toList())
+                .hasSize(4)
+                .allSatisfy(candidate -> assertThat(candidate.toolPolicy())
+                        .isEqualTo(AiRuntime.ToolPolicy.READ_ONLY));
+        assertThat(calls.getAllValues().stream()
+                .filter(candidate -> candidate.agentDepth() == 0).toList())
+                .singleElement()
+                .satisfies(candidate -> assertThat(candidate.toolPolicy())
+                        .isEqualTo(AiRuntime.ToolPolicy.FULL));
+    }
+
+    @Test
+    void retriesToolRequiredConcurrentDirectLeavesUntilTheyReadDomainData() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.fork(any())).thenAnswer(ignored -> recoveredBranchRecorder());
+        AiWorkflowNode root = new AiWorkflowNode("root", "parallel", true, null,
+                "Working", "Completed", null, "Synthesizing", "Synthesized",
+                null, null, List.of(directLeaf("first"), directLeaf("second")), Map.of());
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "parallel", true, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", List.of(), root));
+        when(runtimes.execute(eq("default"), any())).thenAnswer(invocation -> {
+            AiRuntime.Context candidate = invocation.getArgument(1);
+            return new AiRuntime.Result(candidate.agentDepth() == 0
+                    ? "final answer" : "branch evidence");
+        });
+
+        AiRuntime.Result result;
+        try (AiMultiAgentManager manager = manager(runtimes, planner, mock(AiAgentCatalog.class))) {
+            result = manager.execute(context(recorder, AiMultiAgentOptions.single(), 0));
+        }
+
+        assertThat(result.answer()).isEqualTo("final answer");
+        ArgumentCaptor<AiRuntime.Context> calls = ArgumentCaptor.forClass(AiRuntime.Context.class);
+        verify(runtimes, times(5)).execute(eq("default"), calls.capture());
+        List<AiRuntime.Context> branchCalls = calls.getAllValues().stream()
+                .filter(candidate -> candidate.agentDepth() == 1).toList();
+        assertThat(branchCalls).hasSize(4).allSatisfy(candidate ->
+                assertThat(candidate.toolPolicy()).isEqualTo(AiRuntime.ToolPolicy.READ_ONLY));
+        assertThat(branchCalls.stream().filter(candidate -> candidate.history().stream()
+                .filter(SystemMessage.class::isInstance)
+                .map(Message::getText)
+                .anyMatch(text -> text.contains("INTERNAL_WORKFLOW_RECOVERY"))).toList())
+                .hasSize(2);
+    }
+
+    @Test
+    void failsToolRequiredConcurrentDirectLeavesAfterRecoveryExhaustion() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.fork(any())).thenAnswer(ignored -> mock(AiTrajectoryRecorder.class));
+        AiWorkflowNode root = new AiWorkflowNode("root", "parallel", true, null,
+                "Working", "Completed", null, "Synthesizing", "Synthesized",
+                null, null, List.of(directLeaf("first"), directLeaf("second")), Map.of());
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "parallel", true, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", List.of(), root));
+        when(runtimes.execute(eq("default"), any()))
+                .thenReturn(new AiRuntime.Result("No current evidence."));
+
+        try (AiMultiAgentManager manager = manager(runtimes, planner, mock(AiAgentCatalog.class))) {
+            assertThatThrownBy(() -> manager.execute(
+                    context(recorder, AiMultiAgentOptions.single(), 0)))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("All parallel workflow branches failed.");
+        }
+
+        verify(runtimes, times(4)).execute(eq("default"), any());
+    }
+
+    private AiWorkflowNode directLeaf(String id) {
+        return new AiWorkflowNode(id, "direct", true, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", null, null, List.of(), Map.of());
+    }
+
+    private AiTrajectoryRecorder groundedBranchRecorder() {
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.successfulDomainToolCallCount()).thenReturn(0L, 1L);
+        return recorder;
+    }
+
+    private AiTrajectoryRecorder recoveredBranchRecorder() {
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.successfulDomainToolCallCount()).thenReturn(0L, 0L, 1L);
+        return recorder;
+    }
+
+    @Test
+    void usesARegisteredWorkflowCompilerExtensionForComposedPlans() {
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        AiWorkflowNode root = new AiWorkflowNode("root", "custom_direct", false, null,
+                "Working", "Completed", null, "Synthesizing", "Synthesized",
+                null, null, List.of(), Map.of());
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "custom_direct", false, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", List.of(), root));
+        AiWorkflowCompiler.WorkflowNodeCompiler extension =
+                new AiWorkflowCompiler.WorkflowNodeCompiler() {
+                    @Override
+                    public String workflowType() {
+                        return "custom_direct";
+                    }
+
+                    @Override
+                    public Workflow compile(AiWorkflowNode node,
+                                            AiWorkflowCompiler.CompilationContext context) {
+                        return new DirectWorkflow(node.id(), ignored -> WorkflowResult.success(
+                                node.id(), "extension answer", Map.of(), List.of()));
+                    }
+                };
+
+        AiRuntime.Result result;
+        try (AiMultiAgentManager manager = new AiMultiAgentManager(
+                runtimes, planner, null, mock(AiAgentCatalog.class), null, null,
+                16, 8, Duration.ofSeconds(2), List.of(extension))) {
+            result = manager.execute(context(recorder, AiMultiAgentOptions.single(), 0));
+        }
+
+        assertThat(result.answer()).isEqualTo("extension answer");
+        assertThat(result.traceMetadata()).containsEntry("workflow", "custom_direct");
+        verify(runtimes, never()).execute(any(), any());
     }
 
     private AiMultiAgentManager manager(AiRuntimeRegistry runtimes, AiWorkflowPlanner planner,

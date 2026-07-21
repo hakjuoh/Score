@@ -138,8 +138,21 @@ public final class OpenAiResponsesChatModel implements ChatModel {
             response = client.responses().create(createRequest(requestOptions, converted, false));
         }
         if (ResponseStatus.FAILED.equals(response.status().orElse(null))) {
-            throw new IllegalStateException("OpenAI Responses API failed: "
-                    + response.error().map(Object::toString).orElse("unknown error"));
+            // A FAILED response arrives over HTTP 200, so no SDK exception carries it.
+            // The retry markers make server-side generation failures recoverable by the
+            // application-level provider retry loop, matching the SDK-thrown statuses.
+            String detail = "OpenAI Responses API failed: "
+                    + response.error().map(error -> error.message()).orElse("unknown error");
+            boolean transientFailure = response.error()
+                    .map(error -> com.openai.models.responses.ResponseError.Code.SERVER_ERROR
+                            .equals(error.code())
+                            || com.openai.models.responses.ResponseError.Code.RATE_LIMIT_EXCEEDED
+                            .equals(error.code()))
+                    .orElse(false);
+            if (transientFailure) {
+                throw new org.springframework.ai.retry.TransientAiException(detail);
+            }
+            throw new org.springframework.ai.retry.NonTransientAiException(detail);
         }
         converted.consumedContinuationIds().forEach(toolContinuations::remove);
         return toChatResponse(response);

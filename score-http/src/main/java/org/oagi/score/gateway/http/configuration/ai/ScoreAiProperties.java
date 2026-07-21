@@ -19,6 +19,7 @@ public class ScoreAiProperties {
     private MultiAgent multiAgent = new MultiAgent();
     private Memory memory = new Memory();
     private Mcp mcp = new Mcp();
+    private ProviderRetry providerRetry = new ProviderRetry();
 
     public Map<String, Provider> getProviders() {
         return providers;
@@ -66,6 +67,59 @@ public class ScoreAiProperties {
 
     public void setMultiAgent(MultiAgent multiAgent) {
         this.multiAgent = multiAgent != null ? multiAgent : new MultiAgent();
+    }
+
+    public ProviderRetry getProviderRetry() {
+        return providerRetry;
+    }
+
+    public void setProviderRetry(ProviderRetry providerRetry) {
+        this.providerRetry = providerRetry != null ? providerRetry : new ProviderRetry();
+    }
+
+    /**
+     * Application-level retry for transient model-provider failures. The provider
+     * SDKs' internal retries are disabled so this single loop owns the backoff and
+     * can narrate every attempt to the user.
+     */
+    public static class ProviderRetry {
+
+        private int maxAttempts = 10;
+        private Duration initialDelay = Duration.ofSeconds(2);
+        private double multiplier = 2.0;
+        private Duration maxDelay = Duration.ofSeconds(60);
+
+        public int getMaxAttempts() { return maxAttempts; }
+        public void setMaxAttempts(int maxAttempts) {
+            if (maxAttempts < 1) {
+                throw new IllegalArgumentException("score.ai.provider-retry.max-attempts must be positive.");
+            }
+            this.maxAttempts = maxAttempts;
+        }
+
+        public Duration getInitialDelay() { return initialDelay; }
+        public void setInitialDelay(Duration initialDelay) {
+            if (initialDelay == null || initialDelay.isNegative()) {
+                throw new IllegalArgumentException("score.ai.provider-retry.initial-delay must not be negative.");
+            }
+            this.initialDelay = initialDelay;
+        }
+
+        public double getMultiplier() { return multiplier; }
+        public void setMultiplier(double multiplier) {
+            if (multiplier < 1.0) {
+                throw new IllegalArgumentException("score.ai.provider-retry.multiplier must be at least 1.");
+            }
+            this.multiplier = multiplier;
+        }
+
+        public Duration getMaxDelay() { return maxDelay; }
+        public void setMaxDelay(Duration maxDelay) {
+            if (maxDelay == null || maxDelay.isNegative()) {
+                throw new IllegalArgumentException("score.ai.provider-retry.max-delay must not be negative.");
+            }
+            this.maxDelay = maxDelay;
+        }
     }
 
     public Memory getMemory() {
@@ -251,6 +305,7 @@ public class ScoreAiProperties {
         // the per-user active-request limit in the shared AI request registry.
         private int maxConcurrentSpecialistsPerUser = 8;
         private Duration specialistTimeout = Duration.ofMinutes(2);
+        private int maximumWorkflowIterations = 3;
 
         public int getMaxConcurrentSpecialists() { return maxConcurrentSpecialists; }
         public void setMaxConcurrentSpecialists(int maxConcurrentSpecialists) {
@@ -264,6 +319,10 @@ public class ScoreAiProperties {
         public void setSpecialistTimeout(Duration specialistTimeout) {
             this.specialistTimeout = specialistTimeout != null
                     ? specialistTimeout : Duration.ofMinutes(2);
+        }
+        public int getMaximumWorkflowIterations() { return maximumWorkflowIterations; }
+        public void setMaximumWorkflowIterations(int maximumWorkflowIterations) {
+            this.maximumWorkflowIterations = maximumWorkflowIterations;
         }
     }
 

@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
 /**
@@ -51,17 +52,31 @@ public final class ScoreToolSearchToolCallingAdvisor extends ToolSearchToolCalli
             ScoreToolSearchToolCallingAdvisor.class.getName() + ".cachedToolCallbacks";
     private static final String SYSTEM_MESSAGE_SUFFIX = """
 
-            You have access to `toolSearchTool` for discovering connectCenter tools on demand.
-            Before the first search, identify every capability required by the user's complete
-            request, including mutations, relationship operations, and final read-back. Prefer one
-            comprehensive search with maxResults 10 that includes all relevant entity and action
-            keywords. If one query cannot cover the workflow, issue all necessary searches in
-            parallel in the same response. Search results are accumulated and their full tool
+            You are the tool-search agent for the current workflow. The compact catalog below
+            contains names only; full schemas are deliberately deferred to conserve context.
+            Before execution, identify every capability required by the complete request, including
+            mutations, relationship operations, and final read-back. Prefer `select:name1,name2`
+            with exact names from the catalog. If more than 10 tools are required, issue multiple
+            searches in parallel in the same response. Use a specific natural-language query only
+            when no exact catalog name is suitable. Search results accumulate and only their full
             definitions become available on the next step. Do not guess an unknown tool name.
             Never write or simulate `[Tool call: ...]`, `[Tool: ...]`, or another textual placeholder;
             invoke toolSearchTool and selected tools only through the structured tool interface.
             """;
+    private static final String DEFERRED_TOOLS_START = "\n<available-deferred-tools>\n";
+    private static final String DEFERRED_TOOLS_END = "\n</available-deferred-tools>";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static final int MENTION_PATTERN_CACHE_LIMIT = 4_096;
+
+    /**
+     * Compiled exact-mention patterns keyed by tool name. The tool-name set is small
+     * and stable per registry, so the cache stays far below its bound in practice;
+     * the limit only caps a pathological flood of unique names, after which new
+     * names fall back to per-call compilation.
+     */
+    private static final ConcurrentHashMap<String, Pattern> MENTION_PATTERNS =
+            new ConcurrentHashMap<>();
 
     private final ToolIndex toolIndex;
     private final ToolCallback toolSearchToolCallback;
@@ -146,10 +161,18 @@ public final class ScoreToolSearchToolCallingAdvisor extends ToolSearchToolCalli
                 Collections.unmodifiableMap(new LinkedHashMap<>(registry)));
         request.context().put(ToolSearchTool.TOOL_SEARCH_TOOL_SESSION_ID_KEY, sessionId);
 
+        String deferredToolCatalog = references.stream()
+                .map(ToolReference::toolName)
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted()
+                .collect(Collectors.collectingAndThen(Collectors.joining("\n"), names ->
+                        names.isEmpty() ? "" : DEFERRED_TOOLS_START + names + DEFERRED_TOOLS_END));
+
         return request.mutate()
                 .prompt(request.prompt().copy().augmentSystemMessage(systemMessage -> systemMessage
                         .copy().mutate()
-                        .text(systemMessage.getText() + SYSTEM_MESSAGE_SUFFIX)
+                        .text(systemMessage.getText() + SYSTEM_MESSAGE_SUFFIX + deferredToolCatalog)
                         .build()))
                 .build();
     }
@@ -247,10 +270,15 @@ public final class ScoreToolSearchToolCallingAdvisor extends ToolSearchToolCalli
     }
 
     private boolean containsExactToolName(String text, String toolName) {
-        return Pattern.compile("(?<![A-Za-z0-9_])" + Pattern.quote(toolName)
-                        + "(?![A-Za-z0-9_])")
-                .matcher(text)
-                .find();
+        Pattern pattern = MENTION_PATTERNS.get(toolName);
+        if (pattern == null) {
+            pattern = Pattern.compile("(?<![A-Za-z0-9_])" + Pattern.quote(toolName)
+                    + "(?![A-Za-z0-9_])");
+            if (MENTION_PATTERNS.size() < MENTION_PATTERN_CACHE_LIMIT) {
+                MENTION_PATTERNS.putIfAbsent(toolName, pattern);
+            }
+        }
+        return pattern.matcher(text).find();
     }
 
     private String sessionId(Map<String, Object> context) {
@@ -267,9 +295,11 @@ public final class ScoreToolSearchToolCallingAdvisor extends ToolSearchToolCalli
             references.stream()
                     .sorted(Comparator.comparing(ToolReference::toolName))
                     .forEachOrdered(reference -> {
-                        digest.update(reference.toolName().getBytes(StandardCharsets.UTF_8));
+                        digest.update(Objects.toString(reference.toolName(), "")
+                                .getBytes(StandardCharsets.UTF_8));
                         digest.update((byte) 0);
-                        digest.update(reference.summary().getBytes(StandardCharsets.UTF_8));
+                        digest.update(Objects.toString(reference.summary(), "")
+                                .getBytes(StandardCharsets.UTF_8));
                         digest.update((byte) 1);
                     });
             return HexFormat.of().formatHex(digest.digest());

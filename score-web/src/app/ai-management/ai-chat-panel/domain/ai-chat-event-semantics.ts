@@ -37,7 +37,8 @@ export function toolCallEventSemantics(event: AiChatSocketEvent): AiToolCallEven
   const subtype = nonBlank(event.subtype);
   if (!groupId || !toolCallId
     || (subtype !== 'started' && subtype !== 'progress'
-      && subtype !== 'completed' && subtype !== 'failed')) {
+      && subtype !== 'completed' && subtype !== 'failed'
+      && subtype !== 'blocked' && subtype !== 'cancelled')) {
     return undefined;
   }
   if (subtype === 'failed') {
@@ -52,9 +53,7 @@ export function toolCallEventSemantics(event: AiChatSocketEvent): AiToolCallEven
   const toolName = nonBlank(event.metadata?.['toolName']);
   const content = active
     ? (toolName ? `Calling ${toolName}.` : 'Executing...')
-    : subtype === 'completed'
-      ? (toolName ? `${toolName} completed.` : 'Executed')
-      : (toolName ? `${toolName} failed.` : 'Execution failed');
+    : terminalToolCallContent(subtype, toolName, event);
   const turnId = nonBlank(event.turnId);
   const toolCallSeq = nonNegativeSequence(event.metadata?.['toolCallSeq']);
   const toolDetail = nonBlank(event.metadata?.['toolDetail']);
@@ -76,6 +75,25 @@ export function toolCallEventSemantics(event: AiChatSocketEvent): AiToolCallEven
   };
 }
 
+function terminalToolCallContent(subtype: 'completed' | 'failed' | 'blocked' | 'cancelled',
+                                 toolName: string | undefined,
+                                 event: AiChatSocketEvent): string {
+  if (subtype === 'completed') {
+    return toolName ? `${toolName} completed.` : 'Executed';
+  }
+  if (subtype === 'failed') {
+    return toolName ? `${toolName} failed.` : 'Execution failed';
+  }
+  const content = nonBlank(primaryContent(event));
+  if (content) {
+    return content;
+  }
+  if (subtype === 'blocked') {
+    return toolName ? `${toolName} is awaiting approval.` : 'Awaiting approval';
+  }
+  return toolName ? `${toolName} was stopped before execution.` : 'Stopped before execution';
+}
+
 /** Returns a terminal status only when the complete explicit contract agrees. */
 export function terminalRequestErrorStatus(event: AiChatSocketEvent): AiTerminalRequestErrorStatus | undefined {
   if (event.type !== 'system'
@@ -89,6 +107,36 @@ export function terminalRequestErrorStatus(event: AiChatSocketEvent): AiTerminal
   const status = event.metadata?.['status'];
   return status === 'FAILED' || status === 'TIMED_OUT' || status === 'STEP_LIMIT_REACHED'
     ? status : undefined;
+}
+
+export interface AiProviderRetrySemantics {
+  attempt: number;
+  maxAttempts: number;
+  delayMillis: number;
+  reason?: string;
+  statusCode?: number;
+}
+
+/** Parses only complete retry narrations. A malformed wait must never start a countdown. */
+export function providerRetrySemantics(event: AiChatSocketEvent): AiProviderRetrySemantics | undefined {
+  if (event.type !== 'system' || event.subtype !== 'provider_retry') {
+    return undefined;
+  }
+  const attempt = positiveInteger(event.metadata?.['attempt']);
+  const maxAttempts = positiveInteger(event.metadata?.['max_attempts']);
+  const delayMillis = nonNegativeSequence(event.metadata?.['delay_millis']);
+  if (attempt === undefined || maxAttempts === undefined || delayMillis === undefined) {
+    return undefined;
+  }
+  const reason = nonBlank(event.metadata?.['reason']);
+  const statusCode = positiveInteger(event.metadata?.['status_code']);
+  return {
+    attempt,
+    maxAttempts,
+    delayMillis,
+    ...(reason ? {reason} : {}),
+    ...(statusCode !== undefined ? {statusCode} : {})
+  };
 }
 
 export function isReconciliationRequired(event: AiChatSocketEvent): boolean {
@@ -170,6 +218,11 @@ function booleanValue(value: unknown): boolean | undefined {
 
 function positiveSequence(value: unknown): boolean {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+    ? value : undefined;
 }
 
 function nonNegativeSequence(value: unknown): number | undefined {

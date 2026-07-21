@@ -1,6 +1,10 @@
 import {
+  AiChatRestResponse,
   AiConversationRestoreService,
+  HttpErrorResponse,
+  Subject,
   Subscription,
+  api,
   component,
   setupAiChatPanelSpec,
   teardownAiChatPanelSpec,
@@ -49,6 +53,168 @@ describe('AiChatPanelComponent tool events', () => {
     expect(component.state.currentStatus).toBe('Ready');
     expect(component.state.messages).toContainEqual(expect.objectContaining({
       role: 'assistant', content: 'Used a safe alternative.'
+    }));
+  });
+
+  it('shows REST attachment tool failure, retry guide, and retry without replay duplicates', () => {
+    const live = new Subject<{body: string}>();
+    const response = new Subject<AiChatRestResponse>();
+    transport.watch.mockReturnValueOnce(live);
+    api.sendChat.mockReturnValueOnce(response);
+    component.state.prompt = 'Retry an attachment-backed tool call';
+    component.state.attachments = [{
+      name: 'sample.txt', mediaType: 'text/plain', size: 4, data: 'test'
+    }];
+    component.send();
+    const events = [
+      {
+        requestId: 'request-1', conversationId: 'conversation-1', sequence: 1,
+        type: 'tool_call', subtype: 'failed', groupId: 'request-1', turnId: 'request-1',
+        toolCallId: 'call-1', content: 'create_item failed.',
+        metadata: {toolName: 'create_item', toolCallSeq: 1, terminal: false,
+          recoverable: true, retryable: false, mutationSafe: true,
+          toolDetail: 'create_item\nError: value must be an integer.'}
+      },
+      {
+        requestId: 'request-1', conversationId: 'conversation-1', sequence: 2,
+        type: 'system', subtype: 'guide',
+        content: 'I corrected the tool arguments and am retrying it.',
+        metadata: {tool_retry: true}
+      },
+      {
+        requestId: 'request-1', conversationId: 'conversation-1', sequence: 3,
+        type: 'tool_call', subtype: 'started', groupId: 'request-1', turnId: 'request-1',
+        toolCallId: 'call-2', content: 'Calling create_item.',
+        metadata: {toolName: 'create_item', toolCallSeq: 2}
+      },
+      {
+        requestId: 'request-1', conversationId: 'conversation-1', sequence: 4,
+        type: 'tool_call', subtype: 'completed', groupId: 'request-1', turnId: 'request-1',
+        toolCallId: 'call-2', content: 'create_item completed.',
+        metadata: {toolName: 'create_item', toolCallSeq: 2}
+      }
+    ];
+
+    events.forEach(event => live.next({body: JSON.stringify(event)}));
+
+    expect(component.state.messages.filter(message =>
+      message.role === 'tool_call' || message.role === 'guide')
+      .map(message => [message.role, message.content])).toEqual([
+      ['tool_call', 'create_item failed.'],
+      ['guide', 'I corrected the tool arguments and am retrying it.'],
+      ['tool_call', 'create_item completed.']
+    ]);
+
+    response.next({
+      response: 'Done.', conversationId: 'conversation-1', events
+    });
+
+    expect(component.state.messages.filter(message =>
+      message.role === 'tool_call' || message.role === 'guide')
+      .map(message => [message.role, message.content])).toEqual([
+      ['tool_call', 'create_item failed.'],
+      ['guide', 'I corrected the tool arguments and am retrying it.'],
+      ['tool_call', 'create_item completed.']
+    ]);
+  });
+
+  it('replays missed REST tool and guide events from a terminal HTTP error body', () => {
+    const live = new Subject<{body: string}>();
+    const response = new Subject<AiChatRestResponse>();
+    transport.watch.mockReturnValueOnce(live);
+    api.sendChat.mockReturnValueOnce(response);
+    component.state.prompt = 'Retry an attachment-backed tool call';
+    component.state.attachments = [{
+      name: 'sample.txt', mediaType: 'text/plain', size: 4, data: 'test'
+    }];
+    component.send();
+    const events = [
+      {
+        requestId: 'request-1', conversationId: 'conversation-1', sequence: 1,
+        type: 'tool_call', subtype: 'failed', groupId: 'request-1', turnId: 'request-1',
+        toolCallId: 'call-1', content: 'create_item failed.',
+        metadata: {toolName: 'create_item', toolCallSeq: 1, terminal: false,
+          recoverable: true, retryable: false, mutationSafe: true,
+          toolDetail: 'create_item\nError: value must be an integer.'}
+      },
+      {
+        requestId: 'request-1', conversationId: 'conversation-1', sequence: 2,
+        type: 'system', subtype: 'guide',
+        content: 'I corrected the tool arguments and am retrying it.',
+        metadata: {tool_retry: true}
+      },
+      {
+        requestId: 'request-1', conversationId: 'conversation-1', sequence: 3,
+        type: 'tool_call', subtype: 'failed', groupId: 'request-1', turnId: 'request-1',
+        toolCallId: 'call-2', content: 'create_item failed.',
+        metadata: {toolName: 'create_item', toolCallSeq: 2, terminal: false,
+          recoverable: true, retryable: false, mutationSafe: true,
+          toolDetail: 'create_item\nError: value must be an integer.'}
+      }
+    ];
+
+    response.error(new HttpErrorResponse({status: 500, error: {events}}));
+
+    expect(component.state.messages.filter(message =>
+      message.role === 'tool_call' || message.role === 'guide')
+      .map(message => [message.role, message.content])).toEqual([
+      ['tool_call', 'create_item failed.'],
+      ['guide', 'I corrected the tool arguments and am retrying it.'],
+      ['tool_call', 'create_item failed.']
+    ]);
+    expect(component.state.messages.at(-1)).toEqual(expect.objectContaining({role: 'error'}));
+  });
+
+  it('renders a live awaiting-approval row for a guard-blocked mutation without ending the request', () => {
+    component.state.prompt = 'Create a business context';
+    component.send();
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', type: 'tool_call', subtype: 'started',
+      groupId: 'mcp', toolCallId: 'call-1', content: 'Creating business context',
+      metadata: {toolName: 'create_business_context'}
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', type: 'tool_call', subtype: 'blocked',
+      groupId: 'mcp', toolCallId: 'call-1',
+      content: 'create_business_context is awaiting approval.',
+      metadata: {toolName: 'create_business_context'}
+    });
+
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      role: 'tool_call', content: 'create_business_context is awaiting approval.',
+      groupId: 'mcp', toolCallId: 'call-1', toolName: 'create_business_context',
+      toolStatus: 'blocked', inProgress: false
+    }));
+    expect(component.state.pending).toBe(true);
+    expect(component.state.currentStatus).toBe('Working');
+  });
+
+  it('renders a live stopped row for a tool intercepted by a user stop', () => {
+    component.state.prompt = 'Create a business context';
+    component.send();
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', type: 'tool_call', subtype: 'cancelled',
+      groupId: 'mcp', toolCallId: 'call-1',
+      content: 'create_business_context was stopped before execution.',
+      metadata: {toolName: 'create_business_context'}
+    });
+
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      role: 'tool_call', content: 'create_business_context was stopped before execution.',
+      groupId: 'mcp', toolCallId: 'call-1', toolName: 'create_business_context',
+      toolStatus: 'cancelled', inProgress: false
+    }));
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', type: 'system', subtype: 'cancelled',
+      content: 'Request cancelled.'
+    });
+
+    expect(component.state.pending).toBe(false);
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      role: 'tool_call', toolStatus: 'cancelled'
     }));
   });
 
