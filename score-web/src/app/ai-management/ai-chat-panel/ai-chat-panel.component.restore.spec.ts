@@ -453,7 +453,8 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
       reasoningEffort: 'medium',
       runtime: 'claude',
       runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true},
-      permissionMode: 'auto'
+      permissionMode: 'auto',
+      activeWorkflow: 'parallel'
     };
 
     (component as any).handleSocketEvent({
@@ -468,6 +469,7 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
       permissionMode: 'auto', maxTurns: 40, verbose: true
     });
     expect(component.state.permissionMode).toBe('auto');
+    expect(component.state.activeWorkflow).toBe('parallel');
 
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-original',
@@ -479,6 +481,7 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
     expect(component.state.selectedReasoningEffort).toBe('high');
     expect(component.state.selectedRuntime).toBe('openai');
     expect(component.state.permissionMode).toBe('full_access');
+    expect(component.state.activeWorkflow).toBe('');
   });
 
   it('clears the draft prompt and attachments when switching conversations', () => {

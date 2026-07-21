@@ -25,21 +25,23 @@ public final class ClaudeRuntime extends AbstractSpringAIRuntime {
                          ScoreAiSystemPrompt systemPrompt,
                          AiMutationToolGuard mutationGuard,
                          AiElicitationService elicitations,
+                         AiProviderRetryExecutor providerRetry,
                          AnthropicRuntimeOptions options) {
-        super(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, elicitations);
+        super(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, elicitations,
+                providerRetry);
         this.options = options;
     }
 
     ClaudeRuntime(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                   ToolSearchToolCallingAdvisor toolSearchAdvisor, ScoreAiSystemPrompt systemPrompt,
                   AiMutationToolGuard mutationGuard, AnthropicRuntimeOptions options) {
-        this(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, null, options);
+        this(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, null, null, options);
     }
 
     ClaudeRuntime(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                   ToolSearchToolCallingAdvisor toolSearchAdvisor, ScoreAiSystemPrompt systemPrompt,
                   AnthropicRuntimeOptions options) {
-        this(models, mcpClients, toolSearchAdvisor, systemPrompt, null, null, options);
+        this(models, mcpClients, toolSearchAdvisor, systemPrompt, null, null, null, options);
     }
 
     @Override

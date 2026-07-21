@@ -7,6 +7,7 @@ import {
   AiTerminalRequestErrorStatus,
   contextUsageValue,
   isReconciliationRequired,
+  providerRetrySemantics,
   terminalRequestErrorStatus,
   toolCallEventSemantics
 } from './domain/ai-chat-event-semantics';
@@ -14,9 +15,11 @@ import {FORMATTER_META_RESPONSE_PATTERN} from './domain/ai-chat-panel-display.co
 import {
   agentActivityUpdate,
   isExecutionActivityEvent,
+  isFanoutNamespacedEvent,
   isSpecialistToolEvent,
   upsertAgentActivity,
   upsertAgentGuideEvent,
+  upsertAgentRetryEvent,
   upsertAgentToolEvent
 } from './domain/ai-agent-activity';
 import {AiChatSocketEvent} from './domain/ai-chat-panel.model';
@@ -29,6 +32,12 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       return;
     }
     if (event.subtype === 'guide' && content) {
+      if (event.metadata?.['workflow_preference'] === true) {
+        // Keep the session-settings region in sync when a natural-language
+        // command sets or clears the persistent workflow preference.
+        const workflow = event.metadata?.['active_workflow'];
+        this.state.activeWorkflow = typeof workflow === 'string' ? workflow.trim() : '';
+      }
       if (upsertAgentGuideEvent(this.state.agentActivities, event)) return;
       // A guide is the first substantive assistant message for this stage. It
       // replaces only the generic connection/wait placeholder; later tool
@@ -103,6 +112,9 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         inProgress: false
       });
       this.state.currentStatus = 'Using fallback model';
+      return;
+    }
+    if (event.subtype === 'provider_retry' && this.handleProviderRetryEvent(event)) {
       return;
     }
     if (event.visibility === 'debug') {
@@ -217,10 +229,68 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.focusPrompt();
   }
 
+  /**
+   * Renders one transient alert-styled status line for a retried provider
+   * call and ticks its countdown down each second until the next event
+   * replaces the line. The partial streamed answer is dropped first because
+   * the retried call re-streams the whole current segment. A retry from a
+   * fan-out WORKER shares the lead's request identity and belongs to that
+   * agent's timeline; it must never disturb the main status row or bubble.
+   * While a cancellation is in progress the cancellation status owns the
+   * row, so retries are ignored entirely.
+   */
+  protected handleProviderRetryEvent(event: AiChatSocketEvent): boolean {
+    const retry = providerRetrySemantics(event);
+    if (!retry) {
+      return false;
+    }
+    if (this.state.cancellation.phase !== 'idle') {
+      return true;
+    }
+    if (isFanoutNamespacedEvent(event)) {
+      upsertAgentRetryEvent(this.state.agentActivities, event);
+      return true;
+    }
+    this.clearProviderRetryCountdown();
+    if (this.messageTracker.removeStreamedSegment(this.state, event.requestId)) {
+      this.assistantMessageIndexesByRequestId.delete(event.requestId);
+    }
+    const head = retry.statusCode !== undefined
+      ? retry.reason ? `${retry.statusCode} ${retry.reason}` : `${retry.statusCode}`
+      : retry.reason || '';
+    let secondsRemaining = Math.ceil(retry.delayMillis / 1000);
+    const renderCountdown = () => {
+      const wait = secondsRemaining > 0
+        ? `Retrying in ${secondsRemaining}s · attempt ${retry.attempt}/${retry.maxAttempts}`
+        : 'Reconnecting…';
+      this.showStatus(head, true, head ? ` · ${wait}` : wait);
+    };
+    renderCountdown();
+    this.state.currentStatus = 'Retrying';
+    if (secondsRemaining > 0) {
+      this.providerRetryInterval = window.setInterval(() => {
+        secondsRemaining -= 1;
+        renderCountdown();
+        if (secondsRemaining <= 0) {
+          this.clearProviderRetryCountdown();
+        }
+      }, 1000);
+    }
+    return true;
+  }
+
+  protected clearProviderRetryCountdown(): void {
+    if (this.providerRetryInterval !== undefined) {
+      window.clearInterval(this.providerRetryInterval);
+      this.providerRetryInterval = undefined;
+    }
+  }
+
   protected upsertToolGroup(event: AiChatSocketEvent): void {
     if (this.divertSpecialistToolEvent(event)) {
       return;
     }
+    this.clearProviderRetryCountdown();
     this.messageTracker.upsertToolGroup(this.state, event);
   }
 
@@ -228,6 +298,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     if (this.divertSpecialistToolEvent(event)) {
       return;
     }
+    this.clearProviderRetryCountdown();
     this.messageTracker.handleToolCall(this.state, event);
   }
 
@@ -285,6 +356,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         || event.subtype === 'authentication_failed'
         || event.subtype === 'error'
         || event.subtype === 'model_fallback'
+        || event.subtype === 'provider_retry'
         || event.subtype === 'context_usage'
         || event.subtype === 'context_compacted'
         || event.subtype === 'guide'
@@ -316,7 +388,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       // state array, so settled anchors keep their own final statuses.
       this.state.messages.push({
         role: update.executionKind === 'parallel' ? 'workflow_group' : 'agent_group',
-        content: update.executionKind === 'parallel' ? 'Parallel workflow' : 'Multi-agent workflow',
+        content: update.executionKind === 'parallel' ? 'Parallel workflow' : 'Delegated workflow',
         activities: this.state.agentActivities
       });
     }

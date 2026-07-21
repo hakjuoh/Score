@@ -65,6 +65,7 @@ class MariaDbCtxSchemeRepository(CtxSchemeRepositoryContract):
         Args:
             limit: Maximum number of records to return.
             offset: Number of records to skip before collecting results.
+            sorts: Validated sort columns and directions.
             scheme_id: Optional context scheme identifier filter.
             scheme_name: Optional context scheme name filter.
             description: Optional textual description filter or payload field.
@@ -105,10 +106,28 @@ class MariaDbCtxSchemeRepository(CtxSchemeRepositoryContract):
             total_stmt = total_stmt.where(*where_clauses)
         total = int((await self._session.execute(total_stmt)).scalar_one())
 
-        stmt = _build_base_query()
+        # Page over schemes, not the one-to-many rows produced by joining values.
+        # Applying LIMIT to _build_base_query() can consume the whole page with
+        # multiple values from one scheme and return fewer schemes than requested.
+        order_by = [*_build_order_by(sorts), CtxScheme.ctx_scheme_id.asc()]
+        page_stmt = select(CtxScheme.ctx_scheme_id)
+        if ctx_category_name:
+            page_stmt = page_stmt.outerjoin(
+                ContextCategory,
+                ContextCategory.ctx_category_id == CtxScheme.ctx_category_id,
+            )
         if where_clauses:
-            stmt = stmt.where(*where_clauses)
-        stmt = stmt.order_by(*_build_order_by(sorts)).limit(limit).offset(offset)
+            page_stmt = page_stmt.where(*where_clauses)
+        page_stmt = page_stmt.order_by(*order_by).limit(limit).offset(offset)
+        page_ids = list((await self._session.execute(page_stmt)).scalars().all())
+        if not page_ids:
+            return total, []
+
+        stmt = (
+            _build_base_query()
+            .where(CtxScheme.ctx_scheme_id.in_(page_ids))
+            .order_by(*order_by, CtxSchemeValue.ctx_scheme_value_id.asc())
+        )
         rows = (await self._session.execute(stmt)).all()
         items = _to_ctx_scheme_rows(rows)
         return total, items
@@ -507,9 +526,11 @@ def _build_where_clauses(
         ctx_category_id: Optional context category identifier filter.
         ctx_category_name: Optional context category name filter.
         creation_timestamp_before: Optional upper bound for creation timestamp.
-            creation_timestamp_after: Optional lower bound for creation timestamp.
+        creation_timestamp_after: Optional lower bound for creation timestamp.
         last_update_timestamp_before: Optional upper bound for last update timestamp.
-            last_update_timestamp_after: Optional lower bound for last update timestamp.
+        last_update_timestamp_after: Optional lower bound for last update timestamp.
+        included_updater_login_ids: Optional updater login IDs to include.
+        excluded_updater_login_ids: Optional updater login IDs to exclude.
 
     Returns:
         Result of the operation.

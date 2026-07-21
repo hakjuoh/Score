@@ -203,7 +203,9 @@ export class AiChatMessageListComponent implements OnChanges {
 
   agentToolMessage(event: AiAgentActivityEvent, agentInProgress: boolean): AiChatMessage {
     const toolStatus: AiChatToolStatus | undefined = event.toolStatus === 'completed'
-      || event.toolStatus === 'failed' ? event.toolStatus : undefined;
+      || event.toolStatus === 'failed' || event.toolStatus === 'blocked'
+      || event.toolStatus === 'cancelled'
+      ? event.toolStatus : undefined;
     return {
       role: 'tool_call',
       content: event.content,
@@ -310,7 +312,9 @@ export class AiChatMessageListComponent implements OnChanges {
     return message.activities?.find(activity => activity.isLead)?.content
       || (message.role === 'workflow_group'
         ? 'Running independent workflow tasks before synthesizing their results.'
-        : 'Starting specialist agents before the lead synthesizes their findings.');
+        : this.agentGroupCount(message) === 1
+          ? 'A specialist is gathering evidence for the lead.'
+          : 'Specialists are gathering evidence for the lead.');
   }
 
   agentGroupActivities(message: AiChatMessage): AiAgentActivity[] {
@@ -338,11 +342,13 @@ export class AiChatMessageListComponent implements OnChanges {
 
   agentGroupWorkflowLabel(message: AiChatMessage): string | undefined {
     if (message.role === 'workflow_group') return 'Parallel workflow';
-    if (message.role === 'agent_group') return 'Multi-agent workflow';
     const workflow = this.agentGroupWorkflow(message);
     if (workflow === 'chain') return 'Chain workflow';
     if (workflow === 'routing') return 'Routing workflow';
     if (workflow === 'orchestrator_workers') return 'Agent workflow';
+    if (message.role === 'agent_group') {
+      return this.agentGroupCount(message) === 1 ? 'Specialist workflow' : 'Multi-agent workflow';
+    }
     return undefined;
   }
 

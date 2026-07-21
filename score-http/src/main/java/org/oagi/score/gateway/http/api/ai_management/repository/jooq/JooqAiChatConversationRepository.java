@@ -139,7 +139,10 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
     @Override
     @Transactional(readOnly = true)
     public Optional<String> activeWorkflow(String conversationId) {
-        ULong internalConversationId = ownedId(conversationId);
+        return latestActiveWorkflow(ownedId(conversationId));
+    }
+
+    private Optional<String> latestActiveWorkflow(ULong internalConversationId) {
         return dslContext().select(AI_CHAT_STEP.EXTRA_JSON)
                 .from(AI_CHAT_STEP)
                 .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
@@ -303,7 +306,8 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         }
         return new ChatConversationDetails(conversationId, header.title(), settings.modelName(),
                 settings.reasoningEffort(), settings.runtime(), settings.runtimeOptions(), header.updatedAt(),
-                indexedMessages, List.<ChatContextMessage>of(), null, permissionMode);
+                indexedMessages, List.<ChatContextMessage>of(), null, permissionMode,
+                latestActiveWorkflow(internalConversationId).orElse(null));
     }
 
     @Override

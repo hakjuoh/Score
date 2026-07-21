@@ -83,6 +83,11 @@ public class ScoreAiConfiguration {
         return new ScoreToolSearchToolCallingAdvisor(toolIndex);
     }
 
+    @Bean
+    public ToolIndex scoreAiToolIndex() {
+        return new ScoreToolIndex();
+    }
+
     @Bean(name = "scoreAiChatExecutor", destroyMethod = "close")
     public ExecutorService scoreAiChatExecutor() {
         return Executors.newVirtualThreadPerTaskExecutor();
@@ -132,6 +137,9 @@ public class ScoreAiConfiguration {
         if (StringUtils.hasText(provider.getAnthropicVersion())) {
             options.customHeaders(Map.of("anthropic-version", provider.getAnthropicVersion()));
         }
+        // The application-level provider retry loop owns backoff and narrates every
+        // attempt to the user; silent SDK-internal retries would multiply it.
+        options.maxRetries(0);
         return AnthropicChatModel.builder()
                 .options(options.build())
                 .httpClientBuilderCustomizer(builder -> builder.timeout(requestTimeout))
@@ -219,6 +227,9 @@ public class ScoreAiConfiguration {
                 && !"default".equalsIgnoreCase(model.getReasoningEffort())) {
             options.reasoningEffort(model.getReasoningEffort().strip().toLowerCase());
         }
+        // The application-level provider retry loop owns backoff and narrates every
+        // attempt to the user; silent SDK-internal retries would multiply it.
+        options.maxRetries(0);
         return options;
     }
 

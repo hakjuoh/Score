@@ -151,12 +151,82 @@ class ChatServiceTest {
         verify(manager, never()).execute(any());
         ArgumentCaptor<AiChatTrajectoryStep> steps =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository, org.mockito.Mockito.times(4))
+        verify(repository, org.mockito.Mockito.times(5))
                 .append(eq("conversation-1"), steps.capture());
         assertThat(steps.getAllValues()).extracting(AiChatTrajectoryStep::messageKind)
-                .containsExactly("settings_change", "workflow_preference", "user", "assistant");
+                .containsExactly("settings_change", "workflow_preference", "user", "guide", "assistant");
         AiChatTrajectoryStep preference = steps.getAllValues().get(1);
         assertThat(preference.extra()).containsEntry("activeWorkflow", "orchestrator_workers");
+        AiChatTrajectoryStep notice = steps.getAllValues().get(3);
+        assertThat(notice.visibility()).isEqualTo("visible");
+        assertThat(notice.message()).isEqualTo(
+                "Workflow preference set to \"orchestrator_workers\" for this conversation. "
+                        + "Say \"From now on, choose the workflow automatically.\" to clear it.");
+        assertThat(notice.extra())
+                .containsEntry("workflow_preference", true)
+                .containsEntry("active_workflow", "orchestrator_workers");
+    }
+
+    @Test
+    void clearsTheWorkflowPreferenceWithADurableVisibleNotice() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        when(models.resolveModelName("model")).thenReturn("model");
+        when(models.resolveReasoningEffort("model", "high")).thenReturn("high");
+        when(models.resolveRuntime("model", "default")).thenReturn("default");
+        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        when(runtimes.normalizeOptions("default", "model", Map.of())).thenReturn(Map.of());
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("conversation-1")).thenReturn(List.of());
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.open(eq(null), eq("From now on, choose the workflow automatically.")))
+                .thenReturn("conversation-1");
+        when(repository.latestUsage(eq("conversation-1"))).thenReturn(Optional.empty());
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        when(budgets.budget("model")).thenReturn(Optional.empty());
+        AiMultiAgentManager manager = mock(AiMultiAgentManager.class);
+        ChatService service = new ChatService(models, runtimes, null, memory, repository,
+                new ObjectMapper(), null, budgets, manager);
+        ScoreUser requester = mock(ScoreUser.class);
+
+        ChatRequest prepared = service.prepare(new ChatRequest(
+                "From now on, choose the workflow automatically.", "request-1", null, null,
+                null, List.of(), null, "model", "high", "default"), requester);
+        service.chat(prepared, requester, ignored -> {});
+
+        assertThat(prepared.activeWorkflow()).isNull();
+        verify(manager, never()).execute(any());
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, org.mockito.Mockito.times(5))
+                .append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues()).extracting(AiChatTrajectoryStep::messageKind)
+                .containsExactly("settings_change", "workflow_preference", "user", "guide", "assistant");
+        AiChatTrajectoryStep notice = steps.getAllValues().get(3);
+        assertThat(notice.visibility()).isEqualTo("visible");
+        assertThat(notice.message()).isEqualTo(
+                "Workflow preference cleared for this conversation. "
+                        + "The workflow is now chosen automatically for each request.");
+        assertThat(notice.extra())
+                .containsEntry("workflow_preference", true)
+                .doesNotContainKey("active_workflow");
+    }
+
+    @Test
+    void exposesThePersistedWorkflowPreferenceInConversationDetails() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        ChatConversationDetails stored = new ChatConversationDetails(
+                "conversation-1", "Title", "model", "high", "claude",
+                Map.of(), Instant.EPOCH, List.of(), List.of(), null, "ask", "parallel");
+        when(repository.get("conversation-1")).thenReturn(stored);
+        when(models.normalizeRuntime("claude")).thenReturn("claude");
+        ChatService service = new ChatService(models, null, null, null, repository, null);
+
+        ChatConversationDetails details = service.conversation(requester, "conversation-1");
+
+        assertThat(details.activeWorkflow()).isEqualTo("parallel");
     }
 
     @Test

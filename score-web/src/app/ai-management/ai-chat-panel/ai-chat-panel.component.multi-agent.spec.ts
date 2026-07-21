@@ -290,6 +290,35 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     ]);
   });
 
+  it('shows a specialist guard-blocked tool as awaiting approval in the agent timeline', () => {
+    startPublishedRequest();
+    (component as any).handleSocketEvent(activity(
+      'subagent_started', 'fanout-1-agent-01', 'Evidence checker'
+    ));
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'tool_call', subtype: 'blocked',
+      groupId: 'fanout-1', toolCallId: 'call-10',
+      content: 'create_business_context is awaiting approval.',
+      metadata: {
+        toolName: 'create_business_context',
+        agentId: 'fanout-1-agent-01', parentNodeId: 'fanout-1-lead'
+      }
+    });
+
+    expect(component.state.messages.some(message =>
+      message.role === 'tool_call' || message.role === 'tool_group')).toBe(false);
+    const agent = component.state.agentActivities
+      .find(candidate => candidate.agentId === 'fanout-1-agent-01');
+    expect(agent?.events.filter(entry => entry.status === 'tool')).toEqual([
+      expect.objectContaining({
+        content: 'create_business_context is awaiting approval.',
+        toolStatus: 'blocked'
+      })
+    ]);
+  });
+
   it('keeps lead tool events in the main chat flow', () => {
     startPublishedRequest();
     (component as any).handleSocketEvent(activity(

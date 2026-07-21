@@ -60,16 +60,61 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     const confirmedMutation = mutationConfirmation !== undefined;
     const confirmedConversationId = confirmedMutation
       ? this.state.conversationId : undefined;
+    const liveRestEventKeys = new Set<string>();
+    const restEventKey = (event: AiChatSocketEvent): string | undefined =>
+      Number.isSafeInteger(event.sequence) && (event.sequence || 0) > 0
+        ? `${event.requestId}:${event.sequence}:${event.type}:${event.subtype || ''}`
+        : undefined;
+    const replayRestEvents = (events: AiChatSocketEvent[]): void => {
+      events.forEach(event => {
+        const key = restEventKey(event);
+        if (key && liveRestEventKeys.has(key)) {
+          return;
+        }
+        if (event.type === 'system'
+          && event.subtype === 'mutation_confirmation_required') {
+          this.handleMutationConfirmationNotice(event);
+        } else if (event.type === 'system'
+          && (event.subtype === 'context_usage' || event.subtype === 'context_compacted')) {
+          this.handleSystemEvent(event);
+        } else if (isExecutionActivityEvent(event)) {
+          this.handleSystemEvent(event);
+        } else if (event.type === 'system' && event.subtype === 'guide') {
+          this.handleSystemEvent(event);
+        } else if (event.type === 'tool_call' || event.type === 'tool_group') {
+          // Replayed specialist activity belongs in its agent timeline;
+          // lead activity uses the same structured row path as WebSocket chat.
+          if (!this.divertSpecialistToolEvent(event)) {
+            this.handleSocketEvent(event);
+          }
+        }
+      });
+    };
+    const errorEvents = (error: unknown): AiChatSocketEvent[] => {
+      if (!(error instanceof HttpErrorResponse)
+        || typeof error.error !== 'object' || error.error === null) {
+        return [];
+      }
+      const events = (error.error as {events?: unknown}).events;
+      return Array.isArray(events)
+        ? events.filter((event): event is AiChatSocketEvent =>
+          typeof event === 'object' && event !== null)
+        : [];
+    };
     const liveInteractionSubscription = this.transportService.watch(
       '/user/queue/ai/chat/' + requestId
     ).subscribe((message: Message) => {
       const event = JSON.parse(message.body) as AiChatSocketEvent;
       if (isExecutionActivityEvent(event)
         || isSpecialistToolEvent(event)
+        || event.type === 'tool_call' || event.type === 'tool_group'
         || event.type === 'system' && event.subtype === 'guide'
+        || event.type === 'system' && event.subtype === 'provider_retry'
         || event.type === 'system' && (event.subtype === 'elicitation_required'
         || event.subtype === 'elicitation_decision_accepted'
         || event.subtype === 'elicitation_decision_rejected')) {
+        const key = restEventKey(event);
+        if (key) liveRestEventKeys.add(key);
         this.handleSocketEvent(event);
       }
     });
@@ -126,23 +171,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         this.clearStatusMessage();
         this.state.conversationId = response.conversationId || this.state.conversationId;
         this.sessionPersistence.rememberLastConversation(this.state.conversationId);
-        (response.events || []).forEach(event => {
-          if (event.type === 'system'
-            && event.subtype === 'mutation_confirmation_required') {
-            this.handleMutationConfirmationNotice(event);
-          } else if (event.type === 'system'
-            && (event.subtype === 'context_usage' || event.subtype === 'context_compacted')) {
-            this.handleSystemEvent(event);
-          } else if (isExecutionActivityEvent(event)) {
-            this.handleSystemEvent(event);
-          } else if (event.type === 'system' && event.subtype === 'guide') {
-            this.handleSystemEvent(event);
-          } else if (event.type === 'tool_call' || event.type === 'tool_group') {
-            // Replayed specialist tool activity lands in the agent timeline;
-            // lead tool rows are not replayed here (unchanged behavior).
-            this.divertSpecialistToolEvent(event);
-          }
-        });
+        replayRestEvents(response.events || []);
         this.settleAgentActivity('completed');
         this.confirmContextUpdate();
         this.state.elicitation = undefined;
@@ -183,9 +212,9 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           this.completeUnknownConfirmedRequest(requestId);
           return;
         }
-        const confirmationConversationId = this.captureRestErrorMutationNotice(
-          error, requestId
-        );
+        replayRestEvents(errorEvents(error));
+        const confirmationConversationId =
+          this.pendingMutationConfirmation?.conversationId;
         this.completeProgressMessages();
         this.settleAgentActivity('failed');
         this.clearTimers();
@@ -251,28 +280,6 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       return fallback;
     }
     return message;
-  }
-
-  protected captureRestErrorMutationNotice(
-    error: unknown,
-    requestId: string
-  ): string | undefined {
-    if (!(error instanceof HttpErrorResponse)
-      || typeof error.error !== 'object' || error.error === null) {
-      return undefined;
-    }
-    const events = (error.error as {events?: unknown}).events;
-    if (!Array.isArray(events)) {
-      return undefined;
-    }
-    events.forEach(event => {
-      if (typeof event === 'object' && event !== null
-        && (event as AiChatSocketEvent).type === 'system'
-        && (event as AiChatSocketEvent).subtype === 'mutation_confirmation_required') {
-        this.handleMutationConfirmationNotice(event as AiChatSocketEvent);
-      }
-    });
-    return this.pendingMutationConfirmation?.conversationId;
   }
 
   protected completeUnknownConfirmedRequest(requestId: string): void {

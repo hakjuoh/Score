@@ -25,15 +25,17 @@ public final class OpenAIRuntime extends AbstractSpringAIRuntime {
                          ScoreAiSystemPrompt systemPrompt,
                          AiMutationToolGuard mutationGuard,
                          AiElicitationService elicitations,
+                         AiProviderRetryExecutor providerRetry,
                          OpenAiRuntimeOptions options) {
-        super(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, elicitations);
+        super(models, mcpClients, toolSearchAdvisor, systemPrompt, mutationGuard, elicitations,
+                providerRetry);
         this.options = options;
     }
 
     OpenAIRuntime(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                   ToolSearchToolCallingAdvisor toolSearchAdvisor, ScoreAiSystemPrompt systemPrompt,
                   OpenAiRuntimeOptions options) {
-        this(models, mcpClients, toolSearchAdvisor, systemPrompt, null, null, options);
+        this(models, mcpClients, toolSearchAdvisor, systemPrompt, null, null, null, options);
     }
 
     @Override

@@ -3,6 +3,8 @@ package org.oagi.score.gateway.http.api.ai_management.controller;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChatSocketEvent;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChatSocketRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
@@ -16,10 +18,12 @@ import org.oagi.score.gateway.http.configuration.security.SessionService;
 import org.oagi.score.gateway.http.configuration.websocket.WebSocketSessionUserResolver;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.AuthenticatedPrincipal;
 
 import java.math.BigInteger;
+import java.security.Principal;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +52,7 @@ class AiChatControllerTest {
     private final ChatService chatService = mock(ChatService.class);
     private final SessionService sessionService = mock(SessionService.class);
     private final SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
+    private final WebSocketSessionUserResolver webSocketUsers = mock(WebSocketSessionUserResolver.class);
 
     @Test
     void preservesMultiAgentSettingsWhileAddingRestCorrelation() throws Exception {
@@ -138,6 +143,48 @@ class AiChatControllerTest {
     }
 
     @Test
+    void streamsAndReplaysRestToolFailureGuideAndRetryInOrder() throws Exception {
+        AiChatController controller = controller(new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
+        ChatRequest request = request("request-1", "conversation-1");
+        when(sessionService.asScoreUser(principal)).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            Consumer<AiExecutionEvent> events = invocation.getArgument(2);
+            events.accept(AiExecutionEvent.tool("failed", "create_item failed.",
+                    "call-1", "create_item", 1L,
+                    Map.of("toolDetail", "create_item\nError: value must be an integer.")));
+            events.accept(AiExecutionEvent.detail("guide",
+                    "I corrected the tool arguments and am retrying it.",
+                    Map.of("tool_retry", true)));
+            events.accept(AiExecutionEvent.tool("started", "Calling create_item.",
+                    "call-2", "create_item", 2L));
+            events.accept(AiExecutionEvent.tool("completed", "create_item completed.",
+                    "call-2", "create_item", 2L));
+            return new ChatResponse("connectcenter-assistant", "Done.",
+                    "conversation-1", false, List.of());
+        });
+
+        ChatResponse response = controller.chat(principal, request)
+                .get(1, TimeUnit.SECONDS).getBody();
+
+        assertThat(response).isNotNull();
+        assertThat(response.events()).extracting(
+                event -> event.type() + "/" + event.subtype())
+                .containsExactly("tool_call/failed", "system/guide",
+                        "tool_call/started", "tool_call/completed");
+        ArgumentCaptor<Object> streamed = ArgumentCaptor.forClass(Object.class);
+        verify(messagingTemplate, times(4)).convertAndSendToUser(
+                eq("tester"), eq("/queue/ai/chat/request-1"), streamed.capture());
+        assertThat(streamed.getAllValues()).extracting(value -> {
+            AiChatSocketEvent event = (AiChatSocketEvent) value;
+            return event.type() + "/" + event.subtype();
+        }).containsExactly("tool_call/failed", "system/guide",
+                "tool_call/started", "tool_call/completed");
+    }
+
+    @Test
     void ordersConcurrentRestEventsByTheirAssignedSequence() {
         var second = org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChatSocketEvent.system(
                 "request-1", "conversation-1", 2L, "subagent_completed", "second", Map.of());
@@ -180,7 +227,8 @@ class AiChatControllerTest {
                     .extracting(event -> event.metadata().get("confirmationRequestId"))
                     .isEqualTo("confirmation-1");
             verify(chatService, timeout(1_000)).recordFailure(any(ChatRequest.class), eq(user),
-                    eq("The assistant request deadline was exceeded."));
+                    eq("The assistant request deadline was exceeded."),
+                    eq(CancellationException.class.getName()));
         }
     }
 
@@ -224,10 +272,66 @@ class AiChatControllerTest {
         }
     }
 
+    @Test
+    void reportsWebSocketAdmissionFailuresAsTerminalErrorEventsOnTheRequesterQueue() {
+        AiChatController controller = controller(new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
+        Principal wsPrincipal = mock(Principal.class);
+        SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
+        when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user))).thenThrow(
+                new IllegalArgumentException("A prompt must not exceed the configured length."));
+        AiChatSocketRequest socketRequest = new AiChatSocketRequest("request-1", "Help me", null,
+                "conversation-1", null, List.of(), null);
+
+        assertThatThrownBy(() -> controller.chat(socketRequest, wsPrincipal, headers))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("A prompt must not exceed the configured length.");
+
+        ArgumentCaptor<Object> sent = ArgumentCaptor.forClass(Object.class);
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("tester"), eq("/queue/ai/chat/request-1"), sent.capture());
+        assertThat(sent.getValue()).isInstanceOfSatisfying(AiChatSocketEvent.class, event -> {
+            assertThat(event.type()).isEqualTo("system");
+            assertThat(event.subtype()).isEqualTo("error");
+            assertThat(event.requestId()).isEqualTo("request-1");
+            assertThat(event.conversationId()).isEqualTo("conversation-1");
+            assertThat(event.content()).isEqualTo("A prompt must not exceed the configured length.");
+        });
+    }
+
+    @Test
+    void surfacesTheProviderErrorMessageWhenRetriesAreExhausted() {
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            AiChatController controller = controller(
+                    new AiRequestRegistry(), new ScoreAiProperties(), executor);
+            ChatRequest request = request("request-provider", "conversation-provider");
+            when(sessionService.asScoreUser(principal)).thenReturn(user);
+            when(chatService.prepare(any(ChatRequest.class), eq(user)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+            String providerMessage = "This request would exceed your rate limit tier of"
+                    + " 50,000,000 input tokens per minute.";
+            when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenThrow(
+                    new org.oagi.score.gateway.http.api.ai_management.runtime.AiProviderException(
+                            new org.oagi.score.gateway.http.api.ai_management.runtime.AiProviderFailure(
+                                    "com.anthropic.errors.RateLimitException", 429,
+                                    providerMessage, true, null),
+                            10, new IllegalStateException("429: rate_limit_error")));
+
+            assertThatThrownBy(() -> controller.chat(principal, request).get(5, TimeUnit.SECONDS))
+                    .hasMessageContaining("rate limit tier");
+
+            // The provider's own message reaches the persisted error step while the
+            // diagnostic failure class keeps the original provider exception.
+            verify(chatService, timeout(1_000)).recordFailure(any(ChatRequest.class), eq(user),
+                    eq(providerMessage + " (failed after 10 attempts)"),
+                    eq(IllegalStateException.class.getName()));
+        }
+    }
+
     private AiChatController controller(AiRequestRegistry registry, ScoreAiProperties properties,
                                         java.util.concurrent.Executor executor) {
         return new AiChatController(chatService, sessionService, messagingTemplate,
-                mock(WebSocketSessionUserResolver.class), registry,
+                webSocketUsers, registry,
                 mock(AiMutationConfirmationService.class), properties, executor);
     }
 
