@@ -56,7 +56,11 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       && event.type !== 'UI_FORMATTED') {
       return;
     }
-    if (this.cancellationService.handleSocketEvent(event)) {
+    const cancellationDisposition = this.cancellationService.handleSocketEventDisposition(event);
+    if (cancellationDisposition !== 'unhandled') {
+      if (cancellationDisposition === 'admitted') {
+        this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
+      }
       this.scrollToBottom();
       return;
     }
@@ -101,6 +105,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     if (!this.isRecognizedRequestEvent(event)) {
       return;
     }
+    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
     // Any admitted backend event is already a response. Do not allow the
     // delayed client-side "Request sent" placeholder to appear afterward or
     // overwrite the chronological position of newer guide/tool messages.
@@ -165,6 +170,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       && this.state.elicitation.elicitationId !== notice.elicitationId)) {
       return;
     }
+    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
     this.completeProgressMessages();
     this.clearStatusMessage();
     this.state.elicitation = notice;
@@ -184,6 +190,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     if (!notice) {
       return;
     }
+    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
     const active = this.state.mutationApprovalBatch;
     if (active?.batchId === notice.batchId
       || this.state.mutationApprovalBatchQueue.some(batch => batch.batchId === notice.batchId)) {
@@ -215,6 +222,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       || event.metadata?.['batchId'] !== active.batchId) {
       return;
     }
+    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
     this.clearMutationApprovalAcknowledgementTimeout();
     if (event.subtype === 'mutation_approval_decision_accepted') {
       this.state.mutationApprovalBatch = this.nextMutationApprovalBatch();
@@ -395,6 +403,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       || event.metadata?.['elicitationId'] !== active.elicitationId) {
       return;
     }
+    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
     if (event.subtype === 'elicitation_decision_accepted') {
       this.state.elicitation = undefined;
       this.state.elicitationBusy = false;
@@ -553,6 +562,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       this.rejectedMutationConfirmationRequestId = requestId;
       return;
     }
+    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
     this.pendingMutationConfirmation = {
       conversationId: expectedConversationId!,
       notice

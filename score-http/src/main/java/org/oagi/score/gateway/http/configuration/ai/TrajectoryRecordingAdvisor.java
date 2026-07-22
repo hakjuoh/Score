@@ -34,7 +34,7 @@ public final class TrajectoryRecordingAdvisor implements CallAdvisor, StreamAdvi
         Object phase = request.context().get(AiTrajectoryRecorder.PHASE_CONTEXT_KEY);
         recorder.recordToolResponses(request.prompt().getInstructions());
         return new ChatClientMessageAggregator().aggregateChatClientResponse(
-                chain.nextStream(request), response -> recorder.recordModelResponse(
+                chain.nextStream(request), response -> recorder.recordStreamingModelResponse(
                         response.chatResponse(), phase != null ? phase.toString() : null));
     }
 

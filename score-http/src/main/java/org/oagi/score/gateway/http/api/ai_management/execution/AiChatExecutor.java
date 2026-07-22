@@ -342,6 +342,7 @@ public final class AiChatExecutor {
         ChatOptions options = optionsFactory.create(
                 request.modelName(), request.reasoningEffort(), request.routeManifest());
         ScoreAiModelRegistry.ModelConfiguration model = models.modelConfiguration(request.modelName());
+        recorder.useModelProvider(model.providerType());
         long toolOutputTokenLimit = model.contextBudget() != null
                 && model.contextBudget().toolOutputTokenLimit() != null
                 ? model.contextBudget().toolOutputTokenLimit() : Long.MAX_VALUE;

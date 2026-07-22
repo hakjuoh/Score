@@ -14,8 +14,9 @@ import {
 } from './domain/ai-chat-panel.model';
 
 export abstract class AiChatPanelLifecycleController extends AiChatPanelConversationController {
-  protected showStatus(content: string, inProgress = false, alertSuffix?: string): void {
-    this.messageTracker.showStatus(this.state, content, inProgress, alertSuffix);
+  protected showStatus(content: string, inProgress = false, alertSuffix?: string,
+                       eventType?: string): void {
+    this.messageTracker.showStatus(this.state, content, inProgress, alertSuffix, eventType);
   }
 
   protected completeProgressMessages(): void {
@@ -30,8 +31,8 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.messageTracker.clearToolCallTracking();
   }
 
-  protected clearStatusMessage(): void {
-    this.messageTracker.clearStatusMessage(this.state);
+  protected clearStatusMessage(eventType?: string): void {
+    this.messageTracker.clearStatusMessage(this.state, eventType);
   }
 
   protected refreshBranding(): void {
@@ -42,6 +43,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
   }
 
   protected clearTimers(): void {
+    this.activeRequestRecovery.cancel();
     this.clearRequestStatusWatchdog();
     this.clearResponseTimeout();
     this.clearProviderRetryCountdown();
@@ -122,6 +124,11 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
         || expected.generation === undefined || expected.requestId !== active.requestId) {
         return;
       }
+      const recoveryIdentity = {
+        ...expected,
+        conversationId: expected.conversationId,
+        generation: expected.generation
+      };
       this.requestStatusWatchdogSubscription = this.api.getRequestStatus(
         expected.requestId, expected.conversationId, expected.generation
       ).pipe(take(1)).subscribe({
@@ -135,7 +142,9 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
             this.scheduleRequestStatusWatchdog();
           }
         },
-        error: () => this.scheduleRequestStatusWatchdog()
+        error: () => this.recoverActiveRequestConnection(
+          recoveryIdentity, () => this.scheduleRequestStatusWatchdog()
+        )
       });
     }, REQUEST_STATUS_WATCHDOG_MS);
   }

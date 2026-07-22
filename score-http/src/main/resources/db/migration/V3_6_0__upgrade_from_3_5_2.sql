@@ -57,7 +57,7 @@ CREATE TABLE `ai_chat_step`
     `step_sequence`           bigint      NOT NULL COMMENT 'The zero-based sequence of the step within the complete conversation trajectory.',
     `request_id`              varchar(128) COLLATE utf8mb4_bin NULL COMMENT 'The request identifier used to correlate steps produced by the same chat request.',
     `source`                  varchar(16) NULL DEFAULT 'system' COMMENT 'Expected ATIF sources are system, user, and agent; other values are handled by the application.',
-    `message_kind`            varchar(32) NOT NULL COMMENT 'The application-specific kind of trajectory event represented by the step.',
+    `message_kind`            varchar(64) NOT NULL COMMENT 'The application-specific kind of trajectory event represented by the step.',
     `visibility`              varchar(16) NULL DEFAULT 'visible' COMMENT 'Expected presentation scopes are visible and debug; other values are handled by the application.',
     `message`                 longtext    NOT NULL COMMENT 'The textual message or event content recorded for the step.',
     `reasoning_content`       longtext NULL COMMENT 'Optional model reasoning content associated with the step.',

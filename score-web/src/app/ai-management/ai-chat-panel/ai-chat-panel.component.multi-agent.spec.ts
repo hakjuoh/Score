@@ -290,6 +290,173 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     ]);
   });
 
+  it('keeps a composed worker chain planned and isolated in one specialist timeline', () => {
+    startPublishedRequest();
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'multi_agent_started',
+      content: 'Checking every extender and reviewing the conflicts.',
+      metadata: {
+        agentId: 'request-1:composed:lead', agentName: 'Lead agent',
+        activeVerb: 'Checking', completedVerb: 'Checked', agent_count: 2,
+        executionScope: 'lead', workflow: 'chain', executionKind: 'multi_agent'
+      }
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'subagent_planned', content: 'Find extenders is queued.',
+      metadata: {
+        agentId: 'request-1:composed:worker:find-extenders',
+        agentName: 'Evidence researcher', taskLabel: 'Find extenders',
+        activeVerb: 'Searching', completedVerb: 'Searched',
+        executionScope: 'worker', conversationKind: 'SUBAGENT'
+      }
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'subagent_planned', content: 'Review conflicts is queued.',
+      metadata: {
+        agentId: 'request-1:composed:worker:conflict-review',
+        agentName: 'Critical reviewer', taskLabel: 'Review conflicts',
+        activeVerb: 'Reviewing', completedVerb: 'Reviewed',
+        executionScope: 'worker', conversationKind: 'SUBAGENT'
+      }
+    });
+
+    const group = component.state.messages.find(message => message.role === 'agent_group');
+    expect(group?.activities?.find(candidate => candidate.isLead))
+      .toMatchObject({plannedAgentCount: 2, activeVerb: 'Checking'});
+    expect(group?.activities?.filter(candidate => !candidate.isLead))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({taskLabel: 'Find extenders', status: 'planned'}),
+        expect.objectContaining({taskLabel: 'Review conflicts', status: 'planned'})
+      ]));
+    expect(group?.activities).toHaveLength(3);
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'subagent_started',
+      content: 'Listing every extending ACC.',
+      metadata: {
+        agentId: 'request-1:composed:worker:find-extenders', agentName: 'Evidence researcher',
+        activeVerb: 'Searching', completedVerb: 'Searched',
+        executionScope: 'worker', conversationKind: 'SUBAGENT'
+      }
+    });
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'guide', content: 'Inspecting the ACC associations.',
+      metadata: {
+        agentId: 'request-1:composed:worker:find-extenders', executionScope: 'worker',
+        conversationKind: 'SUBAGENT'
+      }
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'tool_call', subtype: 'completed',
+      groupId: 'request-1', toolCallId: 'call-1', content: 'get_acc completed.',
+      metadata: {
+        agentId: 'request-1:composed:worker:find-extenders', executionScope: 'worker',
+        conversationKind: 'SUBAGENT', toolName: 'get_acc'
+      }
+    });
+
+    expect(component.state.messages.some(message =>
+      message.content === 'Inspecting the ACC associations.')).toBe(false);
+    expect(component.state.messages.some(message => message.role === 'tool_call')).toBe(false);
+    expect(component.state.agentActivities
+      .find(candidate => candidate.agentId === 'request-1:composed:worker:find-extenders')?.events)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({content: 'Inspecting the ACC associations.'}),
+        expect.objectContaining({status: 'tool', content: 'get_acc completed.'})
+      ]));
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'subagent_completed', content: 'Searched.',
+      metadata: {
+        agentId: 'request-1:composed:worker:find-extenders', agentName: 'Evidence researcher',
+        activeVerb: 'Searching', completedVerb: 'Searched',
+        executionScope: 'worker', conversationKind: 'SUBAGENT'
+      }
+    });
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'subagent_started',
+      content: 'Reviewing the conflict findings.',
+      metadata: {
+        agentId: 'request-1:composed:worker:conflict-review', agentName: 'Critical reviewer',
+        activeVerb: 'Reviewing', completedVerb: 'Reviewed',
+        executionScope: 'worker', conversationKind: 'SUBAGENT'
+      }
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'subagent_completed', content: 'Reviewed.',
+      metadata: {
+        agentId: 'request-1:composed:worker:conflict-review', agentName: 'Critical reviewer',
+        activeVerb: 'Reviewing', completedVerb: 'Reviewed',
+        executionScope: 'worker', conversationKind: 'SUBAGENT'
+      }
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'multi_agent_completed', content: 'Checked.',
+      metadata: {
+        agentId: 'request-1:composed:lead', agentName: 'Lead agent',
+        activeVerb: 'Checking', completedVerb: 'Checked', agent_count: 2,
+        executionScope: 'lead', workflow: 'chain', executionKind: 'multi_agent'
+      }
+    });
+
+    expect(component.state.messages.filter(message => message.role === 'agent_group'))
+      .toHaveLength(1);
+    expect(component.state.agentActivities.filter(candidate => !candidate.isLead))
+      .toHaveLength(2);
+    expect(component.state.agentActivities.find(candidate => candidate.isLead))
+      .toMatchObject({status: 'completed', completedVerb: 'Checked'});
+  });
+
+  it('starts a new group for each evaluator workflow iteration', () => {
+    startPublishedRequest();
+    const lifecycle = (subtype: string, agentId: string, content: string) => ({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype, content,
+      metadata: {
+        agentId,
+        agentName: subtype.startsWith('multi_agent') ? 'Lead agent' : 'Evidence researcher',
+        executionScope: subtype.startsWith('multi_agent') ? 'lead' : 'worker',
+        conversationKind: subtype.startsWith('multi_agent') ? 'ROOT' : 'SUBAGENT',
+        activeVerb: 'Checking', completedVerb: 'Checked', agent_count: 1,
+        workflow: 'chain', executionKind: 'multi_agent'
+      }
+    });
+
+    const leadOne = 'request-1:composed:iteration-1:lead';
+    const workerOne = 'request-1:composed:iteration-1:worker:research';
+    (component as any).handleSocketEvent(lifecycle('multi_agent_started', leadOne, 'First plan.'));
+    (component as any).handleSocketEvent(lifecycle('subagent_planned', workerOne, 'Queued.'));
+    (component as any).handleSocketEvent(lifecycle('subagent_started', workerOne, 'Checking.'));
+    (component as any).handleSocketEvent(lifecycle('subagent_completed', workerOne, 'Checked.'));
+    (component as any).handleSocketEvent(lifecycle('multi_agent_completed', leadOne, 'Checked.'));
+
+    const firstGroup = component.state.messages.find(message => message.role === 'agent_group');
+    const firstActivities = firstGroup?.activities;
+    const leadTwo = 'request-1:composed:iteration-2:lead';
+    (component as any).handleSocketEvent(lifecycle('multi_agent_started', leadTwo, 'Revised plan.'));
+
+    const groups = component.state.messages.filter(message => message.role === 'agent_group');
+    expect(groups).toHaveLength(2);
+    expect(groups[0].activities).toBe(firstActivities);
+    expect(groups[0].activities?.every(candidate => !candidate.inProgress)).toBe(true);
+    expect(groups[1].activities).toBe(component.state.agentActivities);
+    expect(component.state.agentActivities).toEqual([
+      expect.objectContaining({agentId: leadTwo, status: 'started', inProgress: true})
+    ]);
+  });
+
   it('shows a specialist guard-blocked tool as awaiting approval in the agent timeline', () => {
     startPublishedRequest();
     (component as any).handleSocketEvent(activity(

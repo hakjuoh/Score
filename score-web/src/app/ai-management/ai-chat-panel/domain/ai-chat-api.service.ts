@@ -1,6 +1,7 @@
-import {HttpClient, HttpParams} from '@angular/common/http';
+import {HttpClient, HttpContext, HttpParams} from '@angular/common/http';
 import {Injectable, inject} from '@angular/core';
 import {map, Observable} from 'rxjs';
+import {HANDLE_HTTP_ERROR_LOCALLY} from '../../../authentication/auth.service';
 import {
   AiChatConversationSummary,
   AiChatConversationDetails,
@@ -37,7 +38,7 @@ export class AiChatApiService {
   private http = inject(HttpClient);
 
   sendChat(request: AiChatRequest): Observable<AiChatRestResponse> {
-    return this.http.post<AiChatRestResponse>('/api/ai/chat', request);
+    return this.http.post<AiChatRestResponse>('/api/ai/chat', request, this.localErrorHandling());
   }
 
   decideMutationConfirmation(
@@ -53,7 +54,8 @@ export class AiChatApiService {
       '/api/ai/chat/conversations/' + encodeURIComponent(conversationId)
       + '/mutation-confirmations/' + encodeURIComponent(confirmationRequestId)
       + '/decision',
-      {decision, ...(revisionPrompt ? {revisionPrompt} : {})}
+      {decision, ...(revisionPrompt ? {revisionPrompt} : {})},
+      this.localErrorHandling()
     );
   }
 
@@ -68,7 +70,8 @@ export class AiChatApiService {
       throw new Error('conversationId and a positive expectedGeneration must be supplied together.');
     }
     return this.http.post<AiCancellationResponse>(
-      '/api/ai/chat/' + encodeURIComponent(requestId) + '/cancel', command
+      '/api/ai/chat/' + encodeURIComponent(requestId) + '/cancel', command,
+      this.localErrorHandling()
     );
   }
 
@@ -81,20 +84,29 @@ export class AiChatApiService {
       .set('conversationId', conversationId)
       .set('expectedGeneration', expectedGeneration);
     return this.http.get<AiPublicExecutionRequestStatus>(
-      '/api/ai/chat/' + encodeURIComponent(requestId) + '/status', {params}
+      '/api/ai/chat/' + encodeURIComponent(requestId) + '/status', {
+        params,
+        context: this.localErrorHandling().context
+      }
     );
   }
 
   getActiveRequest(): Observable<AiPublicExecutionRequestStatus | null> {
-    return this.http.get<AiPublicExecutionRequestStatus | null>('/api/ai/chat/active-request');
+    return this.http.get<AiPublicExecutionRequestStatus | null>(
+      '/api/ai/chat/active-request', this.localErrorHandling()
+    );
   }
 
   getConversationHistory(): Observable<AiChatConversationSummary[]> {
-    return this.http.get<AiChatConversationSummary[]>('/api/ai/chat/conversations');
+    return this.http.get<AiChatConversationSummary[]>(
+      '/api/ai/chat/conversations', this.localErrorHandling()
+    );
   }
 
   getAvailableModels(): Observable<AiChatModelInfo[]> {
-    return this.http.get<AiChatModelWire[]>('/api/ai/chat/models').pipe(
+    return this.http.get<AiChatModelWire[]>(
+      '/api/ai/chat/models', this.localErrorHandling()
+    ).pipe(
       map(models => models.map(model => ({
         ...model,
         description: model.description?.trim() || this.defaultModelDescription(model.provider),
@@ -114,20 +126,29 @@ export class AiChatApiService {
     }
     return this.http.patch<AiConversationModelResponse>(
       '/api/ai/chat/conversations/' + encodeURIComponent(conversationId) + '/model',
-      {modelName, reasoningEffort}
+      {modelName, reasoningEffort},
+      this.localErrorHandling()
     );
   }
 
   getConversation(conversationId: string): Observable<AiChatConversationDetails> {
     return this.http.get<AiChatConversationDetails>(
-      '/api/ai/chat/conversations/' + encodeURIComponent(conversationId)
+      '/api/ai/chat/conversations/' + encodeURIComponent(conversationId),
+      this.localErrorHandling()
     );
   }
 
   deleteConversation(conversationId: string): Observable<{deleted?: boolean}> {
     return this.http.delete<{deleted?: boolean}>(
-      '/api/ai/chat/conversations/' + encodeURIComponent(conversationId)
+      '/api/ai/chat/conversations/' + encodeURIComponent(conversationId),
+      this.localErrorHandling()
     );
+  }
+
+  private localErrorHandling(): {context: HttpContext} {
+    return {
+      context: new HttpContext().set(HANDLE_HTTP_ERROR_LOCALLY, true)
+    };
   }
 
   private isPositiveGeneration(value: number): boolean {
