@@ -56,7 +56,6 @@ score:
         description: Frontier Claude model for complex reasoning and tool-driven work.
         provider: azure-foundry
         model: claude-fable-5
-        runtimes: [claude]
         reasoning-effort: high
         reasoning-efforts:
           - name: low
@@ -83,7 +82,7 @@ score:
         adaptive-thinking: true
         output-effort: high
         cache-strategy: conversation-history
-        runtime-capabilities:
+        model-capabilities:
           output-effort: true
           temperature: false
           thinking-modes: [adaptive]
@@ -93,7 +92,6 @@ score:
         description: Most capable Claude model for advanced reasoning and complex agentic work.
         provider: azure-foundry
         model: claude-opus-4-8
-        runtimes: [claude]
         reasoning-effort: high
         reasoning-efforts:
           - name: low
@@ -119,7 +117,7 @@ score:
         adaptive-thinking: true
         output-effort: high
         cache-strategy: conversation-history
-        runtime-capabilities:
+        model-capabilities:
           output-effort: true
           temperature: false
           thinking-modes: [adaptive]
@@ -129,7 +127,6 @@ score:
         description: Balanced Claude model for everyday reasoning and agentic work.
         provider: azure-foundry
         model: claude-sonnet-5
-        runtimes: [claude]
         reasoning-effort: medium
         reasoning-efforts:
           - name: low
@@ -155,7 +152,7 @@ score:
         adaptive-thinking: true
         output-effort: medium
         cache-strategy: conversation-history
-        runtime-capabilities:
+        model-capabilities:
           output-effort: true
           temperature: false
           thinking-modes: [adaptive, disabled]
@@ -165,7 +162,6 @@ score:
         description: Fast and efficient Claude model for lightweight everyday tasks.
         provider: azure-foundry
         model: claude-haiku-4-5
-        runtimes: [claude]
         reasoning-effort: default
         reasoning-efforts:
           - name: default
@@ -181,7 +177,7 @@ score:
           provider-compaction-enabled: false
         thinking-budget-tokens: 4096
         cache-strategy: conversation-history
-        runtime-capabilities:
+        model-capabilities:
           output-effort: false
           temperature: false
           thinking-modes: [enabled, disabled]
@@ -191,7 +187,6 @@ score:
         description: Latest frontier agentic model for complex reasoning and tool-driven work.
         provider: azure-openai
         model: gpt-5.6-sol
-        runtimes: [openai]
         reasoning-effort: medium
         context-window: ${GPT_5_6_SOL_CONTEXT_WINDOW:200000}
         context-budget:
@@ -200,7 +195,7 @@ score:
           auto-compact-threshold-tokens: ${GPT_5_6_SOL_AUTO_COMPACT_THRESHOLD:150000}
           emergency-headroom-tokens: 8192
           tool-output-token-limit: 32000
-          provider-compaction-enabled: true
+          provider-compaction-enabled: false
         reasoning-efforts:
           - name: low
             display-name: Low
@@ -214,7 +209,7 @@ score:
           - name: xhigh
             display-name: Max
             description: Maximum reasoning depth for the most complex problems.
-        runtime-capabilities:
+        model-capabilities:
           reasoning-model: true
           verbosity: true
           temperature: false
@@ -223,7 +218,6 @@ score:
         description: Balanced agentic model for everyday reasoning and tool-driven work.
         provider: azure-openai
         model: gpt-5.6-terra
-        runtimes: [openai]
         reasoning-effort: medium
         context-window: ${GPT_5_6_TERRA_CONTEXT_WINDOW:200000}
         context-budget:
@@ -231,7 +225,7 @@ score:
           auto-compact-threshold-tokens: ${GPT_5_6_TERRA_AUTO_COMPACT_THRESHOLD:150000}
           emergency-headroom-tokens: 8192
           tool-output-token-limit: 32000
-          provider-compaction-enabled: true
+          provider-compaction-enabled: false
         reasoning-efforts:
           - name: low
             display-name: Low
@@ -245,7 +239,7 @@ score:
           - name: xhigh
             display-name: Max
             description: Maximum reasoning depth for the most complex problems.
-        runtime-capabilities:
+        model-capabilities:
           reasoning-model: true
           verbosity: true
           temperature: false
@@ -254,7 +248,6 @@ score:
         description: Fast and affordable agentic model for lightweight everyday tasks.
         provider: azure-openai
         model: gpt-5.6-luna
-        runtimes: [openai]
         reasoning-effort: low
         context-window: ${GPT_5_6_LUNA_CONTEXT_WINDOW:200000}
         context-budget:
@@ -262,7 +255,7 @@ score:
           auto-compact-threshold-tokens: ${GPT_5_6_LUNA_AUTO_COMPACT_THRESHOLD:150000}
           emergency-headroom-tokens: 8192
           tool-output-token-limit: 32000
-          provider-compaction-enabled: true
+          provider-compaction-enabled: false
         reasoning-efforts:
           - name: low
             display-name: Low
@@ -276,7 +269,7 @@ score:
           - name: xhigh
             display-name: Max
             description: Maximum reasoning depth for the most complex problems.
-        runtime-capabilities:
+        model-capabilities:
           reasoning-model: true
           verbosity: true
           temperature: false

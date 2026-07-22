@@ -52,10 +52,9 @@ export interface AiChatRequest {
   conversationId?: string;
   modelName?: string;
   reasoningEffort?: string;
-  runtime?: string;
-  runtimeOptions?: AiRuntimeOptions;
   permissionMode?: AiMutationPermissionMode;
   pageContext?: string;
+  routeManifest?: AiUiRouteManifest;
   attachments: AiChatAttachment[];
   mutationConfirmation?: AiMutationConfirmationAuthorization;
 }
@@ -68,8 +67,6 @@ export interface AiChatModelInfo {
   defaultModel: boolean;
   defaultReasoningEffort: string;
   reasoningEfforts: AiReasoningEffortInfo[];
-  defaultRuntime: string;
-  runtimes: AiChatRuntimeInfo[];
   contextWindow?: number | null;
   outputReserveTokens?: number | null;
   autoCompactThresholdTokens?: number | null;
@@ -87,33 +84,6 @@ export interface AiContextUsage {
   source: string;
 }
 
-export interface AiChatRuntimeInfo {
-  name: string;
-  displayName: string;
-  description: string;
-  settings: AiChatRuntimeSettingInfo[];
-}
-
-export type AiChatRuntimeSettingType = 'select' | 'number' | 'boolean';
-export type AiRuntimeOptions = Record<string, unknown>;
-
-export interface AiChatRuntimeSettingOptionInfo {
-  value: string;
-  displayName: string;
-}
-
-export interface AiChatRuntimeSettingInfo {
-  name: string;
-  displayName: string;
-  description: string;
-  type: AiChatRuntimeSettingType;
-  defaultValue: unknown;
-  options: AiChatRuntimeSettingOptionInfo[];
-  minimum: number | null;
-  maximum: number | null;
-  step: number | null;
-}
-
 export interface AiReasoningEffortInfo {
   name: string;
   displayName: string;
@@ -124,8 +94,6 @@ export interface AiConversationModelResponse {
   conversationId: string;
   modelName: string;
   reasoningEffort: string;
-  runtime: string;
-  runtimeOptions: AiRuntimeOptions;
   contextCompacted?: boolean;
   contextUsage?: AiContextUsage;
 }
@@ -222,7 +190,6 @@ export interface AiChatRestResponse {
   continuationRequired?: boolean;
   progress?: string[];
   events?: AiChatSocketEvent[];
-  runtimeOptions?: AiRuntimeOptions;
 }
 
 export type AiExecutionStatus =
@@ -340,8 +307,6 @@ export interface AiChatConversationDetails {
   title: string;
   modelName?: string;
   reasoningEffort?: string;
-  runtime?: string;
-  runtimeOptions?: AiRuntimeOptions;
   permissionMode?: AiMutationPermissionMode;
   activeWorkflow?: string;
   contextUsage?: AiContextUsage;
@@ -370,8 +335,31 @@ export interface AiResourceRoute {
   roles: string[];
 }
 
+export interface AiUiRouteManifest {
+  schemaVersion: 1;
+  routes: AiUiRouteManifestEntry[];
+}
+
+export interface AiUiRouteManifestEntry {
+  resource: string;
+  listPath: string;
+  detailPatterns: {[variant: string]: string};
+  idFields: string[];
+  linkableFields: string[];
+  listQuery?: AiUiRouteManifestListQuery;
+}
+
+export interface AiUiRouteManifestListQuery {
+  codec: 'base64-utf8-form' | 'plain';
+  defaultParams: {[key: string]: string};
+  allowedPlainParams: string[];
+  toolParamAliases: {[key: string]: string};
+  dateRangeParamAliases: {[key: string]: string};
+}
+
 export interface AiResourceListQuery {
   finalFormat: string;
+  codec?: 'base64-utf8-form' | 'plain';
   encoding?: string;
   formatterRule?: string;
   defaultParams?: {[key: string]: string};
@@ -388,6 +376,5 @@ export interface AiChatCommand {
 
 export interface AiChatContextUpdate {
   pageContext?: string;
-  includesRouteRegistry: boolean;
-  pagePath?: string;
+  routeManifest: AiUiRouteManifest;
 }

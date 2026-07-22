@@ -1,8 +1,5 @@
-package org.oagi.score.gateway.http.api.ai_management.runtime;
+package org.oagi.score.gateway.http.api.ai_management.provider;
 
-import com.anthropic.core.JsonValue;
-import com.anthropic.core.http.Headers;
-import com.anthropic.errors.RateLimitException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
@@ -11,10 +8,13 @@ import org.oagi.score.gateway.http.api.ai_management.service.AiTrajectoryRecorde
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.ai.retry.TransientAiException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -112,23 +112,25 @@ class AiProviderRetryExecutorTest {
     void honorsTheProviderDirectedWait() {
         AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
         AtomicInteger attempts = new AtomicInteger();
-        AiProviderRetryExecutor executor = new AiProviderRetryExecutor(settings(5), null);
+        ScoreAiProperties.ProviderRetry retrySettings = settings(5);
+        retrySettings.setMaxDelay(Duration.ofSeconds(2));
+        AiProviderRetryExecutor executor = new AiProviderRetryExecutor(retrySettings, null);
 
         executor.execute(request(), recorder, () -> 0L, () -> {
             if (attempts.incrementAndGet() == 1) {
-                throw RateLimitException.builder()
-                        .headers(Headers.builder().put("retry-after-ms", "20").build())
-                        .body(JsonValue.from(Map.of("type", "error", "error",
-                                Map.of("type", "rate_limit_error", "message", "Rate limited."))))
-                        .build();
+                HttpHeaders headers = new HttpHeaders();
+                headers.set(HttpHeaders.RETRY_AFTER, "1");
+                throw HttpClientErrorException.create(
+                        HttpStatus.TOO_MANY_REQUESTS, "Rate limited", headers,
+                        "Rate limited.".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8);
             }
             return "answer";
         });
 
         ArgumentCaptor<Long> delay = ArgumentCaptor.forClass(Long.class);
         verify(recorder).providerRetry(eq(1), eq(5), delay.capture(),
-                eq("Rate limited."), eq(RateLimitException.class.getName()), eq(429));
-        assertThat(delay.getValue()).isGreaterThanOrEqualTo(20L);
+                eq("Rate limited."), eq(HttpClientErrorException.TooManyRequests.class.getName()), eq(429));
+        assertThat(delay.getValue()).isGreaterThanOrEqualTo(1_000L);
     }
 
     @Test
@@ -173,6 +175,6 @@ class AiProviderRetryExecutorTest {
 
     private ChatRequest request() {
         return new ChatRequest("Investigate", "request-1", null, "conversation-1", null,
-                List.of(), null, "model", "high", "default", Map.of(), "ask");
+                List.of(), null, "model", "high", "ask");
     }
 }

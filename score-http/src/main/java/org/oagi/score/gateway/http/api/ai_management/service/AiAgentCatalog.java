@@ -5,7 +5,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDefinition;
 import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDescriptor;
 import org.oagi.score.gateway.http.api.ai_management.model.AiAgentFile;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChatExecutor;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
@@ -39,7 +39,7 @@ public final class AiAgentCatalog {
                 String id = descriptor.id().strip().toLowerCase(Locale.ROOT);
                 AiAgentDefinition previous = loaded.put(id, new AiAgentDefinition(
                         id, descriptor.name().strip(), descriptor.description().strip(), agentFile.prompt(),
-                        AiRuntime.ToolPolicy.valueOf(descriptor.toolPolicy().strip().toUpperCase(Locale.ROOT))));
+                        AiChatExecutor.ToolPolicy.valueOf(descriptor.toolPolicy().strip().toUpperCase(Locale.ROOT))));
                 if (previous != null) throw new IllegalStateException("Duplicate AI agent id: " + id);
             }
             if (loaded.isEmpty()) throw new IllegalStateException("The AI agent registry is empty.");

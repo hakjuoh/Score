@@ -56,7 +56,6 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
   ): void {
     const requestId = this.activeRequestId || this.createRequestId();
     const contextUpdate = this.nextContextUpdate();
-    this.pendingContextUpdate = contextUpdate;
     const confirmedMutation = mutationConfirmation !== undefined;
     const confirmedConversationId = confirmedMutation
       ? this.state.conversationId : undefined;
@@ -132,10 +131,9 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       conversationId: this.state.conversationId,
       modelName: this.state.selectedModelName,
       reasoningEffort: this.state.selectedReasoningEffort,
-      runtime: this.state.selectedRuntime,
-      runtimeOptions: {...this.state.selectedRuntimeOptions},
       permissionMode: this.state.permissionMode,
       pageContext: contextUpdate.pageContext,
+      routeManifest: contextUpdate.routeManifest,
       attachments,
       ...(mutationConfirmation ? {mutationConfirmation} : {})
     });
@@ -173,7 +171,6 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         this.sessionPersistence.rememberLastConversation(this.state.conversationId);
         replayRestEvents(response.events || []);
         this.settleAgentActivity('completed');
-        this.confirmContextUpdate();
         this.state.elicitation = undefined;
         this.state.elicitationBusy = false;
         this.activeRequestId = undefined;
@@ -222,7 +219,6 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         if (!confirmationConversationId) {
           this.clearMutationRepeatDraft(requestId);
         }
-        this.pendingContextUpdate = undefined;
         this.state.elicitation = undefined;
         this.state.elicitationBusy = false;
         this.activeRequestId = undefined;
@@ -291,7 +287,6 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     this.clearTimers();
     this.clearStatusMessage();
     this.clearMutationRepeatDraft(requestId);
-    this.pendingContextUpdate = undefined;
     this.confirmedMutationRequests.cancel(requestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
@@ -349,7 +344,6 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       content: 'Could not reconnect to WebSocket after 3 attempts. Check that score-http is running and the /ws proxy is active, then try again.'
     });
     this.state.pending = false;
-    this.pendingContextUpdate = undefined;
     this.clearMutationRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
@@ -376,15 +370,13 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       conversationId: this.state.conversationId,
       modelName: this.state.selectedModelName,
       reasoningEffort: this.state.selectedReasoningEffort,
-      runtime: this.state.selectedRuntime,
-      runtimeOptions: {...this.state.selectedRuntimeOptions},
       permissionMode: this.state.permissionMode,
       pageContext: contextUpdate.pageContext,
+      routeManifest: contextUpdate.routeManifest,
       attachments,
       ...(mutationConfirmation ? {mutationConfirmation} : {})
     });
     this.activeRequestPublished = true;
-    this.pendingContextUpdate = contextUpdate;
     this.responseTimeout = window.setTimeout(() => {
       if (this.state.pending) {
         this.showStatus('Request sent. Waiting for the assistant response.', true);
@@ -401,7 +393,6 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           content: 'The request was sent, but the backend did not acknowledge it. If this included an attachment, the WebSocket message may be too large or the backend may need to be restarted.'
         });
         this.state.pending = false;
-        this.pendingContextUpdate = undefined;
         this.clearMutationRepeatDraft(this.activeRequestId);
         this.activeRequestId = undefined;
         this.clearToolCallTracking();
@@ -420,7 +411,6 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     this.clearStatusMessage();
     this.state.messages.push({role: 'error', content: 'Could not send the WebSocket chat request.'});
     this.state.pending = false;
-    this.pendingContextUpdate = undefined;
     this.clearMutationRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();

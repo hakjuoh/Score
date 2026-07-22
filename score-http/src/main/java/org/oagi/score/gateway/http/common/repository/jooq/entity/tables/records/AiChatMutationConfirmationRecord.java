@@ -127,18 +127,18 @@ public class AiChatMutationConfirmationRecord extends UpdatableRecordImpl<AiChat
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_mutation_confirmation.status</code>. The
-     * confirmation lifecycle status: REQUESTED, APPROVED, DENIED, CONSUMED, or
-     * EXPIRED.
+     * Setter for <code>oagi.ai_chat_mutation_confirmation.status</code>.
+     * Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED,
+     * and EXPIRED; other values are handled by the application.
      */
     public void setStatus(String value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_mutation_confirmation.status</code>. The
-     * confirmation lifecycle status: REQUESTED, APPROVED, DENIED, CONSUMED, or
-     * EXPIRED.
+     * Getter for <code>oagi.ai_chat_mutation_confirmation.status</code>.
+     * Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED,
+     * and EXPIRED; other values are handled by the application.
      */
     public String getStatus() {
         return (String) get(6);

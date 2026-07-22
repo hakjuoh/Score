@@ -109,9 +109,6 @@ export abstract class AiChatPanelControllerBase {
   protected acknowledgementTimeout?: number;
   protected providerRetryInterval?: number;
   protected resizeState?: ResizeState;
-  protected routeRegistrySent = false;
-  protected lastPageContextPath?: string;
-  protected pendingContextUpdate?: AiChatContextUpdate;
   protected activeRequestPublished = false;
   protected activeRestoreRequestId?: string;
   protected restoreAttemptSequence = 0;
@@ -186,7 +183,7 @@ export abstract class AiChatPanelControllerBase {
 
   get commandInputBlocked(): boolean {
     return this.state.reconciliationRequired
-      || this.state.modelChangePending || this.state.modelSettingsOpen || this.state.runtimeSettingsOpen
+      || this.state.modelChangePending || this.state.modelSettingsOpen
       || this.state.permissionSettingsOpen
       || !!this.state.elicitation
       || this.mutationDecisionInFlight
@@ -349,9 +346,6 @@ export abstract class AiChatPanelControllerBase {
   abstract changeModelDraft(modelName: string): void;
   abstract applyModelSettings(): void;
   abstract closeModelSettings(): void;
-  abstract changeRuntimeDraft(runtime: string): void;
-  abstract applyRuntimeSettings(): void;
-  abstract closeRuntimeSettings(): void;
   abstract startNewChat(event?: Event, activePanelTab?: AiChatPanelTab): void;
   abstract startResize(event: MouseEvent): void;
   abstract onResizeMove(event: MouseEvent): void;
@@ -426,8 +420,6 @@ export abstract class AiChatPanelControllerBase {
   protected abstract handleLocalCommand(localCommand: AiLocalCommand, commandText: string): void;
   protected abstract openModelSettings(commandText: string): void;
   protected abstract finishModelSettings(displayName: string, reasoningEffort: string): void;
-  protected abstract openRuntimeSettings(commandText: string): void;
-  protected abstract finishRuntimeSettings(runtimeDisplayName: string): void;
   protected abstract openPermissionSettings(commandText: string): void;
   abstract applyPermissionSettings(): void;
   abstract closePermissionSettings(): void;
@@ -482,7 +474,6 @@ export abstract class AiChatPanelControllerBase {
   protected abstract createRestoreToken(): string;
   protected abstract nextContextUpdate(): AiChatContextUpdate;
   protected abstract invalidateAttachmentReads(): void;
-  protected abstract confirmContextUpdate(): void;
   protected abstract updateMainPanelInset(): void;
 }
 

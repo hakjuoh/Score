@@ -2,14 +2,13 @@ package org.oagi.score.gateway.http.configuration.ai;
 
 import com.anthropic.models.messages.OutputConfig;
 import com.openai.azure.AzureOpenAIServiceVersion;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AnthropicRuntimeProperties;
-import org.oagi.score.gateway.http.api.ai_management.runtime.OpenAiRuntimeProperties;
 import org.springframework.ai.anthropic.AnthropicCacheOptions;
 import org.springframework.ai.anthropic.AnthropicCacheStrategy;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.chat.client.advisor.toolsearch.ToolSearchToolCallingAdvisor;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.toolsearch.ToolIndex;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -29,14 +28,14 @@ import java.util.concurrent.ScheduledExecutorService;
 
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
-@EnableConfigurationProperties({ScoreAiProperties.class, AnthropicRuntimeProperties.class,
-        OpenAiRuntimeProperties.class})
+@EnableConfigurationProperties({ScoreAiProperties.class, AnthropicChatProperties.class,
+        OpenAiChatProperties.class})
 public class ScoreAiConfiguration {
 
     @Bean("scoreAiChatModels")
     public Map<String, ChatModel> scoreAiChatModels(ScoreAiProperties properties,
-                                                    AnthropicRuntimeProperties anthropicProperties,
-                                                    OpenAiRuntimeProperties openAiProperties) {
+                                                    AnthropicChatProperties anthropicProperties,
+                                                    OpenAiChatProperties openAiProperties) {
         Map<String, ChatModel> models = new LinkedHashMap<>();
         properties.getModels().forEach((name, model) -> {
             validateContextBudget(name, model);
@@ -65,8 +64,8 @@ public class ScoreAiConfiguration {
 
     private ChatModel chatModel(String configuredName, ScoreAiProperties.Model model,
                                 ScoreAiProperties.Provider provider, Duration requestTimeout,
-                                AnthropicRuntimeProperties anthropicProperties,
-                                OpenAiRuntimeProperties openAiProperties) {
+                                AnthropicChatProperties anthropicProperties,
+                                OpenAiChatProperties openAiProperties) {
         return switch (providerType(provider)) {
             case "anthropic" -> anthropicModel(configuredName, model, provider, requestTimeout,
                     anthropicProperties);
@@ -102,12 +101,12 @@ public class ScoreAiConfiguration {
     private ChatModel anthropicModel(String configuredName, ScoreAiProperties.Model model,
                                      ScoreAiProperties.Provider provider,
                                      Duration requestTimeout,
-                                     AnthropicRuntimeProperties runtimeProperties) {
+                                     AnthropicChatProperties chatProperties) {
         AnthropicChatOptions.Builder options = AnthropicChatOptions.builder()
                 .baseUrl(baseUrl(provider))
                 .apiKey(provider.getKey())
                 .model(StringUtils.hasText(model.getModel()) ? model.getModel() : configuredName);
-        runtimeProperties.apply(options, !thinkingModes(model).isEmpty());
+        chatProperties.apply(options, !thinkingModes(model).isEmpty());
         if (model.getMaxTokens() != null) {
             options.maxTokens(model.getMaxTokens());
         }
@@ -149,34 +148,28 @@ public class ScoreAiConfiguration {
     private ChatModel azureOpenAiModel(String configuredName, ScoreAiProperties.Model model,
                                        ScoreAiProperties.Provider provider,
                                        Duration requestTimeout,
-                                       OpenAiRuntimeProperties runtimeProperties) {
-        OpenAiChatOptions.Builder options = openAiOptions(configuredName, model, provider, runtimeProperties)
+                                       OpenAiChatProperties chatProperties) {
+        OpenAiChatOptions.Builder options = openAiOptions(configuredName, model, provider, chatProperties)
                 .deploymentName(StringUtils.hasText(model.getModel()) ? model.getModel() : configuredName)
                 .azure(true);
         if (StringUtils.hasText(provider.getApiVersion())) {
             options.azureOpenAIServiceVersion(AzureOpenAIServiceVersion.fromString(provider.getApiVersion()));
         }
-        return openAiChatModel(options, requestTimeout, providerCompactThreshold(model));
+        return openAiChatModel(options, requestTimeout);
     }
 
     private ChatModel openAiModel(String configuredName, ScoreAiProperties.Model model,
                                   ScoreAiProperties.Provider provider,
                                   Duration requestTimeout,
-                                  OpenAiRuntimeProperties runtimeProperties) {
-        return openAiChatModel(openAiOptions(configuredName, model, provider, runtimeProperties), requestTimeout,
-                providerCompactThreshold(model));
+                                  OpenAiChatProperties chatProperties) {
+        return openAiChatModel(openAiOptions(configuredName, model, provider, chatProperties), requestTimeout);
     }
 
-    private ChatModel openAiChatModel(OpenAiChatOptions.Builder options,
-                                      Duration requestTimeout, Long compactThreshold) {
-        return OpenAiResponsesChatModel.create(options.build(), requestTimeout, compactThreshold);
-    }
-
-    private Long providerCompactThreshold(ScoreAiProperties.Model model) {
-        if (model.getContextWindow() == null || !model.getContextBudget().isProviderCompactionEnabled()) {
-            return null;
-        }
-        return model.getContextBudget().getAutoCompactThresholdTokens();
+    private ChatModel openAiChatModel(OpenAiChatOptions.Builder options, Duration requestTimeout) {
+        return OpenAiChatModel.builder()
+                .options(options.build())
+                .httpClientBuilderCustomizer(builder -> builder.timeout(requestTimeout))
+                .build();
     }
 
     private void validateContextBudget(String name, ScoreAiProperties.Model model) {
@@ -208,14 +201,14 @@ public class ScoreAiConfiguration {
 
     private OpenAiChatOptions.Builder openAiOptions(String configuredName, ScoreAiProperties.Model model,
                                                     ScoreAiProperties.Provider provider,
-                                                    OpenAiRuntimeProperties runtimeProperties) {
+                                                    OpenAiChatProperties chatProperties) {
         String deploymentName = StringUtils.hasText(model.getModel()) ? model.getModel() : configuredName;
         OpenAiChatOptions.Builder options = OpenAiChatOptions.builder()
                 .baseUrl(trimTrailingSlashes(provider.getBaseUrl()))
                 .apiKey(provider.getKey())
                 .model(deploymentName);
         boolean reasoningModel = openAiReasoningModel(model, deploymentName);
-        runtimeProperties.apply(options, reasoningModel);
+        chatProperties.apply(options, reasoningModel);
         if (model.getMaxTokens() != null) {
             if (reasoningModel) options.maxCompletionTokens(model.getMaxTokens());
             else options.maxTokens(model.getMaxTokens());
@@ -234,7 +227,7 @@ public class ScoreAiConfiguration {
     }
 
     private boolean openAiReasoningModel(ScoreAiProperties.Model model, String modelName) {
-        Boolean configured = model.getRuntimeCapabilities().getReasoningModel();
+        Boolean configured = model.getModelCapabilities().getReasoningModel();
         if (configured != null) return configured;
         String normalized = modelName.toLowerCase();
         return normalized.startsWith("gpt-5") || normalized.matches("o[134](?:[-_].*)?")
@@ -243,18 +236,18 @@ public class ScoreAiConfiguration {
     }
 
     private boolean supportsTemperature(ScoreAiProperties.Model model, boolean reasoningModel) {
-        Boolean configured = model.getRuntimeCapabilities().getTemperature();
+        Boolean configured = model.getModelCapabilities().getTemperature();
         return configured != null ? configured : !reasoningModel && thinkingModes(model).isEmpty();
     }
 
     private boolean supportsOutputEffort(ScoreAiProperties.Model model) {
-        Boolean configured = model.getRuntimeCapabilities().getOutputEffort();
+        Boolean configured = model.getModelCapabilities().getOutputEffort();
         return configured != null ? configured
                 : model.isAdaptiveThinking() || StringUtils.hasText(model.getOutputEffort());
     }
 
     private java.util.List<String> thinkingModes(ScoreAiProperties.Model model) {
-        java.util.List<String> configured = model.getRuntimeCapabilities().getThinkingModes().stream()
+        java.util.List<String> configured = model.getModelCapabilities().getThinkingModes().stream()
                 .filter(StringUtils::hasText).map(value -> value.strip().toLowerCase()).distinct().toList();
         if (!configured.isEmpty()) return configured;
         if (model.isAdaptiveThinking()) return java.util.List.of("adaptive", "disabled");
@@ -263,7 +256,7 @@ public class ScoreAiConfiguration {
     }
 
     private String defaultThinking(ScoreAiProperties.Model model) {
-        String configured = model.getRuntimeCapabilities().getDefaultThinking();
+        String configured = model.getModelCapabilities().getDefaultThinking();
         if (StringUtils.hasText(configured) && thinkingModes(model).contains(configured.strip().toLowerCase())) {
             return configured.strip().toLowerCase();
         }

@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.runtime;
+package org.oagi.score.gateway.http.configuration.ai;
 
 import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.anthropic.AnthropicServiceTier;
@@ -9,7 +9,7 @@ import java.util.List;
 
 /** Server-owned defaults from {@code spring.ai.anthropic.chat.*}. */
 @ConfigurationProperties("spring.ai.anthropic.chat")
-public class AnthropicRuntimeProperties {
+public class AnthropicChatProperties {
 
     private Integer maxTokens;
     private List<String> stopSequences = List.of();

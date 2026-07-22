@@ -9,7 +9,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
-import org.jooq.Check;
 import org.jooq.Condition;
 import org.jooq.Field;
 import org.jooq.ForeignKey;
@@ -30,7 +29,6 @@ import org.jooq.TableField;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
-import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
@@ -259,11 +257,6 @@ public class AiChatMutationConfirmation extends TableImpl<AiChatMutationConfirma
             _aiChatConversation = new AiChatConversationPath(this, Keys.AI_CHAT_MUTATION_CONFIRMATION_CONVERSATION_FK, null);
 
         return _aiChatConversation;
-    }
-
-    @Override
-    public List<Check<AiChatMutationConfirmationRecord>> getChecks() {
-        return Arrays.asList();
     }
 
     @Override

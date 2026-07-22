@@ -189,7 +189,7 @@ public class AiChatController {
             @RequestBody AiConversationModelUpdateRequest request) {
         return requests.whileConversationIdle(conversationId, () -> chatService.updateConversationModel(
                 sessionService.asScoreUser(principal), conversationId,
-                request.modelName(), request.reasoningEffort(), request.runtime(), request.runtimeOptions()));
+                request.modelName(), request.reasoningEffort()));
     }
 
     @GetMapping("/conversations/{conversationId}/trajectory")
@@ -321,8 +321,6 @@ public class AiChatController {
             metadata.put("restoreSequence", request.restoreSequence());
             metadata.put("modelName", details.modelName());
             metadata.put("reasoningEffort", details.reasoningEffort());
-            metadata.put("runtime", details.runtime());
-            metadata.put("runtimeOptions", details.runtimeOptions());
             metadata.put("permissionMode", details.permissionMode());
             if (StringUtils.hasText(details.activeWorkflow())) {
                 metadata.put("activeWorkflow", details.activeWorkflow());
@@ -395,8 +393,8 @@ public class AiChatController {
         ChatRequest correlated = new ChatRequest(request.prompt(), requestId, request.agent(),
                 request.conversationId(), request.pageContext(), request.attachments(),
                 request.mutationConfirmation(), request.modelName(), request.reasoningEffort(),
-                request.runtime(), request.runtimeOptions(), request.permissionMode(),
-                request.multiAgent());
+                request.permissionMode(), request.multiAgent(), request.activeWorkflow(),
+                request.routeManifest());
         Instant deadline = Instant.now().plus(requestTimeout);
         AiRequestRegistry.Entry entry = requests.register(
                 requestId, request.conversationId(), requester, deadline);
@@ -442,7 +440,7 @@ public class AiChatController {
         // provider's own message for display; it wraps the raw provider exception,
         // so it must be found before the root-cause walk skips past it.
         for (Throwable candidate = throwable; candidate != null; candidate = candidate.getCause()) {
-            if (candidate instanceof org.oagi.score.gateway.http.api.ai_management.runtime.AiProviderException provider) {
+            if (candidate instanceof org.oagi.score.gateway.http.api.ai_management.provider.AiProviderException provider) {
                 LOGGER.warn("AI chat request failed at the model provider", provider);
                 return provider.getMessage();
             }
@@ -454,7 +452,7 @@ public class AiChatController {
         LOGGER.warn("AI chat request failed", current);
         if (current instanceof IllegalArgumentException && StringUtils.hasText(current.getMessage())) {
             String message = current.getMessage();
-            if (message.length() <= 500 && message.matches("(?i)^(attachment|attachments|unsupported ai attachment|a prompt|a maximum|runtime option|the requested assistant model|the requested reasoning effort|the requested ai runtime|chat request|multiagent).*$")) {
+            if (message.length() <= 500 && message.matches("(?i)^(attachment|attachments|unsupported ai attachment|a prompt|a maximum|the requested assistant model|the requested reasoning effort|chat request|multiagent).*$")) {
                 return message;
             }
         }

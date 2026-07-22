@@ -339,11 +339,6 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
   applyModelSettings(): void {
     const model = this.state.availableModels.find(candidate => candidate.name === this.state.modelDraftName);
     const reasoningEffort = this.state.modelDraftReasoningEffort;
-    const runtime = model && this.settingsService.modelRuntimes(model)
-      .some(candidate => candidate.name === this.state.selectedRuntime)
-      ? this.state.selectedRuntime : model?.defaultRuntime || 'default';
-    const runtimeOptions = this.state.runtimeOptionsFor(runtime,
-      runtime === this.state.selectedRuntime ? this.state.selectedRuntimeOptions : {}, model);
     if (!this.state.modelSettingsOpen || !model
       || !model.reasoningEfforts.some(effort => effort.name === reasoningEffort)
       || this.state.modelChangePending) {
@@ -351,26 +346,22 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     }
     const previousModelName = this.state.selectedModelName;
     const previousReasoningEffort = this.state.selectedReasoningEffort;
-    const previousRuntime = this.state.selectedRuntime;
-    const previousRuntimeOptions = {...this.state.selectedRuntimeOptions};
     if (!this.state.conversationId) {
       this.state.selectedModelName = model.name;
       this.state.selectedReasoningEffort = reasoningEffort;
-      this.state.selectRuntime(runtime, runtimeOptions);
       this.state.resetContextUsageForSelectedModel();
       this.finishModelSettings(model.displayName, reasoningEffort);
       return;
     }
     this.state.modelChangePending = true;
     this.api.updateConversationModel(
-      this.state.conversationId, model.name, reasoningEffort, runtime, runtimeOptions
+      this.state.conversationId, model.name, reasoningEffort
     ).pipe(
       take(1), takeUntil(this.destroyed$)
     ).subscribe({
       next: response => {
         this.state.selectedModelName = response.modelName;
         this.state.selectedReasoningEffort = response.reasoningEffort;
-        this.state.selectRuntime(response.runtime || runtime, response.runtimeOptions || runtimeOptions);
         this.state.resetContextUsageForSelectedModel();
         this.state.setContextUsage(contextUsageValue(response.contextUsage, response.modelName));
         this.state.modelChangePending = false;
@@ -383,7 +374,6 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
       error: () => {
         this.state.selectedModelName = previousModelName;
         this.state.selectedReasoningEffort = previousReasoningEffort;
-        this.state.selectRuntime(previousRuntime, previousRuntimeOptions);
         this.state.modelChangePending = false;
         this.snackBar.open('Could not change the assistant model.', 'Dismiss', {duration: 3500});
       }
@@ -392,55 +382,6 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
 
   closeModelSettings(): void {
     if (this.settingsService.closeModel(this.state)) {
-      this.focusPrompt();
-    }
-  }
-
-  changeRuntimeDraft(runtime: string): void {
-    this.settingsService.changeRuntimeDraft(this.state, runtime);
-  }
-
-  applyRuntimeSettings(): void {
-    const model = this.state.selectedModel() || this.state.defaultModel();
-    const runtime = this.state.runtimeDraft;
-    const runtimeInfo = model ? this.settingsService.modelRuntimes(model)
-      .find(candidate => candidate.name === runtime) : undefined;
-    if (!this.state.runtimeSettingsOpen || !model || !runtimeInfo || this.state.modelChangePending) {
-      return;
-    }
-    const previousRuntime = this.state.selectedRuntime;
-    const previousRuntimeOptions = {...this.state.selectedRuntimeOptions};
-    const runtimeOptions = this.state.runtimeOptionsFor(runtime, this.state.runtimeDraftOptions);
-    if (!this.state.conversationId) {
-      this.state.selectRuntime(runtime, runtimeOptions);
-      this.finishRuntimeSettings(runtimeInfo.displayName);
-      return;
-    }
-    this.state.modelChangePending = true;
-    this.api.updateConversationModel(this.state.conversationId, model.name,
-      this.state.selectedReasoningEffort, runtime, runtimeOptions).pipe(
-      take(1), takeUntil(this.destroyed$)
-    ).subscribe({
-      next: response => {
-        this.state.selectedModelName = response.modelName;
-        this.state.selectedReasoningEffort = response.reasoningEffort;
-        this.state.selectRuntime(response.runtime || runtime, response.runtimeOptions || runtimeOptions);
-        this.state.setContextUsage(contextUsageValue(response.contextUsage, response.modelName));
-        this.state.modelChangePending = false;
-        this.finishRuntimeSettings(this.settingsService.modelRuntimes(model)
-          .find(candidate => candidate.name === (response.runtime || runtime))?.displayName
-          || response.runtime || runtime);
-      },
-      error: () => {
-        this.state.selectRuntime(previousRuntime, previousRuntimeOptions);
-        this.state.modelChangePending = false;
-        this.snackBar.open('Could not change the assistant runtime.', 'Dismiss', {duration: 3500});
-      }
-    });
-  }
-
-  closeRuntimeSettings(): void {
-    if (this.settingsService.closeRuntime(this.state)) {
       this.focusPrompt();
     }
   }
@@ -484,9 +425,6 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     this.sessionPersistence.clearLastConversation();
     this.sessionPersistence.restoreSelection(this.state);
     this.resizePromptInput();
-    this.routeRegistrySent = false;
-    this.lastPageContextPath = undefined;
-    this.pendingContextUpdate = undefined;
     this.activeRequestId = undefined;
     this.assistantMessageIndexesByRequestId.clear();
     this.clearToolCallTracking();

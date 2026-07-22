@@ -86,7 +86,7 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
     localStorage.setItem(lastConversationStorageKey(), 'conversation-last');
     api.getConversation.mockReturnValueOnce(of({
       conversationId: 'conversation-last', title: 'Last conversation',
-      modelName: 'claude-fable-5', reasoningEffort: 'high', runtime: 'default',
+      modelName: 'claude-fable-5', reasoningEffort: 'high',
       messages: [{index: 0, role: 'assistant', content: 'Previous response'}]
     }));
 
@@ -291,35 +291,29 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
     expect(component.contextBudgetHoverOpen).toBe(false);
   });
 
-  it('publishes the selected runtime options with text and attachment chats', () => {
+  it('publishes model settings without a runtime selector', () => {
     (component as any).loadAvailableModels();
-    component.state.selectRuntime('claude', {
-      permissionMode: 'auto', maxTurns: 40, verbose: true
-    });
     component.state.prompt = 'Run with these settings';
 
     component.send();
     transport.publishWhenConnected.mock.calls[0][0].publish();
 
-    expect(transport.publish).toHaveBeenCalledWith('/app/ai/chat', expect.objectContaining({
-      runtime: 'claude',
-      runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true}
-    }));
+    const socketPayload = transport.publish.mock.calls[0][1];
+    expect(socketPayload).toEqual(expect.objectContaining({modelName: 'claude-fable-5'}));
+    expect(socketPayload).not.toHaveProperty('runtime');
+    expect(socketPayload).not.toHaveProperty('runtimeOptions');
 
     component.state.resetForNewChat();
-    component.state.selectRuntime('claude', {
-      permissionMode: 'auto', maxTurns: 40, verbose: true
-    });
     component.state.prompt = 'Inspect this file';
     component.state.attachments = [{
       name: 'sample.txt', mediaType: 'text/plain', size: 4, data: 'test'
     }];
     component.send();
 
-    expect(api.sendChat).toHaveBeenCalledWith(expect.objectContaining({
-      runtime: 'claude',
-      runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true}
-    }));
+    const restPayload = api.sendChat.mock.calls[0][0];
+    expect(restPayload).toEqual(expect.objectContaining({modelName: 'claude-fable-5'}));
+    expect(restPayload).not.toHaveProperty('runtime');
+    expect(restPayload).not.toHaveProperty('runtimeOptions');
   });
 
   it('blocks send while a file is loading and discards a late read after a new chat', async () => {
@@ -366,7 +360,7 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
     localStorage.setItem(storageKey, 'conversation-last');
     api.getConversation.mockReturnValueOnce(of({
       conversationId: 'conversation-last', title: 'Last conversation',
-      modelName: 'claude-fable-5', reasoningEffort: 'high', runtime: 'default',
+      modelName: 'claude-fable-5', reasoningEffort: 'high',
       messages: [
         {index: 0, role: 'user', content: 'Remember this request'},
         {index: 1, role: 'assistant', content: 'Remembered response'}
@@ -433,13 +427,10 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
       version: 1,
       modelName: 'gpt-5_6-sol',
       reasoningEffort: 'high',
-      runtime: 'openai',
-      runtimeOptions: {},
       permissionMode: 'full_access'
     }));
     component.state.selectedModelName = 'gpt-5_6-sol';
     component.state.selectedReasoningEffort = 'high';
-    component.state.selectRuntime('openai');
     component.state.permissionMode = 'full_access';
 
     const restoreToken = '00000000-0000-4000-8000-000000000002';
@@ -451,8 +442,6 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
       restoreSequence: 1,
       modelName: 'claude-fable-5',
       reasoningEffort: 'medium',
-      runtime: 'claude',
-      runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true},
       permissionMode: 'auto',
       activeWorkflow: 'parallel'
     };
@@ -464,10 +453,6 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
 
     expect(component.state.selectedModelName).toBe('claude-fable-5');
     expect(component.state.selectedReasoningEffort).toBe('medium');
-    expect(component.state.selectedRuntime).toBe('claude');
-    expect(component.state.selectedRuntimeOptions).toEqual({
-      permissionMode: 'auto', maxTurns: 40, verbose: true
-    });
     expect(component.state.permissionMode).toBe('auto');
     expect(component.state.activeWorkflow).toBe('parallel');
 
@@ -479,7 +464,6 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
 
     expect(component.state.selectedModelName).toBe('gpt-5_6-sol');
     expect(component.state.selectedReasoningEffort).toBe('high');
-    expect(component.state.selectedRuntime).toBe('openai');
     expect(component.state.permissionMode).toBe('full_access');
     expect(component.state.activeWorkflow).toBe('');
   });

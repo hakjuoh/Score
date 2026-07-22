@@ -131,18 +131,6 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
     public final TableField<AiChatStepRecord, String> REASONING_EFFORT = createField(DSL.name("reasoning_effort"), SQLDataType.VARCHAR(32).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "The reasoning-effort setting used for the model inference.");
 
     /**
-     * The column <code>oagi.ai_chat_step.agent_runtime</code>. The agent
-     * runtime selected for the conversation at this step.
-     */
-    public final TableField<AiChatStepRecord, String> AGENT_RUNTIME = createField(DSL.name("agent_runtime"), SQLDataType.VARCHAR(32).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "The agent runtime selected for the conversation at this step.");
-
-    /**
-     * The column <code>oagi.ai_chat_step.runtime_options_json</code>. JSON
-     * object containing runtime-specific options used for the step.
-     */
-    public final TableField<AiChatStepRecord, String> RUNTIME_OPTIONS_JSON = createField(DSL.name("runtime_options_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "JSON object containing runtime-specific options used for the step.");
-
-    /**
      * The column <code>oagi.ai_chat_step.tool_calls_json</code>. JSON array
      * containing tool calls requested by the model.
      */
@@ -295,7 +283,6 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
             Internal.createCheck(this, DSL.name("extra_json"), "json_valid(`extra_json`)", true),
             Internal.createCheck(this, DSL.name("metrics_json"), "json_valid(`metrics_json`)", true),
             Internal.createCheck(this, DSL.name("observation_json"), "json_valid(`observation_json`)", true),
-            Internal.createCheck(this, DSL.name("runtime_options_json"), "json_valid(`runtime_options_json`)", true),
             Internal.createCheck(this, DSL.name("tool_calls_json"), "json_valid(`tool_calls_json`)", true)
         );
     }
