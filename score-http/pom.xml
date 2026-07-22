@@ -87,6 +87,7 @@
         <fastods.version>0.8.1</fastods.version>
         <poi.version>5.5.1</poi.version>
         <plantuml.version>1.2026.8</plantuml.version>
+        <archunit.version>1.4.1</archunit.version>
         <springdoc.version>3.0.3</springdoc.version>
         <snakeyaml.version>2.6</snakeyaml.version>
         <json-schema-validator.version>2.0.7</json-schema-validator.version>
@@ -348,6 +349,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>${archunit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>

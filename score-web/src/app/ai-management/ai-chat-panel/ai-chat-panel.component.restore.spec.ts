@@ -14,6 +14,8 @@ import {
   setCurrentUsername,
   setupAiChatPanelSpec,
   snackBar,
+  Subscription,
+  Subject,
   teardownAiChatPanelSpec,
   throwError,
   transport,
@@ -353,6 +355,62 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
     expect(component.state.attachments).toEqual([{
       name: 'payload.txt', mediaType: 'text/plain', size: 7, data: 'cGF5bG9hZA=='
     }]);
+  });
+
+  it('reconstructs a pending approval and its live decision channel when recovering a request', () => {
+    const live = new Subject<{body: string}>();
+    const status = {
+      requestId: 'request-running', conversationId: 'conversation-1', generation: 7,
+      status: 'RUNNING' as const, deadline: '2099-07-17T23:00:00Z'
+    };
+    api.getActiveRequest.mockReturnValue(of(status));
+    api.getRequestStatus.mockReturnValue(of(status));
+    api.getConversation.mockReturnValue(of({
+      conversationId: 'conversation-1', title: 'Running request', messages: [{
+        index: 1, role: 'guide', content: 'Approval requested for one data-changing action.',
+        requestId: 'request-running', subtype: 'mutation_approval_batch_requested',
+        metadata: {
+          batchId: 'batch-recovered', parallel: false,
+          expiresAt: '2099-07-15T00:00:00Z', items: [{
+            confirmationRequestId: 'confirmation-recovered', toolName: 'update_bbie',
+            argumentsSummary: '{"id":1}', agentId: 'agent-a', agentLabel: 'Agent A'
+          }]
+        }
+      }]
+    }));
+    transport.watch.mockReturnValueOnce(live);
+
+    component.open();
+
+    expect(transport.watch).toHaveBeenCalledWith('/user/queue/ai/chat/request-running');
+    expect(component.state.mutationApprovalBatch).toMatchObject({
+      batchId: 'batch-recovered', requestId: 'request-running'
+    });
+    expect(component.state.currentStatus).toBe('Approval required');
+    const subscription = (component as any).requestSubscription as Subscription;
+    expect(subscription.closed).toBe(false);
+    component.decideMutationApprovalBatch('APPROVE');
+    expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/mutation-approval', {
+      requestId: 'request-running', conversationId: 'conversation-1',
+      batchId: 'batch-recovered', decisions: [{
+        confirmationRequestId: 'confirmation-recovered', decision: 'APPROVE'
+      }]
+    });
+
+    live.next({body: JSON.stringify({
+      requestId: 'request-running', conversationId: 'conversation-1', type: 'system',
+      subtype: 'mutation_approval_decision_rejected', content: 'Please decide again.',
+      metadata: {batchId: 'batch-recovered'}
+    })});
+    expect(component.state.mutationApprovalBatchBusy).toBe(false);
+    component.decideMutationApprovalBatch('DENY');
+    expect(transport.publish).toHaveBeenCalledTimes(2);
+
+    (component as any).finishRecoveredRequest({...status, status: 'COMPLETED'});
+    expect(subscription.closed).toBe(true);
+    expect((component as any).requestSubscription).toBeUndefined();
+    expect(component.state.mutationApprovalBatch).toBeUndefined();
+    expect(component.state.pending).toBe(false);
   });
 
   it('restores the last completed conversation after the assistant is reopened following refresh', () => {

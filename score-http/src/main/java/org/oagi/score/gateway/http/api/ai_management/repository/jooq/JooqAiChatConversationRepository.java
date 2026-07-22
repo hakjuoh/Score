@@ -406,6 +406,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         Map<String, Object> extra = storedExtra != null ? storedExtra : Map.of();
         String role = switch (kind) {
             case "assistant", "user", "error", "progress", "tool_call", "guide" -> kind;
+            case "mutation_approval_batch_requested", "mutation_approval_decision" -> "guide";
             case "tool_call_update" -> "tool_call";
             case "agent_lifecycle" -> "agent_event";
             default -> "debug";
@@ -421,10 +422,15 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         Map<String, Object> metadata = new LinkedHashMap<>(extra);
         putIfPresent(metadata, "toolName", toolName);
         putIfPresent(metadata, "toolCallSeq", toolCallSequence);
+        String subtype = switch (kind) {
+            case "mutation_approval_batch_requested", "mutation_approval_decision" -> kind;
+            case "agent_lifecycle" -> string(extra, "lifecycle_subtype");
+            default -> toolStatus;
+        };
         return new ChatHistoryMessage(record.get(AI_CHAT_STEP.STEP_SEQUENCE).intValue(), role,
                 Objects.requireNonNullElse(content, ""), requestId, requestId,
                 toolCallId != null ? requestId : null, toolCallId, toolCallSequence,
-                "agent_event".equals(role) ? string(extra, "lifecycle_subtype") : toolStatus,
+                subtype,
                 AiChatTrajectoryStep.normalizeVisibility(
                         record.get(AI_CHAT_STEP.VISIBILITY)), metadata);
     }

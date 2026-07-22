@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.workflow;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,7 +40,10 @@ public final class ChainWorkflow implements Workflow {
             current = context.withUpstream(List.of(result));
         }
         WorkflowResult last = results.getLast();
+        Map<String, Object> metadata = new LinkedHashMap<>(last.metadata());
+        metadata.put("workflow", "chain");
+        metadata.put("step_count", steps.size());
         return WorkflowResult.success(id, last.output(),
-                Map.of("workflow", "chain", "step_count", steps.size()), results);
+                metadata, results);
     }
 }

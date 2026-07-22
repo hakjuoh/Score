@@ -285,7 +285,8 @@ export class AiConversationRestoreService {
     const toolCallId = this.nonBlankText(event.toolCallId);
     const toolName = this.nonBlankText(event.metadata?.['toolName']);
     const toolStatus = event.subtype === 'completed' || event.subtype === 'failed'
-      || event.subtype === 'blocked' || event.subtype === 'cancelled'
+      || event.subtype === 'blocked' || event.subtype === 'denied'
+      || event.subtype === 'cancelled'
       ? event.subtype : undefined;
     if (!groupId || !toolCallId || !toolName || !toolStatus) {
       // Old projected tool rows had no durable execution evidence. Skipping
@@ -314,13 +315,16 @@ export class AiConversationRestoreService {
   }
 
   private restoredToolContent(
-    toolStatus: 'completed' | 'failed' | 'blocked' | 'cancelled', toolName: string
+    toolStatus: 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled', toolName: string
   ): string {
     if (toolStatus === 'blocked') {
       return `${toolName} is awaiting approval.`;
     }
     if (toolStatus === 'cancelled') {
       return `${toolName} was stopped before execution.`;
+    }
+    if (toolStatus === 'denied') {
+      return `${toolName} was denied before execution.`;
     }
     return toolStatus === 'completed' ? `${toolName} completed.` : `${toolName} failed.`;
   }

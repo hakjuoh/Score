@@ -38,7 +38,7 @@ export function toolCallEventSemantics(event: AiChatSocketEvent): AiToolCallEven
   if (!groupId || !toolCallId
     || (subtype !== 'started' && subtype !== 'progress'
       && subtype !== 'completed' && subtype !== 'failed'
-      && subtype !== 'blocked' && subtype !== 'cancelled')) {
+      && subtype !== 'blocked' && subtype !== 'denied' && subtype !== 'cancelled')) {
     return undefined;
   }
   if (subtype === 'failed') {
@@ -75,7 +75,7 @@ export function toolCallEventSemantics(event: AiChatSocketEvent): AiToolCallEven
   };
 }
 
-function terminalToolCallContent(subtype: 'completed' | 'failed' | 'blocked' | 'cancelled',
+function terminalToolCallContent(subtype: 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled',
                                  toolName: string | undefined,
                                  event: AiChatSocketEvent): string {
   if (subtype === 'completed') {
@@ -90,6 +90,9 @@ function terminalToolCallContent(subtype: 'completed' | 'failed' | 'blocked' | '
   }
   if (subtype === 'blocked') {
     return toolName ? `${toolName} is awaiting approval.` : 'Awaiting approval';
+  }
+  if (subtype === 'denied') {
+    return toolName ? `${toolName} was denied before execution.` : 'Denied before execution';
   }
   return toolName ? `${toolName} was stopped before execution.` : 'Stopped before execution';
 }

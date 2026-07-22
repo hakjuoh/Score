@@ -365,6 +365,39 @@ describe('AiChatPanelComponent mutation lifecycle', () => {
     expect(component.mutationInteraction).toBeUndefined();
   });
 
+  it('clears every later approval batch when a confirmed request outcome becomes unknown', () => {
+    vi.useFakeTimers();
+    component.state.prompt = 'Run an approved request';
+    component.send();
+    component.state.mutationApprovalBatch = {
+      batchId: 'batch-later', requestId: 'request-1', conversationId: 'conversation-1',
+      parallel: true, expiresAt: '2099-07-15T00:00:00Z', items: [{
+        confirmationRequestId: 'confirmation-later', toolName: 'update_bbie',
+        argumentsSummary: '{"id":1}'
+      }]
+    };
+    component.state.mutationApprovalBatchQueue = [{
+      batchId: 'batch-queued', requestId: 'request-1', conversationId: 'conversation-1',
+      parallel: false, expiresAt: '2099-07-15T00:00:00Z', items: [{
+        confirmationRequestId: 'confirmation-queued', toolName: 'update_bbie',
+        argumentsSummary: '{"id":2}'
+      }]
+    }];
+    component.state.mutationApprovalBatchBusy = true;
+    (component as any).scheduleMutationApprovalExpiry();
+    expect((component as any).mutationApprovalExpiryTimeout).toBeDefined();
+
+    (component as any).completeUnknownConfirmedRequest('request-1');
+
+    expect(component.state.mutationApprovalBatch).toBeUndefined();
+    expect(component.state.mutationApprovalBatchQueue).toEqual([]);
+    expect(component.state.mutationApprovalBatchBusy).toBe(false);
+    expect((component as any).mutationApprovalExpiryTimeout).toBeUndefined();
+    expect(component.state.pending).toBe(false);
+    expect(component.state.reconciliationRequired).toBe(true);
+    expect(component.state.currentStatus).toBe('Review needed');
+  });
+
   it.each([
     ['conflict', {
       confirmationRequestId: 'confirmation-1', conversationId: 'conversation-1',

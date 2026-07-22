@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMutationConfirmationDecisionResponse;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.MutationConfirmation;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationAuthorization;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationState;
@@ -117,6 +118,40 @@ public class AiMutationConfirmationService {
         return decide(requester, conversationId, confirmationRequestId, requestedDecision, null);
     }
 
+    /** Returns the owner-scoped request that issued a legacy confirmation. */
+    @Transactional(readOnly = true)
+    public String sourceRequestId(
+            ScoreUser requester, String conversationId, String confirmationRequestId) {
+        return queryRepository(requester).findOwned(conversationId, confirmationRequestId)
+                .orElseThrow(() -> new AccessDeniedException(
+                        "Mutation confirmation does not exist or is not owned by the signed-in user."))
+                .requestId();
+    }
+
+    /** Applies a complete UI approval batch atomically. */
+    @Transactional
+    public List<AiMutationDecision> decideBatch(
+            ScoreUser requester, List<BatchDecision> decisions) {
+        if (decisions == null || decisions.isEmpty()) {
+            throw new IllegalArgumentException("A mutation approval batch cannot be empty.");
+        }
+        List<AiMutationDecision> results = new ArrayList<>(decisions.size());
+        for (BatchDecision item : decisions) {
+            if (item == null || !StringUtils.hasText(item.conversationId())
+                    || !StringUtils.hasText(item.confirmationRequestId())) {
+                throw new IllegalArgumentException("A mutation approval batch item is incomplete.");
+            }
+            AiMutationDecision result = decide(requester, item.conversationId(),
+                    item.confirmationRequestId(), item.decision());
+            if (result.status() != HttpStatus.OK) {
+                throw new IllegalStateException(
+                        "A mutation approval batch item could not be decided.");
+            }
+            results.add(result);
+        }
+        return List.copyOf(results);
+    }
+
     /**
      * Applies an approval or denial decision and optionally binds approval to a revised prompt.
      */
@@ -161,9 +196,11 @@ public class AiMutationConfirmationService {
                 revisedDigest = revisionDigest(row.toolName(), normalizedRevision);
             }
             String grant = grant();
+            Instant grantExpiresAt = now.plus(CONFIRMATION_TTL);
             commandRepository.approve(row.id(), sha256(grant), now,
+                    grantExpiresAt,
                     revisedDigest != null ? revisedDigest : row.argumentsDigest());
-            row = row.withApproved(now,
+            row = row.withApproved(now, grantExpiresAt,
                     revisedDigest != null ? revisedDigest : row.argumentsDigest());
             return new AiMutationDecision(response(row, "APPROVED", grant), HttpStatus.OK);
         }
@@ -270,7 +307,7 @@ public class AiMutationConfirmationService {
                 response.deniedAt(), response.expiredAt(), response.consumedAt(), response.confirmationGrant());
     }
 
-    String argumentsDigest(String toolName, String input) {
+    public String argumentsDigest(String toolName, String input) {
         Object parsed;
         try {
             parsed = StringUtils.hasText(input) ? objectMapper.readValue(input, Object.class) : Map.of();
@@ -356,6 +393,12 @@ public class AiMutationConfirmationService {
     private boolean constantTimeEquals(String left, String right) {
         return left != null && right != null && MessageDigest.isEqual(
                 left.getBytes(StandardCharsets.US_ASCII), right.getBytes(StandardCharsets.US_ASCII));
+    }
+
+    public record BatchDecision(
+            String conversationId,
+            String confirmationRequestId,
+            String decision) {
     }
 
 }

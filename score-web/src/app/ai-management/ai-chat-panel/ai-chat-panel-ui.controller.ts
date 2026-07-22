@@ -68,6 +68,7 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     this.mutationInteractions.destroy(this.state);
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
+    this.clearMutationApprovalBatch();
     this.invalidateAttachmentReads();
     this.requestSubscription?.unsubscribe();
     this.conversationHistorySubscription?.unsubscribe();
