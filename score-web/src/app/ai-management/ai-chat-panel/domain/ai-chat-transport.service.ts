@@ -25,7 +25,6 @@ export class AiChatTransportService {
 
   private stompService = inject(RxStompService);
   private publishSubscription?: Subscription;
-  private reconnectAttemptTimeout?: number;
   private reconnectGeneration = 0;
 
   watch(destination: string): Observable<Message> {
@@ -53,13 +52,13 @@ export class AiChatTransportService {
     this.clearReconnectAttempt();
   }
 
+  reconnectOnce(): Observable<void> {
+    return this.connectOnce(true);
+  }
+
   private clearReconnectAttempt(): void {
     this.publishSubscription?.unsubscribe();
     this.publishSubscription = undefined;
-    if (this.reconnectAttemptTimeout) {
-      window.clearTimeout(this.reconnectAttemptTimeout);
-      this.reconnectAttemptTimeout = undefined;
-    }
   }
 
   private tryReconnect(options: AiChatPublishWhenConnectedOptions, attempt: number,
@@ -70,39 +69,10 @@ export class AiChatTransportService {
     this.clearReconnectAttempt();
     options.onReconnectStatus(attempt, MAX_STOMP_RECONNECT_ATTEMPTS);
 
-    let opened = false;
-    this.publishSubscription = this.stompService.connected$.pipe(
-      filter(state => state === RxStompState.OPEN),
-      take(1)
-    ).subscribe(() => {
-      opened = true;
-      this.clearReconnectAttemptTimeout();
-      this.publishAfterReconnect(options, generation);
+    this.publishSubscription = this.connectOnce(false).subscribe({
+      next: () => this.publishAfterReconnect(options, generation),
+      error: () => this.scheduleReconnectRetry(options, attempt, generation)
     });
-
-    const activate = () => {
-      if (generation !== this.reconnectGeneration || !options.active()) {
-        return;
-      }
-      try {
-        this.stompService.activate();
-      } catch (e) {
-        this.scheduleReconnectRetry(options, attempt, generation);
-      }
-    };
-
-    if (this.stompService.connected()) {
-      activate();
-    } else {
-      this.stompService.deactivate({force: true}).then(activate).catch(activate);
-    }
-
-    this.reconnectAttemptTimeout = window.setTimeout(() => {
-      if (generation !== this.reconnectGeneration || !options.active() || opened) {
-        return;
-      }
-      this.scheduleReconnectRetry(options, attempt, generation);
-    }, STOMP_RECONNECT_ATTEMPT_TIMEOUT_MS);
   }
 
   private scheduleReconnectRetry(options: AiChatPublishWhenConnectedOptions, attempt: number,
@@ -133,10 +103,41 @@ export class AiChatTransportService {
     }
   }
 
-  private clearReconnectAttemptTimeout(): void {
-    if (this.reconnectAttemptTimeout) {
-      window.clearTimeout(this.reconnectAttemptTimeout);
-      this.reconnectAttemptTimeout = undefined;
-    }
+  private connectOnce(forceRestart: boolean): Observable<void> {
+    return new Observable<void>(subscriber => {
+      let connectionSubscription: Subscription | undefined;
+      const timeout = window.setTimeout(() => {
+        subscriber.error(new Error('WebSocket reconnect attempt timed out.'));
+      }, STOMP_RECONNECT_ATTEMPT_TIMEOUT_MS);
+      const complete = () => {
+        subscriber.next();
+        subscriber.complete();
+      };
+      const activate = () => {
+        if (subscriber.closed) {
+          return;
+        }
+        connectionSubscription = this.stompService.connected$.pipe(
+          filter(state => state === RxStompState.OPEN),
+          take(1)
+        ).subscribe({next: complete, error: error => subscriber.error(error)});
+        try {
+          this.stompService.activate();
+        } catch (error) {
+          subscriber.error(error);
+        }
+      };
+
+      if (this.stompService.connected() && !forceRestart) {
+        complete();
+      } else {
+        this.stompService.deactivate({force: true}).then(activate).catch(activate);
+      }
+
+      return () => {
+        window.clearTimeout(timeout);
+        connectionSubscription?.unsubscribe();
+      };
+    });
   }
 }

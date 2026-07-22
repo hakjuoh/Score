@@ -1,16 +1,21 @@
 import {HttpErrorResponse} from '@angular/common/http';
-import {forkJoin} from 'rxjs';
+import {forkJoin, map, of, tap} from 'rxjs';
 import {take} from 'rxjs/operators';
 import {AiChatPanelCommandController} from './ai-chat-panel-command.controller';
 import {pendingMutationApprovalBatches} from './domain/ai-mutation-approval-batch';
 import {
+  AiActiveRequestIdentity,
   AiChatConversationDetails,
   AiChatMessage,
   AiExecutionStatus,
   AiPublicExecutionRequestStatus
 } from './domain/ai-chat-panel.model';
 
+const RECOVERED_REQUEST_STATUS_EVENT = 'request_recovery';
+
 export abstract class AiChatPanelConversationController extends AiChatPanelCommandController {
+  private recoveredRequestSnapshotId?: string;
+
   loadConversationHistory(): void {
     this.conversationHistorySubscription?.unsubscribe();
     this.state.conversationHistoryLoading = true;
@@ -33,12 +38,13 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
       return;
     }
     this.activeRecoverySubscription?.unsubscribe();
-    this.activeRecoverySubscription = this.api.getActiveRequest().pipe(take(1)).subscribe({
+    const discoverySubscription = this.api.getActiveRequest().pipe(take(1)).subscribe({
       next: status => {
         if (this.destroyed || this.activeRequestId) {
           return;
         }
         if (!status) {
+          this.state.reconciliationRequired = false;
           onIdle?.();
           return;
         }
@@ -49,8 +55,12 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
           deadline: status.deadline
         };
         this.state.conversationId = status.conversationId;
+        // Mark recovery before the asynchronous snapshot starts. A live event
+        // can then cancel a delayed snapshot before it overwrites newer activity.
+        this.recoveredRequestSnapshotId = status.requestId;
         this.sessionPersistence.rememberLastConversation(status.conversationId);
         this.state.pending = true;
+        this.state.reconciliationRequired = false;
         this.activeRequestPublished = true;
         this.state.currentStatus = 'Reconnected to running request';
         this.requestSubscription?.unsubscribe();
@@ -63,6 +73,12 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
       },
       error: () => onIdle?.()
     });
+    // Synchronous sources used by tests can enter pollRecoveredRequest before
+    // subscribe() returns. Do not overwrite the newer snapshot subscription
+    // with an already-closed discovery subscription in that case.
+    if (!discoverySubscription.closed) {
+      this.activeRecoverySubscription = discoverySubscription;
+    }
   }
 
   protected restoreLastConversation(): void {
@@ -131,6 +147,11 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
     if (!active?.conversationId || active.generation === undefined || this.destroyed) {
       return;
     }
+    const recoveryIdentity = {
+      ...active,
+      conversationId: active.conversationId,
+      generation: active.generation
+    };
     this.activeRecoverySubscription?.unsubscribe();
     this.activeRecoverySubscription = forkJoin({
       details: this.api.getConversation(active.conversationId),
@@ -149,8 +170,9 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
       },
       error: () => {
         if (this.activeRequestId === active.requestId) {
-          this.state.currentStatus = 'Reconnecting to running request';
-          this.scheduleRecoveredRequestPoll(1500);
+          this.recoverActiveRequestConnection(
+            recoveryIdentity, () => this.scheduleRecoveredRequestPoll(1000), true
+          );
         }
       }
     });
@@ -172,7 +194,13 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
       },
       error: () => {
         if (this.activeRequestId === status.requestId) {
-          this.scheduleRecoveredRequestPoll(1500);
+          const active = this.state.activeRequest;
+          if (active?.conversationId && active.generation !== undefined) {
+            this.recoverActiveRequestConnection(
+              {...active, conversationId: active.conversationId, generation: active.generation},
+              () => this.scheduleRequestStatusWatchdog()
+            );
+          }
         }
       }
     });
@@ -182,15 +210,19 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
                                      status: AiPublicExecutionRequestStatus): void {
     const messages = this.conversationRestoreService.projectStoredMessages(
       [...(details.messages || [])].sort((left, right) => left.index - right.index));
-    if (!this.isTerminalExecutionStatus(status.status)) {
-      messages.push({
-        role: 'progress',
-        content: 'The request is still running. Progress is restored automatically.',
-        inProgress: true,
-        turnId: status.requestId
-      });
-    }
+    this.clearStatusMessage();
     this.state.messages = messages;
+    if (!this.isTerminalExecutionStatus(status.status)) {
+      this.recoveredRequestSnapshotId = status.requestId;
+      // Register this as the request's status row so the first admitted live
+      // event can remove it instead of leaving a completed recovery notice in history.
+      this.showStatus(
+        'The request is still running. Progress is restored automatically.',
+        true, undefined, RECOVERED_REQUEST_STATUS_EVENT
+      );
+    } else if (this.recoveredRequestSnapshotId === status.requestId) {
+      this.recoveredRequestSnapshotId = undefined;
+    }
     const recoveredApprovals = this.isTerminalExecutionStatus(status.status)
       ? [] : pendingMutationApprovalBatches(
         details.messages || [], status.requestId, details.conversationId
@@ -227,6 +259,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
   }
 
   protected finishRecoveredRequest(status: AiPublicExecutionRequestStatus): void {
+    this.recoveredRequestSnapshotId = undefined;
     this.clearActiveRecovery();
     this.requestSubscription?.unsubscribe();
     this.requestSubscription = undefined;
@@ -238,9 +271,26 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
     this.state.pending = false;
     this.activeRequestPublished = false;
     this.state.activeRequest = undefined;
-    this.state.currentStatus = status.status === 'COMPLETED' ? 'Ready' : status.status;
+    this.state.reconciliationRequired = status.status === 'UNKNOWN_RECONCILIATION_REQUIRED';
+    this.appendBackendRestartMessage(status);
+    this.state.currentStatus = status.status === 'COMPLETED'
+      ? 'Ready' : this.state.reconciliationRequired ? 'Review needed' : status.status;
     this.loadConversationHistory();
     this.focusPrompt();
+    this.scrollToBottom();
+  }
+
+  private appendBackendRestartMessage(status: AiPublicExecutionRequestStatus): void {
+    if (status.statusReason !== 'WORKER_INSTANCE_SHUTDOWN') {
+      return;
+    }
+    const content = status.status === 'UNKNOWN_RECONCILIATION_REQUIRED'
+      ? 'The backend restarted while a data-changing action may have been running. '
+        + 'Review the result before retrying.'
+      : 'The assistant request stopped because the backend restarted.';
+    if (!this.state.messages.some(message => message.role === 'error' && message.content === content)) {
+      this.state.messages.push({role: 'error', content});
+    }
   }
 
   protected scheduleRecoveredRequestPoll(delay: number): void {
@@ -260,6 +310,127 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
     }
     this.activeRecoverySubscription?.unsubscribe();
     this.activeRecoverySubscription = undefined;
+    this.activeRequestRecovery.cancel();
+  }
+
+  protected acknowledgeRecoveredRequestLiveEvent(requestId: string): void {
+    if (this.recoveredRequestSnapshotId !== requestId) {
+      return;
+    }
+    this.recoveredRequestSnapshotId = undefined;
+    this.clearActiveRecovery();
+    this.clearStatusMessage(RECOVERED_REQUEST_STATUS_EVENT);
+  }
+
+  protected recoverActiveRequestConnection(
+    active: AiActiveRequestIdentity & {conversationId: string; generation: number},
+    resume: () => void,
+    restoreConversationSnapshot = false
+  ): void {
+    let terminalStatus: AiPublicExecutionRequestStatus | undefined;
+    this.activeRequestRecovery.recover(active, {
+      onAttempt: (attempt, maxAttempts) => {
+        if (!this.matchesRecoveryIdentity(active)) {
+          this.activeRequestRecovery.cancel();
+          return;
+        }
+        this.showStatus(`Reconnecting... (${attempt}/${maxAttempts})`, true);
+        this.state.currentStatus = 'Reconnecting';
+        this.scrollToBottom();
+      },
+      verify: status => {
+        if (!this.matchesRecoveryIdentity(active)
+          || status.requestId !== active.requestId
+          || status.conversationId !== active.conversationId
+          || status.generation !== active.generation) {
+          throw new Error('Recovered request identity changed.');
+        }
+        terminalStatus = this.isTerminalExecutionStatus(status.status) ? status : undefined;
+        if (!terminalStatus && !restoreConversationSnapshot) {
+          return of(undefined);
+        }
+        return this.api.getConversation(status.conversationId).pipe(
+          take(1),
+          // Conversation verification is part of the same bounded attempt.
+          // A successful status request alone must not reset the retry budget.
+          tap(details => this.applyRecoveredConversation(details, status)),
+          map(() => undefined)
+        );
+      },
+      onRecovered: status => {
+        if (!this.matchesRecoveryIdentity(active)
+          || status.requestId !== active.requestId
+          || status.conversationId !== active.conversationId
+          || status.generation !== active.generation) {
+          return;
+        }
+        this.activeRequestRecovery.cancel();
+        if (this.isTerminalExecutionStatus(status.status)) {
+          this.finishRecoveredRequest(status);
+          return;
+        }
+        this.showStatus('Reconnected. Waiting for the assistant response.', true);
+        this.state.currentStatus = 'Request in progress';
+        resume();
+      },
+      onFailure: maxAttempts => {
+        if (this.matchesRecoveryIdentity(active)) {
+          if (terminalStatus) {
+            this.completeTerminalConversationRecoveryFailure(terminalStatus);
+          } else {
+            this.completeActiveRequestRecoveryFailure(active.requestId, maxAttempts);
+          }
+        }
+      }
+    });
+  }
+
+  private completeTerminalConversationRecoveryFailure(
+    status: AiPublicExecutionRequestStatus
+  ): void {
+    if (status.statusReason !== 'WORKER_INSTANCE_SHUTDOWN') {
+      this.state.messages.push({
+        role: 'error',
+        content: `The request ended with status ${status.status}, but its saved conversation `
+          + 'could not be restored after 3 attempts.'
+      });
+    }
+    this.finishRecoveredRequest(status);
+  }
+
+  private matchesRecoveryIdentity(active: AiActiveRequestIdentity): boolean {
+    const current = this.state.activeRequest;
+    return !this.destroyed && this.state.pending
+      && current?.requestId === active.requestId
+      && current.conversationId === active.conversationId
+      && current.generation === active.generation;
+  }
+
+  private completeActiveRequestRecoveryFailure(requestId: string, maxAttempts: number): void {
+    this.recoveredRequestSnapshotId = undefined;
+    this.activeRequestRecovery.cancel();
+    this.completeProgressMessages();
+    this.settleAgentActivity('failed');
+    this.clearTimers();
+    this.clearStatusMessage();
+    this.state.elicitation = undefined;
+    this.state.elicitationBusy = false;
+    this.clearMutationApprovalBatch();
+    this.clearMutationRepeatDraft(requestId);
+    this.requestSubscription?.unsubscribe();
+    this.requestSubscription = undefined;
+    this.activeRequestPublished = false;
+    this.activeRequestId = undefined;
+    this.clearToolCallTracking();
+    this.state.messages.push({
+      role: 'error',
+      content: `Could not reconnect to the assistant after ${maxAttempts} attempts. `
+        + 'The request outcome is unknown. Reopen the assistant after the backend is available to reconcile it.'
+    });
+    this.state.pending = false;
+    this.state.reconciliationRequired = true;
+    this.state.currentStatus = 'Connection lost';
+    this.scrollToBottom();
   }
 
   protected isTerminalExecutionStatus(status: AiExecutionStatus): boolean {

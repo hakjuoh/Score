@@ -20,6 +20,8 @@ import {AiChatTransportService} from './ai-chat-transport.service';
 
 export {AiChatCancellationCallbacks} from './ai-chat-cancellation-state';
 
+export type AiCancellationSocketEventDisposition = 'unhandled' | 'ignored' | 'admitted';
+
 /** Coordinates one idempotent, HTTP-first cancellation handshake. */
 @Injectable({
   providedIn: 'root'
@@ -108,9 +110,18 @@ export class AiChatCancellationService extends AiChatCancellationState implement
 
   /** Returns true when the event belongs to the cancellation protocol. */
   handleSocketEvent(event: AiChatSocketEvent): boolean {
+    return this.handleSocketEventDisposition(event) !== 'unhandled';
+  }
+
+  /**
+   * Separates protocol consumption from a fully admitted lifecycle update.
+   * Another tab's command or malformed identity is consumed but must not end
+   * this panel's request-recovery polling.
+   */
+  handleSocketEventDisposition(event: AiChatSocketEvent): AiCancellationSocketEventDisposition {
     const attempt = this.current;
     if (!attempt || event.requestId !== attempt.identity.requestId || event.type !== 'system') {
-      return false;
+      return 'unhandled';
     }
     const subtype = event.subtype;
     if (subtype !== 'cancellation_acknowledged'
@@ -119,7 +130,7 @@ export class AiChatCancellationService extends AiChatCancellationState implement
       && subtype !== 'cancellation_current_status'
       && subtype !== 'reconciliation_required'
       && subtype !== 'cancelled') {
-      return false;
+      return 'unhandled';
     }
 
     const eventCancellationId = this.stringMetadata(event, 'cancellationRequestId');
@@ -129,7 +140,7 @@ export class AiChatCancellationService extends AiChatCancellationState implement
     if (!terminalControl
       && eventCancellationId && eventCancellationId !== attempt.cancellationRequestId) {
       // Consume another tab's command event without treating it as our ACK.
-      return true;
+      return 'ignored';
     }
     const generationValue = event.metadata?.['generation'];
     const generation = this.positiveIntegerMetadata(event, 'generation');
@@ -137,7 +148,7 @@ export class AiChatCancellationService extends AiChatCancellationState implement
       if (!attempt.acknowledged) {
         this.reject(attempt);
       }
-      return true;
+      return 'ignored';
     }
     if (!this.mergeIdentity(attempt, {
       requestId: event.requestId,
@@ -147,7 +158,7 @@ export class AiChatCancellationService extends AiChatCancellationState implement
       if (!attempt.acknowledged) {
         this.reject(attempt);
       }
-      return true;
+      return 'ignored';
     }
     const sequence = this.nonNegativeIntegerMetadata(event, 'lifecycleEventSequence') || 0;
     attempt.lifecycleEventSequence = Math.max(attempt.lifecycleEventSequence, sequence);
@@ -157,11 +168,11 @@ export class AiChatCancellationService extends AiChatCancellationState implement
 
     if (subtype === 'cancelled') {
       this.finish(attempt, 'CANCELLED');
-      return true;
+      return 'admitted';
     }
     if (subtype === 'reconciliation_required') {
       this.finish(attempt, 'UNKNOWN_RECONCILIATION_REQUIRED');
-      return true;
+      return 'admitted';
     }
     const status = this.executionStatus(this.stringMetadata(event, 'status'));
     if (subtype === 'cancellation_current_status') {
@@ -170,43 +181,43 @@ export class AiChatCancellationService extends AiChatCancellationState implement
       } else {
         this.delay(attempt, 'transport_unknown');
       }
-      return true;
+      return status ? 'admitted' : 'ignored';
     }
     if (sequence > 0 && sequence < attempt.lifecycleEventSequence) {
-      return true;
+      return 'admitted';
     }
     if (subtype === 'cancellation_delayed') {
       if (!attempt.acknowledged) {
         this.delay(attempt, 'transport_unknown');
       }
-      return true;
+      return 'admitted';
     }
     if (subtype === 'cancellation_rejected') {
       if (!attempt.acknowledged) {
         this.reject(attempt);
       }
-      return true;
+      return 'admitted';
     }
 
     if (!this.isPositiveSequence(event.sequence)) {
       if (!attempt.acknowledged) {
         this.delay(attempt, 'transport_unknown');
       }
-      return true;
+      return 'ignored';
     }
     const terminal = event.metadata?.['terminal'] === true;
     if ((terminal || (status && this.isTerminal(status))) && status) {
       this.finish(attempt, status);
-      return true;
+      return 'admitted';
     }
     if (sequence <= 0) {
       if (!attempt.acknowledged) {
         this.delay(attempt, 'transport_unknown');
       }
-      return true;
+      return 'ignored';
     }
     this.acknowledge(attempt);
-    return true;
+    return 'admitted';
   }
 
   reset(): void {

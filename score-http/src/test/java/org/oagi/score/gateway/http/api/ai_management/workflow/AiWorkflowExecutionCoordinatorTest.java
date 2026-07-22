@@ -46,6 +46,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -58,6 +59,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -422,7 +424,9 @@ class AiWorkflowExecutionCoordinatorTest {
                 "direct", true, null, "Updating", "Updated",
                 null, "Summarizing", "Summarized", List.of(task), rootNode));
         AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
         AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
         when(root.forkSubagent(eq(writer.id()), eq(task.instruction()), any())).thenReturn(child);
         when(child.conversationId()).thenReturn("child-composed");
         when(child.successfulDomainToolCallCount()).thenReturn(0L);
@@ -436,6 +440,378 @@ class AiWorkflowExecutionCoordinatorTest {
         assertThat(result.answer()).contains("denied", "not executed");
         verify(executor, times(1)).execute(any());
         verify(child).terminalLifecycle(eq("subagent_completed"), any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void exposesTheCompleteComposedWorkerPlanAndStableWorkerOwnershipBeforeExecution() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition researcher = new AiAgentDefinition(
+                "evidence-researcher", "Evidence researcher", "current-data research",
+                "Research the assigned records.");
+        AiAgentDefinition reviewer = new AiAgentDefinition(
+                "critical-reviewer", "Critical reviewer", "adversarial review",
+                "Review the supplied evidence.");
+        AiWorkflowPlan.Task research = new AiWorkflowPlan.Task(
+                "Find extenders", researcher.id(), "Find every extending ACC.",
+                "Listing every extending ACC.", "Searching", "Searched",
+                AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowPlan.Task review = new AiWorkflowPlan.Task(
+                "Review conflicts", reviewer.id(), "Review every conflict.",
+                "Reviewing every conflict.", "Reviewing", "Reviewed",
+                AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowNode researchNode = new AiWorkflowNode(
+                "find-extenders", "direct", false, research.guideMessage(),
+                research.activeVerb(), research.completedVerb(), null,
+                "Summarizing", "Summarized", research, null, List.of(), Map.of());
+        AiWorkflowNode reviewNode = new AiWorkflowNode(
+                "conflict-review", "direct", false, review.guideMessage(),
+                review.activeVerb(), review.completedVerb(), null,
+                "Summarizing", "Summarized", review, null, List.of(), Map.of());
+        AiWorkflowNode rootNode = new AiWorkflowNode(
+                "conflict-chain", "chain", false, null, "Checking", "Checked",
+                null, "Summarizing", "Summarized", null, null,
+                List.of(researchNode, reviewNode), Map.of());
+        AiWorkflowPlan plan = new AiWorkflowPlan(
+                "chain", false, "Checking every extender and reviewing conflicts.",
+                "Checking", "Checked", null, "Summarizing", "Summarized",
+                List.of(research, review), rootNode);
+        when(planner.plan(any())).thenReturn(plan);
+        when(catalog.requireWorker(researcher.id())).thenReturn(researcher);
+        when(catalog.requireWorker(reviewer.id())).thenReturn(reviewer);
+
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder researchRecorder = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder reviewRecorder = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
+        when(root.forkSubagent(eq(researcher.id()), eq(research.instruction()), any()))
+                .thenReturn(researchRecorder);
+        when(root.forkSubagent(eq(reviewer.id()), eq(review.instruction()), any()))
+                .thenReturn(reviewRecorder);
+        when(researchRecorder.conversationId()).thenReturn("research-child");
+        when(reviewRecorder.conversationId()).thenReturn("review-child");
+        when(executor.execute(any())).thenReturn(
+                new AiChatExecutor.Result("research evidence"),
+                new AiChatExecutor.Result("reviewed evidence"));
+
+        try (AiWorkflowExecutionCoordinator coordinator = coordinator(executor, planner, catalog)) {
+            assertThat(coordinator.execute(context(root,
+                    new AiMultiAgentOptions(true, 2, "balanced"), 0)).answer())
+                    .isEqualTo("reviewed evidence");
+        }
+
+        ArgumentCaptor<Map<String, Object>> leadNamespace =
+                (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>)
+                        ArgumentCaptor.forClass(Map.class);
+        verify(root).fork(leadNamespace.capture());
+        assertThat(leadNamespace.getValue())
+                .containsEntry("fanout_id", "request-1:composed")
+                .containsEntry("node_id", "request-1:composed:lead")
+                .containsEntry("execution_scope", "lead")
+                .containsEntry("max_agents", 2);
+
+        ArgumentCaptor<Map<String, Object>> workerNamespaces =
+                (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>)
+                        ArgumentCaptor.forClass(Map.class);
+        verify(root, times(2)).forkSubagent(any(), any(), workerNamespaces.capture());
+        assertThat(workerNamespaces.getAllValues()).allSatisfy(namespace -> assertThat(namespace)
+                .containsEntry("fanout_id", "request-1:composed")
+                .containsEntry("parent_node_id", "request-1:composed:lead")
+                .containsEntry("execution_scope", "worker")
+                .containsEntry("execution_kind", "multi_agent"));
+        assertThat(workerNamespaces.getAllValues())
+                .extracting(namespace -> namespace.get("node_id"))
+                .containsExactly("request-1:composed:worker:find-extenders",
+                        "request-1:composed:worker:conflict-review");
+
+        ArgumentCaptor<Map<String, Object>> leadStarted =
+                (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>)
+                        ArgumentCaptor.forClass(Map.class);
+        verify(lead).lifecycle(eq("multi_agent_started"), eq(plan.guideMessage()),
+                leadStarted.capture());
+        assertThat(leadStarted.getValue())
+                .containsEntry("agent_count", 2)
+                .containsEntry("active_verb", "Checking")
+                .containsEntry("completed_verb", "Checked");
+        verify(lead).terminalLifecycle(eq("multi_agent_completed"), eq("Checked."), any());
+        verify(researchRecorder).lifecycle(eq("subagent_planned"), any(), any());
+        verify(reviewRecorder).lifecycle(eq("subagent_planned"), any(), any());
+        var lifecycleOrder = inOrder(lead, researchRecorder, reviewRecorder);
+        lifecycleOrder.verify(lead).lifecycle(eq("multi_agent_started"), any(), any());
+        lifecycleOrder.verify(researchRecorder).lifecycle(eq("subagent_planned"), any(), any());
+        lifecycleOrder.verify(reviewRecorder).lifecycle(eq("subagent_planned"), any(), any());
+        lifecycleOrder.verify(researchRecorder).lifecycle(eq("subagent_started"), any(), any());
+        verify(researchRecorder, never()).guide(any(), any());
+        verify(reviewRecorder, never()).guide(any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void plansOnlyTheSelectedRoutingWorkers() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition selectedAgent = new AiAgentDefinition(
+                "selected", "Selected", "selected route", "Execute the selected route.");
+        AiAgentDefinition ignoredAgent = new AiAgentDefinition(
+                "ignored", "Ignored", "ignored route", "Do not execute this route.");
+        AiWorkflowPlan.Task selectedTask = new AiWorkflowPlan.Task(
+                "Selected task", selectedAgent.id(), "Run selected.", null,
+                "Selecting", "Selected");
+        AiWorkflowPlan.Task ignoredTask = new AiWorkflowPlan.Task(
+                "Ignored task", ignoredAgent.id(), "Run ignored.", null,
+                "Ignoring", "Ignored");
+        AiWorkflowNode selected = new AiWorkflowNode(
+                "selected-node", "direct", false, null, "Selecting", "Selected",
+                null, "Summarizing", "Summarized", selectedTask, null, List.of(), Map.of());
+        AiWorkflowNode ignored = new AiWorkflowNode(
+                "ignored-node", "direct", false, null, "Ignoring", "Ignored",
+                null, "Summarizing", "Summarized", ignoredTask, null, List.of(), Map.of());
+        AiWorkflowNode rootNode = new AiWorkflowNode(
+                "router", "routing", false, null, "Routing", "Routed",
+                null, "Summarizing", "Summarized", null, "selected",
+                List.of(), Map.of("selected", selected, "ignored", ignored));
+        AiWorkflowPlan plan = new AiWorkflowPlan(
+                "routing", false, null, "Routing", "Routed",
+                null, "Summarizing", "Summarized",
+                List.of(selectedTask, ignoredTask), rootNode);
+        when(planner.plan(any())).thenReturn(plan);
+        when(catalog.requireWorker(selectedAgent.id())).thenReturn(selectedAgent);
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
+        when(root.forkSubagent(eq(selectedAgent.id()), any(), any())).thenReturn(child);
+        when(child.conversationId()).thenReturn("selected-child");
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("selected result"));
+
+        try (AiWorkflowExecutionCoordinator coordinator = coordinator(executor, planner, catalog)) {
+            assertThat(coordinator.execute(context(root, AiMultiAgentOptions.single(), 0)).answer())
+                    .isEqualTo("selected result");
+        }
+
+        verify(catalog, never()).requireWorker(ignoredAgent.id());
+        verify(root, times(1)).forkSubagent(any(), any(), any());
+        ArgumentCaptor<Map<String, Object>> started =
+                (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>)
+                        ArgumentCaptor.forClass(Map.class);
+        verify(lead).lifecycle(eq("multi_agent_started"), any(), started.capture());
+        assertThat(started.getValue()).containsEntry("agent_count", 1);
+    }
+
+    @Test
+    void recordsComposedCancellationAsTerminalCancellation() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition agent = new AiAgentDefinition(
+                "researcher", "Researcher", "research", "Research the request.");
+        AiWorkflowPlan.Task task = new AiWorkflowPlan.Task(
+                "Research", agent.id(), "Research now.", null, "Researching", "Researched");
+        AiWorkflowNode rootNode = new AiWorkflowNode(
+                "research", "direct", false, null, "Researching", "Researched",
+                null, "Summarizing", "Summarized", task, null, List.of(), Map.of());
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "direct", false, null, "Researching", "Researched",
+                null, "Summarizing", "Summarized", List.of(task), rootNode));
+        when(catalog.requireWorker(agent.id())).thenReturn(agent);
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
+        when(root.forkSubagent(eq(agent.id()), any(), any())).thenReturn(child);
+        when(child.conversationId()).thenReturn("research-child");
+        when(executor.execute(any())).thenThrow(new CancellationException("cancelled"));
+
+        try (AiWorkflowExecutionCoordinator coordinator = coordinator(executor, planner, catalog)) {
+            assertThatThrownBy(() -> coordinator.execute(
+                    context(root, AiMultiAgentOptions.single(), 0)))
+                    .isInstanceOf(CancellationException.class);
+        }
+
+        verify(child).terminalLifecycle(eq("subagent_cancelled"), any(), any());
+        verify(child, never()).terminalLifecycle(eq("subagent_failed"), any(), any());
+        verify(lead).terminalLifecycle(eq("multi_agent_cancelled"), any(), any());
+        verify(lead, never()).terminalLifecycle(eq("multi_agent_failed"), any(), any());
+    }
+
+    @Test
+    void cancelsTheComposedLeadWhenOneParallelBranchIsCancelled() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition cancelledAgent = new AiAgentDefinition(
+                "cancelled-agent", "Cancelled", "cancelled branch", "Run the first branch.");
+        AiAgentDefinition completedAgent = new AiAgentDefinition(
+                "completed-agent", "Completed", "completed branch", "Run the second branch.");
+        AiWorkflowPlan.Task cancelledTask = new AiWorkflowPlan.Task(
+                "Cancelled branch", cancelledAgent.id(), "Run first.", null,
+                "Working", "Completed", AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowPlan.Task completedTask = new AiWorkflowPlan.Task(
+                "Completed branch", completedAgent.id(), "Run second.", null,
+                "Working", "Completed", AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowPlan plan = parallelComposedPlan(cancelledTask, completedTask);
+        when(planner.plan(any())).thenReturn(plan);
+        when(catalog.requireWorker(cancelledAgent.id())).thenReturn(cancelledAgent);
+        when(catalog.requireWorker(completedAgent.id())).thenReturn(completedAgent);
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder cancelledChild = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder completedChild = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
+        when(root.forkSubagent(eq(cancelledAgent.id()), any(), any()))
+                .thenReturn(cancelledChild);
+        when(root.forkSubagent(eq(completedAgent.id()), any(), any()))
+                .thenReturn(completedChild);
+        when(cancelledChild.conversationId()).thenReturn("cancelled-child");
+        when(completedChild.conversationId()).thenReturn("completed-child");
+        when(executor.execute(any())).thenAnswer(invocation -> {
+            AiChatExecutor.Context candidate = invocation.getArgument(0);
+            if (cancelledAgent.id().equals(candidate.agentId())) {
+                throw new CancellationException("branch cancelled");
+            }
+            return new AiChatExecutor.Result("completed evidence");
+        });
+
+        try (AiWorkflowExecutionCoordinator coordinator = coordinator(executor, planner, catalog)) {
+            assertThatThrownBy(() -> coordinator.execute(
+                    context(root, AiMultiAgentOptions.single(), 0)))
+                    .isInstanceOf(CancellationException.class);
+        }
+
+        verify(executor, times(2)).execute(any());
+        verify(cancelledChild).terminalLifecycle(eq("subagent_cancelled"), any(), any());
+        verify(completedChild).terminalLifecycle(eq("subagent_completed"), any(), any());
+        verify(lead).terminalLifecycle(eq("multi_agent_cancelled"), any(), any());
+        verify(lead, never()).terminalLifecycle(eq("multi_agent_completed"), any(), any());
+        verify(lead, never()).terminalLifecycle(eq("multi_agent_failed"), any(), any());
+    }
+
+    @Test
+    void cancelsTheComposedLeadWhenEveryParallelBranchIsCancelled() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition firstAgent = new AiAgentDefinition(
+                "first-agent", "First", "first branch", "Run the first branch.");
+        AiAgentDefinition secondAgent = new AiAgentDefinition(
+                "second-agent", "Second", "second branch", "Run the second branch.");
+        AiWorkflowPlan.Task firstTask = new AiWorkflowPlan.Task(
+                "First branch", firstAgent.id(), "Run first.", null,
+                "Working", "Completed", AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowPlan.Task secondTask = new AiWorkflowPlan.Task(
+                "Second branch", secondAgent.id(), "Run second.", null,
+                "Working", "Completed", AiWorkflowPlan.ToolAccess.NONE);
+        when(planner.plan(any())).thenReturn(parallelComposedPlan(firstTask, secondTask));
+        when(catalog.requireWorker(firstAgent.id())).thenReturn(firstAgent);
+        when(catalog.requireWorker(secondAgent.id())).thenReturn(secondAgent);
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder firstChild = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder secondChild = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
+        when(root.forkSubagent(eq(firstAgent.id()), any(), any())).thenReturn(firstChild);
+        when(root.forkSubagent(eq(secondAgent.id()), any(), any())).thenReturn(secondChild);
+        when(firstChild.conversationId()).thenReturn("first-child");
+        when(secondChild.conversationId()).thenReturn("second-child");
+        when(executor.execute(any())).thenThrow(new CancellationException("branch cancelled"));
+
+        try (AiWorkflowExecutionCoordinator coordinator = coordinator(executor, planner, catalog)) {
+            assertThatThrownBy(() -> coordinator.execute(
+                    context(root, AiMultiAgentOptions.single(), 0)))
+                    .isInstanceOf(CancellationException.class);
+        }
+
+        verify(executor, times(2)).execute(any());
+        verify(firstChild).terminalLifecycle(eq("subagent_cancelled"), any(), any());
+        verify(secondChild).terminalLifecycle(eq("subagent_cancelled"), any(), any());
+        verify(lead).terminalLifecycle(eq("multi_agent_cancelled"), any(), any());
+        verify(lead, never()).terminalLifecycle(eq("multi_agent_completed"), any(), any());
+        verify(lead, never()).terminalLifecycle(eq("multi_agent_failed"), any(), any());
+    }
+
+    @Test
+    void recordsOneLeadCancellationWhenASequentialDirectLeafHitsTheStopFence() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiRequestRegistry requests = mock(AiRequestRegistry.class);
+        AiAgentDefinition agent = new AiAgentDefinition(
+                "researcher", "Researcher", "research", "Research the request.");
+        AiWorkflowPlan.Task task = new AiWorkflowPlan.Task(
+                "Research", agent.id(), "Research now.", null,
+                "Researching", "Researched", AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowNode worker = new AiWorkflowNode(
+                "research", "direct", false, null, "Researching", "Researched",
+                null, "Synthesizing", "Synthesized", task, null, List.of(), Map.of());
+        AiWorkflowNode direct = new AiWorkflowNode(
+                "summarize", "direct", false, null, "Summarizing", "Summarized",
+                null, "Synthesizing", "Synthesized", null, null, List.of(), Map.of());
+        AiWorkflowNode rootNode = new AiWorkflowNode(
+                "root", "chain", false, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", null, null,
+                List.of(worker, direct), Map.of());
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "chain", false, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", List.of(task), rootNode));
+        when(catalog.requireWorker(agent.id())).thenReturn(agent);
+        when(requests.shouldDiscardResult("request-1")).thenReturn(false, false, true);
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
+        when(root.forkSubagent(eq(agent.id()), any(), any())).thenReturn(child);
+        when(child.conversationId()).thenReturn("research-child");
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("evidence"));
+
+        try (AiWorkflowExecutionCoordinator coordinator = new AiWorkflowExecutionCoordinator(
+                executor, planner, null, catalog, null, requests,
+                16, 8, Duration.ofSeconds(2))) {
+            assertThatThrownBy(() -> coordinator.execute(
+                    context(root, AiMultiAgentOptions.single(), 0)))
+                    .isInstanceOf(CancellationException.class);
+        }
+
+        verify(child).terminalLifecycle(eq("subagent_completed"), any(), any());
+        verify(lead, times(1)).terminalLifecycle(eq("multi_agent_cancelled"), any(), any());
+        verify(root, never()).terminalLifecycle(eq("multi_agent_cancelled"), any(), any());
+    }
+
+    @Test
+    void recordsComposedFailureAndSettlesEveryPlannedWorker() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition agent = new AiAgentDefinition(
+                "researcher", "Researcher", "research", "Research the request.");
+        AiWorkflowPlan.Task task = new AiWorkflowPlan.Task(
+                "Research", agent.id(), "Research now.", null, "Researching", "Researched");
+        AiWorkflowNode rootNode = new AiWorkflowNode(
+                "research", "direct", false, null, "Researching", "Researched",
+                null, "Summarizing", "Summarized", task, null, List.of(), Map.of());
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "direct", false, null, "Researching", "Researched",
+                null, "Summarizing", "Summarized", List.of(task), rootNode));
+        when(catalog.requireWorker(agent.id())).thenReturn(agent);
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
+        when(root.forkSubagent(eq(agent.id()), any(), any())).thenReturn(child);
+        when(child.conversationId()).thenReturn("research-child");
+        when(executor.execute(any())).thenThrow(new IllegalStateException("provider failed"));
+
+        try (AiWorkflowExecutionCoordinator coordinator = coordinator(executor, planner, catalog)) {
+            assertThatThrownBy(() -> coordinator.execute(
+                    context(root, AiMultiAgentOptions.single(), 0)))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+
+        verify(child).terminalLifecycle(eq("subagent_failed"), any(), any());
+        verify(lead).terminalLifecycle(eq("multi_agent_failed"), any(), any());
     }
 
     @Test
@@ -469,8 +845,10 @@ class AiWorkflowExecutionCoordinatorTest {
                 "parallel", true, null, "Working", "Completed",
                 null, "Synthesizing", "Synthesized", List.of(analysis, update), rootNode));
         AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
         AiTrajectoryRecorder analysisRecorder = mock(AiTrajectoryRecorder.class);
         AiTrajectoryRecorder updateRecorder = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
         when(root.forkSubagent(eq(analyst.id()), eq(analysis.instruction()), any()))
                 .thenReturn(analysisRecorder);
         when(root.forkSubagent(eq(writer.id()), eq(update.instruction()), any()))
@@ -562,8 +940,10 @@ class AiWorkflowExecutionCoordinatorTest {
                 "orchestrator_workers", true, null, "Updating", "Updated",
                 null, "Summarizing", "Summarized", List.of(taskA, taskB), rootNode));
         AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder lead = mock(AiTrajectoryRecorder.class);
         AiTrajectoryRecorder childA = mock(AiTrajectoryRecorder.class);
         AiTrajectoryRecorder childB = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(lead);
         when(root.forkSubagent(eq(writerA.id()), eq(taskA.instruction()), any())).thenReturn(childA);
         when(root.forkSubagent(eq(writerB.id()), eq(taskB.instruction()), any())).thenReturn(childB);
         when(childA.conversationId()).thenReturn("child-a");
@@ -1017,7 +1397,9 @@ class AiWorkflowExecutionCoordinatorTest {
                 null, "Answering", "Answered", List.of(update), rootNode));
 
         AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder workflowLead = mock(AiTrajectoryRecorder.class);
         AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(workflowLead);
         when(root.forkSubagent(eq(writer.id()), eq(update.instruction()), any()))
                 .thenReturn(child);
         when(child.conversationId()).thenReturn("mutation-child");
@@ -1156,6 +1538,129 @@ class AiWorkflowExecutionCoordinatorTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void givesEveryComposedEvaluatorIterationASeparateExecutionIdentity() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiWorkflowEvaluator evaluator = mock(AiWorkflowEvaluator.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition agent = new AiAgentDefinition(
+                "researcher", "Researcher", "research", "Research the request.");
+        AiWorkflowPlan.Task task = new AiWorkflowPlan.Task(
+                "Research", agent.id(), "Research now.", null, "Researching", "Researched");
+        AiWorkflowNode rootNode = new AiWorkflowNode(
+                "research", "direct", false, null, "Researching", "Researched",
+                null, "Summarizing", "Summarized", task, null, List.of(), Map.of());
+        AiWorkflowPlan plan = new AiWorkflowPlan(
+                "direct", false, null, "Researching", "Researched",
+                null, "Summarizing", "Summarized", List.of(task), rootNode);
+        when(planner.plan(any(), anyList())).thenReturn(plan, plan);
+        when(catalog.requireWorker(agent.id())).thenReturn(agent);
+        when(executor.execute(any()))
+                .thenReturn(new AiChatExecutor.Result("first research"))
+                .thenReturn(new AiChatExecutor.Result("verified research"));
+        when(evaluator.evaluate(any(), eq(plan), any(), eq(1), eq(3)))
+                .thenReturn(new AiWorkflowEvaluation(AiWorkflowEvaluation.Decision.CONTINUE,
+                        "Verify once more.", "Repeat the research."));
+        when(evaluator.evaluate(any(), eq(plan), any(), eq(2), eq(3)))
+                .thenReturn(new AiWorkflowEvaluation(AiWorkflowEvaluation.Decision.COMPLETE,
+                        null, null));
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder leadOne = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder leadTwo = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder childOne = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder childTwo = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(leadOne, leadTwo);
+        when(root.forkSubagent(eq(agent.id()), any(), any())).thenReturn(childOne, childTwo);
+        when(childOne.conversationId()).thenReturn("research-child-1");
+        when(childTwo.conversationId()).thenReturn("research-child-2");
+
+        AiChatExecutor.Result result;
+        try (AiWorkflowExecutionCoordinator coordinator = new AiWorkflowExecutionCoordinator(
+                executor, planner, evaluator, catalog, null, null,
+                16, 8, Duration.ofSeconds(2))) {
+            result = coordinator.execute(context(root, AiMultiAgentOptions.single(), 0));
+        }
+
+        assertThat(result.answer()).isEqualTo("verified research");
+        ArgumentCaptor<Map<String, Object>> leadNamespaces =
+                (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>)
+                        ArgumentCaptor.forClass(Map.class);
+        verify(root, times(2)).fork(leadNamespaces.capture());
+        assertThat(leadNamespaces.getAllValues())
+                .extracting(namespace -> namespace.get("fanout_id"))
+                .containsExactly("request-1:composed:iteration-1",
+                        "request-1:composed:iteration-2");
+        verify(leadOne).terminalLifecycle(eq("multi_agent_completed"), any(), any());
+        verify(leadTwo).terminalLifecycle(eq("multi_agent_completed"), any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void givesEveryDelegatedEvaluatorIterationASeparateExecutionIdentity() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiWorkflowEvaluator evaluator = mock(AiWorkflowEvaluator.class);
+        AiAgentCatalog catalog = mock(AiAgentCatalog.class);
+        AiAgentDefinition agent = new AiAgentDefinition(
+                "researcher", "Researcher", "research", "Research the request.");
+        AiWorkflowPlan.Task task = new AiWorkflowPlan.Task(
+                "Research", agent.id(), "Research now.", null,
+                "Researching", "Researched", AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowPlan plan = new AiWorkflowPlan(
+                "orchestrator_workers", false, null, "Researching", "Researched",
+                null, "Synthesizing", "Synthesized", List.of(task));
+        when(planner.plan(any(), anyList())).thenReturn(plan, plan);
+        when(catalog.requireWorker(agent.id())).thenReturn(agent);
+        AtomicInteger synthesisCalls = new AtomicInteger();
+        when(executor.execute(any())).thenAnswer(invocation -> {
+            AiChatExecutor.Context candidate = invocation.getArgument(0);
+            return new AiChatExecutor.Result(candidate.agentDepth() == 1
+                    ? "research evidence"
+                    : "attempt " + synthesisCalls.incrementAndGet());
+        });
+        when(evaluator.evaluate(any(), eq(plan), any(), eq(1), eq(3)))
+                .thenReturn(new AiWorkflowEvaluation(AiWorkflowEvaluation.Decision.CONTINUE,
+                        "Verify once more.", "Repeat the research."));
+        when(evaluator.evaluate(any(), eq(plan), any(), eq(2), eq(3)))
+                .thenReturn(new AiWorkflowEvaluation(AiWorkflowEvaluation.Decision.COMPLETE,
+                        null, null));
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder leadOne = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder leadTwo = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder childOne = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder childTwo = mock(AiTrajectoryRecorder.class);
+        when(root.fork(any())).thenReturn(leadOne, leadTwo);
+        when(root.forkSubagent(eq(agent.id()), any(), any())).thenReturn(childOne, childTwo);
+        when(childOne.conversationId()).thenReturn("research-child-1");
+        when(childTwo.conversationId()).thenReturn("research-child-2");
+
+        AiChatExecutor.Result result;
+        try (AiWorkflowExecutionCoordinator coordinator = new AiWorkflowExecutionCoordinator(
+                executor, planner, evaluator, catalog, null, null,
+                16, 8, Duration.ofSeconds(2))) {
+            result = coordinator.execute(context(root, AiMultiAgentOptions.single(), 0));
+        }
+
+        assertThat(result.answer()).isEqualTo("attempt 2");
+        ArgumentCaptor<Map<String, Object>> leadNamespaces =
+                (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>)
+                        ArgumentCaptor.forClass(Map.class);
+        verify(root, times(2)).fork(leadNamespaces.capture());
+        assertThat(leadNamespaces.getAllValues())
+                .extracting(namespace -> namespace.get("fanout_id"))
+                .allSatisfy(value -> assertThat(value.toString())
+                        .startsWith("fanout-").contains("-iteration-"))
+                .doesNotHaveDuplicates();
+        assertThat(leadNamespaces.getAllValues())
+                .extracting(namespace -> namespace.get("fanout_id").toString())
+                .extracting(value -> value.substring(value.lastIndexOf("-iteration-")))
+                .containsExactly("-iteration-1", "-iteration-2");
+        verify(leadOne).terminalLifecycle(eq("multi_agent_completed"), any(), any());
+        verify(leadTwo).terminalLifecycle(eq("multi_agent_completed"), any(), any());
+    }
+
+    @Test
     void reportsTheIterationLimitWhenWorkStillRemains() {
         AiChatExecutor executor = mock(AiChatExecutor.class);
         AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
@@ -1190,11 +1695,108 @@ class AiWorkflowExecutionCoordinatorTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void isolatesConcurrentDirectBranchesAsDurablePlannedSpecialists() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiTrajectoryRecorder rootRecorder = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder leadRecorder = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder firstRecorder = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder secondRecorder = mock(AiTrajectoryRecorder.class);
+        when(rootRecorder.fork(any())).thenReturn(leadRecorder);
+        when(rootRecorder.forkSubagent(any(), any(), any()))
+                .thenReturn(firstRecorder, secondRecorder);
+        when(firstRecorder.conversationId()).thenReturn("direct-branch-1");
+        when(secondRecorder.conversationId()).thenReturn("direct-branch-2");
+        when(firstRecorder.successfulDomainToolCallCount()).thenReturn(0L, 1L);
+        when(secondRecorder.successfulDomainToolCallCount()).thenReturn(0L, 1L);
+        AiWorkflowNode root = new AiWorkflowNode("root", "parallel", true, null,
+                "Working", "Completed", null, "Synthesizing", "Synthesized",
+                null, null, List.of(directLeaf("first"), directLeaf("second")), Map.of());
+        AiWorkflowPlan plan = new AiWorkflowPlan(
+                "parallel", true, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", List.of(), root);
+        when(planner.plan(any())).thenReturn(plan);
+        when(executor.execute(any())).thenAnswer(invocation -> {
+            AiChatExecutor.Context candidate = invocation.getArgument(0);
+            return new AiChatExecutor.Result(candidate.agentDepth() == 0
+                    ? "combined answer" : "branch evidence");
+        });
+
+        AiChatExecutor.Result result;
+        try (AiWorkflowExecutionCoordinator coordinator = coordinator(
+                executor, planner, mock(AiAgentCatalog.class))) {
+            result = coordinator.execute(
+                    context(rootRecorder, AiMultiAgentOptions.single(), 0));
+        }
+
+        assertThat(result.answer()).isEqualTo("combined answer");
+        ArgumentCaptor<Map<String, Object>> branchNamespaces =
+                (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>)
+                        ArgumentCaptor.forClass(Map.class);
+        verify(rootRecorder, times(2)).forkSubagent(any(), any(), branchNamespaces.capture());
+        assertThat(branchNamespaces.getAllValues()).allSatisfy(namespace -> assertThat(namespace)
+                .containsEntry("execution_scope", "worker")
+                .containsEntry("execution_kind", "multi_agent")
+                .containsEntry("parent_node_id", "request-1:composed:lead"));
+        assertThat(branchNamespaces.getAllValues())
+                .extracting(namespace -> namespace.get("node_id"))
+                .containsExactly("request-1:composed:worker:first",
+                        "request-1:composed:worker:second");
+        ArgumentCaptor<Map<String, Object>> leadMetadata =
+                (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>)
+                        ArgumentCaptor.forClass(Map.class);
+        verify(leadRecorder).lifecycle(eq("multi_agent_started"), any(),
+                leadMetadata.capture());
+        assertThat(leadMetadata.getValue()).containsEntry("agent_count", 2);
+        verify(firstRecorder).lifecycle(eq("subagent_planned"), any(), any());
+        verify(firstRecorder).lifecycle(eq("subagent_started"), any(), any());
+        verify(firstRecorder).terminalLifecycle(eq("subagent_completed"), any(), any());
+        verify(secondRecorder).lifecycle(eq("subagent_planned"), any(), any());
+        verify(secondRecorder).lifecycle(eq("subagent_started"), any(), any());
+        verify(secondRecorder).terminalLifecycle(eq("subagent_completed"), any(), any());
+        ArgumentCaptor<AiChatExecutor.Context> branchCalls =
+                ArgumentCaptor.forClass(AiChatExecutor.Context.class);
+        verify(executor, times(3)).execute(branchCalls.capture());
+        assertThat(branchCalls.getAllValues().stream()
+                .filter(candidate -> candidate.agentDepth() == 1).toList())
+                .extracting(candidate -> candidate.request().conversationId())
+                .containsExactlyInAnyOrder("direct-branch-1", "direct-branch-2");
+    }
+
+    @Test
+    void rejectsDuplicateComposedNodeIdsBeforeOpeningAnyRecorder() {
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        AiWorkflowNode root = new AiWorkflowNode("root", "parallel", false, null,
+                "Working", "Completed", null, "Synthesizing", "Synthesized",
+                null, null, List.of(directLeaf("duplicate"), directLeaf("duplicate")), Map.of());
+        when(planner.plan(any())).thenReturn(new AiWorkflowPlan(
+                "parallel", true, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", List.of(), root));
+
+        try (AiWorkflowExecutionCoordinator coordinator = coordinator(
+                executor, planner, mock(AiAgentCatalog.class))) {
+            assertThatThrownBy(() -> coordinator.execute(
+                    context(recorder, AiMultiAgentOptions.single(), 0)))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("node ids must be unique", "duplicate");
+        }
+
+        verify(recorder, never()).fork(any());
+        verify(recorder, never()).forkSubagent(any(), any(), any());
+        verify(executor, never()).execute(any());
+    }
+
+    @Test
     void forcesReadOnlyAdmittedSynthesisForAContainerNestedInAParallelBranch() {
         AiChatExecutor executor = mock(AiChatExecutor.class);
         AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
         AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
         when(recorder.fork(any())).thenAnswer(ignored -> groundedBranchRecorder());
+        when(recorder.forkSubagent(any(), any(), any()))
+                .thenAnswer(ignored -> groundedBranchRecorder());
         AiWorkflowNode inner = new AiWorkflowNode("inner", "parallel", true, null,
                 "Working", "Completed", null, "Synthesizing", "Synthesized",
                 null, null, List.of(directLeaf("inner-a"), directLeaf("inner-b")), Map.of());
@@ -1257,6 +1859,8 @@ class AiWorkflowExecutionCoordinatorTest {
         AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
         AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
         when(recorder.fork(any())).thenAnswer(ignored -> recoveredBranchRecorder());
+        when(recorder.forkSubagent(any(), any(), any()))
+                .thenAnswer(ignored -> recoveredBranchRecorder());
         AiWorkflowNode root = new AiWorkflowNode("root", "parallel", true, null,
                 "Working", "Completed", null, "Synthesizing", "Synthesized",
                 null, null, List.of(directLeaf("first"), directLeaf("second")), Map.of());
@@ -1294,6 +1898,8 @@ class AiWorkflowExecutionCoordinatorTest {
         AiWorkflowPlanner planner = mock(AiWorkflowPlanner.class);
         AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
         when(recorder.fork(any())).thenAnswer(ignored -> mock(AiTrajectoryRecorder.class));
+        when(recorder.forkSubagent(any(), any(), any()))
+                .thenAnswer(ignored -> branchRecorderWithoutDomainEvidence());
         AiWorkflowNode root = new AiWorkflowNode("root", "parallel", true, null,
                 "Working", "Completed", null, "Synthesizing", "Synthesized",
                 null, null, List.of(directLeaf("first"), directLeaf("second")), Map.of());
@@ -1313,6 +1919,25 @@ class AiWorkflowExecutionCoordinatorTest {
         verify(executor, times(4)).execute(any());
     }
 
+    private AiWorkflowPlan parallelComposedPlan(
+            AiWorkflowPlan.Task first, AiWorkflowPlan.Task second) {
+        AiWorkflowNode firstNode = new AiWorkflowNode(
+                "first", "direct", false, first.guideMessage(),
+                first.activeVerb(), first.completedVerb(), null,
+                "Synthesizing", "Synthesized", first, null, List.of(), Map.of());
+        AiWorkflowNode secondNode = new AiWorkflowNode(
+                "second", "direct", false, second.guideMessage(),
+                second.activeVerb(), second.completedVerb(), null,
+                "Synthesizing", "Synthesized", second, null, List.of(), Map.of());
+        AiWorkflowNode root = new AiWorkflowNode(
+                "root", "parallel", false, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", null, null,
+                List.of(firstNode, secondNode), Map.of());
+        return new AiWorkflowPlan(
+                "parallel", false, null, "Working", "Completed",
+                null, "Synthesizing", "Synthesized", List.of(first, second), root);
+    }
+
     private AiWorkflowNode directLeaf(String id) {
         return new AiWorkflowNode(id, "direct", true, null, "Working", "Completed",
                 null, "Synthesizing", "Synthesized", null, null, List.of(), Map.of());
@@ -1320,13 +1945,21 @@ class AiWorkflowExecutionCoordinatorTest {
 
     private AiTrajectoryRecorder groundedBranchRecorder() {
         AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.conversationId()).thenReturn("branch-conversation");
         when(recorder.successfulDomainToolCallCount()).thenReturn(0L, 1L);
         return recorder;
     }
 
     private AiTrajectoryRecorder recoveredBranchRecorder() {
         AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.conversationId()).thenReturn("branch-conversation");
         when(recorder.successfulDomainToolCallCount()).thenReturn(0L, 0L, 1L);
+        return recorder;
+    }
+
+    private AiTrajectoryRecorder branchRecorderWithoutDomainEvidence() {
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.conversationId()).thenReturn("branch-conversation");
         return recorder;
     }
 
