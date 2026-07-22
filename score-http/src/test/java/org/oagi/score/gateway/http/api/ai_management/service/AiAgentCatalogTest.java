@@ -2,7 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDefinition;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChatExecutor;
 import org.springframework.core.io.DefaultResourceLoader;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,7 +17,7 @@ class AiAgentCatalogTest {
                 .containsExactly("critical-reviewer", "evidence-researcher", "general-purpose");
         assertThat(catalog.all()).allSatisfy(agent -> {
             assertThat(agent.prompt()).isNotBlank();
-            assertThat(agent.toolPolicy()).isEqualTo(AiRuntime.ToolPolicy.READ_ONLY);
+            assertThat(agent.toolPolicy()).isEqualTo(AiChatExecutor.ToolPolicy.READ_ONLY);
         });
         assertThat(catalog.require("evidence-researcher").prompt())
                 .startsWith("You are an isolated, read-only connectCenter evidence researcher.")

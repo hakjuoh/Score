@@ -168,7 +168,7 @@ public class CodeList extends TableImpl<CodeListRecord> {
      * The column <code>oagi.code_list.owner_user_id</code>. Foreign key to the
      * APP_USER table. This is the user who owns the entity, is allowed to edit
      * the entity, and who can transfer the ownership to another user.
-     *
+     * 
      * The ownership can change throughout the history, but undoing shouldn't
      * rollback the ownership.
      */
@@ -197,7 +197,7 @@ public class CodeList extends TableImpl<CodeListRecord> {
      * The column <code>oagi.code_list.state</code>. Deleted, WIP, Draft, QA,
      * Candidate, Production, Release Draft, Published. This the revision life
      * cycle state of the code list.
-     *
+     * 
      * State change can't be undone. But the history record can still keep the
      * records of when the state was changed.
      */

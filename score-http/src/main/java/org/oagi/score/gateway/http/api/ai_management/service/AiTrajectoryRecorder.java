@@ -65,8 +65,6 @@ public final class AiTrajectoryRecorder {
     private final String requestId;
     private final String modelName;
     private final String reasoningEffort;
-    private final String runtime;
-    private final Map<String, Object> runtimeOptions;
     private final Consumer<AiExecutionEvent> events;
     private final AiContextBudget contextBudget;
     private final AtomicLong estimatedInputFloor;
@@ -98,27 +96,25 @@ public final class AiTrajectoryRecorder {
                                 ScoreUser requester, String conversationId, String requestId,
                                 Consumer<AiExecutionEvent> events) {
         this(repository, objectMapper, requester, conversationId, requestId,
-                null, null, null, Map.of(), events, null, 0L);
+                null, null, events, null, 0L);
     }
 
     public AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
                                 ScoreUser requester, String conversationId, String requestId,
-                                String modelName, String reasoningEffort, String runtime,
-                                Map<String, Object> runtimeOptions,
+                                String modelName, String reasoningEffort,
                                 Consumer<AiExecutionEvent> events) {
         this(repository, objectMapper, requester, conversationId, requestId, modelName,
-                reasoningEffort, runtime, runtimeOptions, events, null, 0L);
+                reasoningEffort, events, null, 0L);
     }
 
     public AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
                                 ScoreUser requester, String conversationId, String requestId,
-                                String modelName, String reasoningEffort, String runtime,
-                                Map<String, Object> runtimeOptions,
+                                String modelName, String reasoningEffort,
                                 Consumer<AiExecutionEvent> events,
                                 AiContextBudget contextBudget,
                                 long estimatedInputFloor) {
         this(repository, objectMapper, requester, conversationId, requestId, modelName,
-                reasoningEffort, runtime, runtimeOptions, events, contextBudget,
+                reasoningEffort, events, contextBudget,
                 estimatedInputFloor, new AtomicLong(), new AtomicLong(),
                 new AtomicLong(), new AtomicLong(), Map.of(), false,
                 AiChatConversationKind.ROOT);
@@ -126,8 +122,7 @@ public final class AiTrajectoryRecorder {
 
     private AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
                                  ScoreUser requester, String conversationId, String requestId,
-                                 String modelName, String reasoningEffort, String runtime,
-                                 Map<String, Object> runtimeOptions,
+                                 String modelName, String reasoningEffort,
                                  Consumer<AiExecutionEvent> events,
                                  AiContextBudget contextBudget,
                                  long estimatedInputFloor,
@@ -143,8 +138,6 @@ public final class AiTrajectoryRecorder {
         this.requestId = requestId;
         this.modelName = modelName;
         this.reasoningEffort = reasoningEffort;
-        this.runtime = runtime;
-        this.runtimeOptions = runtimeOptions != null ? Map.copyOf(runtimeOptions) : Map.of();
         this.events = events != null ? events : ignored -> {};
         this.contextBudget = contextBudget;
         this.estimatedInputFloor = new AtomicLong(Math.max(0L, estimatedInputFloor));
@@ -167,7 +160,7 @@ public final class AiTrajectoryRecorder {
         Map<String, Object> childContext = traceMetadata(namespace);
         AiTrajectoryRecorder child = new AiTrajectoryRecorder(
                 repository, objectMapper, requester, conversationId, requestId,
-                modelName, reasoningEffort, runtime, runtimeOptions, events, contextBudget,
+                modelName, reasoningEffort, events, contextBudget,
                 estimatedInputFloor.get(), eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovals, childContext, true,
                 conversationKind);
@@ -199,7 +192,7 @@ public final class AiTrajectoryRecorder {
                 kind == AiChatConversationKind.PARALLEL ? "parallel" : "multi_agent");
         AiTrajectoryRecorder child = new AiTrajectoryRecorder(
                 repository, objectMapper, requester, childConversationId, requestId,
-                modelName, reasoningEffort, runtime, runtimeOptions, events, contextBudget,
+                modelName, reasoningEffort, events, contextBudget,
                 estimatedInputFloor.get(), eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovals,
                 traceMetadata(childNamespace), true, kind);
@@ -207,14 +200,14 @@ public final class AiTrajectoryRecorder {
         repository.append(childConversationId, new AiChatTrajectoryStep(
                 requestId, "system", "settings_change", "debug",
                 "Child execution settings initialized.", null, modelName, reasoningEffort,
-                runtime, runtimeOptions, null, null, null,
+                null, null, null,
                 child.traceMetadata(Map.of("agent_id", workerId)), 0, null, Instant.now()));
         repository.append(childConversationId, new AiChatTrajectoryStep(
                 requestId, "user",
                 kind == AiChatConversationKind.PARALLEL ? "parallel_assignment" : "assignment",
                 "visible",
                 Objects.requireNonNullElse(assignment, ""), null, modelName, reasoningEffort,
-                runtime, runtimeOptions, null, null, null,
+                null, null, null,
                 child.traceMetadata(Map.of("copied_from_parent", true)), 0, true, Instant.now()));
         return child;
     }
@@ -281,7 +274,7 @@ public final class AiTrajectoryRecorder {
                 "parallel".equals(executionKind)
                         ? "Parallel workflow usage settled." : "Multi-agent fan-out usage settled.",
                 null, modelName,
-                reasoningEffort, runtime, runtimeOptions,
+                reasoningEffort,
                 null, null, Map.copyOf(metrics), traceMetadata(extra), 0, null, Instant.now()));
         if (contextBudget != null) {
             emitContextUsage(contextBudget.usage(estimatedInputFloor.get(), true, "fanout_settled"));
@@ -312,7 +305,7 @@ public final class AiTrajectoryRecorder {
         Map<String, Object> extra = traceMetadata(lifecycle);
         repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "agent", "agent_lifecycle", "debug", content, null,
-                modelName, reasoningEffort, runtime, runtimeOptions,
+                modelName, reasoningEffort,
                 null, null, null, extra, 0, null, Instant.now()));
         emit(AiExecutionEvent.detail(subtype, content, extra));
     }
@@ -333,7 +326,7 @@ public final class AiTrajectoryRecorder {
         Map<String, Object> extra = traceMetadata(metadata);
         repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "agent", "guide", "visible", stripped, null,
-                modelName, reasoningEffort, runtime, runtimeOptions,
+                modelName, reasoningEffort,
                 null, null, null, extra, 0, null, Instant.now()));
         emit(AiExecutionEvent.detail("guide", stripped, extra));
         return true;
@@ -375,7 +368,7 @@ public final class AiTrajectoryRecorder {
                 + attempt + " of " + maxAttempts + ").";
         repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "system", "provider_retry", "debug", content, null,
-                modelName, reasoningEffort, runtime, runtimeOptions,
+                modelName, reasoningEffort,
                 null, null, null, extra, 0, null, Instant.now()));
         emit(AiExecutionEvent.detail("provider_retry", content, extra));
     }
@@ -464,7 +457,7 @@ public final class AiTrajectoryRecorder {
                 new AiChatTrajectoryStep(requestId, "agent", "model_call", "debug",
                         Objects.requireNonNullElse(message, ""), null,
                         StringUtils.hasText(modelName) ? modelName : response.getMetadata().getModel(),
-                        reasoningEffort, runtime, runtimeOptions,
+                        reasoningEffort,
                         auditedToolCalls, null, metrics, extra, 1, null, Instant.now()));
 
         AiObservationAccumulator observations = new AiObservationAccumulator(stored.id(), toolCalls);
@@ -528,7 +521,7 @@ public final class AiTrajectoryRecorder {
     }
 
     /**
-     * Number of tool calls this recorder has observed to completion. Runtimes use
+     * Number of tool calls this recorder has observed to completion. Callers use
      * changes in this count as segment boundaries in the visible answer stream:
      * narration emitted before a tool call is interim commentary, not the answer.
      */
@@ -756,7 +749,7 @@ public final class AiTrajectoryRecorder {
         repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "agent", "tool_call_update", "debug",
                 "Calling " + pending.name() + ".", null, modelName,
-                reasoningEffort, runtime, runtimeOptions,
+                reasoningEffort,
                 null, null, null, traceMetadata(extra), 0, null, Instant.now()));
         emit(AiExecutionEvent.tool("started", "Calling " + pending.name() + ".",
                 pending.id(), pending.name(), pending.sequence()));
@@ -817,7 +810,7 @@ public final class AiTrajectoryRecorder {
         extra = new LinkedHashMap<>(traceMetadata(extra));
         repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "agent", "tool_call", "debug", detail, null, modelName,
-                reasoningEffort, runtime, runtimeOptions,
+                reasoningEffort,
                 null, null, null, extra, 0, null, Instant.now()));
         emit(AiExecutionEvent.tool(status,
                 switch (status) {

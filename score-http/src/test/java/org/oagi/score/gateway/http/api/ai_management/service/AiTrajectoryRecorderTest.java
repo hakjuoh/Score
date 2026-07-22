@@ -51,7 +51,7 @@ class AiTrajectoryRecorderTest {
                 "Inspect Sync Purchase Order"))
                 .thenReturn("child-conversation-1");
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
-                "conversation-1", "request-1", "model", "high", "default", Map.of(),
+                "conversation-1", "request-1", "model", "high",
                 ignored -> {});
 
         AiTrajectoryRecorder child = root.forkParallelExecution(
@@ -85,7 +85,7 @@ class AiTrajectoryRecorderTest {
         ScoreUser requester = mock(ScoreUser.class);
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
-                "conversation-1", "request-1", "model", "high", "default", Map.of(), events::add);
+                "conversation-1", "request-1", "model", "high", events::add);
         Map<String, Object> namespace = Map.of(
                 "fanout_id", "fanout-abc",
                 "node_id", "fanout-abc-agent-01",
@@ -261,7 +261,7 @@ class AiTrajectoryRecorderTest {
                 "conversation-1", "request-1", events::add);
 
         recorder.providerRetry(2, 10, 15_000L, "Rate limited.",
-                "com.anthropic.errors.RateLimitException", 429);
+                "org.springframework.ai.retry.TransientAiException", 429);
 
         ArgumentCaptor<AiChatTrajectoryStep> steps =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
@@ -273,7 +273,7 @@ class AiTrajectoryRecorderTest {
                 .containsEntry("max_attempts", 10)
                 .containsEntry("delay_millis", 15_000L)
                 .containsEntry("reason", "Rate limited.")
-                .containsEntry("failure_class", "com.anthropic.errors.RateLimitException")
+                .containsEntry("failure_class", "org.springframework.ai.retry.TransientAiException")
                 .containsEntry("status_code", 429);
         assertThat(events).singleElement().satisfies(event -> {
             assertThat(event.subtype()).isEqualTo("provider_retry");
@@ -852,7 +852,7 @@ class AiTrajectoryRecorderTest {
         AiContextBudget budget = new AiContextBudget(
                 "claude-fable-5", 200000L, 16000L, 150000L, 8192L, 32000L, false);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
-                "conversation-1", "request-1", "claude-fable-5", "high", "claude", Map.of(),
+                "conversation-1", "request-1", "claude-fable-5", "high",
                 events::add, budget, 5000L);
         ChatResponse response = new ChatResponse(List.of(new Generation(new AssistantMessage("done"))),
                 ChatResponseMetadata.builder().usage(new DefaultUsage(2, 4, 6)).build());
@@ -883,7 +883,7 @@ class AiTrajectoryRecorderTest {
         AiContextBudget budget = new AiContextBudget(
                 "model", 200000L, 16000L, 150000L, 8192L, 32000L, false);
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
-                "conversation-1", "request-1", "model", "high", "default", Map.of(),
+                "conversation-1", "request-1", "model", "high",
                 events::add, budget, 5000L);
         AiTrajectoryRecorder child = root.fork(Map.of(
                 "fanout_id", "fanout-abc",
@@ -915,7 +915,7 @@ class AiTrajectoryRecorderTest {
         AiContextBudget budget = new AiContextBudget(
                 "model", 200000L, 16000L, 150000L, 8192L, 32000L, false);
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
-                "conversation-1", "request-1", "model", "high", "default", Map.of(),
+                "conversation-1", "request-1", "model", "high",
                 events::add, budget, 5000L);
 
         root.recordFanOutUsage("fanout-abc", java.util.Arrays.asList(
@@ -970,7 +970,7 @@ class AiTrajectoryRecorderTest {
         AiContextBudget budget = new AiContextBudget(
                 "model", 200000L, 16000L, 150000L, 8192L, 32000L, false);
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
-                "conversation-1", "request-1", "model", "high", "default", Map.of(),
+                "conversation-1", "request-1", "model", "high",
                 events::add, budget, 5000L);
         AiTrajectoryRecorder child = root.fork(Map.of(
                 "fanout_id", "fanout-abc", "node_id", "fanout-abc-agent-01", "depth", 1));
@@ -1031,8 +1031,8 @@ class AiTrajectoryRecorderTest {
         AiContextBudget budget = new AiContextBudget(
                 "model", 120L, 10L, 90L, 10L, 100L, false);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
-                mock(ScoreUser.class), "conversation-1", "request-1", "model", "high", "default",
-                Map.of(), ignored -> {}, budget, 90L);
+                mock(ScoreUser.class), "conversation-1", "request-1", "model", "high",
+                ignored -> {}, budget, 90L);
 
         String output = recorder.recordingTools(() -> new ToolCallback[]{callback}, 100L)
                 .getToolCallbacks()[0].call("{}", new ToolContext(Map.of()));
@@ -1047,7 +1047,7 @@ class AiTrajectoryRecorderTest {
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(mock(AiChatConversationRepository.class),
                 new ObjectMapper(), mock(ScoreUser.class), "conversation-1", "request-1", "model",
-                "high", "default", Map.of(), events::add, budget, 90L);
+                "high", events::add, budget, 90L);
 
         String output = recorder.limitToolOutput("x".repeat(1000), 100L,
                 "update_business_context");
@@ -1065,7 +1065,7 @@ class AiTrajectoryRecorderTest {
                 "model", 120L, 10L, 90L, 10L, 100L, false);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(mock(AiChatConversationRepository.class),
                 new ObjectMapper(), mock(ScoreUser.class), "conversation-1", "request-1", "model",
-                "high", "default", Map.of(), ignored -> {}, budget, budget.safeInputLimit());
+                "high", ignored -> {}, budget, budget.safeInputLimit());
 
         assertThat(recorder.limitToolOutput("must not fit", 100L, "get_result")).isEmpty();
     }

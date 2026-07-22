@@ -13,31 +13,23 @@ describe('AiChatPanelComponent settings and active recovery', () => {
   beforeEach(setupAiChatPanelSpec);
   afterEach(teardownAiChatPanelSpec);
 
-  it('restores a versioned runtime preference after model discovery and cleans unknown options', () => {
+  it('restores a versioned model preference after model discovery', () => {
     localStorage.setItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY, JSON.stringify({
       version: 1,
       modelName: 'claude-fable-5',
       reasoningEffort: 'medium',
-      runtime: 'claude',
-      runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true, retired: 'value'},
-      multiAgent: {enabled: true, maxAgents: 99, strategy: 'creative'}
+      permissionMode: 'auto'
     }));
 
     (component as any).loadAvailableModels();
 
     expect(component.state.selectedModelName).toBe('claude-fable-5');
     expect(component.state.selectedReasoningEffort).toBe('medium');
-    expect(component.state.selectedRuntime).toBe('claude');
-    expect(component.state.selectedRuntimeOptions).toEqual({
-      permissionMode: 'auto', maxTurns: 40, verbose: true
-    });
     expect(JSON.parse(localStorage.getItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY)!)).toEqual({
       version: 1,
       modelName: 'claude-fable-5',
       reasoningEffort: 'medium',
-      runtime: 'claude',
-      runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true},
-      permissionMode: 'ask'
+      permissionMode: 'auto'
     });
   });
 
@@ -45,9 +37,7 @@ describe('AiChatPanelComponent settings and active recovery', () => {
     localStorage.setItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY, JSON.stringify({
       version: 1,
       modelName: 'gpt-5_6-sol',
-      reasoningEffort: 'ultra',
-      runtime: 'claude',
-      runtimeOptions: {retired: true}
+      reasoningEffort: 'ultra'
     }));
 
     (component as any).loadAvailableModels();
@@ -56,17 +46,13 @@ describe('AiChatPanelComponent settings and active recovery', () => {
       version: 1,
       modelName: 'gpt-5_6-sol',
       reasoningEffort: 'medium',
-      runtime: 'default',
-      runtimeOptions: {},
       permissionMode: 'ask'
     });
 
     localStorage.setItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY, JSON.stringify({
       version: 0,
       modelName: 'gpt-5_6-sol',
-      reasoningEffort: 'medium',
-      runtime: 'openai',
-      runtimeOptions: {}
+      reasoningEffort: 'medium'
     }));
     (component as any).loadAvailableModels();
 
@@ -74,8 +60,6 @@ describe('AiChatPanelComponent settings and active recovery', () => {
       version: 1,
       modelName: 'claude-fable-5',
       reasoningEffort: 'high',
-      runtime: 'default',
-      runtimeOptions: {},
       permissionMode: 'ask'
     });
   });
@@ -85,7 +69,7 @@ describe('AiChatPanelComponent settings and active recovery', () => {
     component.state.conversationId = 'conversation-1';
     api.updateConversationModel.mockReturnValue(of({
       conversationId: 'conversation-1', modelName: 'gpt-5_6-sol',
-      reasoningEffort: 'high', runtime: 'default', runtimeOptions: {}
+      reasoningEffort: 'high'
     }));
 
     (component as any).openModelSettings('/model');
@@ -95,14 +79,14 @@ describe('AiChatPanelComponent settings and active recovery', () => {
 
     expect(api.getAvailableModels).toHaveBeenCalledOnce();
     expect(api.updateConversationModel)
-      .toHaveBeenCalledWith('conversation-1', 'gpt-5_6-sol', 'high', 'default', {});
+      .toHaveBeenCalledWith('conversation-1', 'gpt-5_6-sol', 'high');
     expect(component.state.selectedModelName).toBe('gpt-5_6-sol');
     expect(component.state.selectedReasoningEffort).toBe('high');
     expect(component.state.modelSettingsOpen).toBe(false);
     expect(component.state.messages.some(message => message.content === '/model')).toBe(true);
     expect(JSON.parse(localStorage.getItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY)!)).toEqual({
       version: 1, modelName: 'gpt-5_6-sol', reasoningEffort: 'high',
-      runtime: 'default', runtimeOptions: {}, permissionMode: 'ask'
+      permissionMode: 'ask'
     });
   });
 
@@ -114,57 +98,6 @@ describe('AiChatPanelComponent settings and active recovery', () => {
 
     expect(component.state.modelSettingsOpen).toBe(false);
     expect(component.state.messages.some(message => message.content === '/model')).toBe(false);
-  });
-
-  it('changes the compatible runtime through separate runtime command settings', () => {
-    (component as any).loadAvailableModels();
-    component.state.conversationId = 'conversation-1';
-    api.updateConversationModel.mockReturnValue(of({
-      conversationId: 'conversation-1', modelName: 'claude-fable-5',
-      reasoningEffort: 'high', runtime: 'claude',
-      runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true}
-    }));
-
-    (component as any).openRuntimeSettings('/runtime');
-    component.changeRuntimeDraft('claude');
-    component.state.setRuntimeDraftOption('permissionMode', 'auto');
-    component.state.setRuntimeDraftOption('maxTurns', 40);
-    component.state.setRuntimeDraftOption('verbose', true);
-    component.applyRuntimeSettings();
-
-    expect(api.updateConversationModel)
-      .toHaveBeenCalledWith('conversation-1', 'claude-fable-5', 'high', 'claude', {
-        permissionMode: 'auto', maxTurns: 40, verbose: true
-      });
-    expect(component.state.selectedRuntime).toBe('claude');
-    expect(component.state.selectedRuntimeOptions).toEqual({
-      permissionMode: 'auto', maxTurns: 40, verbose: true
-    });
-    expect(component.state.runtimeSettingsOpen).toBe(false);
-    expect(component.state.messages.some(message => message.content === '/runtime')).toBe(true);
-    expect(JSON.parse(localStorage.getItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY)!)).toEqual({
-      version: 1, modelName: 'claude-fable-5', reasoningEffort: 'high', runtime: 'claude',
-      runtimeOptions: {permissionMode: 'auto', maxTurns: 40, verbose: true},
-      permissionMode: 'ask'
-    });
-
-    component.state.selectRuntime('default');
-    component.startNewChat();
-
-    expect(component.state.selectedRuntime).toBe('claude');
-    expect(component.state.selectedRuntimeOptions).toEqual({
-      permissionMode: 'auto', maxTurns: 40, verbose: true
-    });
-  });
-
-  it('removes the runtime command from history when its settings are cancelled', () => {
-    (component as any).loadAvailableModels();
-
-    (component as any).openRuntimeSettings('/runtime');
-    component.closeRuntimeSettings();
-
-    expect(component.state.runtimeSettingsOpen).toBe(false);
-    expect(component.state.messages.some(message => message.content === '/runtime')).toBe(false);
   });
 
   it('changes mutation approval policy through the permissions command', () => {
@@ -201,22 +134,19 @@ describe('AiChatPanelComponent settings and active recovery', () => {
     api.getConversation
       .mockReturnValueOnce(of({
         conversationId: 'conversation-1', title: 'Long task', modelName: 'claude-fable-5',
-        reasoningEffort: 'high', runtime: 'claude',
-        runtimeOptions: {permissionMode: 'default', maxTurns: 40, verbose: false}, messages: [
+        reasoningEffort: 'high', messages: [
           {index: 0, role: 'user', content: 'Do a long task', requestId: 'request-running'}
         ]
       }))
       .mockReturnValueOnce(of({
         conversationId: 'conversation-1', title: 'Long task', modelName: 'claude-fable-5',
-        reasoningEffort: 'high', runtime: 'claude',
-        runtimeOptions: {permissionMode: 'default', maxTurns: 40, verbose: false}, messages: [
+        reasoningEffort: 'high', messages: [
           {index: 0, role: 'user', content: 'Do a long task', requestId: 'request-running'}
         ]
       }))
       .mockReturnValueOnce(of({
         conversationId: 'conversation-1', title: 'Long task', modelName: 'claude-fable-5',
-        reasoningEffort: 'high', runtime: 'claude',
-        runtimeOptions: {permissionMode: 'default', maxTurns: 40, verbose: false}, messages: [
+        reasoningEffort: 'high', messages: [
           {index: 0, role: 'user', content: 'Do a long task', requestId: 'request-running'},
           {index: 1, role: 'assistant', content: 'Task complete', requestId: 'request-running'}
         ]
@@ -226,10 +156,7 @@ describe('AiChatPanelComponent settings and active recovery', () => {
 
     expect(component.state.pending).toBe(true);
     expect(component.state.activeRequest?.requestId).toBe('request-running');
-    expect(component.state.selectedRuntime).toBe('claude');
-    expect(component.state.selectedRuntimeOptions).toEqual({
-      permissionMode: 'default', maxTurns: 40, verbose: false
-    });
+    expect(component.state.selectedModelName).toBe('claude-fable-5');
     expect(component.state.messages.some(message => message.inProgress)).toBe(true);
 
     vi.advanceTimersByTime(1000);
@@ -244,7 +171,7 @@ describe('AiChatPanelComponent settings and active recovery', () => {
     component.state.prompt = '/';
 
     expect(component.commandSuggestions.map(command => command.name)).toContain('/model');
-    expect(component.commandSuggestions.map(command => command.name)).toContain('/runtime');
+    expect(component.commandSuggestions.map(command => command.name)).not.toContain('/runtime');
     expect(component.commandSuggestions.map(command => command.name)).not.toContain('/cancel');
 
     component.state.pending = true;

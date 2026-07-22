@@ -235,15 +235,13 @@ describe('AiChatMessageListComponent', () => {
   it('shows the selected session settings at the top of an empty chat', () => {
     fixture.componentInstance.availableModels = [{
       name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
-      provider: 'azure-openai', defaultModel: true, defaultRuntime: 'openai', runtimes: [
-        {name: 'openai', displayName: 'OpenAI', description: 'OpenAI runtime.', settings: []}
-      ], defaultReasoningEffort: 'high', reasoningEfforts: [
+      provider: 'azure-openai', defaultModel: true,
+      defaultReasoningEffort: 'high', reasoningEfforts: [
         {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
       ]
     }];
     fixture.componentInstance.selectedModelName = 'gpt-5_6-sol';
     fixture.componentInstance.selectedReasoningEffort = 'high';
-    fixture.componentInstance.selectedRuntime = 'openai';
     fixture.componentInstance.permissionMode = 'full_access';
     fixture.detectChanges();
 
@@ -255,13 +253,13 @@ describe('AiChatMessageListComponent', () => {
     expect(flow.firstElementChild).toBe(summary);
     expect(summary.getAttribute('aria-label')).toBe('Current assistant session settings');
     expect(Array.from(terms, term => term.textContent?.trim())).toEqual([
-      'model', 'reasoning', 'runtime', 'permissions'
+      'model', 'permissions'
     ]);
     expect(Array.from(values, value => value.textContent?.trim())).toEqual([
-      'GPT-5.6 SOL', 'High', 'OpenAI', 'Full access'
+      'GPT-5.6 SOL with High effort', 'Full access'
     ]);
     expect(summary.textContent).toContain('/model');
-    expect(summary.textContent).toContain('/runtime');
+    expect(summary.textContent).not.toContain('/runtime');
     expect(summary.textContent).toContain('/permissions');
   });
 
@@ -269,7 +267,7 @@ describe('AiChatMessageListComponent', () => {
     fixture.componentInstance.messages = [{role: 'user', content: '/model'}];
     fixture.componentInstance.availableModels = [{
       name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
-      provider: 'azure-openai', defaultModel: true, defaultRuntime: 'default', runtimes: [],
+      provider: 'azure-openai', defaultModel: true,
       defaultReasoningEffort: 'high', reasoningEfforts: [
         {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
       ]
@@ -338,10 +336,8 @@ describe('AiChatMessageListComponent', () => {
     fixture.componentInstance.availableModels = [
       {
         name: 'claude-fable-5', displayName: 'Claude Fable 5', description: 'Claude model.',
-        provider: 'azure-foundry', defaultModel: true, defaultRuntime: 'default', runtimes: [
-          {name: 'default', displayName: 'Default', description: 'Default runtime.', settings: []},
-          {name: 'claude', displayName: 'Claude', description: 'Claude runtime.', settings: []}
-        ], defaultReasoningEffort: 'high', reasoningEfforts: [
+        provider: 'azure-foundry', defaultModel: true,
+        defaultReasoningEffort: 'high', reasoningEfforts: [
           {name: 'low', displayName: 'Low', description: 'Fast responses.'},
           {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'},
           {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
@@ -349,10 +345,8 @@ describe('AiChatMessageListComponent', () => {
       },
       {
         name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
-        provider: 'azure-openai', defaultModel: false, defaultRuntime: 'default', runtimes: [
-          {name: 'default', displayName: 'Default', description: 'Default runtime.', settings: []},
-          {name: 'openai', displayName: 'OpenAI', description: 'OpenAI runtime.', settings: []}
-        ], defaultReasoningEffort: 'medium', reasoningEfforts: [
+        provider: 'azure-openai', defaultModel: false,
+        defaultReasoningEffort: 'medium', reasoningEfforts: [
           {name: 'low', displayName: 'Low', description: 'Fast responses.'},
           {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'},
           {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
@@ -363,7 +357,6 @@ describe('AiChatMessageListComponent', () => {
     fixture.componentInstance.modelDraftReasoningEffort = 'high';
     fixture.componentInstance.selectedModelName = 'gpt-5_6-sol';
     fixture.componentInstance.selectedReasoningEffort = 'high';
-    fixture.componentInstance.selectedRuntime = 'openai';
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -374,64 +367,6 @@ describe('AiChatMessageListComponent', () => {
     expect(sections[1].textContent).toContain('(current)');
     expect(sections[1].textContent).toContain('Low');
     expect(sections[1].textContent).toContain('High');
-    const panel = fixture.nativeElement.querySelector('.model-command-panel') as HTMLElement;
-    expect(panel.textContent).not.toContain('OpenAI');
-  });
-
-  it('shows compatible runtimes only for the runtime command', async () => {
-    fixture.componentInstance.runtimeSettingsOpen = true;
-    fixture.componentInstance.availableModels = [{
-      name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
-      provider: 'azure-openai', defaultModel: true, defaultRuntime: 'default', runtimes: [
-        {name: 'default', displayName: 'Default', description: 'Default runtime.', settings: []},
-        {name: 'openai', displayName: 'OpenAI', description: 'OpenAI runtime.', settings: [
-          {name: 'permissionMode', displayName: 'Permission mode', description: 'Controls tool approval.',
-            type: 'select', defaultValue: 'default', options: [
-              {value: 'default', displayName: 'Default'}, {value: 'auto', displayName: 'Auto'}
-            ], minimum: null, maximum: null, step: null},
-          {name: 'maxTurns', displayName: 'Maximum turns', description: 'Limits agent turns.',
-            type: 'number', defaultValue: 20, options: [], minimum: 1, maximum: 100, step: 1},
-          {name: 'verbose', displayName: 'Verbose', description: 'Shows verbose output.',
-            type: 'boolean', defaultValue: false, options: [], minimum: null, maximum: null, step: null}
-        ]}
-      ], defaultReasoningEffort: 'medium', reasoningEfforts: [
-        {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'}
-      ]
-    }];
-    fixture.componentInstance.selectedModelName = 'gpt-5_6-sol';
-    fixture.componentInstance.selectedRuntime = 'openai';
-    fixture.componentInstance.runtimeDraft = 'openai';
-    fixture.componentInstance.runtimeDraftOptions = {
-      permissionMode: 'auto', maxTurns: 40, verbose: true
-    };
-    const optionChanges: Array<{name: string; value: unknown}> = [];
-    fixture.componentInstance.runtimeDraftOptionChange.subscribe(change => optionChanges.push(change));
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    const sections = fixture.nativeElement.querySelectorAll('.model-command-section') as NodeListOf<HTMLElement>;
-    expect(sections).toHaveLength(1);
-    expect(sections[0].textContent).toContain('Default');
-    expect(sections[0].textContent).toContain('OpenAI');
-    expect(sections[0].textContent).toContain('(current)');
-    expect(fixture.nativeElement.querySelector('.model-command-title').textContent)
-      .toContain('Select Runtime and Settings');
-    const select = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
-    const number = fixture.nativeElement.querySelector('input[type="number"]') as HTMLInputElement;
-    const checkbox = fixture.nativeElement.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    expect(select.value).toBe('auto');
-    expect(number.value).toBe('40');
-    expect(number.min).toBe('1');
-    expect(number.max).toBe('100');
-    expect(checkbox.checked).toBe(true);
-
-    number.value = '55';
-    number.dispatchEvent(new Event('change'));
-    checkbox.checked = false;
-    checkbox.dispatchEvent(new Event('change'));
-    expect(optionChanges).toEqual([
-      {name: 'maxTurns', value: 55}, {name: 'verbose', value: false}
-    ]);
   });
 
   it('shows the three permissions choices and emits the selected mode', () => {
@@ -459,7 +394,7 @@ describe('AiChatMessageListComponent', () => {
     fixture.componentInstance.modelSettingsOpen = true;
     fixture.componentInstance.availableModels = [{
       name: 'claude-fable-5', displayName: 'Claude Fable 5', description: 'Claude model.',
-      provider: 'azure-foundry', defaultModel: true, defaultRuntime: 'default', runtimes: [],
+      provider: 'azure-foundry', defaultModel: true,
       defaultReasoningEffort: 'high', reasoningEfforts: [
         {name: 'low', displayName: 'Low', description: 'Fast responses.'},
         {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
@@ -486,7 +421,7 @@ describe('AiChatMessageListComponent', () => {
     fixture.componentInstance.modelSettingsOpen = true;
     fixture.componentInstance.availableModels = [{
       name: 'claude-haiku-4_5', displayName: 'Claude Haiku 4.5', description: 'Fast Claude model.',
-      provider: 'azure-foundry', defaultModel: false, defaultRuntime: 'default', runtimes: [],
+      provider: 'azure-foundry', defaultModel: false,
       defaultReasoningEffort: 'default', reasoningEfforts: [
         {name: 'default', displayName: 'Default', description: 'Uses built-in behavior.'}
       ]

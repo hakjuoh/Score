@@ -9,15 +9,7 @@
         <dl class="session-summary-details">
           <div>
             <dt>model</dt>
-            <dd>{{ selectedModel?.displayName }}</dd>
-          </div>
-          <div>
-            <dt>reasoning</dt>
-            <dd>{{ selectedReasoningEffortDisplayName }}</dd>
-          </div>
-          <div>
-            <dt>runtime</dt>
-            <dd>{{ selectedRuntimeDisplayName }}</dd>
+            <dd>{{ selectedModel?.displayName }} with {{ selectedReasoningEffortDisplayName }} effort</dd>
           </div>
           <div>
             <dt>permissions</dt>
@@ -25,7 +17,7 @@
           </div>
         </dl>
         <p class="session-summary-tip">
-          Change with <code>/model</code>, <code>/runtime</code>, or <code>/permissions</code>.
+          Change with <code>/model</code> or <code>/permissions</code>.
         </p>
       </section>
     }
@@ -196,88 +188,6 @@
                   class="primary"
                   [disabled]="modelChangePending"
                   (click)="modelSettingsApplied.emit()">
-            {{ modelChangePending ? 'Applying...' : 'Apply' }}
-          </button>
-        </div>
-      </div>
-    }
-
-    @if (runtimeSettingsOpen) {
-      <div class="model-command-panel" role="group" aria-label="Assistant runtime settings">
-        <div class="model-command-title">
-          Select Runtime@if (runtimeDraftSettings.length > 0) {<span> and Settings</span>}
-        </div>
-        <section class="model-command-section" aria-label="Runtime">
-          <h4>Runtime</h4>
-          <div class="model-command-options">
-            @for (runtime of runtimeOptions; track runtime.name) {
-              <button type="button"
-                      class="model-command-option"
-                      [class.selected]="runtime.name === runtimeDraft"
-                      [attr.aria-pressed]="runtime.name === runtimeDraft"
-                      [disabled]="modelChangePending"
-                      (click)="runtimeDraftChange.emit(runtime.name)">
-                <span class="model-command-caret" aria-hidden="true">›</span>
-                <span class="model-command-option-content">
-                  <span class="model-command-option-name">
-                    {{ runtime.displayName }}
-                    @if (runtime.name === selectedRuntime) {
-                      <span>(current)</span>
-                    } @else if (runtime.name === selectedModel?.defaultRuntime) {
-                      <span>(default)</span>
-                    }
-                  </span>
-                  <span class="model-command-option-description">{{ runtime.description }}</span>
-                </span>
-              </button>
-            }
-          </div>
-          @if (runtimeDraftSettings.length > 0) {
-            <div class="runtime-command-settings" aria-label="Runtime settings">
-              @for (setting of runtimeDraftSettings; track setting.name) {
-                <label class="runtime-command-setting">
-                  <span class="runtime-command-setting-label">{{ setting.displayName }}</span>
-                  @if (setting.type === 'select') {
-                    <select [value]="runtimeDraftTextOption(setting.name)"
-                            [disabled]="modelChangePending"
-                            (change)="changeRuntimeDraftOption(setting, $event)">
-                      @for (option of setting.options; track option.value) {
-                        <option [value]="option.value"
-                                [selected]="option.value === runtimeDraftTextOption(setting.name)">
-                          {{ option.displayName }}
-                        </option>
-                      }
-                    </select>
-                  } @else if (setting.type === 'number') {
-                    <input type="number"
-                           [value]="runtimeDraftTextOption(setting.name)"
-                           [attr.min]="setting.minimum"
-                           [attr.max]="setting.maximum"
-                           [attr.step]="setting.step"
-                           [disabled]="modelChangePending"
-                           (change)="changeRuntimeDraftOption(setting, $event)">
-                  } @else {
-                    <input type="checkbox"
-                           [checked]="runtimeDraftBooleanOption(setting.name)"
-                           [disabled]="modelChangePending"
-                           (change)="changeRuntimeDraftOption(setting, $event)">
-                  }
-                  @if (setting.description) {
-                    <span class="model-command-option-description">{{ setting.description }}</span>
-                  }
-                </label>
-              }
-            </div>
-          }
-        </section>
-        <div class="model-command-actions">
-          <button type="button"
-                  [disabled]="modelChangePending"
-                  (click)="runtimeSettingsCancelled.emit()">Cancel</button>
-          <button type="button"
-                  class="primary"
-                  [disabled]="modelChangePending"
-                  (click)="runtimeSettingsApplied.emit()">
             {{ modelChangePending ? 'Applying...' : 'Apply' }}
           </button>
         </div>

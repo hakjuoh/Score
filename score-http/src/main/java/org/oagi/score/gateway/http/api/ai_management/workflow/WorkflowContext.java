@@ -1,6 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.workflow;
 
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChatExecutor;
 
 import java.util.List;
 
@@ -9,32 +9,32 @@ import java.util.List;
  * marks state that flows into simultaneously executing siblings, so leaf executors
  * can restrict what a non-exclusive execution is allowed to do.
  */
-public record WorkflowContext(AiRuntime.Context runtimeContext,
+public record WorkflowContext(AiChatExecutor.Context executionContext,
                               List<WorkflowResult> upstreamResults,
                               boolean concurrent) {
 
     public WorkflowContext {
-        if (runtimeContext == null) {
-            throw new IllegalArgumentException("A workflow runtime context is required.");
+        if (executionContext == null) {
+            throw new IllegalArgumentException("A workflow execution context is required.");
         }
         upstreamResults = upstreamResults != null
                 ? List.copyOf(upstreamResults) : List.of();
     }
 
-    public WorkflowContext(AiRuntime.Context runtimeContext,
+    public WorkflowContext(AiChatExecutor.Context executionContext,
                            List<WorkflowResult> upstreamResults) {
-        this(runtimeContext, upstreamResults, false);
+        this(executionContext, upstreamResults, false);
     }
 
-    public static WorkflowContext root(AiRuntime.Context runtimeContext) {
-        return new WorkflowContext(runtimeContext, List.of(), false);
+    public static WorkflowContext root(AiChatExecutor.Context executionContext) {
+        return new WorkflowContext(executionContext, List.of(), false);
     }
 
     public WorkflowContext withUpstream(List<WorkflowResult> results) {
-        return new WorkflowContext(runtimeContext, results, concurrent);
+        return new WorkflowContext(executionContext, results, concurrent);
     }
 
     public WorkflowContext concurrentBranch() {
-        return concurrent ? this : new WorkflowContext(runtimeContext, upstreamResults, true);
+        return concurrent ? this : new WorkflowContext(executionContext, upstreamResults, true);
     }
 }

@@ -12,8 +12,7 @@ import {
   AiContextUsage,
   AiElicitationNotice,
   AiMutationPermissionMode,
-  AiChatPanelTab,
-  AiRuntimeOptions
+  AiChatPanelTab
 } from './ai-chat-panel.model';
 
 export class AiChatPanelState {
@@ -36,14 +35,9 @@ export class AiChatPanelState {
   selectedModelName = '';
   defaultModelName = '';
   selectedReasoningEffort = '';
-  selectedRuntime = 'default';
-  selectedRuntimeOptions: AiRuntimeOptions = {};
   modelSettingsOpen = false;
   modelDraftName = '';
   modelDraftReasoningEffort = '';
-  runtimeSettingsOpen = false;
-  runtimeDraft = '';
-  runtimeDraftOptions: AiRuntimeOptions = {};
   permissionMode: AiMutationPermissionMode = 'ask';
   permissionSettingsOpen = false;
   permissionDraft: AiMutationPermissionMode = 'ask';
@@ -81,14 +75,9 @@ export class AiChatPanelState {
     this.conversationId = undefined;
     this.selectedModelName = this.defaultModelName;
     this.selectedReasoningEffort = this.defaultModel()?.defaultReasoningEffort || '';
-    this.selectedRuntime = this.defaultModel()?.defaultRuntime || 'default';
-    this.selectedRuntimeOptions = this.runtimeOptionsFor(this.selectedRuntime);
     this.modelSettingsOpen = false;
     this.modelDraftName = '';
     this.modelDraftReasoningEffort = '';
-    this.runtimeSettingsOpen = false;
-    this.runtimeDraft = '';
-    this.runtimeDraftOptions = {};
     this.permissionSettingsOpen = false;
     this.permissionDraft = this.permissionMode;
     this.activeWorkflow = '';
@@ -108,15 +97,7 @@ export class AiChatPanelState {
   }
 
   setAvailableModels(models: AiChatModelInfo[]): void {
-    this.availableModels = models.map(model => ({
-      ...model,
-      defaultRuntime: model.defaultRuntime || 'default',
-      runtimes: model.runtimes?.length ? model.runtimes.map(runtime => ({
-        ...runtime, settings: runtime.settings || []
-      })) : [{
-        name: 'default', displayName: 'Default', description: 'Uses the Default runtime.', settings: []
-      }]
-    }));
+    this.availableModels = models;
     this.defaultModelName = this.availableModels.find(model => model.defaultModel)?.name
       || this.availableModels[0]?.name || '';
     if (!this.availableModels.some(model => model.name === this.selectedModelName)) {
@@ -126,31 +107,11 @@ export class AiChatPanelState {
     if (!selectedModel?.reasoningEfforts.some(effort => effort.name === this.selectedReasoningEffort)) {
       this.selectedReasoningEffort = selectedModel?.defaultReasoningEffort || '';
     }
-    const previousRuntime = this.selectedRuntime;
-    if (!selectedModel?.runtimes?.some(runtime => runtime.name === this.selectedRuntime)) {
-      this.selectedRuntime = selectedModel?.defaultRuntime || 'default';
-    }
-    this.selectedRuntimeOptions = this.runtimeOptionsFor(
-      this.selectedRuntime, previousRuntime === this.selectedRuntime ? this.selectedRuntimeOptions : {}
-    );
-    if (!selectedModel?.runtimes?.some(runtime => runtime.name === this.runtimeDraft)) {
-      this.runtimeDraft = this.selectedRuntime;
-    }
-    this.runtimeDraftOptions = this.runtimeOptionsFor(
-      this.runtimeDraft, this.runtimeDraft === this.selectedRuntime
-        ? this.selectedRuntimeOptions : this.runtimeDraftOptions
-    );
     this.ensureContextUsageForSelectedModel();
   }
 
-  selectRuntime(runtime: string, options: AiRuntimeOptions = {}): void {
-    this.selectedRuntime = runtime;
-    this.selectedRuntimeOptions = this.runtimeOptionsFor(runtime, options);
-  }
-
   restoreConversationSettings(settings: Pick<AiChatConversationDetails,
-    'modelName' | 'reasoningEffort' | 'runtime' | 'runtimeOptions' | 'permissionMode'
-    | 'activeWorkflow'>): void {
+    'modelName' | 'reasoningEffort' | 'permissionMode' | 'activeWorkflow'>): void {
     const previousModelName = this.selectedModelName;
     const model = settings.modelName
       ? this.availableModels.find(candidate => candidate.name === settings.modelName)
@@ -158,10 +119,6 @@ export class AiChatPanelState {
     if (!model && settings.modelName) {
       this.selectedModelName = settings.modelName;
       if (settings.reasoningEffort) this.selectedReasoningEffort = settings.reasoningEffort;
-      if (settings.runtime) {
-        this.selectedRuntime = settings.runtime;
-        this.selectedRuntimeOptions = {...(settings.runtimeOptions || {})};
-      }
     } else if (model) {
       this.selectedModelName = model.name;
       const modelChanged = previousModelName !== model.name;
@@ -170,13 +127,6 @@ export class AiChatPanelState {
           .some(effort => effort.name === settings.reasoningEffort)
           ? settings.reasoningEffort! : model.defaultReasoningEffort;
       }
-      const runtime = settings.runtime
-        ? model.runtimes.some(candidate => candidate.name === settings.runtime)
-          ? settings.runtime : model.defaultRuntime || 'default'
-        : modelChanged ? model.defaultRuntime || 'default' : this.selectedRuntime;
-      this.selectRuntime(runtime, this.runtimeOptionsFor(
-        runtime, settings.runtimeOptions || (modelChanged ? {} : this.selectedRuntimeOptions), model
-      ));
     }
     if (settings.permissionMode === 'ask' || settings.permissionMode === 'auto'
       || settings.permissionMode === 'full_access') {
@@ -185,17 +135,6 @@ export class AiChatPanelState {
     this.permissionDraft = this.permissionMode;
     this.activeWorkflow = settings.activeWorkflow || '';
     this.resetContextUsageForSelectedModel();
-  }
-
-  draftRuntime(runtime: string, options?: AiRuntimeOptions): void {
-    this.runtimeDraft = runtime;
-    this.runtimeDraftOptions = this.runtimeOptionsFor(
-      runtime, options || (runtime === this.selectedRuntime ? this.selectedRuntimeOptions : {})
-    );
-  }
-
-  setRuntimeDraftOption(name: string, value: unknown): void {
-    this.runtimeDraftOptions = {...this.runtimeDraftOptions, [name]: value};
   }
 
   selectedModel(): AiChatModelInfo | undefined {
@@ -264,9 +203,6 @@ export class AiChatPanelState {
     this.modelSettingsOpen = false;
     this.modelDraftName = '';
     this.modelDraftReasoningEffort = '';
-    this.runtimeSettingsOpen = false;
-    this.runtimeDraft = '';
-    this.runtimeDraftOptions = {};
     this.permissionSettingsOpen = false;
     this.permissionDraft = this.permissionMode;
     this.activeWorkflow = '';
@@ -301,32 +237,4 @@ export class AiChatPanelState {
     };
   }
 
-  runtimeOptionsFor(runtimeName: string, requested: AiRuntimeOptions = {},
-                    model = this.selectedModel()): AiRuntimeOptions {
-    const runtime = model?.runtimes.find(candidate => candidate.name === runtimeName);
-    if (!runtime) {
-      return {...requested};
-    }
-    return Object.fromEntries((runtime.settings || []).flatMap(setting => {
-      const requestedValue = requested[setting.name];
-      const value = this.validRuntimeOption(setting, requestedValue)
-        ? requestedValue : setting.defaultValue;
-      return value == null ? [] : [[setting.name, value]];
-    }));
-  }
-
-  private validRuntimeOption(
-    setting: AiChatModelInfo['runtimes'][number]['settings'][number], value: unknown
-  ): boolean {
-    if (setting.type === 'boolean') {
-      return typeof value === 'boolean';
-    }
-    if (setting.type === 'number') {
-      return typeof value === 'number' && Number.isFinite(value)
-        && (setting.minimum == null || value >= setting.minimum)
-        && (setting.maximum == null || value <= setting.maximum);
-    }
-    return typeof value === 'string'
-      && setting.options.some(option => option.value === value);
-  }
 }

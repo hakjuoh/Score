@@ -3,10 +3,9 @@ package org.oagi.score.gateway.http.configuration.ai;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationToolGuard;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AnthropicRuntimeProperties;
-import org.oagi.score.gateway.http.api.ai_management.runtime.OpenAiRuntimeProperties;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.toolsearch.ToolIndex;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.env.YamlPropertySourceLoader;
@@ -42,7 +41,7 @@ class ScoreAiConfigurationTest {
     }
 
     @Test
-    void promptResourcesUsePlaceholdersForRuntimeProtocolValues() throws Exception {
+    void promptResourcesUsePlaceholdersForExecutionProtocolValues() throws Exception {
         Resource[] prompts = new PathMatchingResourcePatternResolver()
                 .getResources("classpath*:prompts/*.md");
         for (Resource resource : prompts) {
@@ -93,29 +92,16 @@ class ScoreAiConfigurationTest {
         provider.setBaseUrl("https://example.openai.azure.com/");
         provider.setKey("test-key");
         provider.setApiVersion("2024-10-21");
-        properties.getModels().get("gpt-5.6-sol").setRuntimes(List.of("openai", "unknown-runtime"));
 
         Map<String, ChatModel> models = chatModels(properties);
 
-        OpenAiResponsesChatModel model = assertInstanceOf(
-                OpenAiResponsesChatModel.class, models.get("gpt-5.6-sol"));
+        OpenAiChatModel model = assertInstanceOf(
+                OpenAiChatModel.class, models.get("gpt-5.6-sol"));
         assertEquals("https://example.openai.azure.com", model.getOptions().getBaseUrl());
         assertEquals("gpt-5.6-sol", model.getOptions().getDeploymentName());
         assertEquals("gpt-5.6-sol", model.getOptions().getModel());
         assertEquals("2024-10-21", model.getOptions().getMicrosoftFoundryServiceVersion().value());
         assertTrue(model.getOptions().isMicrosoftFoundry());
-        assertEquals("https://example.openai.azure.com/openai/v1",
-                OpenAiResponsesChatModel.responsesBaseUrl(model.getOptions()));
-
-        ScoreAiModelRegistry registry = new ScoreAiModelRegistry(properties, models);
-        assertEquals(List.of("default", "openai"), registry.availableModels().getFirst().runtimes().stream()
-                .map(ScoreAiModelRegistry.RuntimeDescriptor::name).toList());
-        assertEquals(List.of("Default", "OpenAI"), registry.availableModels().getFirst().runtimes().stream()
-                .map(ScoreAiModelRegistry.RuntimeDescriptor::displayName).toList());
-        assertEquals("default", registry.resolveRuntime("gpt-5.6-sol", null));
-        assertEquals("default", registry.resolveRuntime("gpt-5.6-sol", "spring-ai"));
-        assertEquals("openai", registry.resolveRuntime("gpt-5.6-sol", "openai"));
-        assertEquals("openai", registry.resolveRuntime("gpt-5.6-sol", "codex-sdk"));
     }
 
     @Test
@@ -130,7 +116,6 @@ class ScoreAiConfigurationTest {
         configured.setReasoningEffort("default");
         configured.setReasoningEfforts(List.of(reasoningEffort(
                 "default", "Default", "Uses the model's built-in response behavior.")));
-        configured.setRuntimes(List.of("claude"));
 
         Map<String, ChatModel> models = chatModels(properties);
 
@@ -139,10 +124,7 @@ class ScoreAiConfigurationTest {
         assertEquals("https://example.services.ai.azure.com/anthropic", model.getOptions().getBaseUrl());
         assertEquals("claude-haiku-4-5", model.getOptions().getModel());
 
-        ScoreAiModelRegistry registry = new ScoreAiModelRegistry(properties, models);
         assertNull(model.getOptions().getOutputConfig());
-        assertEquals("claude", registry.resolveRuntime("claude-haiku-4_5", "claude"));
-        assertEquals("claude", registry.resolveRuntime("claude-haiku-4_5", "claude-sdk"));
     }
 
     @Test
@@ -168,10 +150,6 @@ class ScoreAiConfigurationTest {
         assertEquals(16000, properties.getModels().get("claude-fable-5").getMaxTokens());
         assertNull(properties.getModels().get("gpt-5_6-sol").getMaxTokens());
         assertEquals(200000L, properties.getModels().get("gpt-5_6-sol").getContextWindow());
-        assertEquals(List.of("claude"),
-                properties.getModels().get("claude-fable-5").getRuntimes());
-        assertEquals(List.of("openai"),
-                properties.getModels().get("gpt-5_6-sol").getRuntimes());
         assertEquals("classpath:prompts/connect-center-assistant-system-prompt.md",
                 properties.getAssistant().getSystemPromptResource());
         Map.of(
@@ -214,9 +192,6 @@ class ScoreAiConfigurationTest {
         assertTrue(registry.availableModels().getFirst().defaultModel());
         assertEquals("GPT-5.6 SOL", registry.availableModels().getFirst().displayName());
         assertEquals("medium", registry.availableModels().getFirst().defaultReasoningEffort());
-        assertEquals("default", registry.availableModels().getFirst().defaultRuntime());
-        assertEquals(List.of("default"), registry.availableModels().getFirst().runtimes().stream()
-                .map(ScoreAiModelRegistry.RuntimeDescriptor::name).toList());
         assertEquals(List.of("Low", "Medium", "High"), registry.availableModels().getFirst()
                 .reasoningEfforts().stream().map(ScoreAiModelRegistry.ReasoningEffortDescriptor::displayName).toList());
     }
@@ -262,7 +237,7 @@ class ScoreAiConfigurationTest {
 
     private Map<String, ChatModel> chatModels(ScoreAiProperties properties) {
         return new ScoreAiConfiguration().scoreAiChatModels(
-                properties, new AnthropicRuntimeProperties(), new OpenAiRuntimeProperties());
+                properties, new AnthropicChatProperties(), new OpenAiChatProperties());
     }
 
     private ScoreAiProperties.ReasoningEffort reasoningEffort(

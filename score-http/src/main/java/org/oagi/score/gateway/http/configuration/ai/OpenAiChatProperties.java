@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.runtime;
+package org.oagi.score.gateway.http.configuration.ai;
 
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -9,7 +9,7 @@ import java.util.Map;
 
 /** Server-owned defaults from {@code spring.ai.openai.chat.*}. */
 @ConfigurationProperties("spring.ai.openai.chat")
-public class OpenAiRuntimeProperties {
+public class OpenAiChatProperties {
 
     private Double frequencyPenalty;
     private Map<String, Integer> logitBias = Map.of();

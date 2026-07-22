@@ -203,8 +203,6 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         stepRecord.setReasoningContent(blankToNull(step.reasoningContent()));
         stepRecord.setModelName(blankToNull(step.modelName()));
         stepRecord.setReasoningEffort(blankToNull(step.reasoningEffort()));
-        stepRecord.setAgentRuntime(blankToNull(step.runtime()));
-        stepRecord.setRuntimeOptionsJson(serializer.serialize(step.runtimeOptions()));
         stepRecord.setToolCallsJson(serializer.serialize(step.toolCalls()));
         stepRecord.setObservationJson(serializer.serialize(step.observation()));
         stepRecord.setMetricsJson(serializer.serialize(step.metrics()));
@@ -305,8 +303,8 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
             indexedMessages.add(withIndex(messages.get(index), index));
         }
         return new ChatConversationDetails(conversationId, header.title(), settings.modelName(),
-                settings.reasoningEffort(), settings.runtime(), settings.runtimeOptions(), header.updatedAt(),
-                indexedMessages, List.<ChatContextMessage>of(), null, permissionMode,
+                settings.reasoningEffort(), header.updatedAt(), indexedMessages,
+                List.<ChatContextMessage>of(), null, permissionMode,
                 latestActiveWorkflow(internalConversationId).orElse(null));
     }
 
@@ -336,8 +334,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
                         AI_CHAT_STEP.STEP_SEQUENCE, AI_CHAT_STEP.REQUEST_ID, AI_CHAT_STEP.SOURCE,
                         AI_CHAT_STEP.MESSAGE_KIND, AI_CHAT_STEP.VISIBILITY, AI_CHAT_STEP.MESSAGE,
                         AI_CHAT_STEP.REASONING_CONTENT, AI_CHAT_STEP.MODEL_NAME,
-                        AI_CHAT_STEP.REASONING_EFFORT, AI_CHAT_STEP.AGENT_RUNTIME,
-                        AI_CHAT_STEP.RUNTIME_OPTIONS_JSON, AI_CHAT_STEP.TOOL_CALLS_JSON,
+                        AI_CHAT_STEP.REASONING_EFFORT, AI_CHAT_STEP.TOOL_CALLS_JSON,
                         AI_CHAT_STEP.OBSERVATION_JSON, AI_CHAT_STEP.METRICS_JSON,
                         AI_CHAT_STEP.EXTRA_JSON, AI_CHAT_STEP.LLM_CALL_COUNT,
                         AI_CHAT_STEP.IS_COPIED_CONTEXT, AI_CHAT_STEP.CREATED_AT)
@@ -443,8 +440,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         String messageKind = record.get(AI_CHAT_STEP.MESSAGE_KIND);
         String modelName = record.get(AI_CHAT_STEP.MODEL_NAME);
         String reasoningEffort = record.get(AI_CHAT_STEP.REASONING_EFFORT);
-        String agentRuntime = record.get(AI_CHAT_STEP.AGENT_RUNTIME);
-        validateStoredSettingsChange(messageKind, modelName, reasoningEffort, agentRuntime);
+        validateStoredSettingsChange(messageKind, modelName, reasoningEffort);
         return new TrajectoryRow(record.get(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID),
                 record.get(AI_CHAT_STEP.STEP_SEQUENCE),
                 record.get(AI_CHAT_STEP.REQUEST_ID),
@@ -452,8 +448,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
                 messageKind,
                 AiChatTrajectoryStep.normalizeVisibility(record.get(AI_CHAT_STEP.VISIBILITY)),
                 record.get(AI_CHAT_STEP.MESSAGE), record.get(AI_CHAT_STEP.REASONING_CONTENT),
-                modelName, reasoningEffort, agentRuntime,
-                serializer.deserializeMapOrEmpty(record.get(AI_CHAT_STEP.RUNTIME_OPTIONS_JSON)),
+                modelName, reasoningEffort,
                 serializer.deserializeListOfMaps(record.get(AI_CHAT_STEP.TOOL_CALLS_JSON)),
                 serializer.deserializeMap(record.get(AI_CHAT_STEP.OBSERVATION_JSON)),
                 serializer.deserializeMap(record.get(AI_CHAT_STEP.METRICS_JSON)),
@@ -464,12 +459,12 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
     }
 
     static void validateStoredSettingsChange(String messageKind, String modelName,
-                                             String reasoningEffort, String agentRuntime) {
+                                             String reasoningEffort) {
         if ("settings_change".equals(messageKind)
-                && (modelName == null || reasoningEffort == null || agentRuntime == null)) {
+                && (modelName == null || reasoningEffort == null)) {
             throw new IllegalStateException(
                     "Stored AI chat settings_change step is incomplete: model_name, "
-                            + "reasoning_effort, and agent_runtime are required and have no safe defaults.");
+                            + "reasoning_effort are required and have no safe defaults.");
         }
     }
 
@@ -506,8 +501,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
     }
 
     private AiChatConversationSettings latestSettings(ULong internalConversationId) {
-        return dslContext().select(AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.REASONING_EFFORT,
-                        AI_CHAT_STEP.AGENT_RUNTIME, AI_CHAT_STEP.RUNTIME_OPTIONS_JSON)
+        return dslContext().select(AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.REASONING_EFFORT)
                 .from(AI_CHAT_STEP)
                 .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
                         .and(AI_CHAT_STEP.MESSAGE_KIND.eq("settings_change")))
@@ -516,12 +510,8 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
                 .fetchOptional(record -> {
                     String modelName = record.get(AI_CHAT_STEP.MODEL_NAME);
                     String reasoningEffort = record.get(AI_CHAT_STEP.REASONING_EFFORT);
-                    String agentRuntime = record.get(AI_CHAT_STEP.AGENT_RUNTIME);
-                    validateStoredSettingsChange(
-                            "settings_change", modelName, reasoningEffort, agentRuntime);
-                    return new AiChatConversationSettings(modelName, reasoningEffort, agentRuntime,
-                            serializer.deserializeMapOrEmpty(
-                                    record.get(AI_CHAT_STEP.RUNTIME_OPTIONS_JSON)));
+                    validateStoredSettingsChange("settings_change", modelName, reasoningEffort);
+                    return new AiChatConversationSettings(modelName, reasoningEffort);
                 })
                 .orElseThrow(() -> new IllegalStateException(
                         "AI conversation has no settings snapshot."));
@@ -601,8 +591,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
     private record TrajectoryRow(ULong conversationId, long sequence,
                                  String requestId, String source, String messageKind,
                                  String visibility, String message, String reasoningContent,
-                                 String modelName, String reasoningEffort, String runtime,
-                                 Map<String, Object> runtimeOptions,
+                                 String modelName, String reasoningEffort,
                                  List<Map<String, Object>> toolCalls,
                                  Map<String, Object> observation, Map<String, Object> metrics,
                                  Map<String, Object> extra, Integer llmCallCount,
@@ -611,7 +600,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         private AiChatTrajectoryData.Step step() {
             return new AiChatTrajectoryData.Step(sequence, requestId, source, messageKind,
                     visibility, message, reasoningContent, modelName, reasoningEffort,
-                    runtime, runtimeOptions, toolCalls, observation, metrics, extra,
+                    toolCalls, observation, metrics, extra,
                     llmCallCount, isCopiedContext, createdAt);
         }
     }

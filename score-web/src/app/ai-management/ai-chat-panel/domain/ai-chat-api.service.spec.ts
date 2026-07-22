@@ -134,21 +134,18 @@ describe('AiChatApiService cancellation contract', () => {
   });
 
   it('updates the model for an owner-scoped conversation', () => {
-    service.updateConversationModel(
-      'conversation/one', 'gpt-5_6-sol', 'high', 'openai', {maxTurns: 40}
-    ).subscribe();
+    service.updateConversationModel('conversation/one', 'gpt-5_6-sol', 'high').subscribe();
 
     const request = httpTesting.expectOne(
       '/api/ai/chat/conversations/conversation%2Fone/model'
     );
     expect(request.request.method).toBe('PATCH');
     expect(request.request.body).toEqual({
-      modelName: 'gpt-5_6-sol', reasoningEffort: 'high', runtime: 'openai',
-      runtimeOptions: {maxTurns: 40}
+      modelName: 'gpt-5_6-sol', reasoningEffort: 'high'
     });
     request.flush({
       conversationId: 'conversation/one', modelName: 'gpt-5_6-sol',
-      reasoningEffort: 'high', runtime: 'openai', runtimeOptions: {maxTurns: 40}
+      reasoningEffort: 'high'
     });
   });
 
