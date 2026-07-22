@@ -3,6 +3,7 @@ import {HttpTestingController, provideHttpClientTesting} from '@angular/common/h
 import {TestBed} from '@angular/core/testing';
 import {AiChatApiService} from './ai-chat-api.service';
 import {AiChatModelInfo} from './ai-chat-panel.model';
+import {HANDLE_HTTP_ERROR_LOCALLY} from '../../../authentication/auth.service';
 
 describe('AiChatApiService cancellation contract', () => {
   let service: AiChatApiService;
@@ -59,6 +60,7 @@ describe('AiChatApiService cancellation contract', () => {
       && candidate.params.get('expectedGeneration') === '1'
     );
     expect(request.request.method).toBe('GET');
+    expect(request.request.context.get(HANDLE_HTTP_ERROR_LOCALLY)).toBe(true);
     request.flush({
       conversationId: 'conversation/one',
       requestId: 'request/one',

@@ -199,6 +199,11 @@ export class AiChatMessageListComponent implements OnChanges {
     this.expandedHistoryUserIndexes.add(userIndex);
   }
 
+  isLiveProgressStatus(message: AiChatMessage): boolean {
+    return message.role === 'progress' && message.inProgress === true
+      && message.eventType !== 'assistant_update';
+  }
+
   agentToolMessage(event: AiAgentActivityEvent, agentInProgress: boolean): AiChatMessage {
     const toolStatus: AiChatToolStatus | undefined = event.toolStatus === 'completed'
       || event.toolStatus === 'failed' || event.toolStatus === 'blocked'
@@ -253,6 +258,9 @@ export class AiChatMessageListComponent implements OnChanges {
     if (lead?.status === 'failed' || lead?.status === 'cancelled') {
       return `${lead.activeVerb || 'Workflow'} stopped`;
     }
+    // A composed chain can have a gap between one worker completing and the
+    // next worker starting. The still-live lead owns the phase throughout.
+    if (lead?.inProgress) return this.activePhase(lead.activeVerb);
     const specialists = activities.filter(activity => !activity.isLead);
     if (specialists.length > 0 && specialists.every(activity => !activity.inProgress)) {
       const completed = specialists.find(activity => activity.completedVerb)?.completedVerb || lead?.completedVerb;
@@ -316,11 +324,13 @@ export class AiChatMessageListComponent implements OnChanges {
   }
 
   agentElapsed(activity: AiAgentActivity): string {
+    if (activity.status === 'planned') return 'queued';
     return agentActivityElapsedLabel(activity);
   }
 
   agentStatusLabel(activity: AiAgentActivity): string {
-    return activity.status === 'started' ? 'running' : activity.status;
+    return activity.status === 'planned' ? 'queued'
+      : activity.status === 'started' ? 'running' : activity.status;
   }
 
   private activePhase(verb?: string): string {

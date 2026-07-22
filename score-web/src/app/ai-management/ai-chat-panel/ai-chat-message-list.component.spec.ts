@@ -8,6 +8,7 @@ import {MarkdownModule} from 'ngx-markdown';
 import {AiChatMessageListComponent} from './ai-chat-message-list.component';
 import {AiChatInteractionPanelComponent} from './ai-chat-interaction-panel.component';
 import {AiChatToolCallComponent} from './ai-chat-tool-call.component';
+import {AiAgentActivity} from './domain/ai-agent-activity';
 
 describe('AiChatMessageListComponent', () => {
   let fixture: ComponentFixture<AiChatMessageListComponent>;
@@ -128,6 +129,35 @@ describe('AiChatMessageListComponent', () => {
     expect(row.getAttribute('aria-live')).toBe('assertive');
     expect(row.getAttribute('aria-atomic')).toBe('true');
     expect(row.textContent).toContain('Could not send your response.');
+  });
+
+  it('announces reconnect progress as an atomic polite status', () => {
+    fixture.componentInstance.messages = [{
+      role: 'progress', content: 'Reconnecting... (2/3)', inProgress: true
+    }];
+    fixture.componentInstance.pending = true;
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('.message-row.progress') as HTMLElement;
+    expect(row.getAttribute('role')).toBe('status');
+    expect(row.getAttribute('aria-live')).toBe('polite');
+    expect(row.getAttribute('aria-atomic')).toBe('true');
+    expect(row.querySelector('mat-progress-spinner')?.getAttribute('aria-hidden')).toBe('true');
+    expect(fixture.nativeElement.querySelector('.request-pending-indicator')).toBeNull();
+  });
+
+  it('does not repeatedly announce a streamed assistant update as a status', () => {
+    fixture.componentInstance.messages = [{
+      role: 'progress', eventType: 'assistant_update',
+      content: 'A growing streamed response', inProgress: true
+    }];
+    fixture.componentInstance.pending = true;
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('.message-row.progress') as HTMLElement;
+    expect(row.getAttribute('role')).toBeNull();
+    expect(row.getAttribute('aria-live')).toBeNull();
+    expect(row.getAttribute('aria-atomic')).toBeNull();
   });
 
   it('does not label a completed tool row as failed', () => {
@@ -530,6 +560,78 @@ describe('AiChatMessageListComponent', () => {
     expect(block.textContent).toContain('· 1 specialist');
     expect(block.textContent).toContain('A specialist is gathering evidence for the lead.');
     expect(block.textContent).not.toContain('Multi-agent workflow');
+  });
+
+  it('keeps the composed plan count and lead completion label stable across a worker chain', () => {
+    fixture.componentInstance.messages = [{
+      role: 'agent_group', content: 'Delegated workflow', activities: [
+        {
+          agentId: 'request-1:composed:lead', agentName: 'Lead agent',
+          status: 'completed', content: 'Checked.', inProgress: false, isLead: true,
+          plannedAgentCount: 2, activeVerb: 'Checking', completedVerb: 'Checked',
+          workflow: 'chain', executionKind: 'multi_agent',
+          firstSeenAt: 1000, lastUpdateAt: 4000,
+          events: [{status: 'completed', content: 'Checked.'}]
+        },
+        {
+          agentId: 'request-1:find-extenders', agentName: 'Evidence researcher',
+          status: 'completed', content: 'Searched.', inProgress: false, isLead: false,
+          completedVerb: 'Searched', firstSeenAt: 1000, lastUpdateAt: 2000,
+          events: [{status: 'completed', content: 'Searched.'}]
+        },
+        {
+          agentId: 'request-1:conflict-review', agentName: 'Critical reviewer',
+          status: 'completed', content: 'Reviewed.', inProgress: false, isLead: false,
+          completedVerb: 'Reviewed', firstSeenAt: 2000, lastUpdateAt: 3000,
+          events: [{status: 'completed', content: 'Reviewed.'}]
+        }
+      ]
+    }];
+
+    fixture.detectChanges();
+
+    const block = fixture.nativeElement.querySelector('.agent-group-block') as HTMLElement;
+    expect(block.textContent).toContain('Checked');
+    expect(block.textContent).toContain('Chain workflow');
+    expect(block.textContent).toContain('· 2 specialists');
+    expect(block.querySelector('.agent-group-title')?.textContent).not.toContain('Searched');
+  });
+
+  it('keeps the lead phase between sequential worker transitions', () => {
+    const lead: AiAgentActivity = {
+      agentId: 'request-1:composed:lead', agentName: 'Lead agent',
+      status: 'started', content: 'Checking both stages.', inProgress: true, isLead: true,
+      plannedAgentCount: 2, activeVerb: 'Checking', completedVerb: 'Checked',
+      workflow: 'chain', executionKind: 'multi_agent',
+      firstSeenAt: 1000, lastUpdateAt: 1000, events: []
+    };
+    const first: AiAgentActivity = {
+      agentId: 'first', agentName: 'Evidence researcher', status: 'completed',
+      content: 'Searched.', inProgress: false, isLead: false, completedVerb: 'Searched',
+      firstSeenAt: 1000, lastUpdateAt: 2000, events: []
+    };
+    const second: AiAgentActivity = {
+      agentId: 'second', agentName: 'Critical reviewer', status: 'planned',
+      content: 'Review is queued.', inProgress: false, isLead: false, completedVerb: 'Reviewed',
+      firstSeenAt: 1000, lastUpdateAt: 1000, events: []
+    };
+    fixture.componentInstance.messages = [{
+      role: 'agent_group', content: 'Delegated workflow', activities: [lead, first, second]
+    }];
+
+    const phase = () => fixture.componentInstance.agentGroupPhase(
+      fixture.componentInstance.messages[0]
+    );
+    expect(phase()).toBe('Checking...');
+
+    second.status = 'completed';
+    second.content = 'Reviewed.';
+    expect(phase()).toBe('Checking...');
+
+    lead.status = 'completed';
+    lead.inProgress = false;
+    lead.content = 'Checked.';
+    expect(phase()).toBe('Checked');
   });
 
   it('keeps the settled group block in request history at its execution position', () => {

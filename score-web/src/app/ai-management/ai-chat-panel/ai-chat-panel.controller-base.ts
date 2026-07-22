@@ -10,6 +10,7 @@ import {ConfirmDialogService} from '../../common/confirm-dialog/confirm-dialog.s
 import {AiChatComposerComponent} from './ai-chat-composer.component';
 import {AiContextBudgetData} from './ai-context-budget-chart.model';
 import {AiChatApiService} from './domain/ai-chat-api.service';
+import {AiActiveRequestRecoveryService} from './domain/ai-active-request-recovery.service';
 import {
   AiChatAttachmentQueueCallbacks,
   AiChatAttachmentQueueService
@@ -35,6 +36,7 @@ import {AiChatSessionPersistenceService} from './domain/ai-chat-session-persiste
 import {AiChatSettingsService} from './domain/ai-chat-settings.service';
 import {AiChatTransportService} from './domain/ai-chat-transport.service';
 import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
+import {isTerminalAgentStatus} from './domain/ai-agent-activity';
 import {
   AiMutationInteractionCallbacks,
   AiMutationInteractionService,
@@ -71,6 +73,7 @@ export interface BoundMutationConfirmationNotice {
 export abstract class AiChatPanelControllerBase {
 
   protected api = inject(AiChatApiService);
+  protected activeRequestRecovery = inject(AiActiveRequestRecoveryService);
   protected attachmentQueue = inject(AiChatAttachmentQueueService);
   protected attachmentService = inject(AiChatAttachmentService);
   protected cancellationService = inject(AiChatCancellationService);
@@ -229,7 +232,7 @@ export abstract class AiChatPanelControllerBase {
     'completed' | 'failed' | 'cancelled'>): void {
     const now = Date.now();
     for (const activity of this.state.agentActivities) {
-      if (!activity.inProgress) {
+      if (isTerminalAgentStatus(activity.status)) {
         continue;
       }
       const name = activity.agentName || 'Agent';
@@ -465,14 +468,16 @@ export abstract class AiChatPanelControllerBase {
   protected abstract finishRecoveredRequest(status: AiPublicExecutionRequestStatus): void;
   protected abstract scheduleRecoveredRequestPoll(delay: number): void;
   protected abstract clearActiveRecovery(): void;
+  protected abstract acknowledgeRecoveredRequestLiveEvent(requestId: string): void;
   protected abstract isTerminalExecutionStatus(status: AiExecutionStatus): boolean;
   abstract deleteConversation(conversationId: string, event?: Event): void;
   protected abstract deleteConversationNow(conversationId: string): void;
-  protected abstract showStatus(content: string, inProgress?: boolean, alertSuffix?: string): void;
+  protected abstract showStatus(content: string, inProgress?: boolean, alertSuffix?: string,
+                                eventType?: string): void;
   protected abstract completeProgressMessages(): void;
   protected abstract completeToolGroupMessages(): void;
   protected abstract clearToolCallTracking(): void;
-  protected abstract clearStatusMessage(): void;
+  protected abstract clearStatusMessage(eventType?: string): void;
   protected abstract refreshBranding(): void;
   protected abstract clearTimers(): void;
   protected abstract cancellationCallbacks(): AiChatCancellationCallbacks;

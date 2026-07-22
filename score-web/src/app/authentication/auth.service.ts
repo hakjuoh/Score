@@ -292,6 +292,9 @@ export class XhrInterceptor implements HttpInterceptor {
 }
 
 export const SUPPRESS_ERROR_ALERT = new HttpContextToken<boolean>(() => false);
+/** Lets a feature render transport failures in its own UI while preserving the
+ * global authentication-expiry behavior for HTTP 401 responses. */
+export const HANDLE_HTTP_ERROR_LOCALLY = new HttpContextToken<boolean>(() => false);
 
 @Injectable()
 export class ErrorAlertInterceptor implements HttpInterceptor {
@@ -304,7 +307,8 @@ export class ErrorAlertInterceptor implements HttpInterceptor {
   intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     return next.handle(req).pipe(
       catchError((error, caught) => {
-        if (req.context.get(SUPPRESS_ERROR_ALERT)) {
+        if (req.context.get(SUPPRESS_ERROR_ALERT)
+          || (req.context.get(HANDLE_HTTP_ERROR_LOCALLY) && error?.status !== 401)) {
           return throwError(error);
         }
 

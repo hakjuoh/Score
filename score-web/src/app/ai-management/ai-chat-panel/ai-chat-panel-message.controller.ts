@@ -15,7 +15,7 @@ import {FORMATTER_META_RESPONSE_PATTERN} from './domain/ai-chat-panel-display.co
 import {
   agentActivityUpdate,
   isExecutionActivityEvent,
-  isFanoutNamespacedEvent,
+  isSpecialistActivityEvent,
   isSpecialistToolEvent,
   upsertAgentActivity,
   upsertAgentGuideEvent,
@@ -39,6 +39,10 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         this.state.activeWorkflow = typeof workflow === 'string' ? workflow.trim() : '';
       }
       if (upsertAgentGuideEvent(this.state.agentActivities, event)) return;
+      // A rolling-upgrade worker may emit its guide immediately before its
+      // lifecycle row creates the activity. The lifecycle carries the same
+      // status text, so never leak that worker-owned guide into the main chat.
+      if (isSpecialistActivityEvent(event)) return;
       // A guide is the first substantive assistant message for this stage. It
       // replaces only the generic connection/wait placeholder; later tool
       // status updates are then appended below it in event order.
@@ -247,7 +251,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     if (this.state.cancellation.phase !== 'idle') {
       return true;
     }
-    if (isFanoutNamespacedEvent(event)) {
+    if (isSpecialistActivityEvent(event)) {
       upsertAgentRetryEvent(this.state.agentActivities, event);
       return true;
     }
@@ -378,6 +382,15 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   private applyAgentActivity(event: AiChatSocketEvent): void {
     const update = agentActivityUpdate(event);
     if (!update) return;
+    const startsAnotherExecution = update.isLead && update.status === 'started'
+      && this.state.agentActivities.length > 0
+      && this.state.agentActivities.every(activity => !activity.inProgress)
+      && !this.state.agentActivities.some(activity => activity.agentId === update.agentId);
+    if (startsAnotherExecution) {
+      // Evaluator/optimizer iterations are separate executions in one request.
+      // Replacing the array preserves the prior group's settled snapshot.
+      this.state.agentActivities = [];
+    }
     const firstActivity = this.state.agentActivities.length === 0;
     if (!upsertAgentActivity(this.state.agentActivities, update)) {
       return;
@@ -406,7 +419,9 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     const parallel = activities.some(activity => activity.executionKind === 'parallel');
     return activities.some(activity => activity.status === 'failed')
       ? parallel ? 'Parallel workflow completed with errors' : 'Agent completed with errors'
-      : parallel ? 'Parallel tasks finished' : 'Agents finished';
+      : activities.some(activity => activity.status === 'cancelled')
+        ? parallel ? 'Parallel workflow stopped' : 'Agent workflow stopped'
+        : parallel ? 'Parallel tasks finished' : 'Agents finished';
   }
 
   protected handleConversationRestoreEvent(event: AiChatSocketEvent): void {

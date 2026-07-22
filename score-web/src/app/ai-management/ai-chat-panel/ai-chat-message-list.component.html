@@ -265,9 +265,9 @@
        [class.debug]="message.role === 'debug'"
        [class.formatting]="message.formatting"
        [class.history-toggleable]="historyCount > 0"
-       [attr.role]="message.role === 'error' ? 'alert' : null"
-       [attr.aria-live]="message.role === 'error' ? 'assertive' : null"
-       [attr.aria-atomic]="message.role === 'error' ? 'true' : null">
+       [attr.role]="message.role === 'error' ? 'alert' : isLiveProgressStatus(message) ? 'status' : null"
+       [attr.aria-live]="message.role === 'error' ? 'assertive' : isLiveProgressStatus(message) ? 'polite' : null"
+       [attr.aria-atomic]="message.role === 'error' || isLiveProgressStatus(message) ? 'true' : null">
     <div class="message-bubble">
       @if (message.role === 'assistant' || message.role === 'guide') {
         <span class="message-prefix">•</span>
@@ -301,6 +301,7 @@
         @if (message.inProgress) {
           <span class="message-prefix progress-prefix">
             <mat-progress-spinner class="message-progress-spinner"
+                                  aria-hidden="true"
                                   mode="indeterminate"
                                   [diameter]="12"></mat-progress-spinner>
           </span>
@@ -342,6 +343,8 @@
                 @if (activity.inProgress) {
                   <mat-progress-spinner class="message-progress-spinner"
                                         mode="indeterminate" [diameter]="12"></mat-progress-spinner>
+                } @else if (activity.status === 'planned') {
+                  <mat-icon>schedule</mat-icon>
                 } @else if (activity.status === 'failed') {
                   <mat-icon>error_outline</mat-icon>
                 } @else if (activity.status === 'cancelled') {

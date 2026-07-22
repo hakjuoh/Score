@@ -5,6 +5,7 @@ import {
   component,
   of,
   setupAiChatPanelSpec,
+  Subject,
   teardownAiChatPanelSpec,
   transport
 } from './ai-chat-panel.component.spec-support';
@@ -164,6 +165,151 @@ describe('AiChatPanelComponent settings and active recovery', () => {
     expect(component.state.pending).toBe(false);
     expect(component.state.activeRequest).toBeUndefined();
     expect(component.state.messages.some(message => message.content === 'Task complete')).toBe(true);
+  });
+
+  it('removes the recovery notice when live request activity resumes', () => {
+    vi.useFakeTimers();
+    const running = {
+      requestId: 'request-running', conversationId: 'conversation-1', generation: 1,
+      status: 'RUNNING', deadline: '2026-07-17T05:00:00Z'
+    };
+    api.getActiveRequest.mockReturnValue(of(running));
+    api.getRequestStatus.mockReturnValue(of(running));
+    api.getConversation.mockReturnValue(of({
+      conversationId: 'conversation-1', title: 'Long task', messages: [
+        {index: 0, role: 'user', content: 'Do a long task', requestId: 'request-running'}
+      ]
+    }));
+
+    component.open();
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      content: 'The request is still running. Progress is restored automatically.',
+      inProgress: true
+    }));
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-stale', conversationId: 'conversation-1',
+      type: 'tool_call', subtype: 'completed', turnId: 'request-stale',
+      groupId: 'request-stale', toolCallId: 'stale-call',
+      metadata: {toolName: 'get_acc', toolCallSeq: 0}
+    });
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      content: 'The request is still running. Progress is restored automatically.'
+    }));
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-running', conversationId: 'conversation-1',
+      type: 'tool_call', subtype: 'completed', turnId: 'request-running',
+      groupId: 'request-running', toolCallId: 'call-1',
+      content: 'get_acc completed.',
+      metadata: {toolName: 'get_acc', toolCallSeq: 0}
+    });
+
+    expect(component.state.messages.some(message =>
+      message.content === 'The request is still running. Progress is restored automatically.'
+    )).toBe(false);
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      role: 'tool_call', content: 'get_acc completed.'
+    }));
+    vi.advanceTimersByTime(1000);
+    expect(api.getConversation).toHaveBeenCalledOnce();
+  });
+
+  it('does not let a delayed recovery snapshot overwrite earlier live activity', () => {
+    vi.useFakeTimers();
+    const running = {
+      requestId: 'request-running', conversationId: 'conversation-1', generation: 1,
+      status: 'RUNNING', deadline: '2026-07-17T05:00:00Z'
+    };
+    const delayedConversation = new Subject<any>();
+    api.getActiveRequest.mockReturnValue(of(running));
+    api.getRequestStatus.mockReturnValue(of(running));
+    api.getConversation.mockReturnValue(delayedConversation);
+
+    component.open();
+    (component as any).handleSocketEvent({
+      requestId: 'request-running', conversationId: 'conversation-1',
+      type: 'tool_call', subtype: 'completed', turnId: 'request-running',
+      groupId: 'request-running', toolCallId: 'call-live',
+      metadata: {toolName: 'get_acc', toolCallSeq: 0}
+    });
+    delayedConversation.next({
+      conversationId: 'conversation-1', title: 'Stale snapshot', messages: [
+        {index: 0, role: 'user', content: 'Do a long task', requestId: 'request-running'}
+      ]
+    });
+    delayedConversation.complete();
+
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      role: 'tool_call', content: 'get_acc completed.'
+    }));
+    expect(component.state.messages.some(message =>
+      message.content === 'The request is still running. Progress is restored automatically.'
+    )).toBe(false);
+    vi.advanceTimersByTime(1000);
+    expect(api.getConversation).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the recovery notice for an invalid exact-request interaction event', () => {
+    vi.useFakeTimers();
+    const running = {
+      requestId: 'request-running', conversationId: 'conversation-1', generation: 1,
+      status: 'RUNNING', deadline: '2026-07-17T05:00:00Z'
+    };
+    api.getActiveRequest.mockReturnValue(of(running));
+    api.getRequestStatus.mockReturnValue(of(running));
+    api.getConversation.mockReturnValue(of({
+      conversationId: 'conversation-1', title: 'Long task', messages: []
+    }));
+    component.open();
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-running', conversationId: 'conversation-other',
+      type: 'system', subtype: 'elicitation_required', visibility: 'visible',
+      metadata: {
+        elicitationId: 'elicitation-invalid', mode: 'form',
+        expiresAt: '2099-07-15T00:00:00Z', message: 'Choose a strategy.',
+        requestedSchema: {type: 'object', properties: {strategy: {type: 'string'}}}
+      }
+    });
+
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      content: 'The request is still running. Progress is restored automatically.'
+    }));
+    vi.advanceTimersByTime(1000);
+    expect(api.getConversation).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves cancellation acknowledgement while retiring recovery polling', () => {
+    vi.useFakeTimers();
+    const running = {
+      requestId: 'request-running', conversationId: 'conversation-1', generation: 1,
+      status: 'RUNNING', deadline: '2026-07-17T05:00:00Z'
+    };
+    api.getActiveRequest.mockReturnValue(of(running));
+    api.getRequestStatus.mockReturnValue(of(running));
+    api.getConversation.mockReturnValue(of({
+      conversationId: 'conversation-1', title: 'Long task', messages: []
+    }));
+    component.open();
+    component.cancelActiveRequest();
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-running', conversationId: 'conversation-1',
+      type: 'system', subtype: 'cancellation_acknowledged', sequence: 1,
+      metadata: {
+        cancellationRequestId: 'cancel-1', effectiveCancellationRequestId: 'cancel-1',
+        generation: 1, lifecycleEventSequence: 4, status: 'CANCELLING',
+        acknowledged: true, terminal: false
+      }
+    });
+
+    expect(component.state.cancellation.phase).toBe('acknowledged');
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      role: 'progress', content: 'Cancellation acknowledged.', inProgress: true
+    }));
+    vi.advanceTimersByTime(1000);
+    expect(api.getConversation).toHaveBeenCalledOnce();
   });
 
   it('shows model normally and only cancel while a request is active', () => {

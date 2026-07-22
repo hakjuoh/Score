@@ -1,10 +1,5 @@
 package org.oagi.score.gateway.http.api.ai_management.trajectory;
 
-import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiToolFailureMessage;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiToolRetryMessage;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiToolRetryTracker;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +21,10 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiPendingTool;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiToolFailureMessage;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiToolRetryMessage;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiToolRetryTracker;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,6 +75,7 @@ public final class AiTrajectoryRecorder {
     private final String reasoningEffort;
     private final Consumer<AiExecutionEvent> events;
     private final AiContextBudget contextBudget;
+    private volatile PromptTokenAccounting promptTokenAccounting;
     private final AtomicLong estimatedInputFloor;
     private final AtomicLong eventSequence;
     private final AtomicLong toolSequence;
@@ -124,7 +124,8 @@ public final class AiTrajectoryRecorder {
                                 long estimatedInputFloor) {
         this(repository, objectMapper, requester, conversationId, requestId, modelName,
                 reasoningEffort, events, contextBudget,
-                estimatedInputFloor, new AtomicLong(), new AtomicLong(),
+                estimatedInputFloor, PromptTokenAccounting.UNKNOWN,
+                new AtomicLong(), new AtomicLong(),
                 new AtomicLong(), ConcurrentHashMap.newKeySet(), Map.of(), false,
                 AiChatConversationKind.ROOT);
     }
@@ -135,6 +136,7 @@ public final class AiTrajectoryRecorder {
                                  Consumer<AiExecutionEvent> events,
                                  AiContextBudget contextBudget,
                                  long estimatedInputFloor,
+                                 PromptTokenAccounting promptTokenAccounting,
                                  AtomicLong eventSequence, AtomicLong toolSequence,
                                  AtomicLong requestExecutedDomainToolCalls,
                                  Set<String> requestPendingApprovalIds,
@@ -149,6 +151,7 @@ public final class AiTrajectoryRecorder {
         this.reasoningEffort = reasoningEffort;
         this.events = events != null ? events : ignored -> {};
         this.contextBudget = contextBudget;
+        this.promptTokenAccounting = promptTokenAccounting;
         this.estimatedInputFloor = new AtomicLong(Math.max(0L, estimatedInputFloor));
         this.eventSequence = eventSequence;
         this.toolSequence = toolSequence;
@@ -170,7 +173,7 @@ public final class AiTrajectoryRecorder {
         AiTrajectoryRecorder child = new AiTrajectoryRecorder(
                 repository, objectMapper, requester, conversationId, requestId,
                 modelName, reasoningEffort, events, contextBudget,
-                estimatedInputFloor.get(), eventSequence, toolSequence,
+                estimatedInputFloor.get(), promptTokenAccounting, eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovalIds, childContext, true,
                 conversationKind);
         child.retryMessageLanguage = retryMessageLanguage;
@@ -202,7 +205,7 @@ public final class AiTrajectoryRecorder {
         AiTrajectoryRecorder child = new AiTrajectoryRecorder(
                 repository, objectMapper, requester, childConversationId, requestId,
                 modelName, reasoningEffort, events, contextBudget,
-                estimatedInputFloor.get(), eventSequence, toolSequence,
+                estimatedInputFloor.get(), promptTokenAccounting, eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovalIds,
                 traceMetadata(childNamespace), true, kind);
         child.retryMessageLanguage = retryMessageLanguage;
@@ -227,6 +230,11 @@ public final class AiTrajectoryRecorder {
 
     public AiChatConversationKind conversationKind() {
         return conversationKind;
+    }
+
+    /** Selects the provider-specific mapping from Spring AI usage to ATIF prompt totals. */
+    public void useModelProvider(String providerType) {
+        this.promptTokenAccounting = PromptTokenAccounting.fromProviderType(providerType);
     }
 
     /** Snapshot of the model usage this recorder observed, keyed by its fan-out namespace. */
@@ -469,6 +477,15 @@ public final class AiTrajectoryRecorder {
     }
 
     public synchronized void recordModelResponse(ChatResponse response, String phase) {
+        recordModelResponse(response, phase, false);
+    }
+
+    /** Records a response aggregated from streaming chunks with cache metadata loss in mind. */
+    public synchronized void recordStreamingModelResponse(ChatResponse response, String phase) {
+        recordModelResponse(response, phase, true);
+    }
+
+    private void recordModelResponse(ChatResponse response, String phase, boolean streaming) {
         if (sealed || response == null || response.getResults().isEmpty()) {
             return;
         }
@@ -477,7 +494,7 @@ public final class AiTrajectoryRecorder {
         String message = visibleMessage(response.getResults());
         List<Map<String, Object>> toolCalls = toolCalls(response.getResults());
         List<Map<String, Object>> auditedToolCalls = auditToolCalls(toolCalls);
-        AiMetricsSnapshot metricsSnapshot = metrics(response);
+        AiMetricsSnapshot metricsSnapshot = metrics(response, streaming);
         Map<String, Object> metrics = metricsSnapshot != null ? metricsSnapshot.metrics() : null;
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("phase", normalizedPhase);
@@ -731,32 +748,93 @@ public final class AiTrajectoryRecorder {
         }
     }
 
-    private AiMetricsSnapshot metrics(ChatResponse response) {
+    private AiMetricsSnapshot metrics(ChatResponse response, boolean streaming) {
         Usage usage = response.getMetadata().getUsage();
         if (usage == null) {
             return null;
         }
         Map<String, Object> metrics = new LinkedHashMap<>();
-        long promptTokens = Objects.requireNonNullElse(usage.getPromptTokens(), 0);
-        promptTokens += Objects.requireNonNullElse(usage.getCacheReadInputTokens(), 0L);
-        promptTokens += Objects.requireNonNullElse(usage.getCacheWriteInputTokens(), 0L);
-        metrics.put("prompt_tokens", promptTokens);
+        PromptTokenSnapshot prompt = promptTokenAccounting.resolve(usage, streaming);
+        long contextInputTokens = Math.max(prompt.atifPromptTokens(), estimatedInputFloor.get());
+        boolean contextEstimated = !prompt.complete()
+                || contextInputTokens > prompt.atifPromptTokens();
+        if (!prompt.complete()) {
+            // Spring AI's Anthropic streaming adapter can lose cache usage reported on
+            // message_start. ATIF prompt_tokens must include that cached prefix, so the
+            // incomplete provider value is retained only as diagnostic metadata.
+            metrics.put("provider_reported_prompt_tokens", prompt.providerReportedTokens());
+            metrics.put("prompt_tokens_complete", false);
+            metrics.put("prompt_token_accounting", promptTokenAccounting.wireValue);
+        } else {
+            metrics.put("prompt_tokens", prompt.atifPromptTokens());
+            metrics.put("prompt_tokens_complete", true);
+            metrics.put("prompt_token_accounting", promptTokenAccounting.wireValue);
+        }
         putIfPresent(metrics, "completion_tokens", usage.getCompletionTokens());
         putIfPresent(metrics, "cached_tokens", usage.getCacheReadInputTokens());
         if (usage.getCacheWriteInputTokens() != null) {
             metrics.put("extra", Map.of("cache_creation_input_tokens", usage.getCacheWriteInputTokens()));
         }
-        long contextInputTokens = Math.max(promptTokens, estimatedInputFloor.get());
-        boolean estimated = contextInputTokens > promptTokens;
         estimatedInputFloor.accumulateAndGet(contextInputTokens, Math::max);
         metrics.put("context_input_tokens", contextInputTokens);
-        metrics.put("context_estimated", estimated);
+        metrics.put("context_estimated", contextEstimated);
         if (subagentScope) {
             // Marks the row so the conversation's latest-usage lookup skips it.
             metrics.put("context_scope", "subagent");
         }
-        return new AiMetricsSnapshot(Map.copyOf(metrics), contextInputTokens, estimated);
+        return new AiMetricsSnapshot(Map.copyOf(metrics), contextInputTokens, contextEstimated);
     }
+
+    /**
+     * Spring AI exposes provider-native prompt usage: Anthropic reports cache reads and
+     * writes outside {@code input_tokens}, while OpenAI-compatible providers report cached
+     * input as a subset of their prompt total. ATIF always requires the inclusive total.
+     */
+    private enum PromptTokenAccounting {
+        CACHE_EXCLUDED("cache_excluded"),
+        CACHE_INCLUDED("cache_included"),
+        UNKNOWN("unknown");
+
+        private final String wireValue;
+
+        PromptTokenAccounting(String wireValue) {
+            this.wireValue = wireValue;
+        }
+
+        private static PromptTokenAccounting fromProviderType(String providerType) {
+            if (!StringUtils.hasText(providerType)) {
+                return UNKNOWN;
+            }
+            return switch (providerType.strip().toLowerCase()) {
+                case "anthropic" -> CACHE_EXCLUDED;
+                case "openai", "azure-openai" -> CACHE_INCLUDED;
+                default -> UNKNOWN;
+            };
+        }
+
+        private PromptTokenSnapshot resolve(Usage usage, boolean streaming) {
+            Number reported = usage.getPromptTokens();
+            long providerTokens = reported != null ? reported.longValue() : 0L;
+            long cacheReadTokens = Objects.requireNonNullElse(
+                    usage.getCacheReadInputTokens(), 0L);
+            long cacheWriteTokens = Objects.requireNonNullElse(
+                    usage.getCacheWriteInputTokens(), 0L);
+            long cacheTokens = cacheReadTokens + cacheWriteTokens;
+            long inclusiveTokens = this == CACHE_INCLUDED
+                    ? providerTokens : providerTokens + cacheTokens;
+            boolean missingStreamingCacheUsage = this == CACHE_EXCLUDED && streaming
+                    && usage.getCacheReadInputTokens() == null
+                    && usage.getCacheWriteInputTokens() == null;
+            boolean complete = reported != null
+                    && this != UNKNOWN
+                    && !missingStreamingCacheUsage;
+            return new PromptTokenSnapshot(providerTokens, inclusiveTokens, complete);
+        }
+    }
+
+    private record PromptTokenSnapshot(long providerReportedTokens,
+                                       long atifPromptTokens,
+                                       boolean complete) {}
 
     private void emitContextUsage(AiContextUsageInfo usage) {
         emit(AiExecutionEvent.detail("context_usage", "Context usage updated.",
@@ -1164,6 +1242,7 @@ public final class AiTrajectoryRecorder {
         alias(merged, "task_label", "taskLabel");
         alias(merged, "active_verb", "activeVerb");
         alias(merged, "completed_verb", "completedVerb");
+        alias(merged, "execution_scope", "executionScope");
         alias(merged, "child_conversation_id", "childConversationId");
         return merged.isEmpty() ? Map.of() : Map.copyOf(merged);
     }
