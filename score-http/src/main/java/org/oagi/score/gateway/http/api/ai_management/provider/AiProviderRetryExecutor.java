@@ -2,7 +2,8 @@ package org.oagi.score.gateway.http.api.ai_management.provider;
 
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
-import org.oagi.score.gateway.http.api.ai_management.service.AiTrajectoryRecorder;
+import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionState;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +45,12 @@ public final class AiProviderRetryExecutor {
 
     public <T> T execute(ChatRequest request, AiTrajectoryRecorder recorder,
                          LongSupplier executedMutations, Supplier<T> attempt) {
+        return execute(request, recorder, executedMutations, null, attempt);
+    }
+
+    public <T> T execute(ChatRequest request, AiTrajectoryRecorder recorder,
+                         LongSupplier executedMutations, ExecutionState state,
+                         Supplier<T> attempt) {
         int maxAttempts = settings.getMaxAttempts();
         for (int attemptNumber = 1; ; attemptNumber++) {
             long mutationsBefore = executedMutations.getAsLong();
@@ -67,6 +74,9 @@ public final class AiProviderRetryExecutor {
                         classified.failureClass());
                 recorder.providerRetry(attemptNumber, maxAttempts, delay.toMillis(),
                         classified.message(), classified.failureClass(), classified.statusCode());
+                if (state != null) {
+                    state.retryStarted();
+                }
                 sleep(delay);
                 if (requestStopping(request)) {
                     throw new CancellationException(

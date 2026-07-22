@@ -12,6 +12,11 @@ import java.util.Optional;
  */
 public interface AiMutationConfirmationQueryRepository {
 
+    /** Finds an owner-scoped confirmation without acquiring a transition lock. */
+    Optional<AiMutationConfirmationState> findOwned(
+            String conversationId,
+            String confirmationRequestId);
+
     /**
      * Finds an owner-scoped confirmation and locks it for a lifecycle transition.
      *

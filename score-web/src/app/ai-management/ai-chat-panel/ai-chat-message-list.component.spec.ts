@@ -172,6 +172,20 @@ describe('AiChatMessageListComponent', () => {
     expect(row.querySelector('mat-icon')?.textContent).toContain('build');
   });
 
+  it('labels an exact denied retry as denied', () => {
+    fixture.componentInstance.messages = [{
+      role: 'tool_call',
+      content: 'delete_business_context was denied before execution.',
+      toolStatus: 'denied'
+    }];
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('.message-row.tool_call') as HTMLElement;
+    expect(row.classList.contains('tool_failed')).toBe(false);
+    expect(row.textContent).toContain('Denied:');
+    expect(row.textContent).toContain('delete_business_context was denied before execution.');
+  });
+
   it('renders a focused specialist blocked tool with the awaiting-approval status', () => {
     fixture.componentInstance.agentFocus = {
       agentId: 'request-1:agent:1', agentName: 'Verifier',

@@ -3,7 +3,7 @@ import type {AiAgentActivity} from './ai-agent-activity';
 export type AiChatDock = 'right' | 'bottom' | 'left' | 'top';
 export type AiChatMessageRole = 'user' | 'assistant' | 'guide' | 'progress'
   | 'agent_group' | 'workflow_group' | 'tool_group' | 'tool_call' | 'error' | 'debug';
-export type AiChatToolStatus = 'completed' | 'failed' | 'blocked' | 'cancelled';
+export type AiChatToolStatus = 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled';
 export type AiChatPanelTab = 'chat' | 'history';
 export type AiMutationPermissionMode = 'ask' | 'auto' | 'full_access';
 export type AiAgentExecutionStatus = 'started' | 'completed' | 'failed' | 'cancelled' | 'synthesizing';
@@ -134,6 +134,28 @@ export interface AiMutationConfirmationDecisionResponse {
   expiredAt?: string;
   consumedAt?: string;
   confirmationGrant?: string;
+}
+
+export interface AiMutationApprovalBatchItem {
+  confirmationRequestId: string;
+  toolName: string;
+  argumentsSummary: string;
+  agentId?: string;
+  agentLabel?: string;
+}
+
+export interface AiMutationApprovalBatchNotice {
+  batchId: string;
+  requestId: string;
+  conversationId: string;
+  parallel: boolean;
+  expiresAt: string;
+  items: AiMutationApprovalBatchItem[];
+}
+
+export interface AiMutationApprovalBatchDecision {
+  confirmationRequestId: string;
+  decision: 'APPROVE' | 'DENY';
 }
 
 export interface AiElicitationNotice {

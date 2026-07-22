@@ -77,11 +77,12 @@ public class JooqAiMutationConfirmationCommandRepository extends JooqBaseReposit
 
     @Override
     public boolean approve(long confirmationId, String grantDigest, Instant approvedAt,
-                           String argumentsDigest) {
+                           Instant grantExpiresAt, String argumentsDigest) {
         return dslContext().update(AI_CHAT_MUTATION_CONFIRMATION)
                 .set(AI_CHAT_MUTATION_CONFIRMATION.STATUS, "APPROVED")
                 .set(AI_CHAT_MUTATION_CONFIRMATION.GRANT_DIGEST, grantDigest)
                 .set(AI_CHAT_MUTATION_CONFIRMATION.APPROVED_AT, localDateTime(approvedAt))
+                .set(AI_CHAT_MUTATION_CONFIRMATION.EXPIRES_AT, localDateTime(grantExpiresAt))
                 .set(AI_CHAT_MUTATION_CONFIRMATION.ARGUMENTS_DIGEST, argumentsDigest)
                 .where(AI_CHAT_MUTATION_CONFIRMATION.AI_CHAT_MUTATION_CONFIRMATION_ID
                         .eq(ULong.valueOf(confirmationId))

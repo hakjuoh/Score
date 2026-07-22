@@ -142,6 +142,14 @@ describe('AiChatPanelComponent request completion and recovery', () => {
     component.state.prompt = 'Recover a persisted answer';
     component.send();
     transport.publishWhenConnected.mock.calls[0][0].publish();
+    component.state.mutationApprovalBatch = {
+      batchId: 'batch-completed', requestId: 'request-1', conversationId: 'conversation-1',
+      parallel: false, expiresAt: '2099-07-15T00:00:00Z', items: [{
+        confirmationRequestId: 'confirmation-completed', toolName: 'update_bbie',
+        argumentsSummary: '{"id":1}'
+      }]
+    };
+    component.state.mutationApprovalBatchBusy = true;
     component.cancelActiveRequest();
     cancellation.next(completedCancellationResponse());
 
@@ -159,6 +167,10 @@ describe('AiChatPanelComponent request completion and recovery', () => {
       role: 'assistant', content: 'Recovered persisted answer.'
     }));
     expect(component.state.pending).toBe(false);
+    expect(component.state.mutationApprovalBatch).toBeUndefined();
+    expect(component.state.mutationApprovalBatchQueue).toEqual([]);
+    expect(component.state.mutationApprovalBatchBusy).toBe(false);
+    expect(component.commandInputBlocked).toBe(false);
   });
 
   it('does not turn an attachment cancellation into a generic upload error', () => {

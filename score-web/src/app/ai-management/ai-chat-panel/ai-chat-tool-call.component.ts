@@ -26,6 +26,9 @@ export class AiChatToolCallComponent {
     if (this.status === 'blocked') {
       return 'Awaiting approval';
     }
+    if (this.status === 'denied') {
+      return 'Denied';
+    }
     if (this.status === 'cancelled') {
       return 'Stopped';
     }

@@ -168,6 +168,9 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
     // Once Stop is issued, the original chat admission/response watchdogs no
     // longer own the UI. Cancellation has independent 2s/5s deadlines.
     this.clearTimers();
+    if (this.state.mutationApprovalBatch) {
+      this.scheduleMutationApprovalExpiry();
+    }
     this.cancellationService.start(
       this.state.activeRequest || {requestId}, this.cancellationCallbacks()
     );

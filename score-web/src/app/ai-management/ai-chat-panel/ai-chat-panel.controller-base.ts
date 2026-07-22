@@ -108,6 +108,8 @@ export abstract class AiChatPanelControllerBase {
   protected responseTimeout?: number;
   protected acknowledgementTimeout?: number;
   protected providerRetryInterval?: number;
+  protected mutationApprovalExpiryTimeout?: number;
+  protected mutationApprovalAcknowledgementTimeout?: number;
   protected resizeState?: ResizeState;
   protected activeRequestPublished = false;
   protected activeRestoreRequestId?: string;
@@ -186,6 +188,7 @@ export abstract class AiChatPanelControllerBase {
       || this.state.modelChangePending || this.state.modelSettingsOpen
       || this.state.permissionSettingsOpen
       || !!this.state.elicitation
+      || !!this.state.mutationApprovalBatch
       || this.mutationDecisionInFlight
       || (this.mutationDecisionOpen && this.mutationInteractionMode !== 'confirm');
   }
@@ -201,6 +204,25 @@ export abstract class AiChatPanelControllerBase {
 
   get interactionBlocked(): boolean {
     return this.state.pending || this.commandInputBlocked;
+  }
+
+  get mutationApprovalControlsBusy(): boolean {
+    return this.state.mutationApprovalBatchBusy
+      || this.state.cancellation.phase !== 'idle';
+  }
+
+  protected clearMutationApprovalBatch(): void {
+    if (this.mutationApprovalExpiryTimeout !== undefined) {
+      window.clearTimeout(this.mutationApprovalExpiryTimeout);
+      this.mutationApprovalExpiryTimeout = undefined;
+    }
+    if (this.mutationApprovalAcknowledgementTimeout !== undefined) {
+      window.clearTimeout(this.mutationApprovalAcknowledgementTimeout);
+      this.mutationApprovalAcknowledgementTimeout = undefined;
+    }
+    this.state.mutationApprovalBatch = undefined;
+    this.state.mutationApprovalBatchQueue = [];
+    this.state.mutationApprovalBatchBusy = false;
   }
 
   protected settleAgentActivity(status: Extract<AiAgentExecutionStatus,

@@ -469,6 +469,12 @@ describe('AiConversationRestoreService', () => {
       subtype: 'cancelled', groupId: 'mcp', toolCallId: 'call-2',
       metadata: {toolName: 'update_business_context'}, index: 1
     }, callbacks);
+    handle({
+      requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'tool_call',
+      response: 'delete_business_context\nArguments: {"id":3}\nResult: {"error":"MUTATION_CONFIRMATION_DENIED"}',
+      subtype: 'denied', groupId: 'mcp', toolCallId: 'call-3',
+      metadata: {toolName: 'delete_business_context'}, index: 2
+    }, callbacks);
     handle({requestId: 'r1', type: 'HISTORY_FINAL', conversationId: 'c1'}, callbacks);
 
     await vi.runAllTimersAsync();
@@ -485,6 +491,12 @@ describe('AiConversationRestoreService', () => {
         groupId: 'mcp', toolCallId: 'call-2', toolName: 'update_business_context',
         toolDetail: 'update_business_context\nArguments: {"id":2}\nResult: {"error":"REQUEST_STOPPING"}',
         toolStatus: 'cancelled'
+      },
+      {
+        role: 'tool_call', content: 'delete_business_context was denied before execution.',
+        groupId: 'mcp', toolCallId: 'call-3', toolName: 'delete_business_context',
+        toolDetail: 'delete_business_context\nArguments: {"id":3}\nResult: {"error":"MUTATION_CONFIRMATION_DENIED"}',
+        toolStatus: 'denied'
       }
     ]);
   });

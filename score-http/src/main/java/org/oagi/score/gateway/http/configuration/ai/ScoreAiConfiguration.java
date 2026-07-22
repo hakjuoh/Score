@@ -15,7 +15,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
@@ -50,16 +49,6 @@ public class ScoreAiConfiguration {
                     anthropicProperties, openAiProperties));
         });
         return Map.copyOf(models);
-    }
-
-    @Bean
-    public ScoreAiSystemPrompt scoreAiSystemPrompt(
-            ScoreAiProperties properties, ResourceLoader resourceLoader) {
-        String location = properties.getAssistant().getSystemPromptResource();
-        if (!StringUtils.hasText(location)) {
-            throw new IllegalArgumentException("AI assistant system prompt resource must be configured");
-        }
-        return new ScoreAiSystemPrompt(resourceLoader.getResource(location.strip()));
     }
 
     private ChatModel chatModel(String configuredName, ScoreAiProperties.Model model,

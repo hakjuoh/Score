@@ -11,6 +11,7 @@ import java.util.Set;
  *
  * @param id internal confirmation identifier
  * @param guid public confirmation identifier
+ * @param requestId request that originally issued the confirmation
  * @param status lifecycle status
  * @param toolName guarded tool name
  * @param argumentsDigest digest binding the tool to its approved arguments
@@ -24,6 +25,7 @@ import java.util.Set;
 public record AiMutationConfirmationState(
         long id,
         String guid,
+        String requestId,
         String status,
         String toolName,
         String argumentsDigest,
@@ -51,9 +53,9 @@ public record AiMutationConfirmationState(
      * Returns the approved projection of this state.
      */
     public AiMutationConfirmationState withApproved(
-            Instant when, String approvedArgumentsDigest) {
+            Instant when, Instant grantExpiresAt, String approvedArgumentsDigest) {
         return new AiMutationConfirmationState(
-                id, guid, "APPROVED", toolName, approvedArgumentsDigest, expiresAt,
+                id, guid, requestId, "APPROVED", toolName, approvedArgumentsDigest, grantExpiresAt,
                 when, deniedAt, expiredAt, consumedAt, grantDigest);
     }
 
@@ -62,7 +64,7 @@ public record AiMutationConfirmationState(
      */
     public AiMutationConfirmationState withDenied(Instant when) {
         return new AiMutationConfirmationState(
-                id, guid, "DENIED", toolName, argumentsDigest, expiresAt,
+                id, guid, requestId, "DENIED", toolName, argumentsDigest, expiresAt,
                 approvedAt, when, expiredAt, consumedAt, null);
     }
 
@@ -71,7 +73,7 @@ public record AiMutationConfirmationState(
      */
     public AiMutationConfirmationState withExpired(Instant when) {
         return new AiMutationConfirmationState(
-                id, guid, "EXPIRED", toolName, argumentsDigest, expiresAt,
+                id, guid, requestId, "EXPIRED", toolName, argumentsDigest, expiresAt,
                 approvedAt, deniedAt, when, consumedAt, null);
     }
 }

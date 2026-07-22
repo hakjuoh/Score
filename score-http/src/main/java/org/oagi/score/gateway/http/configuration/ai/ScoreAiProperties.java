@@ -16,6 +16,7 @@ public class ScoreAiProperties {
     private String modelName;
     private Duration requestTimeout = Duration.ofMinutes(10);
     private Assistant assistant = new Assistant();
+    private Gateway gateway = new Gateway();
     private MultiAgent multiAgent = new MultiAgent();
     private Memory memory = new Memory();
     private Mcp mcp = new Mcp();
@@ -55,6 +56,11 @@ public class ScoreAiProperties {
 
     public Assistant getAssistant() {
         return assistant;
+    }
+
+    public Gateway getGateway() { return gateway; }
+    public void setGateway(Gateway gateway) {
+        this.gateway = gateway != null ? gateway : new Gateway();
     }
 
     public void setAssistant(Assistant assistant) {
@@ -285,11 +291,39 @@ public class ScoreAiProperties {
     }
 
     public static class Assistant {
-        private String systemPromptResource = "classpath:prompts/connect-center-assistant-system-prompt.md";
+        private String systemPromptResource =
+                "classpath:ai/system/system-prompt-connect-center-assistant.md";
 
         public String getSystemPromptResource() { return systemPromptResource; }
         public void setSystemPromptResource(String systemPromptResource) {
             this.systemPromptResource = systemPromptResource;
+        }
+    }
+
+    /** Trusted per-turn no-Tool simple-request Agent configuration. */
+    public static class Gateway {
+        private boolean enabled = true;
+        private String modelName;
+        private double directConfidenceThreshold = 0.90d;
+        private int maximumInputCharacters = 4000;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public String getModelName() { return modelName; }
+        public void setModelName(String modelName) { this.modelName = modelName; }
+        public double getDirectConfidenceThreshold() { return directConfidenceThreshold; }
+        public void setDirectConfidenceThreshold(double value) {
+            if (!Double.isFinite(value) || value < 0.0d || value > 1.0d) {
+                throw new IllegalArgumentException("Gateway direct confidence must be between 0 and 1.");
+            }
+            directConfidenceThreshold = value;
+        }
+        public int getMaximumInputCharacters() { return maximumInputCharacters; }
+        public void setMaximumInputCharacters(int value) {
+            if (value < 128 || value > 32_768) {
+                throw new IllegalArgumentException("Gateway input limit must be between 128 and 32768.");
+            }
+            maximumInputCharacters = value;
         }
     }
 

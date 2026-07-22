@@ -27,6 +27,7 @@ public class WebSocketConfiguration
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.enableSimpleBroker("/topic", "/queue");
         registry.setApplicationDestinationPrefixes("/app");
+        registry.setPreservePublishOrder(true);
     }
 
     @Override

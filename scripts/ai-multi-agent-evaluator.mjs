@@ -2,12 +2,12 @@ import {createHash} from 'node:crypto';
 import {readdirSync, readFileSync} from 'node:fs';
 
 const agentDirectory = new URL(
-  '../score-http/src/main/resources/prompts/', import.meta.url);
+  '../score-http/src/main/resources/ai/agent/', import.meta.url);
 
 function registeredAgentIds() {
   const ids = readdirSync(agentDirectory, {withFileTypes: true})
     .filter(entry => entry.isFile()
-      && entry.name.startsWith('agent-') && entry.name.endsWith('.md'))
+      && entry.name.startsWith('agent-prompt-') && entry.name.endsWith('.md'))
     .map(entry => {
       const markdown = readFileSync(new URL(entry.name, agentDirectory), 'utf8');
       const frontmatter = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];

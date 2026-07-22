@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiRequestStateStore;
 import org.oagi.score.gateway.http.api.ai_management.model.AiSharedRequestState;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -15,6 +16,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -124,8 +126,28 @@ class AiRequestRegistryTest {
     }
 
     @Test
+    void childConfirmationMaintenanceIsBoundToItsActiveRootRequest() {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry root = registry.register(
+                "request-1", "root-conversation", user, Instant.now().plusSeconds(60));
+        AtomicBoolean invoked = new AtomicBoolean();
+
+        assertThatThrownBy(() -> registry.whileRequestAndConversationIdle(
+                "request-1", "child-conversation", () -> invoked.getAndSet(true)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("active AI request");
+        assertThat(invoked).isFalse();
+
+        registry.cancel("request-1", "cancel-1", user);
+        assertThat(registry.start(root)).isFalse();
+        assertThat(registry.whileRequestAndConversationIdle(
+                "request-1", "child-conversation", () -> "decided"))
+                .isEqualTo("decided");
+    }
+
+    @Test
     void sharedLeaseRejectsTheSameConversationOnAnotherApplicationInstance() {
-        InMemoryAiRequestStateStore sharedState = new InMemoryAiRequestStateStore();
+        AiRequestStateStore sharedState = AiRequestStateStore.inMemory();
         var firstScheduler = Executors.newSingleThreadScheduledExecutor(
                 Thread.ofPlatform().daemon(true).factory());
         var secondScheduler = Executors.newSingleThreadScheduledExecutor(
@@ -155,7 +177,7 @@ class AiRequestRegistryTest {
 
     @Test
     void remoteInstanceCanReadRecoverAndCancelTheOwningInstancesWorker() {
-        InMemoryAiRequestStateStore sharedState = new InMemoryAiRequestStateStore();
+        AiRequestStateStore sharedState = AiRequestStateStore.inMemory();
         var firstScheduler = Executors.newSingleThreadScheduledExecutor(
                 Thread.ofPlatform().daemon(true).factory());
         var secondScheduler = Executors.newSingleThreadScheduledExecutor(
@@ -188,7 +210,7 @@ class AiRequestRegistryTest {
 
     @Test
     void remoteCancellationReconcilesAfterGraceWhenTheOwnerInstanceIsGone() throws Exception {
-        InMemoryAiRequestStateStore sharedState = new InMemoryAiRequestStateStore();
+        AiRequestStateStore sharedState = AiRequestStateStore.inMemory();
         Instant now = Instant.now();
         AiSharedRequestState abandoned = new AiSharedRequestState(
                 "request-abandoned", "conversation-abandoned", user.userId().value().toString(),
@@ -256,13 +278,14 @@ class AiRequestRegistryTest {
     @Test
     void runningDeadlineInterruptsWorkButDoesNotClaimTerminalUntilTheWorkerStops() throws Exception {
         AiRequestRegistry registry = new AiRequestRegistry();
-        AiRequestRegistry.Entry entry = registry.register("request-1", "conversation-1", user,
-                Instant.now().plusMillis(40));
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch interrupted = new CountDownLatch(1);
         CountDownLatch allowStop = new CountDownLatch(1);
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             CompletableFuture<Void> work = CompletableFuture.runAsync(() -> {
+                AiRequestRegistry.Entry entry = registry.register(
+                        "request-1", "conversation-1", user,
+                        Instant.now().plusMillis(250));
                 assertThat(registry.start(entry)).isTrue();
                 started.countDown();
                 try {

@@ -78,6 +78,18 @@ describe('AI chat event semantics', () => {
     }));
   });
 
+  it('classifies a denied mutation retry as terminal and non-executed', () => {
+    expect(toolCallEventSemantics({
+      requestId: 'request-1', type: 'tool_call', subtype: 'denied',
+      groupId: 'mcp', toolCallId: 'call-1',
+      metadata: {toolName: 'delete_business_context'}
+    })).toEqual(expect.objectContaining({
+      key: 'mcp:call-1', toolName: 'delete_business_context',
+      content: 'delete_business_context was denied before execution.',
+      active: false, status: 'denied'
+    }));
+  });
+
   it('shows a correlated tool discovery lifecycle with its tool name', () => {
     expect(toolCallEventSemantics({
       requestId: 'request-1', type: 'tool_call', subtype: 'started',

@@ -11,7 +11,7 @@ class AiMutationConfirmationStateTest {
     @Test
     void treatsUnknownStoredStatusAsExpiredFailClosedState() {
         AiMutationConfirmationState state = new AiMutationConfirmationState(
-                1L, "confirmation-1", "future-status", "create_record", "digest",
+                1L, "confirmation-1", "request-1", "future-status", "create_record", "digest",
                 Instant.MAX, null, null, null, null, null);
 
         assertThat(state.status()).isEqualTo("EXPIRED");

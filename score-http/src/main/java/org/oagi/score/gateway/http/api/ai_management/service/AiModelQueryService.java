@@ -7,18 +7,27 @@ import org.oagi.score.gateway.http.api.cc_management.model.acc.AccSummaryRecord;
 import org.oagi.score.gateway.http.api.cc_management.model.asccp.AsccpManifestId;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.ai.ollama.api.OllamaApi;
-import org.springframework.ai.ollama.api.OllamaChatOptions;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentDefinition;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentFactory;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentInvocation;
+import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
+import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.agent.ResolvedAgent;
+import org.oagi.score.gateway.http.api.ai_management.agent.DefinitionGeneratorAgent;
+import org.oagi.score.gateway.http.api.ai_management.agent.NameSuggesterAgent;
+import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionService;
+import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrailChain;
+import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static org.springframework.util.StringUtils.hasLength;
@@ -27,27 +36,30 @@ import static org.springframework.util.StringUtils.hasLength;
 @Transactional(readOnly = true)
 public class AiModelQueryService {
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private final RepositoryFactory repositoryFactory;
+    private final AgentExecutionService execution;
+    private final SpringAiModelCatalog models;
+    private final AgentOutputGuardrailChain outputGuardrails;
+    private final AgentFactory agents = AgentFactory.binding();
+    private final DefinitionGeneratorAgent definitionGenerator;
+    private final NameSuggesterAgent nameSuggester;
 
-    @Autowired
-    private OllamaApi ollamaApi;
-
-    @Autowired
-    private RepositoryFactory repositoryFactory;
+    public AiModelQueryService(RepositoryFactory repositoryFactory,
+                               AgentExecutionService execution,
+                               SpringAiModelCatalog models,
+                               AgentOutputGuardrailChain outputGuardrails,
+                               DefinitionGeneratorAgent definitionGenerator,
+                               NameSuggesterAgent nameSuggester) {
+        this.repositoryFactory = Objects.requireNonNull(repositoryFactory);
+        this.execution = Objects.requireNonNull(execution);
+        this.models = Objects.requireNonNull(models);
+        this.outputGuardrails = Objects.requireNonNull(outputGuardrails);
+        this.definitionGenerator = Objects.requireNonNull(definitionGenerator);
+        this.nameSuggester = Objects.requireNonNull(nameSuggester);
+    }
 
     public List<String> getAvailableModels() {
-
-        OllamaApi.ListModelResponse response;
-        try {
-            response = ollamaApi.listModels();
-        } catch (Exception e) {
-            logger.error("Error occurs while the list of available models is loading.", e);
-            return Collections.emptyList();
-        }
-        return response.models()
-                .stream()
-                .sorted(Comparator.comparing(OllamaApi.Model::modifiedAt).reversed())
-                .map(e -> e.name()).collect(Collectors.toList());
+        return models.available().stream().map(model -> model.id().value()).toList();
     }
 
     public String generateDefinition(
@@ -58,32 +70,13 @@ public class AiModelQueryService {
 
         CcDocument ccDocument = new CcDocumentImpl(requester, repositoryFactory, acc.release().releaseId());
 
-        String systemPrompt = "Generate a concise, business-focused definition of the given object in approximately 2–4 sentences, depending on the complexity of the object. Describe its purpose and structural role within business processes or data exchange. Summarize the nature of the information it captures by abstractly referring to relevant business domains or categories (e.g., product attributes, compliance details, operational parameters), without listing specific elements. Focus on conveying the business intent and utility of the object based on its structure. Output only the refined definition, with no extra commentary.";
         String userPrompt = "The object class term of the given object is '" + acc.objectClassTerm() + "'.\n";
         if (hasLength(originalText)) {
             userPrompt += "The original definition is '" + originalText + "'.\n";
         }
         userPrompt += prompt(accManifestId, ccDocument, 0);
 
-        var request = OllamaApi.ChatRequest.builder(model)
-                .stream(false) // not streaming
-                .messages(List.of(
-                        OllamaApi.Message.builder(OllamaApi.Message.Role.SYSTEM)
-                                .content(systemPrompt)
-                                .build(),
-                        OllamaApi.Message.builder(OllamaApi.Message.Role.USER)
-                                .content(userPrompt)
-                                .build()))
-                .options(OllamaChatOptions.builder()
-                        .temperature(0.7)
-                        .numCtx(64 * 1024)
-                        .build())
-                .build();
-
-        var response = this.ollamaApi.chat(request);
-
-        String content = response.message().content();
-        return removeReasoning(content);
+        return run(definitionGenerator.definition(), requester, model, userPrompt);
     }
 
     public String generateDefinition(
@@ -154,30 +147,34 @@ public class AiModelQueryService {
 
         CcDocument ccDocument = new CcDocumentImpl(requester, repositoryFactory, acc.release().releaseId());
 
-        String systemPrompt = "Generate a concise, descriptive name for the given object based on its definition. Preserve the original name if it clearly reflects the object's purpose. If the original name includes the word \"Base,\" retain it in the final name. Use the fewest number of words necessary, avoiding articles and special characters. Capitalize the first letter of each word and separate words with a single space. Return only the final name, with no additional text or explanation.";
         String userPrompt = "The original object class term of the given object is '" + originalName + "'.\n";
         if (acc.definition() != null && hasLength(acc.definition().content())) {
             userPrompt += "The definition is '" + acc.definition().content() + "'.\n";
         }
         userPrompt += prompt(accManifestId, ccDocument, 0);
-        var request = OllamaApi.ChatRequest.builder(model)
-                .stream(false) // not streaming
-                .messages(List.of(
-                        OllamaApi.Message.builder(OllamaApi.Message.Role.SYSTEM)
-                                .content(systemPrompt)
-                                .build(),
-                        OllamaApi.Message.builder(OllamaApi.Message.Role.USER)
-                                .content(userPrompt)
-                                .build()))
-                .options(OllamaChatOptions.builder()
-                        .temperature(0.7)
-                        .numCtx(64 * 1024)
-                        .build())
-                .build();
+        return run(nameSuggester.definition(), requester, model, userPrompt);
+    }
 
-        var response = this.ollamaApi.chat(request);
-
-        String content = response.message().content();
-        return removeReasoning(content);
+    private String run(AgentDefinition definition, ScoreUser requester,
+                       String modelId, String prompt) {
+        ResolvedAgent agent = agents.create(definition, models.require(modelId), ToolSet.empty());
+        String correlation = UUID.randomUUID().toString();
+        String requesterId = requester != null && requester.userId() != null
+                ? requester.userId().value().toString()
+                : requester != null && hasLength(requester.username())
+                ? requester.username() : "unknown";
+        ExecutionScope scope = new ExecutionScope("ai-query-" + correlation,
+                "ai-query-" + correlation, requesterId, 0L,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        var result = execution.execute(new AgentInvocation(null, agent,
+                new AiMessage.User(prompt), List.of(), scope, null));
+        var guarded = outputGuardrails.evaluate(new AgentOutputGuardrail.Request(
+                AgentOutputGuardrail.Scope.PUBLIC, result.response(), scope,
+                Map.of("feature", definition.id().value())));
+        if (!guarded.allowed()) {
+            throw new IllegalStateException(
+                    "The generated content was not accepted by output policy.");
+        }
+        return removeReasoning(guarded.output().content());
     }
 }

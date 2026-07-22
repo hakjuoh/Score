@@ -9,7 +9,8 @@ import java.util.Map;
  *
  * <p>A node is either a direct leaf, an ordered list of children, a set of
  * parallel/orchestrated children, or a named routing table. A direct leaf may
- * carry a registered read-only worker assignment.</p>
+ * carry a registered worker assignment whose runtime Tool access is declared
+ * by that task and bounded by the parent request.</p>
  */
 public record AiWorkflowNode(
         String id,

@@ -1,20 +1,25 @@
 package org.oagi.score.gateway.http.api.ai_management.workflow;
 
 import org.junit.jupiter.api.Test;
-import org.oagi.score.gateway.http.api.ai_management.service.AiChatExecutor;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Callable;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class WorkflowCompositionTest {
 
@@ -40,7 +45,7 @@ class WorkflowCompositionTest {
 
             WorkflowResult result = new ChainWorkflow(
                     "root", List.of(routed, parallel, orchestrated))
-                    .process(WorkflowContext.root(mock(AiChatExecutor.Context.class)));
+                    .process(WorkflowContext.root(mock(WorkflowInvocation.class)));
 
             assertThat(result.output()).isEqualTo(
                     "final:2:left:classified|right:classified");
@@ -62,7 +67,7 @@ class WorkflowCompositionTest {
                 (context, result, evaluation, iteration) -> context.withUpstream(List.of(result)));
 
         WorkflowResult result = workflow.process(
-                WorkflowContext.root(mock(AiChatExecutor.Context.class)));
+                WorkflowContext.root(mock(WorkflowInvocation.class)));
 
         assertThat(result.output()).isEqualTo("result-2");
         assertThat(result.metadata()).containsEntry("workflow_iterations", 2)
@@ -77,6 +82,30 @@ class WorkflowCompositionTest {
 
         assertThat(result.workflowId()).isEqualTo("direct");
         assertThat(result.output()).isEqualTo("done");
+    }
+
+    @Test
+    void chainAndRoutingPreserveTheSelectedAgentExecutionMetadata() {
+        Workflow selected = new DirectWorkflow("selected", ignored ->
+                WorkflowResult.success("selected", "done", Map.of(
+                        "agentId", "selected-agent",
+                        "modelId", "selected-model",
+                        "executionPurpose", "WORKER"), List.of()));
+        Workflow routed = new RoutingWorkflow("route", ignored -> "selected",
+                Map.of("selected", selected));
+
+        WorkflowResult result = new ChainWorkflow("chain", List.of(routed))
+                .process(context());
+
+        assertThat(result.metadata())
+                .containsEntry("agentId", "selected-agent")
+                .containsEntry("modelId", "selected-model")
+                .containsEntry("executionPurpose", "WORKER")
+                .containsEntry("workflow", "chain")
+                .containsEntry("step_count", 1);
+        assertThat(result.children().getFirst().metadata())
+                .containsEntry("workflow", "routing")
+                .containsEntry("selected_route", "selected");
     }
 
     @Test
@@ -111,6 +140,168 @@ class WorkflowCompositionTest {
             });
 
             assertThat(workflow.process(context()).output()).isEqualTo("partial");
+        }
+    }
+
+    @Test
+    void parallelWorkflowAppliesAndFinishesOneLifecycleContextPerBranch() {
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            WorkflowInvocation leftExecution = mock(WorkflowInvocation.class);
+            WorkflowInvocation rightExecution = mock(WorkflowInvocation.class);
+            List<WorkflowContext> finished = new CopyOnWriteArrayList<>();
+            ParallelizationWorkflow.BranchLifecycle lifecycle =
+                    new ParallelizationWorkflow.BranchLifecycle() {
+                @Override
+                public List<WorkflowContext> open(
+                        WorkflowContext parent, List<String> branchIds) {
+                    assertThat(branchIds).containsExactly("left", "right");
+                    return List.of(WorkflowContext.root(leftExecution),
+                            WorkflowContext.root(rightExecution));
+                }
+
+                @Override
+                public void finished(WorkflowContext branch) {
+                    finished.add(branch);
+                }
+            };
+            List<WorkflowInvocation> observed = new CopyOnWriteArrayList<>();
+            ParallelizationWorkflow workflow = new ParallelizationWorkflow(
+                    "parallel", List.of(
+                    direct("left", context -> {
+                        observed.add(context.invocation());
+                        return "left";
+                    }),
+                    direct("right", context -> {
+                        observed.add(context.invocation());
+                        return "right";
+                    })), executor, Duration.ofSeconds(1),
+                    (context, results) -> WorkflowResult.success(
+                            "parallel", "done", Map.of(), results), lifecycle);
+
+            assertThat(workflow.process(context()).output()).isEqualTo("done");
+            assertThat(observed).containsExactlyInAnyOrder(leftExecution, rightExecution);
+            assertThat(finished).hasSize(2)
+                    .allMatch(WorkflowContext::concurrent);
+        }
+    }
+
+    @Test
+    void parallelWorkflowFinishesEveryOpenedLifecycleWhenSubmissionFails() {
+        ExecutorService executor = mock(ExecutorService.class);
+        when(executor.submit(org.mockito.ArgumentMatchers
+                .<Callable<WorkflowResult>>any()))
+                .thenThrow(new RejectedExecutionException("executor stopped"));
+        WorkflowContext left = WorkflowContext.root(mock(WorkflowInvocation.class));
+        WorkflowContext right = WorkflowContext.root(mock(WorkflowInvocation.class));
+        List<WorkflowContext> finished = new CopyOnWriteArrayList<>();
+        ParallelizationWorkflow.BranchLifecycle lifecycle =
+                new ParallelizationWorkflow.BranchLifecycle() {
+                    @Override
+                    public List<WorkflowContext> open(
+                            WorkflowContext parent, List<String> branchIds) {
+                        return List.of(left, right);
+                    }
+
+                    @Override
+                    public void finished(WorkflowContext branch) {
+                        finished.add(branch);
+                    }
+                };
+        ParallelizationWorkflow workflow = new ParallelizationWorkflow(
+                "parallel", List.of(direct("left", ignored -> "left"),
+                direct("right", ignored -> "right")), executor, Duration.ofSeconds(1),
+                (context, results) -> WorkflowResult.success(
+                        "parallel", "unused", Map.of(), results), lifecycle);
+
+        assertThatThrownBy(() -> workflow.process(context()))
+                .isInstanceOf(RejectedExecutionException.class)
+                .hasMessage("executor stopped");
+        assertThat(finished).hasSize(2).allMatch(WorkflowContext::concurrent);
+    }
+
+    @Test
+    void parallelWorkflowFinishesALifecycleWhenCancellationWinsBeforeTheBranchStarts()
+            throws Exception {
+        ExecutorService executor = mock(ExecutorService.class);
+        AtomicInteger submissions = new AtomicInteger();
+        AtomicInteger neverStartedCalls = new AtomicInteger();
+        when(executor.submit(org.mockito.ArgumentMatchers
+                .<Callable<WorkflowResult>>any())).thenAnswer(invocation -> {
+            Callable<WorkflowResult> task = invocation.getArgument(0);
+            if (submissions.getAndIncrement() == 0) {
+                return CompletableFuture.completedFuture(task.call());
+            }
+            return new FutureTask<>(task);
+        });
+        List<WorkflowContext> finished = new CopyOnWriteArrayList<>();
+        ParallelizationWorkflow.BranchLifecycle lifecycle =
+                new ParallelizationWorkflow.BranchLifecycle() {
+                    @Override
+                    public List<WorkflowContext> open(
+                            WorkflowContext parent, List<String> branchIds) {
+                        return branchIds.stream()
+                                .map(ignored -> WorkflowContext.root(
+                                        mock(WorkflowInvocation.class)))
+                                .toList();
+                    }
+
+                    @Override
+                    public void finished(WorkflowContext branch) {
+                        finished.add(branch);
+                    }
+                };
+        ParallelizationWorkflow workflow = new ParallelizationWorkflow(
+                "parallel", List.of(direct("fast", ignored -> "fast"),
+                direct("never-started", ignored -> {
+                    neverStartedCalls.incrementAndGet();
+                    return "unexpected";
+                })), executor, Duration.ofMillis(20),
+                (context, results) -> WorkflowResult.success(
+                        "parallel", "partial", Map.of(), results), lifecycle);
+
+        assertThat(workflow.process(context()).output()).isEqualTo("partial");
+        assertThat(neverStartedCalls).hasValue(0);
+        assertThat(finished).hasSize(2).allMatch(WorkflowContext::concurrent);
+    }
+
+    @Test
+    void orchestratorWorkersPropagatesTheParallelBranchLifecycle() {
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            WorkflowInvocation firstExecution = mock(WorkflowInvocation.class);
+            WorkflowInvocation secondExecution = mock(WorkflowInvocation.class);
+            List<WorkflowContext> finished = new CopyOnWriteArrayList<>();
+            ParallelizationWorkflow.BranchLifecycle lifecycle =
+                    new ParallelizationWorkflow.BranchLifecycle() {
+                @Override
+                public List<WorkflowContext> open(
+                        WorkflowContext parent, List<String> branchIds) {
+                    assertThat(branchIds).containsExactly("worker-a", "worker-b");
+                    return List.of(WorkflowContext.root(firstExecution),
+                            WorkflowContext.root(secondExecution));
+                }
+
+                @Override
+                public void finished(WorkflowContext branch) {
+                    finished.add(branch);
+                }
+            };
+            List<WorkflowInvocation> observed = new CopyOnWriteArrayList<>();
+            OrchestratorWorkersWorkflow workflow = new OrchestratorWorkersWorkflow(
+                    "orchestrator", ignored -> List.of(
+                    direct("worker-a", context -> {
+                        observed.add(context.invocation());
+                        return "a";
+                    }),
+                    direct("worker-b", context -> {
+                        observed.add(context.invocation());
+                        return "b";
+                    })), executor, Duration.ofSeconds(1),
+                    (context, results) -> WorkflowResult.success(
+                            "orchestrator", "done", Map.of(), results), lifecycle);
+
+            assertThat(workflow.process(context()).output()).isEqualTo("done");
+            assertThat(observed).containsExactlyInAnyOrder(firstExecution, secondExecution);
+            assertThat(finished).hasSize(2);
         }
     }
 
@@ -321,6 +512,6 @@ class WorkflowCompositionTest {
     }
 
     private WorkflowContext context() {
-        return WorkflowContext.root(mock(AiChatExecutor.Context.class));
+        return WorkflowContext.root(mock(WorkflowInvocation.class));
     }
 }

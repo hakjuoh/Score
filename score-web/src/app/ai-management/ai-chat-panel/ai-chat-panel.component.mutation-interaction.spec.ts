@@ -3,6 +3,7 @@ import {
   component,
   finishMutationConfirmationRequest,
   of,
+  Subject,
   sendMutationConfirmationNotice,
   setupAiChatPanelSpec,
   snackBar,
@@ -42,6 +43,349 @@ describe('AiChatPanelComponent elicitation and mutation interaction', () => {
     });
     expect(component.state.elicitation).toBeUndefined();
     expect(component.state.pending).toBe(true);
+  });
+
+  it('sends one complete decision for a parallel mutation batch and resumes the active request', () => {
+    startApprovalBatch(true);
+
+    expect(component.state.mutationApprovalBatch).toMatchObject({
+      batchId: 'batch-1', parallel: true
+    });
+    expect(component.state.mutationApprovalBatch?.items).toHaveLength(2);
+    expect(component.state.currentStatus).toBe('2 approvals required');
+    expect(component.state.messages.at(-1)).toEqual({
+      role: 'guide', content: 'Approval requested for 2 data-changing actions.'
+    });
+
+    component.decideMutationApprovalBatch('APPROVE');
+
+    expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/mutation-approval', {
+      requestId: 'request-1', conversationId: 'conversation-1', batchId: 'batch-1',
+      decisions: [
+        {confirmationRequestId: 'confirmation-1', decision: 'APPROVE'},
+        {confirmationRequestId: 'confirmation-2', decision: 'APPROVE'}
+      ]
+    });
+    expect(component.state.mutationApprovalBatchBusy).toBe(true);
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'mutation_approval_decision_accepted',
+      content: 'Approved 2 actions and denied 0. Continuing the active request.',
+      metadata: {batchId: 'batch-1'}
+    });
+
+    expect(component.state.mutationApprovalBatch).toBeUndefined();
+    expect(component.state.pending).toBe(true);
+    expect(component.state.messages.filter(message => message.role === 'user')).toHaveLength(1);
+    expect(component.state.messages.at(-1)).toEqual({
+      role: 'guide',
+      content: 'Approved 2 actions and denied 0. Continuing the active request.'
+    });
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'assistant_final',
+      content: 'The approved parallel work completed.'
+    });
+    const approvalIndex = component.state.messages.findIndex(message =>
+      message.role === 'guide' && message.content.startsWith('Approved 2 actions'));
+    const finalIndex = component.state.messages.findIndex(message =>
+      message.role === 'assistant' && message.content === 'The approved parallel work completed.');
+    expect(approvalIndex).toBeGreaterThanOrEqual(0);
+    expect(finalIndex).toBeGreaterThan(approvalIndex);
+  });
+
+  it('completes an attachment-backed HTTP chat through a live approval batch', () => {
+    const live = new Subject<{body: string}>();
+    const response = new Subject<{
+      response: string;
+      conversationId: string;
+      events: any[];
+    }>();
+    transport.watch.mockReturnValueOnce(live);
+    api.sendChat.mockReturnValueOnce(response);
+    component.state.conversationId = 'conversation-1';
+    component.state.prompt = 'Update the item described by this attachment';
+    component.state.attachments = [{
+      name: 'change.txt', mediaType: 'text/plain', size: 6, data: 'change'
+    }];
+    component.send();
+    const batchEvent = {
+      requestId: 'request-1', conversationId: 'conversation-1', sequence: 1,
+      type: 'system', subtype: 'mutation_approval_batch_required', visibility: 'visible',
+      content: 'Approval required.', metadata: {
+        batchId: 'batch-http', parallel: false, expiresAt: '2099-07-15T00:00:00Z',
+        items: [{
+          confirmationRequestId: 'confirmation-http', toolName: 'update_bbie',
+          argumentsSummary: '{"id":1}', agentId: 'agent-http', agentLabel: 'HTTP Agent'
+        }]
+      }
+    };
+    live.next({body: JSON.stringify(batchEvent)});
+
+    expect(component.state.mutationApprovalBatch).toMatchObject({batchId: 'batch-http'});
+    component.decideMutationApprovalBatch('APPROVE');
+    expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/mutation-approval', {
+      requestId: 'request-1', conversationId: 'conversation-1', batchId: 'batch-http',
+      decisions: [{confirmationRequestId: 'confirmation-http', decision: 'APPROVE'}]
+    });
+
+    live.next({body: JSON.stringify({
+      requestId: 'request-1', conversationId: 'conversation-1', sequence: 2,
+      type: 'system', subtype: 'mutation_approval_decision_rejected',
+      content: 'The approval state changed. Please decide again.',
+      metadata: {batchId: 'batch-http'}
+    })});
+    expect(component.state.mutationApprovalBatchBusy).toBe(false);
+    expect(component.state.mutationApprovalBatch).toMatchObject({batchId: 'batch-http'});
+    component.decideMutationApprovalBatch('APPROVE');
+    expect(transport.publish).toHaveBeenCalledTimes(2);
+
+    const acceptedEvent = {
+      requestId: 'request-1', conversationId: 'conversation-1', sequence: 3,
+      type: 'system', subtype: 'mutation_approval_decision_accepted',
+      content: 'Approved 1 action and denied 0. Continuing the active request.',
+      metadata: {batchId: 'batch-http'}
+    };
+    live.next({body: JSON.stringify(acceptedEvent)});
+    expect(component.state.mutationApprovalBatch).toBeUndefined();
+    expect(component.state.pending).toBe(true);
+
+    response.next({
+      response: 'Attachment-backed update completed.', conversationId: 'conversation-1',
+      events: [batchEvent, acceptedEvent]
+    });
+
+    expect(component.state.pending).toBe(false);
+    expect(component.state.messages.filter(message => message.role === 'user')).toHaveLength(1);
+    expect(component.state.messages.filter(message =>
+      message.role === 'guide' && message.content.startsWith('Approval requested'))).toHaveLength(1);
+    expect(component.state.messages.filter(message =>
+      message.role === 'guide' && message.content.startsWith('Approved 1 action'))).toHaveLength(1);
+    expect(component.state.messages.at(-1)).toEqual({
+      role: 'assistant', content: 'Attachment-backed update completed.'
+    });
+  });
+
+  it('queues a second nested parallel approval batch until the displayed batch is decided', () => {
+    startApprovalBatch(true);
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'mutation_approval_batch_required', content: 'Approval required.',
+      metadata: {
+        batchId: 'batch-2', parallel: true, expiresAt: '2099-07-15T00:00:00Z',
+        items: [{
+          confirmationRequestId: 'confirmation-3', toolName: 'update_asbie',
+          argumentsSummary: '{"id":3}', agentId: 'agent-c', agentLabel: 'Agent C'
+        }]
+      }
+    });
+
+    expect(component.state.mutationApprovalBatch?.batchId).toBe('batch-1');
+    expect(component.state.mutationApprovalBatchQueue).toHaveLength(1);
+
+    component.decideMutationApprovalBatch('APPROVE');
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'mutation_approval_decision_accepted', content: 'First batch approved.',
+      metadata: {batchId: 'batch-1'}
+    });
+
+    expect(component.state.mutationApprovalBatch?.batchId).toBe('batch-2');
+    expect(component.state.mutationApprovalBatchQueue).toHaveLength(0);
+    expect(component.state.currentStatus).toBe('Approval required');
+    component.decideMutationApprovalBatch('DENY');
+    expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/mutation-approval', {
+      requestId: 'request-1', conversationId: 'conversation-1', batchId: 'batch-2',
+      decisions: [{confirmationRequestId: 'confirmation-3', decision: 'DENY'}]
+    });
+  });
+
+  it('reports a queued approval that expires before the preceding batch is decided', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-21T12:00:00Z'));
+    startApprovalBatch(true);
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'mutation_approval_batch_required', content: 'Approval required.',
+      metadata: {
+        batchId: 'batch-expiring', parallel: false,
+        expiresAt: '2026-07-21T12:00:01Z', items: [{
+          confirmationRequestId: 'confirmation-expiring', toolName: 'update_asbie',
+          argumentsSummary: '{"id":3}'
+        }]
+      }
+    });
+    vi.advanceTimersByTime(1_001);
+
+    component.decideMutationApprovalBatch('APPROVE');
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'mutation_approval_decision_accepted', content: 'First batch approved.',
+      metadata: {batchId: 'batch-1'}
+    });
+
+    expect(component.state.mutationApprovalBatch).toBeUndefined();
+    expect(component.state.messages).toContainEqual({
+      role: 'error',
+      content: 'A queued approval request expired before it could be shown.'
+    });
+  });
+
+  it('expires a displayed approval automatically and explains why it was cleared', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-07-21T12:00:00Z'));
+      component.state.pending = true;
+      component.state.conversationId = 'conversation-1';
+      component.state.activeRequest = {requestId: 'request-1'};
+      (component as any).handleSocketEvent({
+        requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+        subtype: 'mutation_approval_batch_required', content: 'Approval required.',
+        metadata: {
+          batchId: 'expiring-batch', parallel: false,
+          expiresAt: '2026-07-21T12:00:01Z',
+          items: [{
+            confirmationRequestId: 'confirmation-expiring', toolName: 'update_bbie',
+            argumentsSummary: '{"id":1}'
+          }]
+        }
+      });
+
+      vi.advanceTimersByTime(1_001);
+
+      expect(component.state.mutationApprovalBatch).toBeUndefined();
+      expect(component.state.mutationApprovalBatchBusy).toBe(false);
+      expect(component.state.currentStatus).toBe('Approval expired');
+      expect(component.state.messages.at(-1)).toEqual({
+        role: 'error', content: 'This approval request expired before a decision was sent.'
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('makes a decision retryable when its acknowledgement is lost', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-07-21T12:00:00Z'));
+      startApprovalBatch(false, 1);
+      (component as any).handleSocketEvent({
+        requestId: 'request-1', conversationId: 'conversation-1',
+        type: 'system', subtype: 'accepted',
+        metadata: {generation: 1, deadline: '2099-07-15T00:00:00Z'}
+      });
+      component.decideMutationApprovalBatch('APPROVE');
+
+      expect(component.state.mutationApprovalBatchBusy).toBe(true);
+      vi.advanceTimersByTime(15_001);
+
+      expect(component.state.mutationApprovalBatch?.batchId).toBe('batch-1');
+      expect(component.state.mutationApprovalBatchBusy).toBe(false);
+      expect(component.state.currentStatus).toBe('Approval required');
+      expect(component.state.messages.at(-1)).toEqual({
+        role: 'error',
+        content: 'No acknowledgement was received. You can retry the approval decision.'
+      });
+
+      component.decideMutationApprovalBatch('APPROVE');
+      expect(transport.publish.mock.calls.filter(call =>
+        call[0] === '/app/ai/chat/mutation-approval')).toHaveLength(2);
+      (component as any).handleSocketEvent({
+        requestId: 'request-1', conversationId: 'conversation-1',
+        type: 'system', subtype: 'mutation_approval_decision_accepted',
+        content: 'Approved 1 action and denied 0. Continuing the active request.',
+        metadata: {batchId: 'batch-1', replayed: true}
+      });
+      expect(component.state.mutationApprovalBatch).toBeUndefined();
+      expect(component.state.mutationApprovalBatchBusy).toBe(false);
+      expect(component.state.currentStatus).toBe('Working');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('disables and fences an approval as soon as Stop is requested', () => {
+    startApprovalBatch(false, 1);
+
+    component.cancelActiveRequest();
+    component.decideMutationApprovalBatch('APPROVE');
+
+    expect(component.state.cancellation.phase).not.toBe('idle');
+    expect(component.mutationApprovalControlsBusy).toBe(true);
+    expect((component as any).mutationApprovalExpiryTimeout).toBeDefined();
+    expect(transport.publish).not.toHaveBeenCalledWith(
+      '/app/ai/chat/mutation-approval', expect.anything()
+    );
+  });
+
+  it.each([
+    ['completion', {
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'assistant_final', content: 'Done.'
+    }],
+    ['failure', {requestId: 'request-1', type: 'system', subtype: 'error', content: 'Failed.'}],
+    ['cancellation', {
+      requestId: 'request-1', type: 'system', subtype: 'cancelled', content: 'Cancelled.'
+    }]
+  ])('clears active and queued approvals on request %s', (_label, terminalEvent) => {
+    startApprovalBatch(true);
+    component.state.mutationApprovalBatchQueue.push({
+      batchId: 'batch-2', requestId: 'request-1', conversationId: 'conversation-1',
+      parallel: true, expiresAt: '2099-07-15T00:00:00Z', items: [{
+        confirmationRequestId: 'confirmation-3', toolName: 'update_asbie',
+        argumentsSummary: '{"id":3}'
+      }]
+    });
+    component.state.mutationApprovalBatchBusy = true;
+
+    (component as any).handleSocketEvent(terminalEvent);
+
+    expect(component.state.mutationApprovalBatch).toBeUndefined();
+    expect(component.state.mutationApprovalBatchQueue).toEqual([]);
+    expect(component.state.mutationApprovalBatchBusy).toBe(false);
+  });
+
+  it('clears approval state when a new-chat reset occurs', () => {
+    component.state.mutationApprovalBatch = {
+      batchId: 'batch-1', requestId: 'request-1', conversationId: 'conversation-1',
+      parallel: false, expiresAt: '2099-07-15T00:00:00Z', items: [{
+        confirmationRequestId: 'confirmation-1', toolName: 'update_bbie',
+        argumentsSummary: '{}'
+      }]
+    };
+    component.state.mutationApprovalBatchQueue = [component.state.mutationApprovalBatch];
+    component.state.mutationApprovalBatchBusy = true;
+
+    component.state.resetForNewChat();
+
+    expect(component.state.mutationApprovalBatch).toBeUndefined();
+    expect(component.state.mutationApprovalBatchQueue).toEqual([]);
+    expect(component.state.mutationApprovalBatchBusy).toBe(false);
+  });
+
+  it('keeps an individual sub-agent approval separate and retryable after rejection', () => {
+    startApprovalBatch(false, 1);
+    component.decideMutationApprovalBatch('DENY');
+
+    expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/mutation-approval', {
+      requestId: 'request-1', conversationId: 'conversation-1', batchId: 'batch-1',
+      decisions: [{confirmationRequestId: 'confirmation-1', decision: 'DENY'}]
+    });
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'mutation_approval_decision_rejected',
+      content: 'The batch changed. Please decide again.', metadata: {batchId: 'batch-1'}
+    });
+
+    expect(component.state.mutationApprovalBatch).toMatchObject({
+      batchId: 'batch-1', parallel: false
+    });
+    expect(component.state.mutationApprovalBatchBusy).toBe(false);
+    expect(component.state.messages.at(-1)).toEqual({
+      role: 'error', content: 'The batch changed. Please decide again.'
+    });
   });
 
   it('shows a rejected elicitation response as a retryable chat error', () => {
@@ -522,6 +866,26 @@ function startElicitation(): void {
           strategy: {type: 'string', enum: ['merge', 'replace']}
         }, required: ['strategy']
       }
+    }
+  });
+}
+
+function startApprovalBatch(parallel: boolean, count = 2): void {
+  component.state.conversationId = 'conversation-1';
+  component.state.prompt = 'Apply the requested changes';
+  component.send();
+  transport.publishWhenConnected.mock.calls[0][0].publish();
+  (component as any).handleSocketEvent({
+    requestId: 'request-1', conversationId: 'conversation-1',
+    type: 'system', subtype: 'mutation_approval_batch_required', visibility: 'visible',
+    content: 'Approval required.', metadata: {
+      batchId: 'batch-1', parallel, expiresAt: '2099-07-15T00:00:00Z',
+      items: [
+        {confirmationRequestId: 'confirmation-1', toolName: 'update_bbie',
+          argumentsSummary: '{"id":1}', agentId: 'agent-a', agentLabel: 'Agent A'},
+        {confirmationRequestId: 'confirmation-2', toolName: 'delete_bbie',
+          argumentsSummary: '{"id":2}', agentId: 'agent-b', agentLabel: 'Agent B'}
+      ].slice(0, count)
     }
   });
 }

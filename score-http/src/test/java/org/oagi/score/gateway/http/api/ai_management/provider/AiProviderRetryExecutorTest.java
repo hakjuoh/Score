@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
-import org.oagi.score.gateway.http.api.ai_management.service.AiTrajectoryRecorder;
+import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.ai.retry.TransientAiException;

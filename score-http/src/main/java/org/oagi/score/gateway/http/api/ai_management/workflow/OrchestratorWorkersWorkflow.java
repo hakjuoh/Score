@@ -14,10 +14,19 @@ public final class OrchestratorWorkersWorkflow implements Workflow {
     private final ExecutorService executor;
     private final Duration timeout;
     private final WorkflowAggregator aggregator;
+    private final ParallelizationWorkflow.BranchLifecycle branchLifecycle;
 
     public OrchestratorWorkersWorkflow(
             String id, Function<WorkflowContext, List<Workflow>> workerPlanner,
             ExecutorService executor, Duration timeout, WorkflowAggregator aggregator) {
+        this(id, workerPlanner, executor, timeout, aggregator,
+                ParallelizationWorkflow.BranchLifecycle.NOOP);
+    }
+
+    public OrchestratorWorkersWorkflow(
+            String id, Function<WorkflowContext, List<Workflow>> workerPlanner,
+            ExecutorService executor, Duration timeout, WorkflowAggregator aggregator,
+            ParallelizationWorkflow.BranchLifecycle branchLifecycle) {
         this.id = Objects.requireNonNull(id, "id");
         this.workerPlanner = Objects.requireNonNull(workerPlanner, "workerPlanner");
         this.executor = Objects.requireNonNull(executor, "executor");
@@ -26,6 +35,7 @@ public final class OrchestratorWorkersWorkflow implements Workflow {
             throw new IllegalArgumentException("An orchestrator workflow timeout must be positive.");
         }
         this.aggregator = Objects.requireNonNull(aggregator, "aggregator");
+        this.branchLifecycle = Objects.requireNonNull(branchLifecycle, "branchLifecycle");
     }
 
     @Override
@@ -52,6 +62,6 @@ public final class OrchestratorWorkersWorkflow implements Workflow {
                     () -> "Orchestrator workflow '" + id + "' aggregator returned null.");
         }
         return new ParallelizationWorkflow(id + ":workers", workers,
-                executor, timeout, aggregator).process(context);
+                executor, timeout, aggregator, branchLifecycle).process(context);
     }
 }

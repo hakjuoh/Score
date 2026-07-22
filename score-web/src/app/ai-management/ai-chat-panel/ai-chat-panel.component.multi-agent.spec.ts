@@ -319,6 +319,32 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     ]);
   });
 
+  it('settles a specialist denied retry as a non-executed terminal tool event', () => {
+    startPublishedRequest();
+    (component as any).handleSocketEvent(activity(
+      'subagent_started', 'fanout-1-agent-01', 'Evidence checker'
+    ));
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'tool_call', subtype: 'denied',
+      groupId: 'fanout-1', toolCallId: 'call-11',
+      metadata: {
+        toolName: 'delete_business_context',
+        agentId: 'fanout-1-agent-01', parentNodeId: 'fanout-1-lead'
+      }
+    });
+
+    const agent = component.state.agentActivities
+      .find(candidate => candidate.agentId === 'fanout-1-agent-01');
+    expect(agent?.events.filter(entry => entry.status === 'tool')).toEqual([
+      expect.objectContaining({
+        content: 'delete_business_context was denied before execution.',
+        toolStatus: 'denied'
+      })
+    ]);
+  });
+
   it('keeps lead tool events in the main chat flow', () => {
     startPublishedRequest();
     (component as any).handleSocketEvent(activity(

@@ -29,6 +29,10 @@ logging:
 
 score:
   ai:
+    gateway:
+      # Keep simple-turn classification independent from the main assistant model.
+      # Override with any configured low-cost, low-latency model.
+      model-name: ${SCORE_AI_GATEWAY_MODEL_NAME:claude-haiku-4_5}
     multi-agent:
       # Caps apply per application instance; cluster-wide bounding comes from the
       # per-user active-request limit enforced by the shared AI request registry.
@@ -276,8 +280,8 @@ score:
     model-name: claude-fable-5
     request-timeout: ${SCORE_AI_REQUEST_TIMEOUT:10m}
     assistant:
-      # For Docker, mount a file and set this to e.g. file:/config/connect-center-assistant-system-prompt.md.
-      system-prompt-resource: ${SCORE_AI_ASSISTANT_SYSTEM_PROMPT_RESOURCE:classpath:prompts/connect-center-assistant-system-prompt.md}
+      # For Docker, mount a file and set this to e.g. file:/config/system-prompt-connect-center-assistant.md.
+      system-prompt-resource: ${SCORE_AI_ASSISTANT_SYSTEM_PROMPT_RESOURCE:classpath:ai/system/system-prompt-connect-center-assistant.md}
     memory:
       max-messages: ${SCORE_AI_MEMORY_MAX_MESSAGES:40}
       retention: ${SCORE_AI_CONVERSATION_RETENTION:90d}

@@ -42,7 +42,10 @@ public final class RoutingWorkflow implements Workflow {
         if (!result.successful()) {
             throw result.failure();
         }
+        Map<String, Object> metadata = new LinkedHashMap<>(result.metadata());
+        metadata.put("workflow", "routing");
+        metadata.put("selected_route", selected);
         return WorkflowResult.success(id, result.output(),
-                Map.of("workflow", "routing", "selected_route", selected), List.of(result));
+                metadata, List.of(result));
     }
 }

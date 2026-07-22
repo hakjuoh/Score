@@ -33,7 +33,7 @@ not an observed application failure; no browser result is represented as a pass.
 
 ```text
 ChatService
-  -> AiMultiAgentManager
+  -> AiWorkflowExecutionCoordinator
      -> AiWorkflowPlanner (validated recursive AiWorkflowNode tree)
      -> AiWorkflowCompiler (registered node compilers)
      -> EvaluatorOptimizerWorkflow
@@ -146,7 +146,7 @@ them, and selected callbacks must resolve against the private registry.
 | Generic regex/OR search could fail or crowd relevant tools out | Exact model-directed selection plus non-regex ranked fallback | Index/advisor tests and all live trajectories |
 | Read-only delegated workers bypassed deferred search and received every read-only schema | Filter read-only callbacks, then apply the deferred advisor | Routing/orchestrator embedded trajectories show tool-search calls |
 | A chain synthesis leaf could describe future work instead of using upstream evidence | Stronger upstream contract requires an evidence-backed result now | Chain live case completed in one iteration |
-| Evaluator converted unfinished `CONTINUE` at the cap into a false `COMPLETE` | Preserve the decision; controller emits `evaluation_status=iteration_limit` | Unit and manager integration tests |
+| Evaluator converted unfinished `CONTINUE` at the cap into a false `COMPLETE` | Preserve the decision; controller emits `evaluation_status=iteration_limit` | Unit and coordinator integration tests |
 | Deleting a scheme was rejected merely because it had a parent category | Removed the reversed dependency guard; real dependent values remain protected | Live category 96/scheme 81 regression and service test |
 | Context-scheme pagination applied `LIMIT` to scheme/value joined rows | Page scheme IDs first, then load all values for those IDs | Repository test and live response returned two schemes for `limit=2` |
 

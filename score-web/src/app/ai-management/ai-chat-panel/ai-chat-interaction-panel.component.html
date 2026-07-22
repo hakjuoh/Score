@@ -1,3 +1,68 @@
+@if (mutationApprovalBatch) {
+  <div class="model-command-panel interaction-command-panel"
+       role="region" aria-live="assertive" aria-atomic="true"
+       aria-label="Data change approvals">
+    <div class="model-command-title">
+      {{ mutationApprovalBatch.items.length === 1
+        ? 'Approve this action?'
+        : 'Approve ' + mutationApprovalBatch.items.length + ' actions?' }}
+    </div>
+    <div class="interaction-command-message">
+      @if (mutationApprovalBatch.parallel && mutationApprovalBatch.items.length > 1) {
+        Parallel assistants have reached one shared approval barrier. Your decision resumes each waiting assistant.
+      } @else {
+        The active assistant is waiting for your decision before it continues.
+      }
+    </div>
+    @for (item of mutationApprovalBatch.items; track item.confirmationRequestId; let i = $index) {
+      <section class="model-command-section" [attr.aria-label]="'Approval item ' + (i + 1)">
+        <h4>{{ i + 1 }}. {{ item.agentLabel || 'Assistant' }}</h4>
+        <dl class="interaction-command-details">
+          <dt>Tool</dt><dd>{{ item.toolName }}</dd>
+          <dt>Proposed arguments</dt><dd>{{ item.argumentsSummary || 'No arguments' }}</dd>
+        </dl>
+        <div class="model-command-options" role="group"
+             [attr.aria-label]="'Decision for ' + item.toolName">
+          <button type="button" class="model-command-option"
+                  [class.selected]="mutationDecisionSelected(item.confirmationRequestId, 'APPROVE')"
+                  [attr.aria-pressed]="mutationDecisionSelected(item.confirmationRequestId, 'APPROVE')"
+                  [disabled]="mutationApprovalBatchBusy"
+                  (click)="chooseMutationDecision(item.confirmationRequestId, 'APPROVE')">
+            <span class="model-command-caret" aria-hidden="true">›</span>
+            <span class="model-command-option-content">
+              <span class="model-command-option-name">Approve</span>
+            </span>
+          </button>
+          <button type="button" class="model-command-option"
+                  [class.selected]="mutationDecisionSelected(item.confirmationRequestId, 'DENY')"
+                  [attr.aria-pressed]="mutationDecisionSelected(item.confirmationRequestId, 'DENY')"
+                  [disabled]="mutationApprovalBatchBusy"
+                  (click)="chooseMutationDecision(item.confirmationRequestId, 'DENY')">
+            <span class="model-command-caret" aria-hidden="true">›</span>
+            <span class="model-command-option-content">
+              <span class="model-command-option-name">Deny</span>
+            </span>
+          </button>
+        </div>
+      </section>
+    }
+    <div class="model-command-actions">
+      <button type="button" [disabled]="mutationApprovalBatchBusy"
+              (click)="mutationBatchDenied.emit()">
+        {{ mutationApprovalBatchBusy ? 'Sending...' : 'Deny all' }}
+      </button>
+      <button type="button" class="primary" [disabled]="mutationApprovalBatchBusy"
+              (click)="mutationBatchApproved.emit()">
+        {{ mutationApprovalBatchBusy ? 'Sending...' : 'Approve all' }}
+      </button>
+      <button type="button" [disabled]="mutationApprovalBatchBusy || !mutationBatchDecisionComplete()"
+              (click)="submitMutationBatchDecision()">
+        Submit selected decisions
+      </button>
+    </div>
+  </div>
+}
+
 @if (mutation) {
   <div class="model-command-panel interaction-command-panel"
        role="group" aria-label="Mutation approval">
