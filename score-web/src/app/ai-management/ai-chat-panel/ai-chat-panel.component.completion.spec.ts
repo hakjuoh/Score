@@ -3,6 +3,7 @@ import {
   AiChatConversationDetails,
   AiChatRestResponse,
   AiPublicExecutionRequestStatus,
+  ACTIVE_REQUEST_RECOVERY_RETRY_DELAY_MS,
   CANCELLATION_TERMINAL_TIMEOUT_MS,
   COMPLETED_PAYLOAD_WAIT_MS,
   HttpErrorResponse,
@@ -14,11 +15,13 @@ import {
   cancellationService,
   completedCancellationResponse,
   component,
+  destroyComponent,
   mutationConfirmationEvent,
   of,
   publicStatus,
   setupAiChatPanelSpec,
   teardownAiChatPanelSpec,
+  throwError,
   transport
 } from './ai-chat-panel.component.spec-support';
 
@@ -339,6 +342,168 @@ describe('AiChatPanelComponent request completion and recovery', () => {
     expect(component.state.currentStatus).toBe('FAILED');
     expect(component.state.messages).toContainEqual(expect.objectContaining({
       role: 'error', content: 'The assistant request failed.'
+    }));
+  });
+
+  it('shows bounded reconnect progress and ends in the assistant after three failures', async () => {
+    vi.useFakeTimers();
+    api.getRequestStatus.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({status: 500}))
+    );
+    transport.reconnectOnce.mockReturnValue(
+      throwError(() => new Error('backend unavailable'))
+    );
+    component.state.prompt = 'Keep this request visible';
+    component.send();
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'accepted', content: 'Request received.',
+      metadata: {generation: 7, deadline: '2099-07-14T13:05:00Z'}
+    });
+
+    vi.advanceTimersByTime(REQUEST_STATUS_WATCHDOG_MS);
+    expect(component.state.messages.at(-1)).toEqual(expect.objectContaining({
+      role: 'progress', content: 'Reconnecting... (1/3)', inProgress: true
+    }));
+    await vi.advanceTimersByTimeAsync(ACTIVE_REQUEST_RECOVERY_RETRY_DELAY_MS);
+    expect(component.state.messages.at(-1)).toEqual(expect.objectContaining({
+      role: 'progress', content: 'Reconnecting... (2/3)', inProgress: true
+    }));
+    await vi.advanceTimersByTimeAsync(ACTIVE_REQUEST_RECOVERY_RETRY_DELAY_MS);
+
+    expect(transport.reconnectOnce).toHaveBeenCalledTimes(3);
+    expect(transport.publish).toHaveBeenCalledTimes(1);
+    expect(component.state.pending).toBe(false);
+    expect(component.state.reconciliationRequired).toBe(true);
+    expect(component.state.currentStatus).toBe('Connection lost');
+    expect(component.state.messages.at(-1)).toEqual(expect.objectContaining({
+      role: 'error', content: expect.stringContaining('after 3 attempts')
+    }));
+    expect(component.state.messages.some(message =>
+      message.role === 'progress' && message.inProgress
+    )).toBe(false);
+  });
+
+  it('resumes the accepted request without publishing it again after reconnect', async () => {
+    vi.useFakeTimers();
+    api.getRequestStatus
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({status: 500})))
+      .mockReturnValueOnce(of(publicStatus('RUNNING')));
+    transport.reconnectOnce
+      .mockReturnValueOnce(throwError(() => new Error('backend unavailable')))
+      .mockReturnValueOnce(of(undefined));
+    component.state.prompt = 'Do not duplicate this request';
+    component.send();
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'accepted', content: 'Request received.',
+      metadata: {generation: 7, deadline: '2099-07-14T13:05:00Z'}
+    });
+
+    vi.advanceTimersByTime(REQUEST_STATUS_WATCHDOG_MS);
+    await vi.advanceTimersByTimeAsync(ACTIVE_REQUEST_RECOVERY_RETRY_DELAY_MS);
+
+    expect(api.getRequestStatus).toHaveBeenCalledTimes(2);
+    expect(transport.publish).toHaveBeenCalledTimes(1);
+    expect(component.state.pending).toBe(true);
+    expect(component.state.currentStatus).toBe('Request in progress');
+    expect(component.state.messages.at(-1)).toEqual(expect.objectContaining({
+      role: 'progress', content: 'Reconnected. Waiting for the assistant response.'
+    }));
+  });
+
+  it('renders a backend restart terminal status as an assistant error', () => {
+    vi.useFakeTimers();
+    api.getRequestStatus
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({status: 500})))
+      .mockReturnValueOnce(of({
+        ...publicStatus('FAILED'), statusReason: 'WORKER_INSTANCE_SHUTDOWN'
+      }));
+    transport.reconnectOnce.mockReturnValueOnce(of(undefined));
+    api.getConversation.mockReturnValueOnce(of({
+      conversationId: 'conversation-1', title: 'Interrupted request',
+      messages: [{index: 0, role: 'user', content: 'Long-running request'}]
+    }));
+    component.state.prompt = 'Long-running request';
+    component.send();
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'accepted', content: 'Request received.',
+      metadata: {generation: 7, deadline: '2099-07-14T13:05:00Z'}
+    });
+
+    vi.advanceTimersByTime(REQUEST_STATUS_WATCHDOG_MS);
+
+    expect(component.state.pending).toBe(false);
+    expect(component.state.currentStatus).toBe('FAILED');
+    expect(component.state.messages.at(-1)).toEqual({
+      role: 'error', content: 'The assistant request stopped because the backend restarted.'
+    });
+  });
+
+  it('shares one three-attempt budget with terminal conversation restoration', async () => {
+    vi.useFakeTimers();
+    const terminalStatus = {
+      ...publicStatus('FAILED'), statusReason: 'WORKER_INSTANCE_SHUTDOWN'
+    };
+    api.getRequestStatus
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({status: 500})))
+      .mockReturnValue(of(terminalStatus));
+    api.getConversation.mockReturnValue(
+      throwError(() => new HttpErrorResponse({status: 503}))
+    );
+    transport.reconnectOnce.mockReturnValue(of(undefined));
+    component.state.prompt = 'Restore the terminal result once';
+    component.send();
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'accepted', content: 'Request received.',
+      metadata: {generation: 7, deadline: '2099-07-14T13:05:00Z'}
+    });
+
+    vi.advanceTimersByTime(REQUEST_STATUS_WATCHDOG_MS);
+    await vi.advanceTimersByTimeAsync(ACTIVE_REQUEST_RECOVERY_RETRY_DELAY_MS * 2);
+
+    expect(transport.reconnectOnce).toHaveBeenCalledTimes(3);
+    expect(api.getConversation).toHaveBeenCalledTimes(3);
+    expect(transport.publish).toHaveBeenCalledTimes(1);
+    expect(component.state.pending).toBe(false);
+    expect(component.state.messages.at(-1)).toEqual({
+      role: 'error', content: 'The assistant request stopped because the backend restarted.'
+    });
+    expect(component.state.messages.some(message =>
+      message.role === 'progress' && message.inProgress
+    )).toBe(false);
+  });
+
+  it('cancels an in-flight reconnect when the panel is destroyed', () => {
+    vi.useFakeTimers();
+    const reconnect = new Subject<void>();
+    api.getRequestStatus.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({status: 500}))
+    );
+    transport.reconnectOnce.mockReturnValueOnce(reconnect);
+    component.state.prompt = 'Do not update a destroyed panel';
+    component.send();
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'accepted', content: 'Request received.',
+      metadata: {generation: 7, deadline: '2099-07-14T13:05:00Z'}
+    });
+
+    vi.advanceTimersByTime(REQUEST_STATUS_WATCHDOG_MS);
+    destroyComponent();
+    reconnect.next();
+    reconnect.complete();
+
+    expect(api.getRequestStatus).toHaveBeenCalledTimes(1);
+    expect(component.state.messages).not.toContainEqual(expect.objectContaining({
+      content: 'Reconnected. Waiting for the assistant response.'
     }));
   });
 

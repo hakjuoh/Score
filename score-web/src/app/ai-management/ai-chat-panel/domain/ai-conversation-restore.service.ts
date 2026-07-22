@@ -13,6 +13,7 @@ import {
 import {
   AiAgentActivity,
   agentActivityUpdate,
+  isSpecialistActivityEvent,
   isSpecialistToolEvent,
   upsertAgentActivity,
   upsertAgentGuideEvent,
@@ -257,6 +258,11 @@ export class AiConversationRestoreService {
       for (const activities of this.restoredAgentGroups.values()) {
         if (upsertAgentGuideEvent(activities, guideEvent)) return null;
       }
+      // Pre-fix composed workers persisted their guide immediately before the
+      // lifecycle that creates the specialist activity. Its lifecycle repeats
+      // that status, so suppress the worker-owned guide instead of restoring it
+      // as a root conversation message.
+      if (isSpecialistActivityEvent(guideEvent)) return null;
     }
     // The durable trajectory contains audit-only progress, model reasoning,
     // and orchestration rows that are never retained in the completed live

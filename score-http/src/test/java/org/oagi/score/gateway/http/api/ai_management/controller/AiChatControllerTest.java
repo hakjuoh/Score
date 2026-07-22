@@ -115,6 +115,43 @@ class AiChatControllerTest {
     }
 
     @Test
+    void returnsPlannedAndCancelledWorkflowLifecyclesAsSystemEvents() throws Exception {
+        AiChatController controller = controller(
+                new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
+        ChatRequest request = request("request-1", "conversation-1");
+        when(sessionService.asScoreUser(principal)).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            Consumer<AiExecutionEvent> events = invocation.getArgument(2);
+            events.accept(AiExecutionEvent.detail(
+                    "subagent_planned", "Research is queued.", Map.of("nodeId", "worker-1")));
+            events.accept(AiExecutionEvent.detail(
+                    "subagent_cancelled", "Research stopped.", Map.of("nodeId", "worker-1")));
+            events.accept(AiExecutionEvent.detail(
+                    "multi_agent_cancelled", "Workflow stopped.", Map.of("nodeId", "lead-1")));
+            return new ChatResponse("connectcenter-assistant", "Stopped.",
+                    "conversation-1", false, List.of());
+        });
+
+        ChatResponse response = controller.chat(principal, request)
+                .get(1, TimeUnit.SECONDS).getBody();
+
+        assertThat(response).isNotNull();
+        assertThat(response.events()).extracting(
+                        AiChatSocketEvent::type, AiChatSocketEvent::subtype,
+                        AiChatSocketEvent::visibility)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(
+                                "system", "subagent_planned", "visible"),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "system", "subagent_cancelled", "visible"),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "system", "multi_agent_cancelled", "visible"));
+    }
+
+    @Test
     void streamsAndReturnsMutationApprovalDecisionsBeforeTheRestResponseCompletes() throws Exception {
         AiChatController controller = controller(
                 new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);

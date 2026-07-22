@@ -327,6 +327,29 @@ describe('AiChatCancellationService', () => {
     expect(terminals).toEqual(['CANCELLED']);
   });
 
+  it('distinguishes consumed stale cancellation events from admitted updates', () => {
+    service.start({
+      requestId: 'request-1', conversationId: 'conversation-1', generation: 7
+    }, callbacks);
+
+    expect(service.handleSocketEventDisposition({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'cancellation_acknowledged', sequence: 1,
+      metadata: {
+        cancellationRequestId: 'another-tabs-command', generation: 7,
+        lifecycleEventSequence: 4, status: 'CANCELLING'
+      }
+    })).toBe('ignored');
+    expect(service.handleSocketEventDisposition({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'cancellation_acknowledged', sequence: 1,
+      metadata: {
+        cancellationRequestId: 'cancel-1', generation: 7,
+        lifecycleEventSequence: 4, status: 'CANCELLING'
+      }
+    })).toBe('admitted');
+  });
+
   it('accepts a shared terminal despite another command ID and an older event sequence', () => {
     service.start({requestId: 'request-1'}, callbacks);
     service.handleSocketEvent({

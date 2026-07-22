@@ -1,6 +1,10 @@
 import {Message} from '@stomp/stompjs';
 import {AiChatPanelMessageController} from './ai-chat-panel-message.controller';
-import {AiAgentActivity, agentActivityElapsedLabel} from './domain/ai-agent-activity';
+import {
+  AiAgentActivity,
+  agentActivityElapsedLabel,
+  isTerminalAgentStatus
+} from './domain/ai-agent-activity';
 import {AiLocalCommand} from './domain/ai-chat-command.service';
 import {AiChatSocketEvent} from './domain/ai-chat-panel.model';
 
@@ -82,7 +86,7 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
     const specialists = activities.filter(activity => !activity.isLead);
     const lead = activities.find(activity => activity.isLead);
     const total = Math.max(specialists.length, lead?.plannedAgentCount || 0);
-    const settled = specialists.filter(activity => !activity.inProgress).length;
+    const settled = specialists.filter(activity => isTerminalAgentStatus(activity.status)).length;
     const phase = specialists.some(activity => activity.inProgress)
       ? 'working'
       : lead?.status === 'synthesizing'

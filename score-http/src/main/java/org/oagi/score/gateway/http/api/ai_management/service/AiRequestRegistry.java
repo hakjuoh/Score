@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.service;
 
+import jakarta.annotation.PreDestroy;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancellationResponse;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiPublicExecutionRequestStatus;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiRequestStateStore;
@@ -12,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +21,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -39,6 +42,10 @@ import java.util.function.Supplier;
  * ScheduledFuture), guarded exclusively by the local Entry monitor.
  */
 @Component
+// Spring destroys dependent singletons before their dependencies. This
+// lifecycle edge guarantees request terminalization can interrupt chat workers
+// before ExecutorService.close() waits for those workers to finish.
+@DependsOn("scoreAiChatExecutor")
 public class AiRequestRegistry implements ConversationCommitFence {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiRequestRegistry.class);
@@ -78,6 +85,33 @@ public class AiRequestRegistry implements ConversationCommitFence {
         this(java.util.concurrent.Executors.newSingleThreadScheduledExecutor(
                         Thread.ofPlatform().name("score-ai-registry-test-", 0).daemon(true).factory()),
                 DEFAULT_STOP_GRACE_PERIOD, AiRequestStateStore.inMemory());
+    }
+
+    @PreDestroy
+    void terminalizeOwnedRequestsOnShutdown() {
+        Instant now = Instant.now();
+        for (Entry entry : List.copyOf(localRequests.values())) {
+            try {
+                stateStore.withRequestLock(entry.requestId, storage -> {
+                    AiSharedRequestState state = storage.get(entry.requestId);
+                    if (!matchesOwner(state, entry) || state.terminal()) {
+                        return null;
+                    }
+                    String terminalStatus = state.mutationObserved()
+                            ? "UNKNOWN_RECONCILIATION_REQUIRED" : "FAILED";
+                    storage.put(state.terminal(
+                            terminalStatus, "WORKER_INSTANCE_SHUTDOWN", now));
+                    return null;
+                });
+            } catch (RuntimeException exception) {
+                LOGGER.error("Could not terminalize AI request {} while this instance was shutting down",
+                        entry.requestId, exception);
+            } finally {
+                interruptLocalWorker(entry);
+                clearLocalExecution(entry);
+                localRequests.remove(entry.requestId, entry);
+            }
+        }
     }
 
     public Entry register(String requestId, String conversationId, ScoreUser requester, Instant deadline) {
@@ -566,6 +600,20 @@ public class AiRequestRegistry implements ConversationCommitFence {
     }
 
     private void markLocalTerminal(Entry entry) {
+        if (!clearLocalExecution(entry)) {
+            return;
+        }
+        try {
+            scheduler.schedule(() -> localRequests.remove(entry.requestId, entry),
+                    TERMINAL_RETENTION.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException exception) {
+            localRequests.remove(entry.requestId, entry);
+            LOGGER.debug("AI lifecycle scheduler stopped before local cleanup for request {}",
+                    entry.requestId, exception);
+        }
+    }
+
+    private boolean clearLocalExecution(Entry entry) {
         synchronized (entry) {
             entry.workerThread = null;
             if (entry.deadlineTask != null) {
@@ -577,17 +625,20 @@ public class AiRequestRegistry implements ConversationCommitFence {
                 entry.stopWatchdogTask = null;
             }
             if (entry.locallyTerminal) {
-                return;
+                return false;
             }
             entry.locallyTerminal = true;
+            return true;
         }
-        try {
-            scheduler.schedule(() -> localRequests.remove(entry.requestId, entry),
-                    TERMINAL_RETENTION.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (RejectedExecutionException exception) {
-            localRequests.remove(entry.requestId, entry);
-            LOGGER.debug("AI lifecycle scheduler stopped before local cleanup for request {}",
-                    entry.requestId, exception);
+    }
+
+    private void interruptLocalWorker(Entry entry) {
+        Thread worker;
+        synchronized (entry) {
+            worker = entry.workerThread;
+        }
+        if (worker != null && worker != Thread.currentThread()) {
+            worker.interrupt();
         }
     }
 

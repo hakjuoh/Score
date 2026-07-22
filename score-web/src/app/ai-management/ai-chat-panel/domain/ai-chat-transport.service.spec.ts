@@ -144,4 +144,29 @@ describe('AiChatTransportService', () => {
     expect(publish).not.toHaveBeenCalled();
     expect(onReconnectFailure).not.toHaveBeenCalled();
   });
+
+  it('forces an existing connection through a fresh reconnect for active recovery', async () => {
+    stompService.connected.mockReturnValue(true);
+    const recovered = vi.fn();
+
+    service.reconnectOnce().subscribe({next: recovered});
+    await Promise.resolve();
+
+    expect(stompService.deactivate).toHaveBeenCalledWith({force: true});
+    expect(stompService.activate).toHaveBeenCalledOnce();
+    expect(recovered).not.toHaveBeenCalled();
+
+    stompService.connected$.next(RxStompState.OPEN);
+    expect(recovered).toHaveBeenCalledOnce();
+  });
+
+  it('bounds one active recovery connection attempt by the reconnect timeout', async () => {
+    const error = vi.fn();
+
+    service.reconnectOnce().subscribe({error});
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(STOMP_RECONNECT_ATTEMPT_TIMEOUT_MS);
+
+    expect(error).toHaveBeenCalledOnce();
+  });
 });

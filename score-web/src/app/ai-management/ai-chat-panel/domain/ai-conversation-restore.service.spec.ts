@@ -584,4 +584,157 @@ describe('AiConversationRestoreService', () => {
       .toContainEqual(expect.objectContaining({status: 'tool', content: 'get_asccp completed.'}));
   });
 
+  it('keeps legacy composed-worker guides and tools out of the restored root chat', () => {
+    const worker = {
+      node_id: 'request-1:find-extenders', agent_name: 'Evidence researcher',
+      conversation_kind: 'SUBAGENT', depth: 1
+    };
+    const projected = service.projectStoredMessages([
+      {index: 0, role: 'user', content: 'Check every extender.'},
+      {index: 1, role: 'guide', content: 'I’ll check the current structures.'},
+      {
+        index: 2, role: 'guide', content: 'Listing every extending ACC.',
+        requestId: 'request-1', metadata: worker
+      },
+      {
+        index: 3, role: 'agent_event', content: 'Listing every extending ACC.',
+        requestId: 'request-1', subtype: 'subagent_started', metadata: {
+          ...worker, status: 'started', active_verb: 'Searching', completed_verb: 'Searched'
+        }
+      },
+      {
+        index: 4, role: 'tool_call', content: 'get_acc\nArguments: {}\nResult: {}',
+        requestId: 'request-1', groupId: 'request-1', toolCallId: 'call-1',
+        toolStatus: 'completed', subtype: 'completed', metadata: {
+          ...worker, toolName: 'get_acc', toolCallSeq: 0
+        }
+      },
+      {
+        index: 5, role: 'agent_event', content: 'Searched.',
+        requestId: 'request-1', subtype: 'subagent_completed', metadata: {
+          ...worker, status: 'completed', active_verb: 'Searching', completed_verb: 'Searched'
+        }
+      },
+      {index: 6, role: 'assistant', content: 'The structures were checked.'}
+    ]);
+
+    expect(projected.map(message => message.role))
+      .toEqual(['user', 'guide', 'agent_group', 'assistant']);
+    expect(projected.some(message => message.content === 'Listing every extending ACC.'))
+      .toBe(false);
+    const specialist = projected.find(message => message.role === 'agent_group')
+      ?.activities?.[0];
+    expect(specialist).toMatchObject({
+      agentId: 'request-1:find-extenders', status: 'completed'
+    });
+    expect(specialist?.events).toContainEqual(expect.objectContaining({
+      status: 'tool', content: 'get_acc completed.'
+    }));
+  });
+
+  it('restores a complete new-format composed workflow as one stable group', () => {
+    const fanout = 'request-1:composed';
+    const worker = `${fanout}:worker:research`;
+    const projected = service.projectStoredMessages([
+      {index: 0, role: 'user', content: 'Check the structures.'},
+      {
+        index: 1, role: 'agent_event', requestId: 'request-1',
+        subtype: 'multi_agent_started', content: 'Checking both stages.', metadata: {
+          fanout_id: fanout, node_id: `${fanout}:lead`, execution_scope: 'lead',
+          agent_name: 'Lead agent', agent_count: 1, workflow: 'chain',
+          active_verb: 'Checking', completed_verb: 'Checked'
+        }
+      },
+      {
+        index: 2, role: 'agent_event', requestId: 'request-1',
+        subtype: 'subagent_planned', content: 'Research is queued.', metadata: {
+          fanout_id: fanout, node_id: worker, parent_node_id: `${fanout}:lead`,
+          execution_scope: 'worker', conversation_kind: 'SUBAGENT',
+          agent_name: 'Evidence researcher', active_verb: 'Searching', completed_verb: 'Searched'
+        }
+      },
+      {
+        index: 3, role: 'agent_event', requestId: 'request-1',
+        subtype: 'subagent_started', content: 'Searching current structures.', metadata: {
+          fanout_id: fanout, node_id: worker, parent_node_id: `${fanout}:lead`,
+          execution_scope: 'worker', conversation_kind: 'SUBAGENT',
+          agent_name: 'Evidence researcher', active_verb: 'Searching', completed_verb: 'Searched'
+        }
+      },
+      {
+        index: 4, role: 'tool_call', requestId: 'request-1',
+        groupId: 'request-1', toolCallId: 'call-1', subtype: 'completed',
+        content: 'get_acc\nArguments: {}\nResult: {}', metadata: {
+          fanout_id: fanout, node_id: worker, parent_node_id: `${fanout}:lead`,
+          execution_scope: 'worker', conversation_kind: 'SUBAGENT',
+          toolName: 'get_acc', toolCallSeq: 0
+        }
+      },
+      {
+        index: 5, role: 'agent_event', requestId: 'request-1',
+        subtype: 'subagent_completed', content: 'Searched.', metadata: {
+          fanout_id: fanout, node_id: worker, parent_node_id: `${fanout}:lead`,
+          execution_scope: 'worker', conversation_kind: 'SUBAGENT',
+          agent_name: 'Evidence researcher', active_verb: 'Searching', completed_verb: 'Searched'
+        }
+      },
+      {
+        index: 6, role: 'agent_event', requestId: 'request-1',
+        subtype: 'multi_agent_completed', content: 'Checked.', metadata: {
+          fanout_id: fanout, node_id: `${fanout}:lead`, execution_scope: 'lead',
+          agent_name: 'Lead agent', agent_count: 1, workflow: 'chain',
+          active_verb: 'Checking', completed_verb: 'Checked'
+        }
+      },
+      {index: 7, role: 'assistant', content: 'Everything was checked.'}
+    ]);
+
+    expect(projected.map(message => message.role)).toEqual(['user', 'agent_group', 'assistant']);
+    const activities = projected[1].activities || [];
+    expect(activities).toHaveLength(2);
+    expect(activities.find(activity => activity.isLead))
+      .toMatchObject({status: 'completed', completedVerb: 'Checked', plannedAgentCount: 1});
+    expect(activities.find(activity => !activity.isLead)?.events)
+      .toContainEqual(expect.objectContaining({status: 'tool', content: 'get_acc completed.'}));
+  });
+
+  it('restores durable cancellation as terminal instead of running', () => {
+    const fanout = 'request-1:composed';
+    const worker = `${fanout}:worker:research`;
+    const projected = service.projectStoredMessages([
+      {index: 0, role: 'user', content: 'Check the structures.'},
+      {
+        index: 1, role: 'agent_event', requestId: 'request-1',
+        subtype: 'multi_agent_started', content: 'Checking.', metadata: {
+          fanout_id: fanout, node_id: `${fanout}:lead`, execution_scope: 'lead', agent_count: 1
+        }
+      },
+      {
+        index: 2, role: 'agent_event', requestId: 'request-1',
+        subtype: 'subagent_planned', content: 'Research is queued.', metadata: {
+          fanout_id: fanout, node_id: worker, parent_node_id: `${fanout}:lead`,
+          execution_scope: 'worker', conversation_kind: 'SUBAGENT'
+        }
+      },
+      {
+        index: 3, role: 'agent_event', requestId: 'request-1',
+        subtype: 'subagent_cancelled', content: 'Stopped research.', metadata: {
+          fanout_id: fanout, node_id: worker, parent_node_id: `${fanout}:lead`,
+          execution_scope: 'worker', conversation_kind: 'SUBAGENT'
+        }
+      },
+      {
+        index: 4, role: 'agent_event', requestId: 'request-1',
+        subtype: 'multi_agent_cancelled', content: 'Workflow cancelled.', metadata: {
+          fanout_id: fanout, node_id: `${fanout}:lead`, execution_scope: 'lead', agent_count: 1
+        }
+      }
+    ]);
+
+    const activities = projected.find(message => message.role === 'agent_group')?.activities || [];
+    expect(activities).toHaveLength(2);
+    expect(activities.every(activity => activity.status === 'cancelled')).toBe(true);
+    expect(activities.every(activity => !activity.inProgress)).toBe(true);
+  });
+
 });

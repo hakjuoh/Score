@@ -98,10 +98,11 @@ export class AiChatMessageTrackerService {
   }
 
   showStatus(state: AiChatPanelState, content: string, inProgress = false,
-             alertSuffix?: string): void {
+             alertSuffix?: string, eventType?: string): void {
     const status: AiChatMessage = {
       role: 'progress', content, inProgress,
-      ...(alertSuffix ? {alertSuffix} : {})
+      ...(alertSuffix ? {alertSuffix} : {}),
+      ...(eventType ? {eventType} : {})
     };
     if (this.statusMessageIndex !== undefined) {
       const existing = state.messages[this.statusMessageIndex];
@@ -161,11 +162,17 @@ export class AiChatMessageTrackerService {
     this.activeToolCallsByKey.clear();
   }
 
-  clearStatusMessage(state: AiChatPanelState): void {
+  clearStatusMessage(state: AiChatPanelState, eventType?: string): void {
     if (this.statusMessageIndex === undefined) return;
-    if (state.messages[this.statusMessageIndex]) {
-      this.removeMessageAt(state, this.statusMessageIndex);
+    const status = state.messages[this.statusMessageIndex];
+    if (!status) {
+      this.statusMessageIndex = undefined;
+      return;
     }
+    if (eventType && status.eventType !== eventType) {
+      return;
+    }
+    this.removeMessageAt(state, this.statusMessageIndex);
     this.statusMessageIndex = undefined;
   }
 

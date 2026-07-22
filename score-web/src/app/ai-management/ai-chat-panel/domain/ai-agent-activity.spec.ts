@@ -5,9 +5,12 @@ import {
   agentActivityUpdate,
   agentToolEventContent,
   isExecutionActivityEvent,
+  isSpecialistActivityEvent,
   isSpecialistToolEvent,
+  specialistActivityAgentId,
   specialistToolAgentId,
-  upsertAgentActivity
+  upsertAgentActivity,
+  upsertAgentGuideEvent
 } from './ai-agent-activity';
 import {AiChatSocketEvent} from './ai-chat-panel.model';
 
@@ -58,6 +61,19 @@ describe('AI agent activity semantics', () => {
     expect(agentActivityUpdate(event('multi_agent_failed'))).toEqual(expect.objectContaining({
       status: 'failed', inProgress: false
     }));
+    expect(agentActivityUpdate(event('multi_agent_cancelled'))).toEqual(expect.objectContaining({
+      status: 'cancelled', inProgress: false
+    }));
+    expect(agentActivityUpdate(event('subagent_planned', {
+      agentId: 'request-1:worker:1'
+    }))).toEqual(expect.objectContaining({
+      status: 'planned', inProgress: false, isLead: false
+    }));
+    expect(agentActivityUpdate(event('subagent_cancelled', {
+      agentId: 'request-1:worker:1'
+    }))).toEqual(expect.objectContaining({
+      status: 'cancelled', inProgress: false, isLead: false
+    }));
   });
 
   it('keeps parallel workflow tasks distinct from multi-agent lifecycle', () => {
@@ -97,6 +113,21 @@ describe('AI agent activity semantics', () => {
       {status: 'started', content: 'Agent status changed.'},
       {status: 'completed', content: 'Verified the evidence.'}
     ]);
+  });
+
+  it('starts elapsed execution time when a queued worker actually starts', () => {
+    const activities: AiAgentActivity[] = [];
+    const specialist = {agentId: 'request-1:worker:1', agentName: 'Verifier'};
+    upsertAgentActivity(
+      activities, agentActivityUpdate(event('subagent_planned', specialist))!, 1000
+    );
+    upsertAgentActivity(
+      activities, agentActivityUpdate(event('subagent_started', specialist))!, 5000
+    );
+
+    expect(activities[0]).toMatchObject({
+      status: 'started', firstSeenAt: 5000, lastUpdateAt: 5000
+    });
   });
 
   it('never regresses a terminal status to a stale live update', () => {
@@ -174,6 +205,51 @@ describe('AI agent activity semantics', () => {
       {...toolEvent, metadata: {toolName: 'get_libraries'}}
     )).toBe(false);
     expect(isSpecialistToolEvent({...toolEvent, type: 'system'})).toBe(false);
+  });
+
+  it('routes composed worker events by explicit execution scope instead of id shape', () => {
+    const activities: AiAgentActivity[] = [];
+    const workerMetadata = {
+      agentId: 'request-1:find-extenders', agentName: 'Evidence researcher',
+      executionScope: 'worker', conversationKind: 'SUBAGENT'
+    };
+    upsertAgentActivity(activities, agentActivityUpdate(
+      event('subagent_started', workerMetadata)
+    )!);
+    const guide: AiChatSocketEvent = {
+      requestId: 'request-1', type: 'system', subtype: 'guide',
+      content: 'Gathering the relevant associations.', metadata: workerMetadata
+    };
+    const tool: AiChatSocketEvent = {
+      requestId: 'request-1', type: 'tool_call', subtype: 'completed',
+      groupId: 'request-1', toolCallId: 'call-1',
+      metadata: {...workerMetadata, toolName: 'get_acc'}
+    };
+
+    expect(isSpecialistActivityEvent(guide)).toBe(true);
+    expect(specialistActivityAgentId(guide)).toBe('request-1:find-extenders');
+    expect(upsertAgentGuideEvent(activities, guide)).toBe(true);
+    expect(isSpecialistToolEvent(tool)).toBe(true);
+    expect(specialistToolAgentId(tool)).toBe('request-1:find-extenders');
+    expect(activities[0].events).toContainEqual(expect.objectContaining({
+      content: 'Gathering the relevant associations.'
+    }));
+
+    expect(isSpecialistActivityEvent({
+      ...guide,
+      metadata: {node_id: 'request-1:legacy-worker', conversation_kind: 'SUBAGENT'}
+    })).toBe(true);
+    expect(isSpecialistActivityEvent({
+      ...guide,
+      metadata: {nodeId: 'request-1:composed:lead', executionScope: 'lead'}
+    })).toBe(false);
+    expect(specialistActivityAgentId({
+      ...guide,
+      metadata: {
+        nodeId: 'request-1:composed:worker:research', agentId: 'evidence-researcher',
+        executionScope: 'worker'
+      }
+    })).toBe('request-1:composed:worker:research');
   });
 
   it('formats client-side elapsed time from the recorded timestamps', () => {

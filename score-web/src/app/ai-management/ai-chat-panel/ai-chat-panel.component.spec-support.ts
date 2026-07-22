@@ -19,6 +19,7 @@ import {
 } from './ai-chat-panel.component';
 import {AiContextBudgetDialogComponent} from './ai-context-budget-dialog.component';
 import {AiChatApiService} from './domain/ai-chat-api.service';
+import {AiActiveRequestRecoveryService} from './domain/ai-active-request-recovery.service';
 import {AiChatAttachmentQueueService} from './domain/ai-chat-attachment-queue.service';
 import {AiChatAttachmentService} from './domain/ai-chat-attachment.service';
 import {AiChatCancellationService} from './domain/ai-chat-cancellation.service';
@@ -56,6 +57,7 @@ export {
   CANCELLATION_ADMISSION_RETRY_MS,
   CANCELLATION_ACK_TIMEOUT_MS,
   CANCELLATION_TERMINAL_TIMEOUT_MS,
+  ACTIVE_REQUEST_RECOVERY_RETRY_DELAY_MS,
   COMPLETED_PAYLOAD_WAIT_MS,
   MUTATION_CONFIRMATION_DECISION_TIMEOUT_MS,
   REQUEST_STATUS_WATCHDOG_MS
@@ -95,6 +97,7 @@ export let transport: {
   watch: ReturnType<typeof vi.fn>;
   publish: ReturnType<typeof vi.fn>;
   publishWhenConnected: ReturnType<typeof vi.fn>;
+  reconnectOnce: ReturnType<typeof vi.fn>;
   cancelReconnect: ReturnType<typeof vi.fn>;
 };
 export let snackBar: {open: ReturnType<typeof vi.fn>};
@@ -164,6 +167,7 @@ export function setupAiChatPanelSpec(): void {
     watch: vi.fn(() => NEVER),
     publish: vi.fn(),
     publishWhenConnected: vi.fn(),
+    reconnectOnce: vi.fn(() => NEVER),
     cancelReconnect: vi.fn()
   };
   navigation = {handleDataChanged: vi.fn()};
@@ -186,6 +190,7 @@ export function setupAiChatPanelSpec(): void {
   TestBed.configureTestingModule({
     providers: [
       {provide: AiChatApiService, useValue: api},
+      AiActiveRequestRecoveryService,
       AiChatAttachmentQueueService,
       {provide: AiChatAttachmentService, useValue: attachmentService},
       {provide: AiChatCommandService, useValue: {decide: () => ({kind: 'none'}), suggestions: () => []}},

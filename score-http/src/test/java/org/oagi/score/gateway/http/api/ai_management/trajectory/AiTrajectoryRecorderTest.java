@@ -96,6 +96,7 @@ class AiTrajectoryRecorderTest {
                 "parent_node_id", "fanout-abc-lead",
                 "agent_name", "requirements-analyst",
                 "agent_role", "requirements analysis",
+                "execution_scope", "worker",
                 "ordinal", 1,
                 "depth", 1);
         AiTrajectoryRecorder child = root.fork(namespace);
@@ -121,7 +122,8 @@ class AiTrajectoryRecorderTest {
                 .containsEntry("nodeId", "fanout-abc-agent-01")
                 .containsEntry("agentId", "fanout-abc-agent-01")
                 .containsEntry("agentName", "requirements-analyst")
-                .containsEntry("agentRole", "requirements analysis"));
+                .containsEntry("agentRole", "requirements analysis")
+                .containsEntry("executionScope", "worker"));
     }
 
     @Test
@@ -381,6 +383,7 @@ class AiTrajectoryRecorderTest {
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", events::add);
+        recorder.useModelProvider("anthropic");
 
         AssistantMessage.ToolCall call = new AssistantMessage.ToolCall(
                 "call-1", "function", "count_business_contexts", "{\"status\":\"active\"}");
@@ -423,6 +426,85 @@ class AiTrajectoryRecorderTest {
                 Result: {"count":12}""");
         assertThat(steps.getAllValues().get(0).reasoningContent()).isNull();
         assertThat(steps.getAllValues().get(0).extra()).containsEntry("reasoning_present", true);
+    }
+
+    @Test
+    void addsAnthropicCacheTokensToTheProviderReportedInputCount() {
+        Map<String, Object> metrics = recordedMetrics(
+                "anthropic", new DefaultUsage(2, 4, 6, null, 100L, 5L));
+
+        assertThat(metrics)
+                .containsEntry("prompt_tokens", 107L)
+                .containsEntry("cached_tokens", 100L)
+                .containsEntry("context_input_tokens", 107L)
+                .containsEntry("context_estimated", false);
+    }
+
+    @Test
+    void keepsOpenAiCompatibleCachedTokensAsASubsetOfThePromptTotal() {
+        for (String providerType : List.of("openai", "azure-openai")) {
+            Map<String, Object> metrics = recordedMetrics(
+                    providerType, new DefaultUsage(107, 4, 111, null, 100L, 0L));
+
+            assertThat(metrics)
+                    .as(providerType)
+                    .containsEntry("prompt_tokens", 107L)
+                    .containsEntry("cached_tokens", 100L)
+                    .containsEntry("context_input_tokens", 107L)
+                    .containsEntry("context_estimated", false);
+        }
+    }
+
+    @Test
+    void omitsPromptTokensWhenCacheAccountingSemanticsAreUnknown() {
+        Map<String, Object> metrics = recordedMetrics(
+                "custom-provider", new DefaultUsage(107, 4, 111, null, 100L, 0L));
+
+        assertThat(metrics)
+                .doesNotContainKey("prompt_tokens")
+                .containsEntry("provider_reported_prompt_tokens", 107L)
+                .containsEntry("prompt_tokens_complete", false)
+                .containsEntry("prompt_token_accounting", "unknown")
+                .containsEntry("context_input_tokens", 207L)
+                .containsEntry("context_estimated", true);
+    }
+
+    @Test
+    void keepsCompleteProviderPromptTokensWhenTheContextFloorIsHigher() {
+        Map<String, Object> anthropic = recordedMetrics(
+                "anthropic", new DefaultUsage(2, 4, 6, null, 100L, 5L), 5_000L);
+        Map<String, Object> openAi = recordedMetrics(
+                "openai", new DefaultUsage(107, 4, 111, null, 100L, 0L), 5_000L);
+
+        assertThat(anthropic)
+                .containsEntry("prompt_tokens", 107L)
+                .containsEntry("prompt_tokens_complete", true)
+                .containsEntry("context_input_tokens", 5_000L)
+                .containsEntry("context_estimated", true)
+                .doesNotContainKey("provider_reported_prompt_tokens");
+        assertThat(openAi)
+                .containsEntry("prompt_tokens", 107L)
+                .containsEntry("prompt_tokens_complete", true)
+                .containsEntry("context_input_tokens", 5_000L)
+                .containsEntry("context_estimated", true)
+                .doesNotContainKey("provider_reported_prompt_tokens");
+    }
+
+    @Test
+    void omitsAnthropicStreamingPromptTokensWhenSpringLosesCacheUsage() {
+        DefaultUsage incompleteStreamingUsage = new DefaultUsage(
+                2, 4, 6, null, null, null);
+
+        Map<String, Object> metrics = recordedMetrics(
+                "anthropic", incompleteStreamingUsage, 0L, true);
+
+        assertThat(metrics)
+                .doesNotContainKey("prompt_tokens")
+                .containsEntry("provider_reported_prompt_tokens", 2L)
+                .containsEntry("prompt_tokens_complete", false)
+                .containsEntry("prompt_token_accounting", "cache_excluded")
+                .containsEntry("context_input_tokens", 2L)
+                .containsEntry("context_estimated", true);
     }
 
     @Test
@@ -938,7 +1020,9 @@ class AiTrajectoryRecorderTest {
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
         verify(repository).append(eq("conversation-1"), step.capture());
         assertThat(step.getValue().metrics())
-                .containsEntry("prompt_tokens", 2L)
+                .doesNotContainKey("prompt_tokens")
+                .containsEntry("provider_reported_prompt_tokens", 2L)
+                .containsEntry("prompt_tokens_complete", false)
                 .containsEntry("context_input_tokens", 5000L)
                 .containsEntry("context_estimated", true);
         assertThat(events).singleElement().satisfies(event -> {
@@ -977,7 +1061,7 @@ class AiTrajectoryRecorderTest {
         assertThat(events).isEmpty();
         assertThat(child.usageSnapshot().nodeId()).isEqualTo("fanout-abc-agent-01");
         assertThat(child.usageSnapshot().agentName()).isEqualTo("data-investigator");
-        assertThat(child.usageSnapshot().promptTokens()).isEqualTo(2L);
+        assertThat(child.usageSnapshot().promptTokens()).isZero();
         assertThat(child.usageSnapshot().completionTokens()).isEqualTo(4L);
         assertThat(child.usageSnapshot().modelCalls()).isEqualTo(1L);
     }
@@ -1143,6 +1227,42 @@ class AiTrajectoryRecorderTest {
                 "high", ignored -> {}, budget, budget.safeInputLimit());
 
         assertThat(recorder.limitToolOutput("must not fit", 100L, "get_result")).isEmpty();
+    }
+
+    private Map<String, Object> recordedMetrics(String providerType, DefaultUsage usage) {
+        return recordedMetrics(providerType, usage, 0L);
+    }
+
+    private Map<String, Object> recordedMetrics(
+            String providerType, DefaultUsage usage, long estimatedInputFloor) {
+        return recordedMetrics(providerType, usage, estimatedInputFloor, false);
+    }
+
+    private Map<String, Object> recordedMetrics(
+            String providerType, DefaultUsage usage, long estimatedInputFloor,
+            boolean streaming) {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), mock(ScoreUser.class),
+                "conversation-1", "request-1", "model", "high",
+                ignored -> {}, null, estimatedInputFloor);
+        recorder.useModelProvider(providerType);
+        ChatResponse response = new ChatResponse(
+                List.of(new Generation(new AssistantMessage("done"))),
+                ChatResponseMetadata.builder().usage(usage).build());
+
+        if (streaming) {
+            recorder.recordStreamingModelResponse(response, "assistant");
+        } else {
+            recorder.recordModelResponse(response, "assistant");
+        }
+
+        ArgumentCaptor<AiChatTrajectoryStep> step =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq("conversation-1"), step.capture());
+        return step.getValue().metrics();
     }
 
     private static ToolExecutionException mcpValidationFailure(ToolDefinition definition) {

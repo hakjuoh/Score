@@ -42,6 +42,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -263,8 +265,13 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
     }
 
     private AiChatExecutor.Result executePlan(AiChatExecutor.Context context, AiWorkflowPlan plan) {
+        return executePlan(context, plan, 0);
+    }
+
+    private AiChatExecutor.Result executePlan(
+            AiChatExecutor.Context context, AiWorkflowPlan plan, int workflowIteration) {
         if (plan.root() != null) {
-            return executeComposedWorkflow(context, plan);
+            return executeComposedWorkflow(context, plan, workflowIteration);
         }
         if (!plan.toolsNeeded() && plan.tasks().isEmpty()) {
             return chatExecutor.execute(new AiChatExecutor.Context(
@@ -289,7 +296,7 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                 AiChatExecutor.ToolPolicy.NONE, context.agentDepth(), context.approvalScope())
                 .withAgentIdentity(context.agentId(), context.executionPurpose())
                 .withGuardrailDecisions(context.guardrailDecisionIds());
-        return executeDelegatedWorkflow(delegatedContext, plan);
+        return executeDelegatedWorkflow(delegatedContext, plan, workflowIteration);
     }
 
     private AiChatExecutor.Result executeEvaluatorOptimizerLoop(AiChatExecutor.Context context) {
@@ -336,7 +343,8 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
 
     private Workflow plannedWorkflow(AiWorkflowPlan plan, int iteration) {
         return new DirectWorkflow("planned-iteration-" + iteration, workflowContext -> {
-            AiChatExecutor.Result result = executePlan(legacyContext(workflowContext), plan);
+            AiChatExecutor.Result result = executePlan(
+                    legacyContext(workflowContext), plan, iteration);
             Map<String, Object> metadata = new LinkedHashMap<>(result.traceMetadata());
             metadata.putIfAbsent("workflow", plan.workflow());
             metadata.put("workflow_iteration", iteration);
@@ -381,29 +389,197 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
     }
 
     private AiChatExecutor.Result executeComposedWorkflow(
-            AiChatExecutor.Context context, AiWorkflowPlan plan) {
+            AiChatExecutor.Context context, AiWorkflowPlan plan, int workflowIteration) {
         if (StringUtils.hasText(plan.guideMessage())) {
             context.recorder().guide(plan.guideMessage(), Map.of(
                     "workflow", plan.workflow(), "active_verb", plan.activeVerb(),
                     "completed_verb", plan.completedVerb()));
         }
-        Workflow workflow = new AiWorkflowCompiler(executor(), executionTimeout(),
-                this::executeComposedLeaf, this::aggregateComposedResults,
-                workflowCompilerExtensions, parallelApprovalLifecycle())
-                .compile(plan.root());
-        WorkflowResult result = workflow.process(WorkflowContext.root(workflowInvocation(context)));
-        Map<String, Object> metadata = new LinkedHashMap<>(result.metadata());
-        metadata.put("workflow", plan.workflow());
-        metadata.put("active_verb", plan.activeVerb());
-        metadata.put("completed_verb", plan.completedVerb());
-        return new AiChatExecutor.Result(result.output(), metadata);
+        ComposedExecution execution = createComposedExecution(
+                context, plan.root(), workflowIteration);
+        int plannedSpecialists = execution.controls().size();
+        AiTrajectoryRecorder leadRecorder = null;
+        Map<String, Object> leadNamespace = Map.of();
+        if (plannedSpecialists > 0) {
+            leadNamespace = leadNamespace(execution.fanoutId(), execution.leadNodeId(),
+                    plan, context.request().multiAgent(), "multi_agent", plannedSpecialists);
+            leadRecorder = Objects.requireNonNull(context.recorder().fork(leadNamespace),
+                    "The composed workflow lead recorder is required.");
+            leadRecorder.lifecycle("multi_agent_started", composedLeadStatus(plan), lifecycleMetadata(
+                    leadNamespace, plan.activeVerb(), plan.completedVerb(), "started",
+                    Map.of("agent_count", plannedSpecialists)));
+            execution.controls().values().forEach(this::recordPlannedWorker);
+        }
+        AiTrajectoryRecorder finalLeadRecorder = leadRecorder;
+        Map<String, Object> finalLeadNamespace = leadNamespace;
+        try {
+            Workflow workflow = new AiWorkflowCompiler(executor(), executionTimeout(),
+                    (workflowContext, node) -> executeComposedLeaf(
+                            workflowContext, node, execution),
+                    this::aggregateComposedResults,
+                    workflowCompilerExtensions, parallelApprovalLifecycle())
+                    .compile(plan.root());
+            WorkflowResult result = workflow.process(WorkflowContext.root(workflowInvocation(context)));
+            if (composedCancellationObserved(context, execution)) {
+                throw new CancellationException("The composed workflow was cancelled.");
+            }
+            Map<String, Object> metadata = new LinkedHashMap<>(result.metadata());
+            metadata.put("workflow", plan.workflow());
+            metadata.put("active_verb", plan.activeVerb());
+            metadata.put("completed_verb", plan.completedVerb());
+            if (finalLeadRecorder != null) {
+                finalLeadRecorder.terminalLifecycle("multi_agent_completed",
+                        sentence(plan.completedVerb()), lifecycleMetadata(
+                                finalLeadNamespace, plan.activeVerb(), plan.completedVerb(),
+                                "completed", Map.of("agent_count", plannedSpecialists)));
+            }
+            return new AiChatExecutor.Result(result.output(), metadata);
+        } catch (CancellationException failure) {
+            recordComposedCancellation(execution, finalLeadRecorder,
+                    finalLeadNamespace, plan, plannedSpecialists);
+            throw failure;
+        } catch (RuntimeException failure) {
+            if (composedCancellationObserved(context, execution)) {
+                recordComposedCancellation(execution, finalLeadRecorder,
+                        finalLeadNamespace, plan, plannedSpecialists);
+                CancellationException cancellation = new CancellationException(
+                        "The composed workflow was cancelled.");
+                cancellation.initCause(failure);
+                throw cancellation;
+            }
+            failOutstanding(execution.controls().values(), "workflow_failed");
+            if (finalLeadRecorder != null) {
+                finalLeadRecorder.terminalLifecycle("multi_agent_failed",
+                        "The composed workflow failed.", lifecycleMetadata(
+                                finalLeadNamespace, plan.activeVerb(), plan.completedVerb(), "failed",
+                                Map.of("agent_count", plannedSpecialists,
+                                        "reason", failure.getClass().getSimpleName())));
+            }
+            throw failure;
+        }
+    }
+
+    private ComposedExecution createComposedExecution(
+            AiChatExecutor.Context context, AiWorkflowNode root, int workflowIteration) {
+        String fanoutId = composedFanoutId(
+                context.request().requestId(), workflowIteration);
+        String leadNodeId = fanoutId + ":lead";
+        Map<String, PlannedComposedNode> planned = new LinkedHashMap<>();
+        collectComposedActivities(root, false, planned);
+        List<PreparedComposedControl> prepared = new ArrayList<>();
+        int ordinal = 0;
+        for (PlannedComposedNode plannedNode : planned.values()) {
+            AiWorkflowNode node = plannedNode.node();
+            AiWorkflowPlan.Task task;
+            AiAgentDefinition definition;
+            if (plannedNode.registeredWorker()) {
+                task = node.task();
+                definition = agents.requireWorker(task.agentId());
+            } else {
+                String branchId = "workflow-branch-" + node.id();
+                definition = new AiAgentDefinition(
+                        branchId, "Workflow branch", "concurrent read-only task",
+                        "Execute the planned workflow branch.");
+                task = new AiWorkflowPlan.Task(
+                        node.id(), branchId, definition.instruction(), node.guideMessage(),
+                        node.activeVerb(), node.completedVerb(), AiWorkflowPlan.ToolAccess.READ_ONLY);
+            }
+            prepared.add(new PreparedComposedControl(
+                    node, task, definition, plannedNode.registeredWorker(), ++ordinal));
+        }
+        Map<String, WorkerControl> controls = new LinkedHashMap<>();
+        for (PreparedComposedControl item : prepared) {
+            AiWorkflowNode node = item.node();
+            AiWorkflowPlan.Task task = item.task();
+            AiAgentDefinition definition = item.definition();
+            String nodeId = fanoutId + ":worker:" + node.id();
+            Map<String, Object> namespace = workerNamespace(
+                    fanoutId, nodeId, leadNodeId, WorkflowTypes.DIRECT,
+                    "multi_agent", definition, task, item.ordinal());
+            AiTrajectoryRecorder recorder = Objects.requireNonNull(
+                    context.recorder().forkSubagent(
+                            definition.id(), task.instruction(), namespace),
+                    "The composed workflow worker recorder is required.");
+            WorkerControl control = new WorkerControl(
+                    item.ordinal(), task, definition, "multi_agent",
+                    recorder.conversationId(),
+                    recorder, namespace, new AtomicReference<>(),
+                    new AtomicBoolean(), new AtomicReference<>());
+            controls.put(node.id(), control);
+        }
+        return new ComposedExecution(fanoutId, leadNodeId,
+                Collections.unmodifiableMap(new LinkedHashMap<>(controls)));
+    }
+
+    private void collectComposedActivities(
+            AiWorkflowNode node, boolean concurrent,
+            Map<String, PlannedComposedNode> planned) {
+        if (node == null) return;
+        if (node.task() != null) {
+            addComposedActivity(planned, node, true);
+            return;
+        }
+        if (WorkflowTypes.ROUTING.equals(node.workflow())) {
+            collectComposedActivities(
+                    node.routes().get(node.selectedRoute()), concurrent, planned);
+            return;
+        }
+        if (concurrent && WorkflowTypes.DIRECT.equals(node.workflow())
+                && node.children().isEmpty()) {
+            addComposedActivity(planned, node, false);
+            return;
+        }
+        boolean concurrentChildren = concurrent
+                || WorkflowTypes.PARALLEL.equals(node.workflow())
+                || WorkflowTypes.ORCHESTRATOR_WORKERS.equals(node.workflow());
+        node.children().forEach(child ->
+                collectComposedActivities(child, concurrentChildren, planned));
+    }
+
+    private void addComposedActivity(
+            Map<String, PlannedComposedNode> planned, AiWorkflowNode node,
+            boolean registeredWorker) {
+        if (planned.putIfAbsent(node.id(),
+                new PlannedComposedNode(node, registeredWorker)) != null) {
+            throw new IllegalArgumentException(
+                    "Composed workflow node ids must be unique: " + node.id());
+        }
+    }
+
+    private String composedFanoutId(String requestId, int workflowIteration) {
+        String base = requestId + ":composed";
+        return workflowIteration > 0 ? base + ":iteration-" + workflowIteration : base;
+    }
+
+    private String composedLeadStatus(AiWorkflowPlan plan) {
+        return sentence(StringUtils.hasText(plan.guideMessage())
+                ? plan.guideMessage() : plan.activeVerb());
+    }
+
+    private boolean composedCancellationObserved(
+            AiChatExecutor.Context context, ComposedExecution execution) {
+        return requestStopping(context.request().requestId())
+                || execution.controls().values().stream().anyMatch(this::cancelled);
+    }
+
+    private void recordComposedCancellation(
+            ComposedExecution execution, AiTrajectoryRecorder leadRecorder,
+            Map<String, Object> leadNamespace, AiWorkflowPlan plan, int plannedSpecialists) {
+        cancelOutstanding(execution.controls().values(), "cancelled");
+        if (leadRecorder != null) {
+            leadRecorder.terminalLifecycle("multi_agent_cancelled",
+                    "The composed workflow was cancelled.", lifecycleMetadata(
+                            leadNamespace, plan.activeVerb(), plan.completedVerb(),
+                            "cancelled", Map.of("agent_count", plannedSpecialists)));
+        }
     }
 
     private WorkflowResult executeComposedLeaf(
-            WorkflowContext workflowContext, AiWorkflowNode node) {
+            WorkflowContext workflowContext, AiWorkflowNode node,
+            ComposedExecution execution) {
         if (node.task() != null) {
             return executeComposedWorker(legacyContext(workflowContext), node,
-                    workflowContext.upstreamResults());
+                    workflowContext.upstreamResults(), execution);
         }
         AiChatExecutor.Context context = withWorkflowResults(
                 legacyContext(workflowContext), workflowContext.upstreamResults());
@@ -414,11 +590,9 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                             : AiChatExecutor.ToolPolicy.READ_ONLY);
         }
         if (workflowContext.concurrent()) {
-            return executeConcurrentDirectLeaf(context, node);
+            return executeConcurrentDirectLeaf(context, node, execution);
         }
-        interruptFence(context.recorder(), context.request().requestId(),
-                "before_leaf_" + node.id(), Map.of("execution_kind", "composed"),
-                fallbackPlan(context));
+        cancellationFence(context.request().requestId(), "before_leaf_" + node.id());
         AiWorkflowPlan leafPlan = new AiWorkflowPlan(WorkflowTypes.DIRECT, node.toolsNeeded(),
                 node.guideMessage(), node.activeVerb(), node.completedVerb(),
                 node.synthesisGuideMessage(), node.synthesisActiveVerb(),
@@ -433,37 +607,42 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
      * it occupies a specialist slot and must not mutate, matching the worker invariants.
      */
     private WorkflowResult executeConcurrentDirectLeaf(
-            AiChatExecutor.Context context, AiWorkflowNode node) {
-        Map<String, Object> namespace = Map.of(
-                "node_id", context.request().requestId() + ":" + node.id(),
-                "workflow", WorkflowTypes.DIRECT,
-                "concurrent_branch", true,
-                "depth", 1);
-        AiTrajectoryRecorder recorder = context.recorder().fork(namespace);
-        if (StringUtils.hasText(node.guideMessage())) {
-            recorder.guide(node.guideMessage(), Map.of(
-                    "workflow", WorkflowTypes.DIRECT, "active_verb", node.activeVerb(),
-                    "completed_verb", node.completedVerb()));
+            AiChatExecutor.Context context, AiWorkflowNode node,
+            ComposedExecution execution) {
+        WorkerControl control = Objects.requireNonNull(execution.controls().get(node.id()),
+                "The concurrent workflow branch control is required for " + node.id());
+        AiTrajectoryRecorder recorder = control.recorder();
+        start(control);
+        try {
+            return admitConcurrentExecution(context, () -> {
+                AiChatExecutor.ToolPolicy policy = node.toolsNeeded()
+                        ? AiChatExecutor.ToolPolicy.READ_ONLY : AiChatExecutor.ToolPolicy.NONE;
+                AiChatExecutor.Context leaf = new AiChatExecutor.Context(
+                        context.request().withConversationId(control.childConversationId())
+                                .withMultiAgent(AiMultiAgentOptions.single()),
+                        context.history(), context.userMessage(), context.requester(),
+                        recorder, policy != AiChatExecutor.ToolPolicy.NONE, false, policy, 1,
+                        context.approvalScope())
+                        .withAgentIdentity(control.definition().id(), ExecutionScope.Purpose.WORKER)
+                        .withGuardrailDecisions(context.guardrailDecisionIds());
+                AiChatExecutor.Result result = executeGroundedModel(
+                        leaf, node.toolsNeeded(), workerRecovery(AiChatExecutor.ToolPolicy.READ_ONLY),
+                        "The concurrent direct workflow branch completed no successful "
+                                + "connectCenter domain tool call.");
+                AiBoundedAnswer bounded = bounded(result.answer(), MAX_SPECIALIST_RESULT_TOKENS);
+                Map<String, Object> metadata = new LinkedHashMap<>(result.traceMetadata());
+                metadata.putAll(control.namespace());
+                metadata.put("tool_policy", policy.name());
+                markCompleted(control, bounded);
+                return WorkflowResult.success(node.id(), bounded.value(), metadata, List.of());
+            });
+        } catch (CancellationException failure) {
+            markCancelled(control, "cancelled");
+            throw failure;
+        } catch (RuntimeException failure) {
+            markFailed(control, "execution_failure");
+            throw failure;
         }
-        return admitConcurrentExecution(context, () -> {
-            AiChatExecutor.ToolPolicy policy = node.toolsNeeded()
-                    ? AiChatExecutor.ToolPolicy.READ_ONLY : AiChatExecutor.ToolPolicy.NONE;
-            AiChatExecutor.Context leaf = new AiChatExecutor.Context(
-                    context.request().withMultiAgent(AiMultiAgentOptions.single()),
-                    context.history(), context.userMessage(), context.requester(),
-                    recorder, policy != AiChatExecutor.ToolPolicy.NONE, false, policy, 1,
-                    context.approvalScope())
-                    .withGuardrailDecisions(context.guardrailDecisionIds());
-            AiChatExecutor.Result result = executeGroundedModel(
-                    leaf, node.toolsNeeded(), workerRecovery(AiChatExecutor.ToolPolicy.READ_ONLY),
-                    "The concurrent direct workflow branch completed no successful "
-                            + "connectCenter domain tool call.");
-            AiBoundedAnswer bounded = bounded(result.answer(), MAX_SPECIALIST_RESULT_TOKENS);
-            Map<String, Object> metadata = new LinkedHashMap<>(result.traceMetadata());
-            metadata.putAll(namespace);
-            metadata.put("tool_policy", policy.name());
-            return WorkflowResult.success(node.id(), bounded.value(), metadata, List.of());
-        });
     }
 
     /**
@@ -503,29 +682,13 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
     }
 
     private WorkflowResult executeComposedWorker(
-            AiChatExecutor.Context context, AiWorkflowNode node, List<WorkflowResult> upstream) {
+            AiChatExecutor.Context context, AiWorkflowNode node, List<WorkflowResult> upstream,
+            ComposedExecution execution) {
         AiWorkflowPlan.Task task = node.task();
-        AiAgentDefinition definition = agents.requireWorker(task.agentId());
-        Map<String, Object> namespace = Map.of(
-                "node_id", context.request().requestId() + ":" + node.id(),
-                "agent_id", definition.id(),
-                "agent_name", definition.name(),
-                "agent_role", definition.description(),
-                "workflow", WorkflowTypes.DIRECT,
-                "depth", 1);
-        AiTrajectoryRecorder recorder = context.recorder().forkSubagent(
-                definition.id(), task.instruction(), namespace);
-        if (recorder == null) recorder = context.recorder().fork(namespace);
-        String childConversationId = StringUtils.hasText(recorder.conversationId())
-                ? recorder.conversationId() : context.request().conversationId();
-        WorkerControl control = new WorkerControl(1, task, definition, "composed",
-                childConversationId, recorder,
-                new AtomicBoolean(), new AtomicBoolean(), new AtomicReference<>());
-        if (StringUtils.hasText(task.guideMessage())) {
-            recorder.guide(task.guideMessage(), Map.of(
-                    "workflow", WorkflowTypes.DIRECT, "active_verb", task.activeVerb(),
-                    "completed_verb", task.completedVerb()));
-        }
+        WorkerControl control = Objects.requireNonNull(execution.controls().get(node.id()),
+                "The composed workflow worker control is required for " + node.id());
+        AiAgentDefinition definition = control.definition();
+        AiTrajectoryRecorder recorder = control.recorder();
         start(control);
 
         AiChatExecutor.ToolPolicy policy = workerPolicy(
@@ -539,7 +702,7 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                 throw new IllegalStateException("Workflow worker admission timed out.");
             }
             if (requestStopping(context.request().requestId())) {
-                markFailed(control, "cancelled");
+                markCancelled(control, "cancelled");
                 throw new CancellationException("Workflow worker was cancelled.");
             }
             List<Message> workerHistory = new ArrayList<>();
@@ -550,13 +713,13 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                 workerHistory.add(untrustedReference(upstreamReference));
             }
             AiChatExecutor.Context child = new AiChatExecutor.Context(
-                    context.request().withConversationId(childConversationId)
+                    context.request().withConversationId(control.childConversationId())
                             .withMultiAgent(AiMultiAgentOptions.single()),
                     workerHistory, workerAssignmentMessage(context.userMessage(), task),
                     context.requester(), recorder, policy != AiChatExecutor.ToolPolicy.NONE,
                     false, policy, 1,
                     composedApprovalScope(context, node, definition, task,
-                            childConversationId), admission)
+                            control.childConversationId()), admission)
                     .withAgentIdentity(definition.id(),
                             org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.WORKER)
                     .withGuardrailDecisions(context.guardrailDecisionIds());
@@ -565,7 +728,7 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                     "The delegated worker completed no successful connectCenter domain tool call.");
             AiBoundedAnswer bounded = bounded(answer.answer(), MAX_SPECIALIST_RESULT_TOKENS);
             Map<String, Object> metadata = new LinkedHashMap<>(answer.traceMetadata());
-            metadata.putAll(namespace);
+            metadata.putAll(control.namespace());
             metadata.put("active_verb", task.activeVerb());
             metadata.put("completed_verb", task.completedVerb());
             metadata.put("tool_policy", policy.name());
@@ -576,8 +739,11 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
             return WorkflowResult.success(node.id(), bounded.value(), metadata, List.of());
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
-            markFailed(control, "cancelled");
+            markCancelled(control, "interrupted");
             throw new CancellationException("Workflow worker was interrupted.");
+        } catch (CancellationException failure) {
+            markCancelled(control, "cancelled");
+            throw failure;
         } catch (RuntimeException failure) {
             markFailed(control, "execution_failure");
             throw failure;
@@ -593,6 +759,10 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
     private WorkflowResult aggregateComposedResults(
             WorkflowContext workflowContext, AiWorkflowNode node,
             List<WorkflowResult> results) {
+        if (results.stream().anyMatch(this::wasCancelled)) {
+            throw new CancellationException(
+                    "A composed workflow branch was cancelled.");
+        }
         List<WorkflowResult> completed = results.stream()
                 .filter(WorkflowResult::successful).toList();
         if (completed.isEmpty()) {
@@ -661,6 +831,16 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         metadata.put("completed_children", completed.size());
         metadata.put("failed_children", results.size() - completed.size());
         return WorkflowResult.success(node.id(), answer.answer(), metadata, results);
+    }
+
+    private boolean wasCancelled(WorkflowResult result) {
+        if (result == null) return false;
+        Throwable failure = result.failure();
+        while (failure != null) {
+            if (failure instanceof CancellationException) return true;
+            failure = failure.getCause();
+        }
+        return result.children().stream().anyMatch(this::wasCancelled);
     }
 
     private AiChatExecutor.Context withWorkflowResults(
@@ -775,30 +955,45 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         return new AiChatExecutor.Result(result.answer(), metadata);
     }
 
-    private AiChatExecutor.Result executeDelegatedWorkflow(AiChatExecutor.Context context, AiWorkflowPlan plan) {
-        String fanoutId = fanoutId(context.request().requestId());
+    private AiChatExecutor.Result executeDelegatedWorkflow(
+            AiChatExecutor.Context context, AiWorkflowPlan plan, int workflowIteration) {
+        String fanoutId = delegatedFanoutId(
+                context.request().requestId(), workflowIteration);
         String leadNodeId = fanoutId + "-lead";
         String executionKind = executionKind(context, plan);
         long resultTokenLimit = specialistResultTokenLimit(context, plan.tasks().size());
+        List<WorkerControl> controls = createControls(
+                context, plan, fanoutId, leadNodeId, executionKind);
         Map<String, Object> leadNamespace = leadNamespace(
-                fanoutId, leadNodeId, plan, context.request().multiAgent(), executionKind);
-        AiTrajectoryRecorder leadRecorder = context.recorder().fork(leadNamespace);
+                fanoutId, leadNodeId, plan, context.request().multiAgent(), executionKind,
+                plan.tasks().size());
+        AiTrajectoryRecorder leadRecorder = Objects.requireNonNull(
+                context.recorder().fork(leadNamespace),
+                "The delegated workflow lead recorder is required.");
         leadRecorder.lifecycle(leadLifecycle(executionKind, "started"), plan.guideMessage(), lifecycleMetadata(
                 leadNamespace, plan.activeVerb(), plan.completedVerb(), "started", Map.of(
                         "agent_count", plan.tasks().size())));
+        controls.forEach(this::recordPlannedWorker);
 
         long deadlineNanos = deadlineNanos(executionTimeout());
-        List<WorkerControl> controls = new ArrayList<>();
         List<AiMultiAgentWorkerResult> results;
         try {
-            controls.addAll(createControls(context, plan, fanoutId, leadNodeId, executionKind));
             boolean parallel = controls.size() > 1
                     && (WorkflowTypes.PARALLEL.equals(plan.workflow())
                     || WorkflowTypes.ORCHESTRATOR_WORKERS.equals(plan.workflow()));
             results = parallel
                     ? executeParallel(context, controls, deadlineNanos, resultTokenLimit)
                     : executeChain(context, controls, deadlineNanos, resultTokenLimit);
+            if (requestStopping(context.request().requestId())
+                    || controls.stream().anyMatch(this::cancelled)) {
+                throw new CancellationException("The delegated workflow was cancelled.");
+            }
         } catch (CancellationException failure) {
+            cancelOutstanding(controls, "cancelled");
+            leadRecorder.terminalLifecycle(leadLifecycle(executionKind, "cancelled"),
+                    "The delegated workflow was cancelled.",
+                    lifecycleMetadata(leadNamespace, plan.activeVerb(),
+                            plan.completedVerb(), "cancelled", Map.of()));
             recordFanOutUsage(context, fanoutId, executionKind, leadRecorder, controls);
             throw failure;
         } catch (RuntimeException failure) {
@@ -866,6 +1061,11 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
             recordFanOutUsage(context, fanoutId, executionKind, leadRecorder, controls);
             return new AiChatExecutor.Result(answer.answer(), finalTrace);
         } catch (CancellationException failure) {
+            cancelOutstanding(controls, "cancelled");
+            leadRecorder.terminalLifecycle(leadLifecycle(executionKind, "cancelled"),
+                    "Lead synthesis was cancelled.",
+                    lifecycleMetadata(leadNamespace, plan.synthesisActiveVerb(),
+                            plan.synthesisCompletedVerb(), "cancelled", Map.of()));
             recordFanOutUsage(context, fanoutId, executionKind, leadRecorder, controls);
             throw failure;
         } catch (RuntimeException failure) {
@@ -888,25 +1088,17 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
             AiWorkflowPlan.Task task = plan.tasks().get(index);
             AiAgentDefinition definition = definition(task);
             Map<String, Object> namespace = specialistNamespace(
-                    fanoutId, leadNodeId, plan.workflow(), definition, task, ordinal);
-            AiTrajectoryRecorder durable = "parallel".equals(executionKind)
+                    fanoutId, leadNodeId, plan.workflow(), executionKind,
+                    definition, task, ordinal);
+            AiTrajectoryRecorder recorder = Objects.requireNonNull("parallel".equals(executionKind)
                     ? context.recorder().forkParallelExecution(
                             definition.id(), task.instruction(), namespace)
                     : context.recorder().forkSubagent(
-                            definition.id(), task.instruction(), namespace);
-            String childConversationId;
-            AiTrajectoryRecorder recorder;
-            if (durable != null) {
-                childConversationId = durable.conversationId();
-                recorder = durable;
-            } else {
-                // Mockito-based compatibility tests created before durable children.
-                childConversationId = context.request().conversationId();
-                recorder = context.recorder().fork(namespace);
-            }
+                            definition.id(), task.instruction(), namespace),
+                    "The delegated workflow worker recorder is required.");
             controls.add(new WorkerControl(ordinal, task, definition, executionKind,
-                    childConversationId, recorder,
-                    new AtomicBoolean(), new AtomicBoolean(), new AtomicReference<>()));
+                    recorder.conversationId(), recorder, namespace,
+                    new AtomicReference<>(), new AtomicBoolean(), new AtomicReference<>()));
         }
         return controls;
     }
@@ -939,7 +1131,7 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                         futures.forEach(future -> future.cancel(true));
                         throw new CancellationException("Delegated workflow was interrupted.");
                     } catch (ExecutionException | CancellationException failure) {
-                        markFailed(control, "execution_failure");
+                        settleWorkerFutureFailure(control, failure);
                         results.add(failed(control));
                     }
                 } else {
@@ -960,7 +1152,7 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                 futures.forEach(future -> future.cancel(true));
                 throw new CancellationException("Delegated workflow was interrupted.");
             } catch (ExecutionException | CancellationException failure) {
-                markFailed(control, "execution_failure");
+                settleWorkerFutureFailure(control, failure);
                 results.add(failed(control));
             }
         }
@@ -979,6 +1171,9 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
             }
             results.add(executeWorker(context, control, deadlineNanos, tokenLimit, results,
                     individualApprovalScope(context, control)));
+            if (cancelled(control)) {
+                throw new CancellationException("The delegated workflow was cancelled.");
+            }
         }
         return results;
     }
@@ -995,7 +1190,7 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                 return failed(control);
             }
             if (requestStopping(parent.request().requestId())) {
-                markFailed(control, "cancelled");
+                markCancelled(control, "cancelled");
                 return failed(control);
             }
             AiChatExecutor.ToolPolicy policy = workerPolicy(
@@ -1022,7 +1217,7 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                     "The delegated worker completed no successful connectCenter domain tool call.")
                     .answer();
             if (requestStopping(parent.request().requestId())) {
-                markFailed(control, "cancelled");
+                markCancelled(control, "cancelled");
                 return failed(control);
             }
             AiBoundedAnswer bounded = bounded(answer, tokenLimit);
@@ -1032,7 +1227,10 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
             return result;
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
-            markFailed(control, "cancelled");
+            markCancelled(control, "interrupted");
+            return failed(control);
+        } catch (CancellationException failure) {
+            markCancelled(control, "cancelled");
             return failed(control);
         } catch (RuntimeException failure) {
             LOGGER.warn("AI worker {} failed for request {}", control.definition().id(),
@@ -1043,6 +1241,16 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
             if (approvalCoordinator != null) {
                 approvalCoordinator.participantFinished(approvalScope);
             }
+        }
+    }
+
+    private void settleWorkerFutureFailure(WorkerControl control, Throwable failure) {
+        Throwable cause = failure instanceof ExecutionException execution
+                ? execution.getCause() : failure;
+        if (cause instanceof CancellationException) {
+            markCancelled(control, "cancelled");
+        } else {
+            markFailed(control, "execution_failure");
         }
     }
 
@@ -1327,9 +1535,15 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         }
     }
 
+    private void recordPlannedWorker(WorkerControl control) {
+        control.recorder().lifecycle(workerLifecycle(control, "planned"),
+                sentence(control.task().label() + " is queued"),
+                workerMetadata(control, "planned", Map.of()));
+    }
+
     private boolean markCompleted(WorkerControl control, AiBoundedAnswer bounded) {
         synchronized (control) {
-            if (!control.terminalRecorded().compareAndSet(false, true)) return false;
+            if (!control.terminalStatus().compareAndSet(null, "completed")) return false;
             Map<String, Object> additional = new LinkedHashMap<>();
             if (bounded.truncated()) {
                 additional.put("result_truncated", true);
@@ -1345,15 +1559,20 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
 
     private boolean markFailed(WorkerControl control, String reason) {
         synchronized (control) {
-            if (!control.terminalRecorded().compareAndSet(false, true)) return false;
-            if (control.started().compareAndSet(false, true)) {
-                control.recorder().lifecycle(workerLifecycle(control, "started"),
-                        workerStatus(control, false),
-                        workerMetadata(control, "started", Map.of()));
-            }
+            if (!control.terminalStatus().compareAndSet(null, "failed")) return false;
             control.recorder().terminalLifecycle(workerLifecycle(control, "failed"),
                     "Could not complete " + control.task().label() + ".",
                     workerMetadata(control, "failed", Map.of("reason", reason)));
+            return true;
+        }
+    }
+
+    private boolean markCancelled(WorkerControl control, String reason) {
+        synchronized (control) {
+            if (!control.terminalStatus().compareAndSet(null, "cancelled")) return false;
+            control.recorder().terminalLifecycle(workerLifecycle(control, "cancelled"),
+                    "Stopped " + control.task().label() + ".",
+                    workerMetadata(control, "cancelled", Map.of("reason", reason)));
             return true;
         }
     }
@@ -1379,8 +1598,16 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         return Map.copyOf(metadata);
     }
 
-    private void failOutstanding(List<WorkerControl> controls, String reason) {
+    private void failOutstanding(Collection<WorkerControl> controls, String reason) {
         controls.forEach(control -> markFailed(control, reason));
+    }
+
+    private void cancelOutstanding(Collection<WorkerControl> controls, String reason) {
+        controls.forEach(control -> markCancelled(control, reason));
+    }
+
+    private boolean cancelled(WorkerControl control) {
+        return "cancelled".equals(control.terminalStatus().get());
     }
 
     private void recordFanOutUsage(AiChatExecutor.Context context, String fanoutId,
@@ -1450,40 +1677,59 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         });
     }
 
-    private Map<String, Object> leadNamespace(String fanoutId, String nodeId, AiWorkflowPlan plan,
-                                               AiMultiAgentOptions options, String executionKind) {
-        Map<String, Object> namespace = new LinkedHashMap<>();
-        namespace.put("fanout_id", fanoutId);
-        namespace.put("node_id", nodeId);
+    private Map<String, Object> leadNamespace(
+            String fanoutId, String nodeId, AiWorkflowPlan plan,
+            AiMultiAgentOptions options, String executionKind, int maxAgents) {
+        Map<String, Object> namespace = new LinkedHashMap<>(executionNamespace(
+                fanoutId, nodeId, null, "lead", executionKind, plan.workflow(), 0));
         namespace.put("agent_name", "lead");
         namespace.put("agent_role", "workflow orchestrator");
-        namespace.put("depth", 0);
-        namespace.put("workflow", plan.workflow());
-        namespace.put("execution_kind", executionKind);
         namespace.put("strategy", options != null ? options.strategy() : "model-selected");
-        namespace.put("max_agents", plan.tasks().size());
+        namespace.put("max_agents", maxAgents);
         namespace.put("active_verb", plan.activeVerb());
         namespace.put("completed_verb", plan.completedVerb());
         return Map.copyOf(namespace);
     }
 
     private Map<String, Object> specialistNamespace(String fanoutId, String parentNodeId,
-                                                     String workflow, AiAgentDefinition definition,
+                                                     String workflow, String executionKind,
+                                                     AiAgentDefinition definition,
                                                      AiWorkflowPlan.Task task, int ordinal) {
-        Map<String, Object> namespace = new LinkedHashMap<>();
-        namespace.put("fanout_id", fanoutId);
-        namespace.put("node_id", fanoutId + "-agent-" + String.format("%02d", ordinal));
-        namespace.put("parent_node_id", parentNodeId);
+        return workerNamespace(fanoutId,
+                fanoutId + "-agent-" + String.format("%02d", ordinal),
+                parentNodeId, workflow, executionKind, definition, task, ordinal);
+    }
+
+    private Map<String, Object> workerNamespace(
+            String fanoutId, String nodeId, String parentNodeId, String workflow,
+            String executionKind, AiAgentDefinition definition,
+            AiWorkflowPlan.Task task, int ordinal) {
+        Map<String, Object> namespace = new LinkedHashMap<>(executionNamespace(
+                fanoutId, nodeId, parentNodeId, "worker", executionKind, workflow, 1));
         namespace.put("agent_id", definition.id());
         namespace.put("agent_name", definition.name());
         namespace.put("agent_role", definition.description());
         namespace.put("task_label", task.label());
         namespace.put("ordinal", ordinal);
-        namespace.put("depth", 1);
-        namespace.put("workflow", workflow);
         namespace.put("active_verb", task.activeVerb());
         namespace.put("completed_verb", task.completedVerb());
         return Map.copyOf(namespace);
+    }
+
+    private Map<String, Object> executionNamespace(
+            String fanoutId, String nodeId, String parentNodeId, String executionScope,
+            String executionKind, String workflow, int depth) {
+        Map<String, Object> namespace = new LinkedHashMap<>();
+        namespace.put("fanout_id", fanoutId);
+        namespace.put("node_id", nodeId);
+        if (StringUtils.hasText(parentNodeId)) {
+            namespace.put("parent_node_id", parentNodeId);
+        }
+        namespace.put("execution_scope", executionScope);
+        namespace.put("execution_kind", executionKind);
+        namespace.put("workflow", workflow);
+        namespace.put("depth", depth);
+        return namespace;
     }
 
     private Map<String, Object> lifecycleMetadata(Map<String, Object> namespace, String activeVerb,
@@ -1501,11 +1747,16 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                                 Map<String, Object> namespace, AiWorkflowPlan plan) {
         if (!Thread.currentThread().isInterrupted() && !requestStopping(requestId)) return;
         recorder.terminalLifecycle(leadLifecycle(
-                        Objects.toString(namespace.get("execution_kind"), "multi_agent"), "failed"),
+                        Objects.toString(namespace.get("execution_kind"), "multi_agent"), "cancelled"),
                 "The delegated workflow was interrupted.",
-                lifecycleMetadata(namespace, plan.activeVerb(), plan.completedVerb(), "failed",
+                lifecycleMetadata(namespace, plan.activeVerb(), plan.completedVerb(), "cancelled",
                         Map.of("reason", "interrupted", "stage", stage)));
         throw new CancellationException("Delegated workflow was interrupted at " + stage + ".");
+    }
+
+    private void cancellationFence(String requestId, String stage) {
+        if (!Thread.currentThread().isInterrupted() && !requestStopping(requestId)) return;
+        throw new CancellationException("Workflow was interrupted at " + stage + ".");
     }
 
     private boolean requestStopping(String requestId) {
@@ -1527,6 +1778,11 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         } catch (NoSuchAlgorithmException impossible) {
             throw new IllegalStateException("SHA-256 is unavailable.", impossible);
         }
+    }
+
+    private String delegatedFanoutId(String requestId, int workflowIteration) {
+        String base = fanoutId(requestId);
+        return workflowIteration > 0 ? base + "-iteration-" + workflowIteration : base;
     }
 
     private String executionKind(AiChatExecutor.Context context, AiWorkflowPlan plan) {
@@ -1721,6 +1977,25 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         }
     }
 
+    private record ComposedExecution(
+            String fanoutId,
+            String leadNodeId,
+            Map<String, WorkerControl> controls) {
+    }
+
+    private record PlannedComposedNode(
+            AiWorkflowNode node,
+            boolean registeredWorker) {
+    }
+
+    private record PreparedComposedControl(
+            AiWorkflowNode node,
+            AiWorkflowPlan.Task task,
+            AiAgentDefinition definition,
+            boolean registeredWorker,
+            int ordinal) {
+    }
+
     private static final class WorkerControl {
         private final int ordinal;
         private final AiWorkflowPlan.Task task;
@@ -1728,14 +2003,16 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         private final String executionKind;
         private final String childConversationId;
         private final AiTrajectoryRecorder recorder;
-        private final AtomicBoolean terminalRecorded;
+        private final Map<String, Object> namespace;
+        private final AtomicReference<String> terminalStatus;
         private final AtomicBoolean started;
         private final AtomicReference<AiMultiAgentWorkerResult> result;
 
         private WorkerControl(
                 int ordinal, AiWorkflowPlan.Task task, AiAgentDefinition definition,
                 String executionKind, String childConversationId,
-                AiTrajectoryRecorder recorder, AtomicBoolean terminalRecorded,
+                AiTrajectoryRecorder recorder, Map<String, Object> namespace,
+                AtomicReference<String> terminalStatus,
                 AtomicBoolean started, AtomicReference<AiMultiAgentWorkerResult> result) {
             this.ordinal = ordinal;
             this.task = task;
@@ -1743,7 +2020,8 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
             this.executionKind = executionKind;
             this.childConversationId = childConversationId;
             this.recorder = recorder;
-            this.terminalRecorded = terminalRecorded;
+            this.namespace = namespace;
+            this.terminalStatus = terminalStatus;
             this.started = started;
             this.result = result;
         }
@@ -1754,7 +2032,8 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         private String executionKind() { return executionKind; }
         private String childConversationId() { return childConversationId; }
         private AiTrajectoryRecorder recorder() { return recorder; }
-        private AtomicBoolean terminalRecorded() { return terminalRecorded; }
+        private Map<String, Object> namespace() { return namespace; }
+        private AtomicReference<String> terminalStatus() { return terminalStatus; }
         private AtomicBoolean started() { return started; }
         private AtomicReference<AiMultiAgentWorkerResult> result() { return result; }
     }

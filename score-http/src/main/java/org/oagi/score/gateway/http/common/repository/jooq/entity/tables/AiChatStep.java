@@ -97,7 +97,7 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
      * The column <code>oagi.ai_chat_step.message_kind</code>. The
      * application-specific kind of trajectory event represented by the step.
      */
-    public final TableField<AiChatStepRecord, String> MESSAGE_KIND = createField(DSL.name("message_kind"), SQLDataType.VARCHAR(32).nullable(false), this, "The application-specific kind of trajectory event represented by the step.");
+    public final TableField<AiChatStepRecord, String> MESSAGE_KIND = createField(DSL.name("message_kind"), SQLDataType.VARCHAR(64).nullable(false), this, "The application-specific kind of trajectory event represented by the step.");
 
     /**
      * The column <code>oagi.ai_chat_step.visibility</code>. Expected

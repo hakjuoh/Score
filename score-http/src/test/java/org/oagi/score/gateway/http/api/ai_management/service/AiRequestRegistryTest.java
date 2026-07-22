@@ -476,6 +476,193 @@ class AiRequestRegistryTest {
         assertThat(entry.hasWorkerThread()).isFalse();
     }
 
+    @Test
+    void instanceShutdownFailsAnOwnedRequestWithoutAObservedMutation() {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-shutdown", "conversation-shutdown", user,
+                Instant.now().plusSeconds(60));
+        assertThat(registry.start(entry)).isTrue();
+
+        registry.terminalizeOwnedRequestsOnShutdown();
+
+        assertThat(registry.status("request-shutdown", user))
+                .extracting(status -> status.status(), status -> status.statusReason())
+                .containsExactly("FAILED", "WORKER_INSTANCE_SHUTDOWN");
+        assertThat(registry.active(user)).isEmpty();
+        assertThat(entry.hasWorkerThread()).isFalse();
+    }
+
+    @Test
+    void instanceShutdownRequiresReconciliationAfterAnObservedMutation() {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-mutating-shutdown", "conversation-mutating-shutdown", user,
+                Instant.now().plusSeconds(60));
+        assertThat(registry.start(entry)).isTrue();
+        assertThat(registry.mutationStarted(entry.requestId())).isTrue();
+
+        registry.terminalizeOwnedRequestsOnShutdown();
+
+        assertThat(registry.status("request-mutating-shutdown", user))
+                .extracting(status -> status.status(), status -> status.statusReason())
+                .containsExactly("UNKNOWN_RECONCILIATION_REQUIRED", "WORKER_INSTANCE_SHUTDOWN");
+        assertThat(registry.active(user)).isEmpty();
+    }
+
+    @Test
+    void instanceShutdownDoesNotTerminalizeRequestsOwnedByAnotherInstance() {
+        AiRequestStateStore sharedStore = AiRequestStateStore.inMemory();
+        var firstScheduler = Executors.newSingleThreadScheduledExecutor();
+        var secondScheduler = Executors.newSingleThreadScheduledExecutor();
+        try {
+            AiRequestRegistry firstInstance = new AiRequestRegistry(
+                    firstScheduler, Duration.ofSeconds(1), sharedStore);
+            AiRequestRegistry secondInstance = new AiRequestRegistry(
+                    secondScheduler, Duration.ofSeconds(1), sharedStore);
+            AiRequestRegistry.Entry first = firstInstance.register(
+                    "request-first-instance", "conversation-first-instance", user,
+                    Instant.now().plusSeconds(60));
+            AiRequestRegistry.Entry second = secondInstance.register(
+                    "request-second-instance", "conversation-second-instance", user,
+                    Instant.now().plusSeconds(60));
+            assertThat(firstInstance.start(first)).isTrue();
+            assertThat(secondInstance.start(second)).isTrue();
+
+            firstInstance.terminalizeOwnedRequestsOnShutdown();
+
+            assertThat(firstInstance.status("request-first-instance", user).status())
+                    .isEqualTo("FAILED");
+            assertThat(secondInstance.status("request-second-instance", user).status())
+                    .isEqualTo("RUNNING");
+            secondInstance.complete(second);
+        } finally {
+            firstScheduler.shutdownNow();
+            secondScheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    void instanceShutdownInterruptsItsLocalWorker() throws Exception {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-interrupted-shutdown", "conversation-interrupted-shutdown", user,
+                Instant.now().plusSeconds(60));
+        CountDownLatch started = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean();
+        CompletableFuture<Void> worker = CompletableFuture.runAsync(() -> {
+            assertThat(registry.start(entry)).isTrue();
+            started.countDown();
+            try {
+                new CountDownLatch(1).await();
+            } catch (InterruptedException expected) {
+                interrupted.set(true);
+            }
+        });
+        assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
+
+        registry.terminalizeOwnedRequestsOnShutdown();
+
+        worker.get(1, TimeUnit.SECONDS);
+        assertThat(interrupted).isTrue();
+        assertThat(registry.status("request-interrupted-shutdown", user).status())
+                .isEqualTo("FAILED");
+    }
+
+    @Test
+    void completedCommitLinearizedBeforeShutdownIsNotRelabeled() throws Exception {
+        var scheduler = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().daemon(true).factory());
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            AiRequestRegistry registry = new AiRequestRegistry(scheduler, Duration.ofSeconds(1));
+            AiRequestRegistry.Entry entry = registry.register(
+                    "request-commit-shutdown", "conversation-commit-shutdown", user,
+                    Instant.now().plusSeconds(60));
+            CountDownLatch persistenceStarted = new CountDownLatch(1);
+            CountDownLatch releasePersistence = new CountDownLatch(1);
+            CompletableFuture<Boolean> commit = CompletableFuture.supplyAsync(() -> {
+                assertThat(registry.start(entry)).isTrue();
+                return registry.commitResult(entry.requestId(), () -> {
+                    persistenceStarted.countDown();
+                    try {
+                        releasePersistence.await();
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            }, executor);
+            assertThat(persistenceStarted.await(1, TimeUnit.SECONDS)).isTrue();
+            CompletableFuture<Void> shutdown = CompletableFuture.runAsync(
+                    registry::terminalizeOwnedRequestsOnShutdown, executor);
+
+            releasePersistence.countDown();
+
+            assertThat(commit.get(1, TimeUnit.SECONDS)).isTrue();
+            shutdown.get(1, TimeUnit.SECONDS);
+            assertThat(registry.status(entry.requestId(), user))
+                    .extracting(status -> status.status(), status -> status.statusReason())
+                    .containsExactly("COMPLETED", null);
+        } finally {
+            scheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    void shutdownFenceRejectsLateCommitAndFinishCannotRelabelIt() {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-late-commit", "conversation-late-commit", user,
+                Instant.now().plusSeconds(60));
+        assertThat(registry.start(entry)).isTrue();
+
+        registry.terminalizeOwnedRequestsOnShutdown();
+
+        assertThat(registry.commitResult(entry.requestId(),
+                () -> { throw new AssertionError("late persistence must be fenced"); })).isFalse();
+        assertThat(registry.finish(entry, null)).isEqualTo("FAILED");
+        assertThat(registry.status(entry.requestId(), user))
+                .extracting(status -> status.status(), status -> status.statusReason())
+                .containsExactly("FAILED", "WORKER_INSTANCE_SHUTDOWN");
+    }
+
+    @Test
+    void shutdownDoesNotOverwriteAReplacementOwnerGeneration() {
+        AiRequestStateStore sharedStore = AiRequestStateStore.inMemory();
+        var scheduler = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().daemon(true).factory());
+        try {
+            AiRequestRegistry registry = new AiRequestRegistry(
+                    scheduler, Duration.ofSeconds(1), sharedStore);
+            AiRequestRegistry.Entry staleEntry = registry.register(
+                    "request-reassigned", "conversation-reassigned", user,
+                    Instant.now().plusSeconds(60));
+            assertThat(registry.start(staleEntry)).isTrue();
+            AiSharedRequestState original = sharedStore.withRequestLock(
+                    staleEntry.requestId(), storage -> storage.get(staleEntry.requestId()));
+            AiSharedRequestState replacement = new AiSharedRequestState(
+                    original.requestId(), original.conversationId(), original.appUserId(),
+                    "replacement-instance", original.generation() + 1,
+                    original.deadline(), original.expiresAt(), original.createdAt(), Instant.now(),
+                    Instant.now(), null, "RUNNING", null, original.terminalTarget(),
+                    null, null, null, original.lastEventSequence(), false, 0, false);
+            sharedStore.withRequestLock(staleEntry.requestId(), storage -> {
+                storage.put(replacement);
+                return null;
+            });
+
+            registry.terminalizeOwnedRequestsOnShutdown();
+
+            AiSharedRequestState retained = sharedStore.withRequestLock(
+                    staleEntry.requestId(), storage -> storage.get(staleEntry.requestId()));
+            assertThat(retained)
+                    .extracting(AiSharedRequestState::workerInstanceId,
+                            AiSharedRequestState::generation, AiSharedRequestState::status)
+                    .containsExactly("replacement-instance", replacement.generation(), "RUNNING");
+        } finally {
+            scheduler.shutdownNow();
+        }
+    }
+
     private void awaitStatus(AiRequestRegistry registry, String requestId, String expected) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
         while (System.nanoTime() < deadline) {

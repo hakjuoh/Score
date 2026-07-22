@@ -6,7 +6,8 @@ export type AiChatMessageRole = 'user' | 'assistant' | 'guide' | 'progress'
 export type AiChatToolStatus = 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled';
 export type AiChatPanelTab = 'chat' | 'history';
 export type AiMutationPermissionMode = 'ask' | 'auto' | 'full_access';
-export type AiAgentExecutionStatus = 'started' | 'completed' | 'failed' | 'cancelled' | 'synthesizing';
+export type AiAgentExecutionStatus =
+  'planned' | 'started' | 'completed' | 'failed' | 'cancelled' | 'synthesizing';
 
 export interface AiChatMessage {
   role: AiChatMessageRole;

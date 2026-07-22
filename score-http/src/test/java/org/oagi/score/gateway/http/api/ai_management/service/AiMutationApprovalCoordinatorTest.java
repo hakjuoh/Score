@@ -41,6 +41,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_STEP;
 
 class AiMutationApprovalCoordinatorTest {
 
@@ -100,6 +101,11 @@ class AiMutationApprovalCoordinatorTest {
         ArgumentCaptor<AiChatTrajectoryStep> recorded =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
         verify(conversations, atLeastOnce()).append(any(), recorded.capture());
+        assertThat(recorded.getAllValues())
+                .extracting(AiChatTrajectoryStep::messageKind)
+                .allSatisfy(messageKind -> assertThat(messageKind.length())
+                        .as("persisted message kind length")
+                        .isLessThanOrEqualTo(AI_CHAT_STEP.MESSAGE_KIND.getDataType().length()));
         assertThat(recorded.getAllValues())
                 .filteredOn(step -> "mutation_approval_batch_requested".equals(step.messageKind()))
                 .singleElement()

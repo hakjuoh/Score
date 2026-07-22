@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.trajectory;
 
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryData;
+import org.oagi.score.gateway.http.api.ai_management.model.AtifMetricAggregate;
 import org.oagi.score.gateway.http.api.ai_management.model.AtifNormalizationResult;
 import org.oagi.score.gateway.http.api.ai_management.model.AtifStepExport;
 import org.springframework.stereotype.Service;
@@ -39,9 +40,6 @@ public class AtifTrajectoryService {
                                       String agentVersion, String defaultModel) {
         List<Map<String, Object>> embeddedSubagents = new ArrayList<>();
         List<Map<String, Object>> delegationSteps = new ArrayList<>();
-        long subagentPromptTokens = 0;
-        long subagentCompletionTokens = 0;
-        long subagentCachedTokens = 0;
         for (AiChatTrajectoryData.ChildTrajectory child : data.childTrajectories()) {
             if (child.steps().isEmpty()) {
                 continue;
@@ -62,9 +60,6 @@ public class AtifTrajectoryService {
                     "Embedded child execution exported from its durable conversation.",
                     childExtra));
             delegationSteps.add(delegationStep(data.conversationId(), child));
-            subagentPromptTokens += childExport.promptTokens();
-            subagentCompletionTokens += childExport.completionTokens();
-            subagentCachedTokens += childExport.cachedTokens();
         }
 
         AtifStepExport rootExport = exportSteps(data.steps(), delegationSteps);
@@ -83,15 +78,8 @@ public class AtifTrajectoryService {
                 agentVersion, defaultModel, rootExport,
                 "Committed UI projections are collapsed into their matching final model inference when "
                         + "correlation is unambiguous; unmatched deterministic projections remain as steps. "
-                        + "Token totals include embedded subagent trajectories.",
+                        + "Embedded subagent trajectories report their own token totals.",
                 rootExtra);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> finalMetrics =
-                (Map<String, Object>) trajectory.get("final_metrics");
-        finalMetrics.put("total_prompt_tokens", rootExport.promptTokens() + subagentPromptTokens);
-        finalMetrics.put("total_completion_tokens",
-                rootExport.completionTokens() + subagentCompletionTokens);
-        finalMetrics.put("total_cached_tokens", rootExport.cachedTokens() + subagentCachedTokens);
         if (!embeddedSubagents.isEmpty()) {
             trajectory.put("subagent_trajectories", List.copyOf(embeddedSubagents));
         }
@@ -139,15 +127,43 @@ public class AtifTrajectoryService {
         long promptTokens = 0;
         long completionTokens = 0;
         long cachedTokens = 0;
+        int promptTokenMeasurements = 0;
+        int completionTokenMeasurements = 0;
+        int cachedTokenMeasurements = 0;
+        int trackedLlmCalls = 0;
+        int untrackedLlmSteps = 0;
         for (Map<String, Object> step : normalization.steps()) {
+            int representedLlmCalls = representedLlmCalls(step);
+            if (representedLlmCalls < 0) {
+                untrackedLlmSteps++;
+                continue;
+            }
+            if (representedLlmCalls == 0) {
+                continue;
+            }
+            trackedLlmCalls += representedLlmCalls;
             Object metricsValue = step.get("metrics");
             if (metricsValue instanceof Map<?, ?> metrics) {
-                promptTokens += number(metrics.get("prompt_tokens"));
-                completionTokens += number(metrics.get("completion_tokens"));
-                cachedTokens += number(metrics.get("cached_tokens"));
+                if (metrics.get("prompt_tokens") instanceof Number value) {
+                    promptTokens += value.longValue();
+                    promptTokenMeasurements += representedLlmCalls;
+                }
+                if (metrics.get("completion_tokens") instanceof Number value) {
+                    completionTokens += value.longValue();
+                    completionTokenMeasurements += representedLlmCalls;
+                }
+                if (metrics.get("cached_tokens") instanceof Number value) {
+                    cachedTokens += value.longValue();
+                    cachedTokenMeasurements += representedLlmCalls;
+                }
             }
         }
-        return new AtifStepExport(normalization.steps(), promptTokens, completionTokens, cachedTokens,
+        return new AtifStepExport(
+                normalization.steps(),
+                new AtifMetricAggregate(promptTokens, promptTokenMeasurements),
+                new AtifMetricAggregate(completionTokens, completionTokenMeasurements),
+                new AtifMetricAggregate(cachedTokens, cachedTokenMeasurements),
+                trackedLlmCalls, untrackedLlmSteps,
                 normalization.collapsedUiProjections());
     }
 
@@ -162,11 +178,7 @@ public class AtifTrajectoryService {
             agent.put("model_name", defaultModel);
         }
 
-        Map<String, Object> finalMetrics = new LinkedHashMap<>();
-        finalMetrics.put("total_prompt_tokens", export.promptTokens());
-        finalMetrics.put("total_completion_tokens", export.completionTokens());
-        finalMetrics.put("total_cached_tokens", export.cachedTokens());
-        finalMetrics.put("total_steps", export.steps().size());
+        Map<String, Object> finalMetrics = finalMetrics(export);
 
         Map<String, Object> trajectory = new LinkedHashMap<>();
         trajectory.put("schema_version", "ATIF-v1.7");
@@ -178,6 +190,55 @@ public class AtifTrajectoryService {
         trajectory.put("final_metrics", finalMetrics);
         trajectory.put("extra", extra);
         return trajectory;
+    }
+
+    private Map<String, Object> finalMetrics(AtifStepExport export) {
+        Map<String, Object> finalMetrics = new LinkedHashMap<>();
+        putCompleteMetric(finalMetrics, "total_prompt_tokens",
+                export.promptTokens().partialTotal(), export.promptTokensComplete());
+        putCompleteMetric(finalMetrics, "total_completion_tokens",
+                export.completionTokens().partialTotal(), export.completionTokensComplete());
+        putCompleteMetric(finalMetrics, "total_cached_tokens",
+                export.cachedTokens().partialTotal(), export.cachedTokensComplete());
+        finalMetrics.put("total_steps", export.steps().size());
+
+        Map<String, Object> measuredCalls = new LinkedHashMap<>();
+        measuredCalls.put("prompt_tokens", export.promptTokens().measuredLlmCalls());
+        measuredCalls.put("completion_tokens", export.completionTokens().measuredLlmCalls());
+        measuredCalls.put("cached_tokens", export.cachedTokens().measuredLlmCalls());
+
+        Map<String, Object> partialTotals = new LinkedHashMap<>();
+        putPartialMetric(partialTotals, "prompt_tokens",
+                export.promptTokens(), export.promptTokensComplete());
+        putPartialMetric(partialTotals, "completion_tokens",
+                export.completionTokens(), export.completionTokensComplete());
+        putPartialMetric(partialTotals, "cached_tokens",
+                export.cachedTokens(), export.cachedTokensComplete());
+
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("metrics_complete", export.metricsComplete());
+        extra.put("tracked_llm_calls", export.trackedLlmCalls());
+        extra.put("untracked_llm_steps", export.untrackedLlmSteps());
+        extra.put("measured_llm_calls", measuredCalls);
+        if (!partialTotals.isEmpty()) {
+            extra.put("partial_totals", partialTotals);
+        }
+        finalMetrics.put("extra", extra);
+        return finalMetrics;
+    }
+
+    private void putCompleteMetric(Map<String, Object> target, String key,
+                                   long value, boolean complete) {
+        if (complete) {
+            target.put(key, value);
+        }
+    }
+
+    private void putPartialMetric(Map<String, Object> target, String key,
+                                  AtifMetricAggregate aggregate, boolean complete) {
+        if (!complete && aggregate.measuredLlmCalls() > 0) {
+            target.put(key, aggregate.partialTotal());
+        }
     }
 
     private Map<String, Object> delegationStep(
@@ -244,17 +305,52 @@ public class AtifTrajectoryService {
         } else if (storedExtra != null) {
             extra.put("producer_extra", storedExtra);
         }
+        Object promptTokens = storedMetrics.get("prompt_tokens");
+        boolean promptTokensComplete = promptTokensComplete(storedMetrics, extra, promptTokens);
         storedMetrics.forEach((key, value) -> {
-            if (STANDARD_METRIC_FIELDS.contains(key)) {
+            if (STANDARD_METRIC_FIELDS.contains(key) && !"prompt_tokens".equals(key)) {
                 normalized.put(key, value);
-            } else if (!"extra".equals(key)) {
+            } else if (!"extra".equals(key) && !"prompt_tokens".equals(key)) {
                 extra.put(key, value);
             }
         });
+        if (promptTokens != null) {
+            if (promptTokensComplete) {
+                normalized.put("prompt_tokens", promptTokens);
+            } else {
+                extra.putIfAbsent("provider_reported_prompt_tokens", promptTokens);
+                extra.put("prompt_tokens_complete", false);
+            }
+        }
         if (!extra.isEmpty()) {
             normalized.put("extra", extra);
         }
         return normalized;
+    }
+
+    private boolean promptTokensComplete(Map<String, Object> storedMetrics,
+                                         Map<String, Object> extra,
+                                         Object promptTokens) {
+        if (!(promptTokens instanceof Number prompt)) {
+            return false;
+        }
+        Object explicitCompleteness = metricMetadata(storedMetrics, extra, "prompt_tokens_complete");
+        if (explicitCompleteness instanceof Boolean complete) {
+            return complete;
+        }
+        // Legacy rows predate provider-aware accounting. When their preflight floor
+        // exceeded the recorded prompt count, the inclusive Anthropic cache prefix may
+        // have been lost, so conservatively avoid publishing that value as ATIF truth.
+        Object estimated = metricMetadata(storedMetrics, extra, "context_estimated");
+        Object contextInput = metricMetadata(storedMetrics, extra, "context_input_tokens");
+        return !Boolean.TRUE.equals(estimated)
+                || !(contextInput instanceof Number context)
+                || prompt.longValue() >= context.longValue();
+    }
+
+    private Object metricMetadata(Map<String, Object> storedMetrics,
+                                  Map<String, Object> extra, String key) {
+        return storedMetrics.containsKey(key) ? storedMetrics.get(key) : extra.get(key);
     }
 
     void addMetrics(Map<String, Object> step, Map<String, Object> extra,
@@ -366,8 +462,19 @@ public class AtifTrajectoryService {
         return value instanceof Number number ? number.longValue() : -1L;
     }
 
-    private long number(Object value) {
-        return value instanceof Number number ? number.longValue() : 0L;
+    private int representedLlmCalls(Map<String, Object> step) {
+        if (!"agent".equals(step.get("source"))) {
+            return 0;
+        }
+        Object value = step.get("llm_call_count");
+        if (!(value instanceof Number number)) {
+            return -1;
+        }
+        long calls = number.longValue();
+        if (calls < 0 || calls > Integer.MAX_VALUE) {
+            return -1;
+        }
+        return (int) calls;
     }
 
     private Map<String, Object> mutableStep(Map<String, Object> source) {

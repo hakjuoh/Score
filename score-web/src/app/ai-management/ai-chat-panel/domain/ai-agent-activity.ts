@@ -2,16 +2,22 @@ import {AiAgentExecutionStatus, AiChatSocketEvent} from './ai-chat-panel.model';
 
 const EXECUTION_ACTIVITY_SUBTYPES = new Set([
   'multi_agent_started',
+  'multi_agent_cancelled',
+  'subagent_planned',
   'subagent_started',
   'subagent_completed',
   'subagent_failed',
+  'subagent_cancelled',
   'multi_agent_synthesizing',
   'multi_agent_completed',
   'multi_agent_failed',
   'parallel_workflow_started',
+  'parallel_workflow_cancelled',
+  'parallel_task_planned',
   'parallel_task_started',
   'parallel_task_completed',
   'parallel_task_failed',
+  'parallel_task_cancelled',
   'parallel_workflow_synthesizing',
   'parallel_workflow_completed',
   'parallel_workflow_failed'
@@ -59,10 +65,15 @@ export function agentActivityUpdate(event: AiChatSocketEvent): AiAgentActivityUp
   const metadata = event.metadata || {};
   const isLead = !!event.subtype?.startsWith('multi_agent')
     || !!event.subtype?.startsWith('parallel_workflow');
-  const agentId = text(metadata['agentId']) || text(metadata['nodeId']) || text(metadata['node_id'])
+  const agentId = text(metadata['nodeId']) || text(metadata['node_id']) || text(metadata['agentId'])
     || (isLead ? `${event.requestId}:lead` : undefined);
   if (!agentId || !content) return undefined;
-  const status: AiAgentExecutionStatus = event.subtype === 'subagent_failed'
+  const status: AiAgentExecutionStatus = event.subtype === 'subagent_planned'
+    || event.subtype === 'parallel_task_planned' ? 'planned'
+    : event.subtype === 'subagent_cancelled' || event.subtype === 'multi_agent_cancelled'
+      || event.subtype === 'parallel_task_cancelled'
+      || event.subtype === 'parallel_workflow_cancelled' ? 'cancelled'
+      : event.subtype === 'subagent_failed'
     || event.subtype === 'multi_agent_failed' || event.subtype === 'parallel_task_failed'
     || event.subtype === 'parallel_workflow_failed' ? 'failed'
     : event.subtype === 'subagent_completed' || event.subtype === 'multi_agent_completed'
@@ -114,6 +125,10 @@ export function upsertAgentActivity(activities: AiAgentActivity[],
   if (isTerminalAgentStatus(existing.status) && !isTerminalAgentStatus(update.status)) {
     return false;
   }
+  if (existing.status === 'planned' && update.status === 'started') {
+    // Queue time is not worker execution time.
+    existing.firstSeenAt = now;
+  }
   existing.agentName = update.agentName;
   existing.agentRole = update.agentRole || existing.agentRole;
   existing.taskLabel = update.taskLabel || existing.taskLabel;
@@ -155,49 +170,48 @@ export function agentActivitySummary(activities: AiAgentActivity[]): string {
 const SPECIALIST_AGENT_ID_PATTERN = /-agent-\d\d$/;
 
 /**
- * Detects a tool lifecycle event recorded by a fan-out SPECIALIST. These must
- * never render as main-chat tool rows; they belong to the agent's timeline.
+ * Resolves the stable execution-node identity for a specialist event. New
+ * servers declare the worker scope explicitly; the conversation kind,
+ * parent-node link, and legacy fan-out id pattern keep persisted and rolling-
+ * upgrade events compatible.
  */
-export function isSpecialistToolEvent(event: AiChatSocketEvent): boolean {
-  if (event.type !== 'tool_call' && event.type !== 'tool_group') {
-    return false;
-  }
+export function specialistActivityAgentId(event: AiChatSocketEvent): string | undefined {
   const metadata = event.metadata || {};
+  const agentId = text(metadata['nodeId']) || text(metadata['node_id']) || text(metadata['agentId']);
+  if (!agentId) return undefined;
+  const executionScope = (text(metadata['executionScope'])
+    || text(metadata['execution_scope']))?.toLowerCase();
+  const conversationKind = (text(metadata['conversationKind'])
+    || text(metadata['conversation_kind']))?.toUpperCase();
   const parentNodeId = text(metadata['parentNodeId']) || text(metadata['parent_node_id']);
-  if (parentNodeId) {
-    return true;
-  }
-  const agentId = text(metadata['agentId']) || text(metadata['nodeId']) || text(metadata['node_id']);
-  return !!agentId && SPECIALIST_AGENT_ID_PATTERN.test(agentId);
+  const specialistOwned = executionScope === 'worker'
+    || conversationKind === 'SUBAGENT' || conversationKind === 'PARALLEL'
+    || !!parentNodeId || SPECIALIST_AGENT_ID_PATTERN.test(agentId);
+  return specialistOwned ? agentId : undefined;
+}
+
+export function isSpecialistActivityEvent(event: AiChatSocketEvent): boolean {
+  return !!specialistActivityAgentId(event);
+}
+
+/** Specialist tools belong to the owning agent timeline, never the main chat. */
+export function isSpecialistToolEvent(event: AiChatSocketEvent): boolean {
+  return (event.type === 'tool_call' || event.type === 'tool_group')
+    && isSpecialistActivityEvent(event);
 }
 
 export function specialistToolAgentId(event: AiChatSocketEvent): string | undefined {
   if (!isSpecialistToolEvent(event)) {
     return undefined;
   }
-  const metadata = event.metadata || {};
-  return text(metadata['agentId']) || text(metadata['nodeId']) || text(metadata['node_id']);
-}
-
-/**
- * Detects a narration recorded inside a fan-out execution namespace. Worker
- * recorders share the lead's request identity, so only this metadata
- * distinguishes a worker's event from the main conversation's.
- */
-export function isFanoutNamespacedEvent(event: AiChatSocketEvent): boolean {
-  const metadata = event.metadata || {};
-  return !!(text(metadata['fanoutId']) || text(metadata['fanout_id'])
-    || text(metadata['parentNodeId']) || text(metadata['parent_node_id'])
-    || text(metadata['nodeId']) || text(metadata['node_id'])
-    || text(metadata['agentId']));
+  return specialistActivityAgentId(event);
 }
 
 /** Reflects a worker's provider retry on its own agent timeline. */
 export function upsertAgentRetryEvent(activities: AiAgentActivity[],
                                       event: AiChatSocketEvent,
                                       now = Date.now()): boolean {
-  const metadata = event.metadata || {};
-  const agentId = text(metadata['agentId']) || text(metadata['nodeId']) || text(metadata['node_id']);
+  const agentId = specialistActivityAgentId(event);
   if (!agentId) return false;
   const activity = activities.find(candidate => candidate.agentId === agentId);
   const content = event.content || event.response || event.message || '';
@@ -214,10 +228,8 @@ export function upsertAgentRetryEvent(activities: AiAgentActivity[],
 export function upsertAgentGuideEvent(activities: AiAgentActivity[],
                                       event: AiChatSocketEvent,
                                       now = Date.now()): boolean {
-  const metadata = event.metadata || {};
-  const parentNodeId = text(metadata['parentNodeId']) || text(metadata['parent_node_id']);
-  const agentId = text(metadata['agentId']) || text(metadata['nodeId']) || text(metadata['node_id']);
-  if (!parentNodeId || !agentId) return false;
+  const agentId = specialistActivityAgentId(event);
+  if (!agentId) return false;
   const activity = activities.find(candidate => candidate.agentId === agentId);
   const content = event.content || event.response || event.message || '';
   if (!activity || !content.trim()) return false;
