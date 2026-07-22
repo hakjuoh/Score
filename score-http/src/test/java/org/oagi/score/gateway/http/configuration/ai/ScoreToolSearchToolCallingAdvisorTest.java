@@ -76,7 +76,7 @@ class ScoreToolSearchToolCallingAdvisorTest {
     }
 
     @Test
-    void asksEveryRuntimeModelToSearchForTheWholeWorkflowUpFront() {
+    void asksEveryModelToSearchForTheWholeWorkflowUpFront() {
         ScoreToolSearchToolCallingAdvisor advisor =
                 new ScoreToolSearchToolCallingAdvisor(new ScoreToolIndex());
 

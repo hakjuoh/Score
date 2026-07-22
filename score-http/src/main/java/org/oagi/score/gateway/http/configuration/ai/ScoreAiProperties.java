@@ -175,8 +175,7 @@ public class ScoreAiProperties {
         private boolean adaptiveThinking;
         private String outputEffort;
         private String cacheStrategy;
-        private List<String> runtimes = List.of();
-        private RuntimeCapabilities runtimeCapabilities = new RuntimeCapabilities();
+        private ModelCapabilities modelCapabilities = new ModelCapabilities();
 
         public String getDisplayName() { return displayName; }
         public void setDisplayName(String displayName) { this.displayName = displayName; }
@@ -210,14 +209,10 @@ public class ScoreAiProperties {
         public void setOutputEffort(String outputEffort) { this.outputEffort = outputEffort; }
         public String getCacheStrategy() { return cacheStrategy; }
         public void setCacheStrategy(String cacheStrategy) { this.cacheStrategy = cacheStrategy; }
-        public List<String> getRuntimes() { return runtimes; }
-        public void setRuntimes(List<String> runtimes) {
-            this.runtimes = runtimes != null ? List.copyOf(runtimes) : List.of();
-        }
-        public RuntimeCapabilities getRuntimeCapabilities() { return runtimeCapabilities; }
-        public void setRuntimeCapabilities(RuntimeCapabilities runtimeCapabilities) {
-            this.runtimeCapabilities = runtimeCapabilities != null
-                    ? runtimeCapabilities : new RuntimeCapabilities();
+        public ModelCapabilities getModelCapabilities() { return modelCapabilities; }
+        public void setModelCapabilities(ModelCapabilities modelCapabilities) {
+            this.modelCapabilities = modelCapabilities != null
+                    ? modelCapabilities : new ModelCapabilities();
         }
     }
 
@@ -252,7 +247,7 @@ public class ScoreAiProperties {
     }
 
     /** Explicit provider/model feature gates; null values retain conservative legacy inference. */
-    public static class RuntimeCapabilities {
+    public static class ModelCapabilities {
         private Boolean reasoningModel;
         private Boolean outputEffort;
         private Boolean verbosity;

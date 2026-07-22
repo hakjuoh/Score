@@ -4,8 +4,7 @@ import {
   AiChatMessage,
   AiChatConversationDetails,
   AiChatSocketEvent,
-  AiContextUsage,
-  AiRuntimeOptions
+  AiContextUsage
 } from './ai-chat-panel.model';
 import {
   contextUsageValue,
@@ -23,16 +22,12 @@ import {
 export interface AiConversationRestoreCallbacks {
   setConversationId(conversationId: string): void;
   setSettings?(settings: Pick<AiChatConversationDetails,
-    'modelName' | 'reasoningEffort' | 'runtime' | 'runtimeOptions' | 'permissionMode'
+    'modelName' | 'reasoningEffort' | 'permissionMode'
     | 'activeWorkflow'>): void;
   setModelName?(modelName: string): void;
   setReasoningEffort?(reasoningEffort: string): void;
-  setRuntime?(runtime: string): void;
-  setRuntimeOptions?(runtimeOptions: AiRuntimeOptions): void;
   setContextUsage?(contextUsage: AiContextUsage): void;
   resetMessages(): void;
-  resetRouteContext(): void;
-  markRouteRegistryRestored(): void;
   setRestoring(restoring: boolean): void;
   setCurrentStatus(status: string): void;
   clearStatus(): void;
@@ -161,27 +156,22 @@ export class AiConversationRestoreService {
       }
       const modelName = this.nonBlankText(event.metadata?.['modelName']);
       const reasoningEffort = this.nonBlankText(event.metadata?.['reasoningEffort']);
-      const runtime = this.nonBlankText(event.metadata?.['runtime']);
-      const runtimeOptions = this.runtimeOptions(event.metadata?.['runtimeOptions']);
       const permissionMode = this.permissionMode(event.metadata?.['permissionMode']);
       const activeWorkflow = this.nonBlankText(event.metadata?.['activeWorkflow']);
-      if (callbacks.setSettings && (modelName || reasoningEffort || runtime
-        || runtimeOptions || permissionMode || activeWorkflow)) {
+      if (callbacks.setSettings && (modelName || reasoningEffort
+        || permissionMode || activeWorkflow)) {
         callbacks.setSettings({
-          modelName, reasoningEffort, runtime, runtimeOptions, permissionMode, activeWorkflow
+          modelName, reasoningEffort, permissionMode, activeWorkflow
         });
       } else {
         if (modelName) callbacks.setModelName?.(modelName);
         if (reasoningEffort) callbacks.setReasoningEffort?.(reasoningEffort);
-        if (runtime) callbacks.setRuntime?.(runtime);
-        if (runtimeOptions) callbacks.setRuntimeOptions?.(runtimeOptions);
       }
       const contextUsage = contextUsageValue(event.metadata?.['contextUsage'], modelName);
       if (contextUsage) {
         callbacks.setContextUsage?.(contextUsage);
       }
       callbacks.setCurrentStatus('Restoring');
-      callbacks.resetRouteContext();
       callbacks.scrollTop();
       return;
     }
@@ -191,9 +181,6 @@ export class AiConversationRestoreService {
     }
 
     if (event.type === 'HISTORY_CONTEXT') {
-      if (event.message === 'route-registry') {
-        callbacks.markRouteRegistryRestored();
-      }
       return;
     }
 
@@ -484,11 +471,6 @@ export class AiConversationRestoreService {
 
   private validRestoreToken(token: string): boolean {
     return AiConversationRestoreService.RESTORE_TOKEN_PATTERN.test(token);
-  }
-
-  private runtimeOptions(value: unknown): AiRuntimeOptions | undefined {
-    return value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? {...value as AiRuntimeOptions} : undefined;
   }
 
   private permissionMode(value: unknown) {

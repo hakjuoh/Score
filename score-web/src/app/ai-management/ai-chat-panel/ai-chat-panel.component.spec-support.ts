@@ -134,28 +134,15 @@ export function setupAiChatPanelSpec(): void {
     getConversationHistory: vi.fn(() => of([])),
     getAvailableModels: vi.fn(() => of([
       {name: 'claude-fable-5', displayName: 'Claude Fable 5', description: 'Claude model.',
-        provider: 'azure-foundry', defaultModel: true, defaultRuntime: 'default', runtimes: [
-          {name: 'default', displayName: 'Default', description: 'Default runtime.', settings: []},
-          {name: 'claude', displayName: 'Claude', description: 'Claude runtime.', settings: [
-            {name: 'permissionMode', displayName: 'Permission mode', description: 'Controls tool approval.',
-              type: 'select', defaultValue: 'default', options: [
-                {value: 'default', displayName: 'Default'}, {value: 'auto', displayName: 'Auto'}
-              ], minimum: null, maximum: null, step: null},
-            {name: 'maxTurns', displayName: 'Maximum turns', description: 'Limits agent turns.',
-              type: 'number', defaultValue: 20, options: [], minimum: 1, maximum: 100, step: 1},
-            {name: 'verbose', displayName: 'Verbose', description: 'Shows verbose output.',
-              type: 'boolean', defaultValue: false, options: [], minimum: null, maximum: null, step: null}
-          ]}
-        ], defaultReasoningEffort: 'high', reasoningEfforts: [
+        provider: 'azure-foundry', defaultModel: true,
+        defaultReasoningEffort: 'high', reasoningEfforts: [
           {name: 'low', displayName: 'Low', description: 'Fast responses.'},
           {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'},
           {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
         ]},
       {name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
-        provider: 'azure-openai', defaultModel: false, defaultRuntime: 'default', runtimes: [
-          {name: 'default', displayName: 'Default', description: 'Default runtime.', settings: []},
-          {name: 'openai', displayName: 'OpenAI', description: 'OpenAI runtime.', settings: []}
-        ], defaultReasoningEffort: 'medium', reasoningEfforts: [
+        provider: 'azure-openai', defaultModel: false,
+        defaultReasoningEffort: 'medium', reasoningEfforts: [
           {name: 'low', displayName: 'Low', description: 'Fast responses.'},
           {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'},
           {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
@@ -204,7 +191,7 @@ export function setupAiChatPanelSpec(): void {
       {provide: AiChatCommandService, useValue: {decide: () => ({kind: 'none'}), suggestions: () => []}},
       AiConfirmedMutationRequestCoordinator,
       {provide: AiChatContextService, useValue: {
-        nextContextUpdate: () => ({includesRouteRegistry: false})
+        nextContextUpdate: () => ({routeManifest: {schemaVersion: 1, routes: []}})
       }},
       {provide: AiConversationRestoreService, useValue: {
         reset: vi.fn(), cancel: vi.fn(), expectAttempt: vi.fn(),

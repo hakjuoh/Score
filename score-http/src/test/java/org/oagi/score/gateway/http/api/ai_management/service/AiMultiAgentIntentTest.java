@@ -99,6 +99,6 @@ class AiMultiAgentIntentTest {
 
     private ChatRequest request(String prompt, AiMultiAgentOptions options) {
         return new ChatRequest(prompt, "request-1", null, "conversation-1", null,
-                List.of(), null, "model", "high", "default", Map.of(), "ask", options);
+                List.of(), null, "model", "high", "ask", options, null, null);
     }
 }

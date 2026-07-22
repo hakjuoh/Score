@@ -13,7 +13,6 @@ import {
   AiElicitationResponse,
   AiMutationInteraction,
   AiMutationPermissionMode,
-  AiChatRuntimeSettingInfo,
   AiChatToolStatus,
   AiReasoningEffortInfo
 } from './domain/ai-chat-panel.model';
@@ -52,16 +51,12 @@ export class AiChatMessageListComponent implements OnChanges {
   @Input() attachments: AiChatAttachment[] = [];
   @Input() pending = false;
   @Input() modelSettingsOpen = false;
-  @Input() runtimeSettingsOpen = false;
   @Input() permissionSettingsOpen = false;
   @Input() availableModels: AiChatModelInfo[] = [];
   @Input() modelDraftName = '';
   @Input() modelDraftReasoningEffort = '';
-  @Input() runtimeDraft = '';
-  @Input() runtimeDraftOptions: Record<string, unknown> = {};
   @Input() selectedModelName = '';
   @Input() selectedReasoningEffort = '';
-  @Input() selectedRuntime = '';
   @Input() permissionMode: AiMutationPermissionMode = 'ask';
   @Input() permissionDraft: AiMutationPermissionMode = 'ask';
   @Input() agentFocus?: AiAgentActivity;
@@ -91,10 +86,6 @@ export class AiChatMessageListComponent implements OnChanges {
   @Output() modelDraftReasoningEffortChange = new EventEmitter<string>();
   @Output() modelSettingsApplied = new EventEmitter<void>();
   @Output() modelSettingsCancelled = new EventEmitter<void>();
-  @Output() runtimeDraftChange = new EventEmitter<string>();
-  @Output() runtimeDraftOptionChange = new EventEmitter<{name: string; value: unknown}>();
-  @Output() runtimeSettingsApplied = new EventEmitter<void>();
-  @Output() runtimeSettingsCancelled = new EventEmitter<void>();
   @Output() permissionDraftChange = new EventEmitter<AiMutationPermissionMode>();
   @Output() permissionSettingsApplied = new EventEmitter<void>();
   @Output() permissionSettingsCancelled = new EventEmitter<void>();
@@ -238,52 +229,9 @@ export class AiChatMessageListComponent implements OnChanges {
       || this.selectedReasoningEffort;
   }
 
-  get selectedRuntimeDisplayName(): string {
-    return this.runtimeOptions.find(runtime => runtime.name === this.selectedRuntime)?.displayName
-      || this.selectedRuntime;
-  }
-
   get permissionDisplayName(): string {
     return this.permissionOptions.find(option => option.value === this.permissionMode)?.name
       || this.permissionMode;
-  }
-
-  get runtimeOptions() {
-    return this.selectedModel?.runtimes?.length ? this.selectedModel.runtimes : [{
-      name: 'default', displayName: 'Default', description: 'Uses the Default runtime.', settings: []
-    }];
-  }
-
-  get runtimeDraftSettings(): AiChatRuntimeSettingInfo[] {
-    return this.runtimeOptions.find(runtime => runtime.name === this.runtimeDraft)?.settings || [];
-  }
-
-  runtimeDraftOption(name: string): unknown {
-    return this.runtimeDraftOptions[name];
-  }
-
-  runtimeDraftTextOption(name: string): string {
-    const value = this.runtimeDraftOption(name);
-    return value == null ? '' : String(value);
-  }
-
-  runtimeDraftBooleanOption(name: string): boolean {
-    return this.runtimeDraftOption(name) === true;
-  }
-
-  changeRuntimeDraftOption(setting: AiChatRuntimeSettingInfo, event: Event): void {
-    const control = event.target as HTMLInputElement | HTMLSelectElement;
-    let value: unknown = control.value;
-    if (setting.type === 'boolean') {
-      value = (control as HTMLInputElement).checked;
-    } else if (setting.type === 'number') {
-      const numberValue = (control as HTMLInputElement).valueAsNumber;
-      if (!Number.isFinite(numberValue)) {
-        return;
-      }
-      value = numberValue;
-    }
-    this.runtimeDraftOptionChange.emit({name: setting.name, value});
   }
 
   agentGroupSummary(message: AiChatMessage): string {

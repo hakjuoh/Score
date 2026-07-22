@@ -1,7 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.workflow;
 
 import org.junit.jupiter.api.Test;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChatExecutor;
 
 import java.time.Duration;
 import java.util.List;
@@ -40,7 +40,7 @@ class WorkflowCompositionTest {
 
             WorkflowResult result = new ChainWorkflow(
                     "root", List.of(routed, parallel, orchestrated))
-                    .process(WorkflowContext.root(mock(AiRuntime.Context.class)));
+                    .process(WorkflowContext.root(mock(AiChatExecutor.Context.class)));
 
             assertThat(result.output()).isEqualTo(
                     "final:2:left:classified|right:classified");
@@ -62,7 +62,7 @@ class WorkflowCompositionTest {
                 (context, result, evaluation, iteration) -> context.withUpstream(List.of(result)));
 
         WorkflowResult result = workflow.process(
-                WorkflowContext.root(mock(AiRuntime.Context.class)));
+                WorkflowContext.root(mock(AiChatExecutor.Context.class)));
 
         assertThat(result.output()).isEqualTo("result-2");
         assertThat(result.metadata()).containsEntry("workflow_iterations", 2)
@@ -321,6 +321,6 @@ class WorkflowCompositionTest {
     }
 
     private WorkflowContext context() {
-        return WorkflowContext.root(mock(AiRuntime.Context.class));
+        return WorkflowContext.root(mock(AiChatExecutor.Context.class));
     }
 }

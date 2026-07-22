@@ -40,7 +40,7 @@ class AiMutationToolGuardTest {
     private final AiMutationToolGuard guard = new AiMutationToolGuard(confirmations, requests);
     private final ScoreUser requester = mock(ScoreUser.class);
     private final ChatRequest request = new ChatRequest("change it", "request-1", null,
-            "conversation-1", null, List.of(), null, "model", "high", "default", Map.of());
+            "conversation-1", null, List.of(), null, "model", "high", null);
 
     @Test
     void permitsReadToolsWithoutConsultingMutationState() {
@@ -280,7 +280,7 @@ class AiMutationToolGuardTest {
 
     private ChatRequest request(String permissionMode, MutationConfirmation confirmation) {
         return new ChatRequest("change it", "request-1", null, "conversation-1",
-                null, List.of(), confirmation, "model", "high", "default", Map.of(), permissionMode);
+                null, List.of(), confirmation, "model", "high", permissionMode);
     }
 
     private ToolCallback tool(String name, String result) {

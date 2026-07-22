@@ -2,7 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowNode;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChatExecutor;
 import org.oagi.score.gateway.http.api.ai_management.workflow.ChainWorkflow;
 import org.oagi.score.gateway.http.api.ai_management.workflow.Workflow;
 import org.oagi.score.gateway.http.api.ai_management.workflow.WorkflowContext;
@@ -41,7 +41,7 @@ class AiWorkflowCompilerTest {
             AiWorkflowNode root = node("root", "custom_chain",
                     List.of(node("leaf", "direct", List.of())));
 
-            WorkflowResult result = compiler.compile(root).process(runtimeContext());
+            WorkflowResult result = compiler.compile(root).process(executionContext());
 
             assertThat(result.workflowId()).isEqualTo("root");
             assertThat(result.output()).isEqualTo("executed:leaf");
@@ -96,7 +96,7 @@ class AiWorkflowCompilerTest {
                 null, null, children, Map.of());
     }
 
-    private WorkflowContext runtimeContext() {
-        return WorkflowContext.root(mock(AiRuntime.Context.class));
+    private WorkflowContext executionContext() {
+        return WorkflowContext.root(mock(AiChatExecutor.Context.class));
     }
 }

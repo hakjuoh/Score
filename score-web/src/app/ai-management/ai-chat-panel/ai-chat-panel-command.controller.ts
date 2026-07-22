@@ -20,10 +20,6 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
       this.openModelSettings(commandText);
       return;
     }
-    if (localCommand === 'runtime') {
-      this.openRuntimeSettings(commandText);
-      return;
-    }
     if (localCommand === 'permissions') {
       this.openPermissionSettings(commandText);
       return;
@@ -49,18 +45,6 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
 
   protected finishModelSettings(displayName: string, reasoningEffort: string): void {
     this.settingsService.finishModel(this.state, displayName, reasoningEffort);
-    this.scrollToBottom(true);
-    this.focusPrompt();
-  }
-
-  protected openRuntimeSettings(commandText: string): void {
-    this.settingsService.openRuntime(this.state, commandText);
-    this.resizePromptInput();
-    this.scrollToBottom(true);
-  }
-
-  protected finishRuntimeSettings(runtimeDisplayName: string): void {
-    this.settingsService.finishRuntime(this.state, runtimeDisplayName);
     this.scrollToBottom(true);
     this.focusPrompt();
   }
@@ -232,8 +216,6 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
     this.sessionPersistence.rememberLastConversation(conversationId);
     this.state.prepareConversationRestore(conversationId);
     this.resizePromptInput();
-    this.routeRegistrySent = false;
-    this.lastPageContextPath = undefined;
     this.scrollChatPaneToTop();
 
     this.requestSubscription?.unsubscribe();

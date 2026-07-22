@@ -14,8 +14,8 @@ class AiChatTrajectoryStepTest {
     void normalizesUnknownSourceAndVisibilityToSafeApplicationDefaults() {
         AiChatTrajectoryStep step = new AiChatTrajectoryStep(
                 "request-1", "future-source", "progress", "future-visibility",
-                "Working", null, null, null, null, Map.of(),
-                null, null, null, Map.of(), 0, null, Instant.EPOCH);
+                "Working", null, null, null,
+                null, Map.of(), null, Map.of(), 0, null, Instant.EPOCH);
 
         assertThat(step.source()).isEqualTo("system");
         assertThat(step.visibility()).isEqualTo("debug");
@@ -27,8 +27,8 @@ class AiChatTrajectoryStepTest {
     void rejectsIncompleteSettingsChangeWithoutInventingDefaults() {
         assertThatThrownBy(() -> new AiChatTrajectoryStep(
                 "request-1", "system", "settings_change", "debug",
-                "Settings changed", null, "model", null, "runtime", Map.of(),
-                null, null, null, Map.of(), 0, null, Instant.EPOCH))
+                "Settings changed", null, "model", null,
+                null, Map.of(), null, Map.of(), 0, null, Instant.EPOCH))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("settings_change", "reasoningEffort", "no safe defaults");
     }

@@ -27,8 +27,6 @@ class V3_6_0AiChatSettingsSchemaTest {
 
         assertFalse(conversationTable.contains("`model_name`"));
         assertFalse(conversationTable.contains("`reasoning_effort`"));
-        assertFalse(conversationTable.contains("`agent_runtime`"));
-        assertFalse(conversationTable.contains("`runtime_options_json`"));
         assertFalse(migration.contains("CONSTRAINT `ai_chat_step_settings_change_ck`"));
         assertTrue(migration.contains("`ai_chat_step_settings_idx`"
                 + " (`ai_chat_conversation_id`, `message_kind`, `step_sequence`)"));

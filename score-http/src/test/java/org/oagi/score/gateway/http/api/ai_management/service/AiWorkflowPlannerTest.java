@@ -6,8 +6,8 @@ import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntimeRegistry;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChatExecutor;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChatExecutor;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -28,11 +28,11 @@ class AiWorkflowPlannerTest {
 
     @Test
     void letsTheModelChooseParallelExecutionFromThePromptWithoutClientSettings() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                executor, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {
                   "workflow":"parallel",
                   "toolRequired":true,
@@ -58,9 +58,8 @@ class AiWorkflowPlannerTest {
         when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
         ChatRequest request = new ChatRequest(
                 "Compare the current data for these two BODs.", "request-1", null,
-                "conversation-1", null, List.of(), null, "model", "high", "default",
-                Map.of(), "ask");
-        AiRuntime.Context context = new AiRuntime.Context(request, List.of(),
+                "conversation-1", null, List.of(), null, "model", "high", "ask");
+        AiChatExecutor.Context context = new AiChatExecutor.Context(request, List.of(),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root);
 
         AiWorkflowPlan plan = planner.plan(context);
@@ -71,21 +70,21 @@ class AiWorkflowPlannerTest {
         assertThat(plan.tasks()).hasSize(2)
                 .extracting(AiWorkflowPlan.Task::agentId)
                 .containsExactly("evidence-researcher", "evidence-researcher");
-        ArgumentCaptor<AiRuntime.Context> planning = ArgumentCaptor.forClass(AiRuntime.Context.class);
-        verify(runtimes).execute(eq("default"), planning.capture());
+        ArgumentCaptor<AiChatExecutor.Context> planning = ArgumentCaptor.forClass(AiChatExecutor.Context.class);
+        verify(executor).execute(planning.capture());
         assertThat(planning.getValue().toolsEnabled()).isFalse();
-        assertThat(planning.getValue().toolPolicy()).isEqualTo(AiRuntime.ToolPolicy.NONE);
+        assertThat(planning.getValue().toolPolicy()).isEqualTo(AiChatExecutor.ToolPolicy.NONE);
         assertThat(planning.getValue().streamVisibleContent()).isFalse();
         assertThat(request.multiAgent()).isEqualTo(AiMultiAgentOptions.single());
     }
 
     @Test
     void expandsAModelSelectedParallelWorkflowToTwoIndependentTasks() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                executor, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {
                   "workflow":"parallel",
                   "toolRequired":true,
@@ -107,10 +106,9 @@ class AiWorkflowPlannerTest {
         when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
         ChatRequest request = new ChatRequest(
                 "Compare the current records independently.", "request-1", null,
-                "conversation-1", null, List.of(), null, "model", "high", "default",
-                Map.of(), "ask");
+                "conversation-1", null, List.of(), null, "model", "high", "ask");
 
-        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request, List.of(),
+        AiWorkflowPlan plan = planner.plan(new AiChatExecutor.Context(request, List.of(),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root));
 
         assertThat(plan.workflow()).isEqualTo("parallel");
@@ -121,11 +119,11 @@ class AiWorkflowPlannerTest {
 
     @Test
     void sendsRecentConversationToThePlannerAndFailsClosedForActionFollowUps() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                executor, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {
                   "workflow":"direct",
                   "toolRequired":false,
@@ -142,9 +140,8 @@ class AiWorkflowPlannerTest {
         when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
         ChatRequest request = new ChatRequest(
                 "add additional schemes", "request-2", null,
-                "conversation-1", null, List.of(), null, "model", "medium", "default",
-                Map.of(), "auto");
-        AiRuntime.Context context = new AiRuntime.Context(request, List.of(
+                "conversation-1", null, List.of(), null, "model", "medium", "auto");
+        AiChatExecutor.Context context = new AiChatExecutor.Context(request, List.of(
                 new UserMessage("create a sample business context"),
                 new AssistantMessage("Created business context 73. I can add values next.")),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root);
@@ -154,8 +151,8 @@ class AiWorkflowPlannerTest {
         assertThat(plan.toolsNeeded()).isTrue();
         assertThat(plan.workflow()).isEqualTo("direct");
         assertThat(plan.guideMessage()).isNotBlank();
-        ArgumentCaptor<AiRuntime.Context> planning = ArgumentCaptor.forClass(AiRuntime.Context.class);
-        verify(runtimes).execute(eq("default"), planning.capture());
+        ArgumentCaptor<AiChatExecutor.Context> planning = ArgumentCaptor.forClass(AiChatExecutor.Context.class);
+        verify(executor).execute(planning.capture());
         assertThat(planning.getValue().userMessage().getText())
                 .isEqualTo("Return the workflow plan for the untrusted input above.");
         assertThat(((SystemMessage) planning.getValue().history().getFirst()).getText())
@@ -170,11 +167,11 @@ class AiWorkflowPlannerTest {
 
     @Test
     void keepsAConversationalFollowUpToolFreeWhenThePlannerSaysNoTools() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                executor, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {"workflow":"direct","toolRequired":false,"guideMessage":null,
                  "activeVerb":"Answering","completedVerb":"Answered",
                  "synthesisGuideMessage":null,"synthesisActiveVerb":"Answering",
@@ -184,9 +181,9 @@ class AiWorkflowPlannerTest {
         when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
         ChatRequest request = new ChatRequest(
                 "thanks", "request-2", null, "conversation-1", null, List.of(), null,
-                "model", "medium", "default", Map.of(), "ask");
+                "model", "medium", "ask");
 
-        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request,
+        AiWorkflowPlan plan = planner.plan(new AiChatExecutor.Context(request,
                 List.of(new AssistantMessage("The lookup is complete.")),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root));
 
@@ -196,11 +193,11 @@ class AiWorkflowPlannerTest {
 
     @Test
     void preservesAgentWorkflowForAMutationFollowUpWhenTheModelReturnsNoTasks() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                executor, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {"workflow":"chain","toolRequired":true,
                  "guideMessage":"I'll prepare the update.",
                  "activeVerb":"Preparing update","completedVerb":"Prepared update",
@@ -211,9 +208,9 @@ class AiWorkflowPlannerTest {
         when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
         ChatRequest request = AiMultiAgentIntent.applyExplicitDelegation(new ChatRequest(
                 "add values using sub-agents", "request-2", null, "conversation-1", null,
-                List.of(), null, "model", "medium", "default", Map.of(), "auto"));
+                List.of(), null, "model", "medium", "auto"));
 
-        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request,
+        AiWorkflowPlan plan = planner.plan(new AiChatExecutor.Context(request,
                 List.of(new AssistantMessage("Created business context 75.")),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root));
 
@@ -227,11 +224,11 @@ class AiWorkflowPlannerTest {
 
     @Test
     void enforcesPersistedOrchestratorWorkflowForAnOrdinaryFollowUp() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                executor, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {"workflow":"direct","toolRequired":true,
                  "guideMessage":"I'll inspect the record.",
                  "activeVerb":"Inspecting","completedVerb":"Inspected",
@@ -242,10 +239,10 @@ class AiWorkflowPlannerTest {
         when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
         ChatRequest request = new ChatRequest(
                 "Show business context 75", "request-3", null, "conversation-1", null,
-                List.of(), null, "model", "medium", "default", Map.of(), "ask",
-                AiMultiAgentOptions.single(), "orchestrator_workers");
+                List.of(), null, "model", "medium", "ask",
+                AiMultiAgentOptions.single(), "orchestrator_workers", null);
 
-        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request, List.of(),
+        AiWorkflowPlan plan = planner.plan(new AiChatExecutor.Context(request, List.of(),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root));
 
         assertThat(plan.workflow()).isEqualTo("orchestrator_workers");
@@ -254,11 +251,11 @@ class AiWorkflowPlannerTest {
 
     @Test
     void enforcesPersistedDirectWorkflowWithoutDisablingRequiredTools() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                executor, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {"workflow":"parallel","toolRequired":true,
                  "guideMessage":"I'll inspect the record.",
                  "activeVerb":"Inspecting","completedVerb":"Inspected",
@@ -272,10 +269,10 @@ class AiWorkflowPlannerTest {
         when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
         ChatRequest request = new ChatRequest(
                 "Show business context 75", "request-4", null, "conversation-1", null,
-                List.of(), null, "model", "medium", "default", Map.of(), "ask",
-                AiMultiAgentOptions.single(), "direct");
+                List.of(), null, "model", "medium", "ask",
+                AiMultiAgentOptions.single(), "direct", null);
 
-        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request, List.of(),
+        AiWorkflowPlan plan = planner.plan(new AiChatExecutor.Context(request, List.of(),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root));
 
         assertThat(plan.workflow()).isEqualTo("direct");
@@ -285,11 +282,11 @@ class AiWorkflowPlannerTest {
 
     @Test
     void collapsesAnAutomaticSingleEvidenceWorkerFollowedByTheLead() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                executor, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {"root":{"id":"root","workflow":"chain","toolRequired":true,
                   "guideMessage":"I’ll verify the records and create them only if missing.",
                   "activeVerb":"Handling context records","completedVerb":"Handled context records",
@@ -319,8 +316,8 @@ class AiWorkflowPlannerTest {
         ChatRequest request = new ChatRequest(
                 "Create the context scheme and category if they are missing.",
                 "request-4", null, "conversation-1", null, List.of(), null,
-                "model", "medium", "default", Map.of(), "ask");
-        AiRuntime.Context context = new AiRuntime.Context(request,
+                "model", "medium", "ask");
+        AiChatExecutor.Context context = new AiChatExecutor.Context(request,
                 List.of(new AssistantMessage("The prior result referenced scheme ID 34 and category ID 44.")),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root);
 
@@ -337,11 +334,11 @@ class AiWorkflowPlannerTest {
 
     @Test
     void normalizesARecursiveComposedWorkflowPlan() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader());
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, catalog, new ObjectMapper(), new DefaultResourceLoader());
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+                executor, catalog, new ObjectMapper(), new DefaultResourceLoader());
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {"root":{"id":"root","workflow":"chain","toolRequired":true,
                   "guideMessage":"I’ll gather and verify the current evidence.",
                   "activeVerb":"Investigating","completedVerb":"Investigated",
@@ -368,10 +365,10 @@ class AiWorkflowPlannerTest {
         when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
         ChatRequest request = new ChatRequest(
                 "Investigate this current record with agents.", "request-5", null,
-                "conversation-1", null, List.of(), null, "model", "medium", "default",
-                Map.of(), "ask", new AiMultiAgentOptions(true, 3, "balanced"));
+                "conversation-1", null, List.of(), null, "model", "medium", "ask",
+                new AiMultiAgentOptions(true, 3, "balanced"), null, null);
 
-        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request, List.of(),
+        AiWorkflowPlan plan = planner.plan(new AiChatExecutor.Context(request, List.of(),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root));
 
         assertThat(plan.root()).isNotNull();
@@ -383,13 +380,13 @@ class AiWorkflowPlannerTest {
 
     @Test
     void countsPlainParallelBranchesAgainstTheWorkerLimit() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, new AiAgentCatalog(new DefaultResourceLoader()),
+                executor, new AiAgentCatalog(new DefaultResourceLoader()),
                 new ObjectMapper(), new DefaultResourceLoader());
         // Four plain (non-worker) branches each consume a concurrent model
         // execution, so a three-agent limit must reject the graph and fall back.
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {"root":{"id":"root","workflow":"parallel","toolRequired":true,
                   "guideMessage":null,"activeVerb":"Working","completedVerb":"Completed",
                   "synthesisGuideMessage":null,"synthesisActiveVerb":"Synthesizing",
@@ -401,10 +398,10 @@ class AiWorkflowPlannerTest {
         when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
         ChatRequest request = new ChatRequest(
                 "Investigate this current record.", "request-6", null,
-                "conversation-1", null, List.of(), null, "model", "medium", "default",
-                Map.of(), "ask", new AiMultiAgentOptions(true, 3, "balanced"));
+                "conversation-1", null, List.of(), null, "model", "medium", "ask",
+                new AiMultiAgentOptions(true, 3, "balanced"), null, null);
 
-        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request, List.of(),
+        AiWorkflowPlan plan = planner.plan(new AiChatExecutor.Context(request, List.of(),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root));
 
         assertThat(plan.root()).isNull();
@@ -414,11 +411,11 @@ class AiWorkflowPlannerTest {
 
     @Test
     void acceptsPlainParallelBranchesWithinTheWorkerLimit() {
-        AiRuntimeRegistry runtimes = mock(AiRuntimeRegistry.class);
+        AiChatExecutor executor = mock(AiChatExecutor.class);
         AiWorkflowPlanner planner = new AiWorkflowPlanner(
-                runtimes, new AiAgentCatalog(new DefaultResourceLoader()),
+                executor, new AiAgentCatalog(new DefaultResourceLoader()),
                 new ObjectMapper(), new DefaultResourceLoader());
-        when(runtimes.execute(eq("default"), any())).thenReturn(new AiRuntime.Result("""
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("""
                 {"root":{"id":"root","workflow":"parallel","toolRequired":true,
                   "guideMessage":null,"activeVerb":"Working","completedVerb":"Completed",
                   "synthesisGuideMessage":null,"synthesisActiveVerb":"Synthesizing",
@@ -430,10 +427,10 @@ class AiWorkflowPlannerTest {
         when(root.fork(any())).thenReturn(mock(AiTrajectoryRecorder.class));
         ChatRequest request = new ChatRequest(
                 "Investigate this current record.", "request-7", null,
-                "conversation-1", null, List.of(), null, "model", "medium", "default",
-                Map.of(), "ask", new AiMultiAgentOptions(true, 3, "balanced"));
+                "conversation-1", null, List.of(), null, "model", "medium", "ask",
+                new AiMultiAgentOptions(true, 3, "balanced"), null, null);
 
-        AiWorkflowPlan plan = planner.plan(new AiRuntime.Context(request, List.of(),
+        AiWorkflowPlan plan = planner.plan(new AiChatExecutor.Context(request, List.of(),
                 new UserMessage(request.prompt()), mock(ScoreUser.class), root));
 
         assertThat(plan.root()).isNotNull();

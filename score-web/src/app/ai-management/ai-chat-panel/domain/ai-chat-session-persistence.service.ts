@@ -6,8 +6,7 @@ import {
   AiChatAttachment,
   AiChatDock,
   AiChatPanelTab,
-  AiMutationPermissionMode,
-  AiRuntimeOptions
+  AiMutationPermissionMode
 } from './ai-chat-panel.model';
 
 export const AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY = 'score.ai-chat.selection-preference';
@@ -35,8 +34,6 @@ interface AiChatSelectionPreference {
   version: number;
   modelName: string;
   reasoningEffort: string;
-  runtime: string;
-  runtimeOptions: AiRuntimeOptions;
   permissionMode: AiMutationPermissionMode;
 }
 
@@ -62,18 +59,10 @@ export class AiChatSessionPersistenceService {
     const reasoningEffort = model.reasoningEfforts
       .some(candidate => candidate.name === requestedReasoningEffort)
       ? requestedReasoningEffort : model.defaultReasoningEffort;
-    const requestedRuntime = typeof preference?.runtime === 'string' ? preference.runtime : '';
-    const runtime = model.runtimes.some(candidate => candidate.name === requestedRuntime)
-      ? requestedRuntime : model.defaultRuntime || 'default';
-    const requestedRuntimeOptions = this.isRecord(preference?.runtimeOptions)
-      ? preference.runtimeOptions : {};
     const requestedPermissionMode = preference?.permissionMode;
 
     state.selectedModelName = model.name;
     state.selectedReasoningEffort = reasoningEffort;
-    state.selectRuntime(
-      runtime, state.runtimeOptionsFor(runtime, requestedRuntimeOptions, model)
-    );
     state.permissionMode = requestedPermissionMode === 'auto'
       || requestedPermissionMode === 'full_access' ? requestedPermissionMode : 'ask';
     state.permissionDraft = state.permissionMode;
@@ -81,15 +70,13 @@ export class AiChatSessionPersistenceService {
   }
 
   persistSelection(state: AiChatPanelState): void {
-    if (!state.selectedModelName || !state.selectedReasoningEffort || !state.selectedRuntime) {
+    if (!state.selectedModelName || !state.selectedReasoningEffort) {
       return;
     }
     const preference: AiChatSelectionPreference = {
       version: AI_CHAT_SELECTION_PREFERENCE_VERSION,
       modelName: state.selectedModelName,
       reasoningEffort: state.selectedReasoningEffort,
-      runtime: state.selectedRuntime,
-      runtimeOptions: {...state.selectedRuntimeOptions},
       permissionMode: state.permissionMode
     };
     try {

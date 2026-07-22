@@ -24,15 +24,14 @@ class AiMultiAgentOptionsTest {
     void normalizesAndPreservesTheSocketSnapshot() {
         AiMultiAgentOptions options = new AiMultiAgentOptions(true, 4, " Verification ");
         AiChatSocketRequest socket = new AiChatSocketRequest("request-1", "help", null,
-                "conversation-1", null, List.of(), null, "model", "high", "openai",
-                Map.of("verbosity", "low"), "ask", options);
+                "conversation-1", null, List.of(), null, "model", "high", "ask", options, null);
 
         ChatRequest request = socket.toChatRequest();
 
         assertThat(request.multiAgent().active()).isTrue();
         assertThat(request.multiAgent().maxAgents()).isEqualTo(4);
         assertThat(request.multiAgent().strategy()).isEqualTo("verification");
-        assertThat(request.withConversation("conversation-2", "model", "high", "openai", Map.of())
+        assertThat(request.withConversation("conversation-2", "model", "high")
                 .multiAgent()).isEqualTo(options);
     }
 

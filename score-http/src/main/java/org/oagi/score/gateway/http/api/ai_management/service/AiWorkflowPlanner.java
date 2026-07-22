@@ -7,8 +7,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowNode;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntimeRegistry;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChatExecutor;
 import org.oagi.score.gateway.http.api.ai_management.workflow.WorkflowTypes;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiSystemPrompt;
 import org.springframework.ai.chat.messages.Message;
@@ -44,37 +43,37 @@ public final class AiWorkflowPlanner {
                     + "add|create|change|update|delete|remove|clean(?:\\s+up)?|proceed|continue|"
                     + "apply|set|assign|link|associate|include|replace|rename|modify|"
                     + "show|list|get|find|search|check|verify|read|retrieve)\\b");
-    private final AiRuntimeRegistry runtimes;
+    private final AiChatExecutor executor;
     private final AiAgentCatalog agents;
     private final ObjectMapper objectMapper;
     private final ScoreAiSystemPrompt plannerPrompt;
 
-    public AiWorkflowPlanner(AiRuntimeRegistry runtimes, AiAgentCatalog agents,
+    public AiWorkflowPlanner(AiChatExecutor executor, AiAgentCatalog agents,
                              ObjectMapper objectMapper, ResourceLoader resources) {
-        this.runtimes = runtimes;
+        this.executor = executor;
         this.agents = agents;
         this.objectMapper = objectMapper;
         this.plannerPrompt = new ScoreAiSystemPrompt(resources.getResource(PROMPT));
     }
 
-    public AiWorkflowPlan plan(AiRuntime.Context context) {
+    public AiWorkflowPlan plan(AiChatExecutor.Context context) {
         return plan(context, List.of());
     }
 
-    public AiWorkflowPlan plan(AiRuntime.Context context, List<AiWorkflowFeedback> feedback) {
+    public AiWorkflowPlan plan(AiChatExecutor.Context context, List<AiWorkflowFeedback> feedback) {
         AiTrajectoryRecorder recorder = context.recorder().fork(Map.of(
                 "node_id", context.request().requestId() + ":workflow-planner",
                 "agent_name", "workflow-planner",
                 "agent_role", "workflow selection",
                 "depth", 0));
         String renderedPrompt = plannerPrompt.render(planningPromptParameters(context, feedback));
-        AiRuntime.Context planning = new AiRuntime.Context(
+        AiChatExecutor.Context planning = new AiChatExecutor.Context(
                 context.request().withMultiAgent(AiMultiAgentOptions.single()),
                 List.of(new SystemMessage(renderedPrompt)),
                 new UserMessage("Return the workflow plan for the untrusted input above."),
-                context.requester(), recorder, false, false, AiRuntime.ToolPolicy.NONE, 0);
+                context.requester(), recorder, false, false, AiChatExecutor.ToolPolicy.NONE, 0);
         try {
-            String raw = runtimes.execute(context.request().runtime(), planning).answer();
+            String raw = executor.execute(planning).answer();
             return normalize(parse(raw), context);
         } catch (RuntimeException failure) {
             recorder.lifecycle("workflow_plan_fallback",
@@ -85,7 +84,7 @@ public final class AiWorkflowPlanner {
     }
 
     private Map<String, Object> planningPromptParameters(
-            AiRuntime.Context context, List<AiWorkflowFeedback> feedback) {
+            AiChatExecutor.Context context, List<AiWorkflowFeedback> feedback) {
         Map<String, Object> envelope = new LinkedHashMap<>();
         envelope.put("userRequest", json(context.request().prompt()));
         envelope.put("recentConversation", json(recentConversation(context.history())));
@@ -126,7 +125,7 @@ public final class AiWorkflowPlanner {
         }
     }
 
-    private AiWorkflowPlan normalize(AiWorkflowPlan plan, AiRuntime.Context context) {
+    private AiWorkflowPlan normalize(AiWorkflowPlan plan, AiChatExecutor.Context context) {
         if (plan == null) throw new IllegalArgumentException("Workflow plan is missing.");
         if (plan.root() != null) {
             return normalizeComposedPlan(plan, context);
@@ -199,7 +198,7 @@ public final class AiWorkflowPlanner {
                 verb(plan.synthesisCompletedVerb(), "Synthesized"), tasks);
     }
 
-    private AiWorkflowPlan normalizeComposedPlan(AiWorkflowPlan plan, AiRuntime.Context context) {
+    private AiWorkflowPlan normalizeComposedPlan(AiWorkflowPlan plan, AiChatExecutor.Context context) {
         String activeWorkflow = activeWorkflow(context);
         AtomicInteger nodeCount = new AtomicInteger();
         AtomicInteger workerCount = new AtomicInteger();
@@ -267,7 +266,7 @@ public final class AiWorkflowPlanner {
     }
 
     private AiWorkflowNode normalizeNode(
-            AiWorkflowNode node, AiRuntime.Context context, String path, int depth,
+            AiWorkflowNode node, AiChatExecutor.Context context, String path, int depth,
             AtomicInteger nodeCount, AtomicInteger workerCount) {
         if (node == null) throw new IllegalArgumentException("A workflow node is missing.");
         if (depth > MAX_WORKFLOW_DEPTH || nodeCount.incrementAndGet() > MAX_WORKFLOW_NODES) {
@@ -332,7 +331,7 @@ public final class AiWorkflowPlanner {
     }
 
     private AiWorkflowPlan.Task normalizeTask(
-            AiWorkflowPlan.Task task, AiRuntime.Context context, AtomicInteger workerCount) {
+            AiWorkflowPlan.Task task, AiChatExecutor.Context context, AtomicInteger workerCount) {
         if (task == null) return null;
         if (!agentWorkflowsAllowed(context)) {
             throw new IllegalArgumentException("Worker workflows are disabled for this request.");
@@ -352,7 +351,7 @@ public final class AiWorkflowPlanner {
      * Worker leaves are excluded here because {@link #normalizeTask} already counted them.
      */
     private void countConcurrentBranches(
-            List<AiWorkflowNode> children, AiRuntime.Context context, AtomicInteger workerCount) {
+            List<AiWorkflowNode> children, AiChatExecutor.Context context, AtomicInteger workerCount) {
         for (AiWorkflowNode child : children) {
             if (child.task() != null) continue;
             if (workerCount.incrementAndGet() > context.request().multiAgent().maxAgents()) {
@@ -418,7 +417,7 @@ public final class AiWorkflowPlanner {
         return result.length() <= 100 ? result : result.substring(0, 100);
     }
 
-    private AiWorkflowPlan fallback(AiRuntime.Context context) {
+    private AiWorkflowPlan fallback(AiChatExecutor.Context context) {
         String activeWorkflow = activeWorkflow(context);
         boolean explicitAgents = agentWorkflowsAllowed(context)
                 && activeWorkflow != null && !WorkflowTypes.DIRECT.equals(activeWorkflow);
@@ -485,18 +484,18 @@ public final class AiWorkflowPlanner {
         return List.copyOf(messages);
     }
 
-    private boolean followUpToolIntent(AiRuntime.Context context) {
+    private boolean followUpToolIntent(AiChatExecutor.Context context) {
         return !context.history().isEmpty()
                 && StringUtils.hasText(context.request().prompt())
                 && FOLLOW_UP_TOOL_INTENT.matcher(context.request().prompt()).find();
     }
 
-    private boolean agentWorkflowsAllowed(AiRuntime.Context context) {
+    private boolean agentWorkflowsAllowed(AiChatExecutor.Context context) {
         return context.request().mutationConfirmation() == null
                 && !WorkflowTypes.DIRECT.equals(activeWorkflow(context));
     }
 
-    private String activeWorkflow(AiRuntime.Context context) {
+    private String activeWorkflow(AiChatExecutor.Context context) {
         return StringUtils.hasText(context.request().activeWorkflow())
                 ? normalizedWorkflow(context.request().activeWorkflow()) : null;
     }

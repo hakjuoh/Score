@@ -40,8 +40,6 @@ public record AiChatTrajectoryData(
             String reasoningContent,
             String modelName,
             String reasoningEffort,
-            String runtime,
-            Map<String, Object> runtimeOptions,
             List<Map<String, Object>> toolCalls,
             Map<String, Object> observation,
             Map<String, Object> metrics,

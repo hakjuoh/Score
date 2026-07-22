@@ -1,6 +1,6 @@
 import {inject, Injectable} from '@angular/core';
 import {AI_RESOURCE_ROUTES} from './resource-routes/ai-resource-routes';
-import {AiResourceRoute} from './ai-chat-panel.model';
+import {AiResourceRoute, AiUiRouteManifest} from './ai-chat-panel.model';
 import {AuthService} from '../../../authentication/auth.service';
 
 @Injectable({
@@ -9,18 +9,33 @@ import {AuthService} from '../../../authentication/auth.service';
 export class AiRouteRegistryContextService {
   private auth = inject(AuthService);
 
-  registryContext(): string {
+  routeManifest(): AiUiRouteManifest {
+    return {
+      schemaVersion: 1,
+      routes: this.allowedRoutes().map(route => ({
+        resource: route.resource,
+        listPath: route.listPath,
+        detailPatterns: route.detailPatterns
+          ? {...route.detailPatterns}
+          : route.detailPattern ? {default: route.detailPattern} : {},
+        idFields: [...route.idFields],
+        linkableFields: [...route.linkableFields],
+        ...(route.listQuery ? {
+          listQuery: {
+            codec: route.listQuery.codec || 'plain',
+            defaultParams: {...(route.listQuery.defaultParams || {})},
+            allowedPlainParams: Object.keys(route.listQuery.allowedPlainParams || {}),
+            toolParamAliases: {...(route.listQuery.toolParamAliases || {})},
+            dateRangeParamAliases: {...(route.listQuery.dateRangeParamAliases || {})}
+          }
+        } : {})
+      }))
+    };
+  }
+
+  private allowedRoutes(): AiResourceRoute[] {
     const requesterRoles = new Set((this.auth.getUserToken()?.roles ?? []).map(role => role.toLowerCase()));
-    return AI_RESOURCE_ROUTES.filter(route => this.isAllowed(route, requesterRoles)).map(route => {
-      const detail = route.detailPattern ? `detail=${route.detailPattern}` :
-        route.detailPatterns ? `detailPatterns=${this.formatDetailPatterns(route.detailPatterns)}` :
-          'detail=none';
-      const idFields = route.idFields.length ? route.idFields.join('|') : 'none';
-      const linkableFields = route.linkableFields.length ? route.linkableFields.join('|') : 'none';
-      const roles = route.roles.length ? route.roles.join('|') : 'none';
-      const listQuery = route.listQuery ? `; listQuery=${this.formatListQuery(route.listQuery)}` : '';
-      return `- ${route.resource}: label=${route.label}; list=${route.listPath}; ${detail}; idFields=${idFields}; linkableFields=${linkableFields}; roles=${roles}${listQuery}`;
-    }).join('\n');
+    return AI_RESOURCE_ROUTES.filter(route => this.isAllowed(route, requesterRoles));
   }
 
   private isAllowed(route: AiResourceRoute, requesterRoles: Set<string>): boolean {
@@ -36,6 +51,7 @@ export class AiRouteRegistryContextService {
   formatListQuery(listQuery: NonNullable<AiResourceRoute['listQuery']>): string {
     return [
       `finalFormat=${listQuery.finalFormat}`,
+      listQuery.codec ? `codec=${listQuery.codec}` : undefined,
       listQuery.encoding ? `encoding=${listQuery.encoding}` : undefined,
       listQuery.formatterRule ? `formatterRule=${listQuery.formatterRule}` : undefined,
       listQuery.defaultParams ? `defaultParams=${this.formatObject(listQuery.defaultParams)}` : undefined,

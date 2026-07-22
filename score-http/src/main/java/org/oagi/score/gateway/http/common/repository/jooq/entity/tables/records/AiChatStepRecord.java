@@ -87,16 +87,16 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.source</code>. The ATIF source of the
-     * step: system, user, or agent.
+     * Setter for <code>oagi.ai_chat_step.source</code>. Expected ATIF sources
+     * are system, user, and agent; other values are handled by the application.
      */
     public void setSource(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.source</code>. The ATIF source of the
-     * step: system, user, or agent.
+     * Getter for <code>oagi.ai_chat_step.source</code>. Expected ATIF sources
+     * are system, user, and agent; other values are handled by the application.
      */
     public String getSource() {
         return (String) get(4);
@@ -119,16 +119,18 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.visibility</code>. The presentation
-     * scope of the step: visible or debug.
+     * Setter for <code>oagi.ai_chat_step.visibility</code>. Expected
+     * presentation scopes are visible and debug; other values are handled by
+     * the application.
      */
     public void setVisibility(String value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.visibility</code>. The presentation
-     * scope of the step: visible or debug.
+     * Getter for <code>oagi.ai_chat_step.visibility</code>. Expected
+     * presentation scopes are visible and debug; other values are handled by
+     * the application.
      */
     public String getVisibility() {
         return (String) get(6);
@@ -199,43 +201,11 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.agent_runtime</code>. The agent
-     * runtime selected for the conversation at this step.
-     */
-    public void setAgentRuntime(String value) {
-        set(11, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_chat_step.agent_runtime</code>. The agent
-     * runtime selected for the conversation at this step.
-     */
-    public String getAgentRuntime() {
-        return (String) get(11);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_chat_step.runtime_options_json</code>. JSON
-     * object containing runtime-specific options used for the step.
-     */
-    public void setRuntimeOptionsJson(String value) {
-        set(12, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_chat_step.runtime_options_json</code>. JSON
-     * object containing runtime-specific options used for the step.
-     */
-    public String getRuntimeOptionsJson() {
-        return (String) get(12);
-    }
-
-    /**
      * Setter for <code>oagi.ai_chat_step.tool_calls_json</code>. JSON array
      * containing tool calls requested by the model.
      */
     public void setToolCallsJson(String value) {
-        set(13, value);
+        set(11, value);
     }
 
     /**
@@ -243,7 +213,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * containing tool calls requested by the model.
      */
     public String getToolCallsJson() {
-        return (String) get(13);
+        return (String) get(11);
     }
 
     /**
@@ -251,7 +221,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * containing tool execution results observed by the agent.
      */
     public void setObservationJson(String value) {
-        set(14, value);
+        set(12, value);
     }
 
     /**
@@ -259,7 +229,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * containing tool execution results observed by the agent.
      */
     public String getObservationJson() {
-        return (String) get(14);
+        return (String) get(12);
     }
 
     /**
@@ -267,7 +237,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * containing token usage and other execution metrics.
      */
     public void setMetricsJson(String value) {
-        set(15, value);
+        set(13, value);
     }
 
     /**
@@ -275,7 +245,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * containing token usage and other execution metrics.
      */
     public String getMetricsJson() {
-        return (String) get(15);
+        return (String) get(13);
     }
 
     /**
@@ -283,7 +253,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * containing additional ATIF or application-specific step metadata.
      */
     public void setExtraJson(String value) {
-        set(16, value);
+        set(14, value);
     }
 
     /**
@@ -291,7 +261,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * containing additional ATIF or application-specific step metadata.
      */
     public String getExtraJson() {
-        return (String) get(16);
+        return (String) get(14);
     }
 
     /**
@@ -299,7 +269,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * language-model calls represented by the step.
      */
     public void setLlmCallCount(Integer value) {
-        set(17, value);
+        set(15, value);
     }
 
     /**
@@ -307,7 +277,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * language-model calls represented by the step.
      */
     public Integer getLlmCallCount() {
-        return (Integer) get(17);
+        return (Integer) get(15);
     }
 
     /**
@@ -315,7 +285,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * whether the step was copied into the model context (0 = False, 1 = True).
      */
     public void setIsCopiedContext(Byte value) {
-        set(18, value);
+        set(16, value);
     }
 
     /**
@@ -323,7 +293,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * whether the step was copied into the model context (0 = False, 1 = True).
      */
     public Byte getIsCopiedContext() {
-        return (Byte) get(18);
+        return (Byte) get(16);
     }
 
     /**
@@ -331,7 +301,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * the trajectory step was created.
      */
     public void setCreatedAt(LocalDateTime value) {
-        set(19, value);
+        set(17, value);
     }
 
     /**
@@ -339,7 +309,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * the trajectory step was created.
      */
     public LocalDateTime getCreatedAt() {
-        return (LocalDateTime) get(19);
+        return (LocalDateTime) get(17);
     }
 
     // -------------------------------------------------------------------------
@@ -365,7 +335,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     /**
      * Create a detached, initialised AiChatStepRecord
      */
-    public AiChatStepRecord(ULong aiChatStepId, ULong aiChatConversationId, Long stepSequence, String requestId, String source, String messageKind, String visibility, String message, String reasoningContent, String modelName, String reasoningEffort, String agentRuntime, String runtimeOptionsJson, String toolCallsJson, String observationJson, String metricsJson, String extraJson, Integer llmCallCount, Byte isCopiedContext, LocalDateTime createdAt) {
+    public AiChatStepRecord(ULong aiChatStepId, ULong aiChatConversationId, Long stepSequence, String requestId, String source, String messageKind, String visibility, String message, String reasoningContent, String modelName, String reasoningEffort, String toolCallsJson, String observationJson, String metricsJson, String extraJson, Integer llmCallCount, Byte isCopiedContext, LocalDateTime createdAt) {
         super(AiChatStep.AI_CHAT_STEP);
 
         setAiChatStepId(aiChatStepId);
@@ -379,8 +349,6 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
         setReasoningContent(reasoningContent);
         setModelName(modelName);
         setReasoningEffort(reasoningEffort);
-        setAgentRuntime(agentRuntime);
-        setRuntimeOptionsJson(runtimeOptionsJson);
         setToolCallsJson(toolCallsJson);
         setObservationJson(observationJson);
         setMetricsJson(metricsJson);

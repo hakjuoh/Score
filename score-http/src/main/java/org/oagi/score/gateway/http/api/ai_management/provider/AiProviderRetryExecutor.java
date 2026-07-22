@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.runtime;
+package org.oagi.score.gateway.http.api.ai_management.provider;
 
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;

@@ -83,7 +83,7 @@ public final class AiWorkflowCompiler {
     private List<WorkflowNodeCompiler> builtInCompilers() {
         return List.of(
                 compiler(WorkflowTypes.DIRECT, (node, context) -> new DirectWorkflow(node.id(),
-                        runtime -> context.executeLeaf(runtime, node))),
+                        execution -> context.executeLeaf(execution, node))),
                 compiler(WorkflowTypes.CHAIN, (node, context) -> new ChainWorkflow(
                         node.id(), context.compileChildren(node))),
                 compiler(WorkflowTypes.PARALLEL, (node, context) -> new ParallelizationWorkflow(

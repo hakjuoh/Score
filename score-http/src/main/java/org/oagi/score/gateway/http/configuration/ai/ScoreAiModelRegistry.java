@@ -8,15 +8,10 @@ import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 /** Resolves the models used by the connectCenter assistant. */
 @Component
 public class ScoreAiModelRegistry {
-
-    public static final String DEFAULT = "default";
-    public static final String CLAUDE = "claude";
-    public static final String OPENAI = "openai";
 
     private final ScoreAiProperties properties;
     private final Map<String, ChatModel> models;
@@ -66,20 +61,6 @@ public class ScoreAiModelRegistry {
                                 + resolvedModelName + "': " + requested));
     }
 
-    public String resolveRuntime(String modelName, String requestedRuntime) {
-        String resolvedModelName = resolveModelName(modelName);
-        List<RuntimeDescriptor> runtimes = runtimes(resolvedModelName);
-        String requested = StringUtils.hasText(requestedRuntime)
-                ? normalizeRuntime(requestedRuntime) : defaultRuntime(runtimes);
-        return runtimes.stream()
-                .map(RuntimeDescriptor::name)
-                .filter(runtime -> runtime.equalsIgnoreCase(requested))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "The requested AI runtime is not available for model '"
-                                + resolvedModelName + "': " + requested));
-    }
-
     public List<ModelDescriptor> availableModels() {
         String defaultModel = isAvailable() ? modelName() : null;
         return properties.getModels().entrySet().stream()
@@ -87,7 +68,6 @@ public class ScoreAiModelRegistry {
                 .map(entry -> new ModelDescriptor(entry.getKey(), displayName(entry), description(entry),
                         entry.getValue().getProvider(), entry.getKey().equals(defaultModel),
                         defaultReasoningEffort(entry.getValue()), reasoningEfforts(entry.getValue()),
-                        defaultRuntime(runtimes(entry.getKey())), runtimes(entry.getKey()),
                         contextBudget(entry.getValue())))
                 .toList();
     }
@@ -100,14 +80,14 @@ public class ScoreAiModelRegistry {
         return ChatClient.builder(model).defaultAdvisors(new VisibleTextResultAdvisor());
     }
 
-    public RuntimeModel runtimeModel(String modelName) {
+    public ModelConfiguration modelConfiguration(String modelName) {
         String resolvedModelName = resolveModelName(modelName);
         ScoreAiProperties.Model model = properties.getModels().get(resolvedModelName);
         ScoreAiProperties.Provider provider = properties.getProviders().get(model.getProvider());
-        ScoreAiProperties.RuntimeCapabilities capabilities = model.getRuntimeCapabilities();
+        ScoreAiProperties.ModelCapabilities capabilities = model.getModelCapabilities();
         String configuredModel = StringUtils.hasText(model.getModel())
                 ? model.getModel().strip() : resolvedModelName;
-        return new RuntimeModel(resolvedModelName, configuredModel, providerType(provider),
+        return new ModelConfiguration(resolvedModelName, configuredModel, providerType(provider),
                 model.getMaxTokens(), model.getTemperature(), model.getThinkingBudgetTokens(),
                 model.isAdaptiveThinking(), model.getOutputEffort(), model.getCacheStrategy(),
                 reasoningEfforts(model), capabilities.getReasoningModel(),
@@ -151,81 +131,12 @@ public class ScoreAiModelRegistry {
         }
         ScoreAiProperties.Provider provider = properties.getProviders().get(model.getProvider());
         return provider != null && StringUtils.hasText(provider.getKey())
-                && (StringUtils.hasText(provider.getBaseUrl()) || StringUtils.hasText(provider.getMessagesUrl()))
-                && !runtimes(modelName).isEmpty();
-    }
-
-    private List<RuntimeDescriptor> runtimes(String modelName) {
-        ScoreAiProperties.Model model = properties.getModels().get(modelName);
-        if (model == null) {
-            return List.of();
-        }
-        return Stream.concat(Stream.of(DEFAULT), model.getRuntimes().stream())
-                .filter(StringUtils::hasText)
-                .map(this::normalizeRuntime)
-                .distinct()
-                .filter(runtime -> supportsRuntime(modelName, model, runtime))
-                .map(this::runtimeDescriptor)
-                .toList();
-    }
-
-    private boolean supportsRuntime(String modelName, ScoreAiProperties.Model model, String runtime) {
-        ScoreAiProperties.Provider provider = properties.getProviders().get(model.getProvider());
-        if (provider == null) {
-            return false;
-        }
-        String type = providerType(provider);
-        return switch (runtime) {
-            case DEFAULT -> models.containsKey(modelName);
-            case CLAUDE -> "anthropic".equals(type);
-            case OPENAI -> "azure-openai".equals(type) || "openai".equals(type);
-            default -> false;
-        };
-    }
-
-    private RuntimeDescriptor runtimeDescriptor(String name) {
-        return switch (name) {
-            case CLAUDE -> new RuntimeDescriptor(name, "Anthropic", "Uses the Anthropic runtime.");
-            case OPENAI -> new RuntimeDescriptor(name, "OpenAI", "Uses the OpenAI runtime.");
-            default -> new RuntimeDescriptor(name, "Default", "Uses the Default runtime.");
-        };
-    }
-
-    private String defaultRuntime(List<RuntimeDescriptor> runtimes) {
-        return runtimes.stream().map(RuntimeDescriptor::name)
-                .filter(DEFAULT::equals)
-                .findFirst()
-                .orElse(DEFAULT);
-    }
-
-    public String providerType(String modelName) {
-        ScoreAiProperties.Model model = properties.getModels().get(modelName);
-        if (model == null) {
-            throw new IllegalArgumentException("Unknown assistant model: " + modelName);
-        }
-        ScoreAiProperties.Provider provider = properties.getProviders().get(model.getProvider());
-        if (provider == null) {
-            throw new IllegalArgumentException("Unknown AI provider: " + model.getProvider());
-        }
-        return providerType(provider);
+                && (StringUtils.hasText(provider.getBaseUrl()) || StringUtils.hasText(provider.getMessagesUrl()));
     }
 
     private String providerType(ScoreAiProperties.Provider provider) {
         return StringUtils.hasText(provider.getType())
                 ? provider.getType().strip().toLowerCase() : "anthropic";
-    }
-
-    public String normalizeRuntime(String runtime) {
-        if (!StringUtils.hasText(runtime)) {
-            return DEFAULT;
-        }
-        String normalized = runtime.strip().toLowerCase();
-        return switch (normalized) {
-            case "spring-ai" -> DEFAULT;
-            case "claude-sdk" -> CLAUDE;
-            case "codex-sdk" -> OPENAI;
-            default -> normalized;
-        };
     }
 
     private String displayName(Map.Entry<String, ScoreAiProperties.Model> entry) {
@@ -269,14 +180,11 @@ public class ScoreAiModelRegistry {
     public record ModelDescriptor(String name, String displayName, String description, String provider,
                                   boolean defaultModel, String defaultReasoningEffort,
                                   List<ReasoningEffortDescriptor> reasoningEfforts,
-                                  String defaultRuntime, List<RuntimeDescriptor> runtimes,
                                   ContextBudgetDescriptor contextBudget) {}
 
     public record ReasoningEffortDescriptor(String name, String displayName, String description) {}
 
-    public record RuntimeDescriptor(String name, String displayName, String description) {}
-
-    public record RuntimeModel(String name, String model, String providerType,
+    public record ModelConfiguration(String name, String model, String providerType,
                                Integer maxTokens, Double temperature,
                                Integer thinkingBudgetTokens, boolean adaptiveThinking,
                                String outputEffort, String cacheStrategy,
@@ -289,7 +197,7 @@ public class ScoreAiModelRegistry {
                                String defaultThinking,
                                ContextBudgetDescriptor contextBudget) {
 
-        public RuntimeModel(String name, String model, String providerType,
+        public ModelConfiguration(String name, String model, String providerType,
                             Integer maxTokens, Double temperature,
                             Integer thinkingBudgetTokens, boolean adaptiveThinking,
                             String outputEffort, String cacheStrategy,

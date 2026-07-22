@@ -16,11 +16,11 @@ class AiContextBudgetServiceTest {
     @Test
     void resolvesSafeLimitAndCompactionThresholdIndependentlyFromOutputCap() {
         ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
-        ScoreAiModelRegistry.RuntimeModel runtimeModel = mock(ScoreAiModelRegistry.RuntimeModel.class);
-        when(runtimeModel.name()).thenReturn("gpt-5_6-sol");
-        when(runtimeModel.contextBudget()).thenReturn(new ScoreAiModelRegistry.ContextBudgetDescriptor(
+        ScoreAiModelRegistry.ModelConfiguration model = mock(ScoreAiModelRegistry.ModelConfiguration.class);
+        when(model.name()).thenReturn("gpt-5_6-sol");
+        when(model.contextBudget()).thenReturn(new ScoreAiModelRegistry.ContextBudgetDescriptor(
                 200000L, 32768L, 150000L, 8192L, 32000L, true));
-        when(models.runtimeModel("gpt-5_6-sol")).thenReturn(runtimeModel);
+        when(models.modelConfiguration("gpt-5_6-sol")).thenReturn(model);
         AiContextBudgetService service = new AiContextBudgetService(models);
 
         AiContextBudget budget = service.budget("gpt-5_6-sol").orElseThrow();

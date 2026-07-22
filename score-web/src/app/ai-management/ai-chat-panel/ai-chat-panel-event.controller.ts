@@ -221,7 +221,6 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     this.state.conversationId = confirmationConversationId
       || event.conversationId || this.state.conversationId;
     this.sessionPersistence.rememberLastConversation(this.state.conversationId);
-    this.confirmContextUpdate();
     this.confirmedMutationRequests.cancel(event.requestId);
     this.activeRequestId = undefined;
     const content = withoutTextualToolCallPlaceholder(this.primaryContent(event));
@@ -326,7 +325,6 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     requestId: string,
     confirmationConversationId: string
   ): void {
-    this.pendingContextUpdate = undefined;
     this.settleAgentActivity('failed');
     this.pendingMutationConfirmation = undefined;
     this.confirmedMutationRequests.cancel(requestId);

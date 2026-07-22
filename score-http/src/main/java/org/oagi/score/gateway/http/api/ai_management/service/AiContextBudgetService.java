@@ -17,7 +17,7 @@ import java.util.Optional;
 @Component
 public class AiContextBudgetService {
 
-    private static final long RUNTIME_OVERHEAD_TOKENS = 4096L;
+    private static final long MODEL_CALL_OVERHEAD_TOKENS = 4096L;
     private static final long MESSAGE_OVERHEAD_TOKENS = 12L;
 
     private final ScoreAiModelRegistry models;
@@ -28,9 +28,9 @@ public class AiContextBudgetService {
 
     public Optional<AiContextBudget> budget(String modelName) {
         if (!StringUtils.hasText(modelName)) return Optional.empty();
-        ScoreAiModelRegistry.RuntimeModel model;
+        ScoreAiModelRegistry.ModelConfiguration model;
         try {
-            model = models.runtimeModel(modelName);
+            model = models.modelConfiguration(modelName);
         } catch (RuntimeException exception) {
             return Optional.empty();
         }
@@ -48,7 +48,7 @@ public class AiContextBudgetService {
     }
 
     public long estimateInputTokens(List<Message> history, Message nextMessage, String pageContext) {
-        long estimate = RUNTIME_OVERHEAD_TOKENS + estimateText(pageContext);
+        long estimate = MODEL_CALL_OVERHEAD_TOKENS + estimateText(pageContext);
         if (history != null) {
             for (Message message : history) estimate = saturatedAdd(estimate, estimateMessage(message));
         }

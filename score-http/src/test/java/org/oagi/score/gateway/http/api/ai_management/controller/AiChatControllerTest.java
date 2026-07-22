@@ -59,7 +59,7 @@ class AiChatControllerTest {
         AiChatController controller = controller(new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
         AiMultiAgentOptions options = new AiMultiAgentOptions(true, 4, "creative");
         ChatRequest request = new ChatRequest("Help me", null, null, "conversation-1",
-                null, List.of(), null, "model", "high", "default", Map.of(), "ask", options);
+                null, List.of(), null, "model", "high", "ask", options, null, null);
         when(sessionService.asScoreUser(principal)).thenReturn(user);
         when(chatService.prepare(any(ChatRequest.class), eq(user)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -311,9 +311,9 @@ class AiChatControllerTest {
             String providerMessage = "This request would exceed your rate limit tier of"
                     + " 50,000,000 input tokens per minute.";
             when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenThrow(
-                    new org.oagi.score.gateway.http.api.ai_management.runtime.AiProviderException(
-                            new org.oagi.score.gateway.http.api.ai_management.runtime.AiProviderFailure(
-                                    "com.anthropic.errors.RateLimitException", 429,
+                    new org.oagi.score.gateway.http.api.ai_management.provider.AiProviderException(
+                            new org.oagi.score.gateway.http.api.ai_management.provider.AiProviderFailure(
+                                    "org.springframework.ai.retry.TransientAiException", 429,
                                     providerMessage, true, null),
                             10, new IllegalStateException("429: rate_limit_error")));
 

@@ -71,16 +71,18 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_memory.message_type</code>. The message
-     * role in the model context: USER, ASSISTANT, SYSTEM, or TOOL.
+     * Setter for <code>oagi.ai_chat_memory.message_type</code>. Expected
+     * model-context roles are USER, ASSISTANT, SYSTEM, and TOOL; other values
+     * are handled by the application.
      */
     public void setMessageType(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_memory.message_type</code>. The message
-     * role in the model context: USER, ASSISTANT, SYSTEM, or TOOL.
+     * Getter for <code>oagi.ai_chat_memory.message_type</code>. Expected
+     * model-context roles are USER, ASSISTANT, SYSTEM, and TOOL; other values
+     * are handled by the application.
      */
     public String getMessageType() {
         return (String) get(3);
