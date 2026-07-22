@@ -5,8 +5,6 @@ import {
   AiChatConversationSummary,
   AiChatConversationDetails,
   AiChatModelInfo,
-  AiChatRuntimeInfo,
-  AiChatRuntimeSettingInfo,
   AiReasoningEffortInfo,
   AiCancellationCommand,
   AiCancellationResponse,
@@ -14,13 +12,8 @@ import {
   AiPublicExecutionRequestStatus,
   AiChatRequest,
   AiChatRestResponse,
-  AiConversationModelResponse,
-  AiRuntimeOptions
+  AiConversationModelResponse
 } from './ai-chat-panel.model';
-
-type AiChatRuntimeWire = Omit<AiChatRuntimeInfo, 'settings'> & {
-  settings?: AiChatRuntimeSettingInfo[];
-};
 
 interface AiChatModelWire {
   name: string;
@@ -30,8 +23,6 @@ interface AiChatModelWire {
   defaultModel: boolean;
   defaultReasoningEffort: string;
   reasoningEfforts?: Array<AiReasoningEffortInfo | string>;
-  defaultRuntime?: string;
-  runtimes?: AiChatRuntimeWire[];
   contextWindow?: number | null;
   outputReserveTokens?: number | null;
   autoCompactThresholdTokens?: number | null;
@@ -108,30 +99,22 @@ export class AiChatApiService {
         ...model,
         description: model.description?.trim() || this.defaultModelDescription(model.provider),
         reasoningEfforts: (model.reasoningEfforts || []).map(effort => this.normalizeReasoningEffort(effort)),
-        defaultRuntime: model.defaultRuntime?.trim() || 'default',
         contextWindow: this.positiveIntegerOrNull(model.contextWindow),
         outputReserveTokens: this.nonNegativeIntegerOrNull(model.outputReserveTokens),
         autoCompactThresholdTokens: this.positiveIntegerOrNull(model.autoCompactThresholdTokens),
-        emergencyHeadroomTokens: this.nonNegativeIntegerOrNull(model.emergencyHeadroomTokens),
-        runtimes: model.runtimes?.length ? model.runtimes.map(runtime => ({
-          ...runtime,
-          settings: runtime.settings || []
-        })) : [{
-          name: 'default', displayName: 'Default', description: 'Uses the Default runtime.', settings: []
-        }]
+        emergencyHeadroomTokens: this.nonNegativeIntegerOrNull(model.emergencyHeadroomTokens)
       })))
     );
   }
 
   updateConversationModel(conversationId: string, modelName: string,
-                          reasoningEffort: string, runtime = 'default',
-                          runtimeOptions: AiRuntimeOptions = {}): Observable<AiConversationModelResponse> {
-    if (!conversationId.trim() || !modelName.trim() || !reasoningEffort.trim() || !runtime.trim()) {
-      throw new Error('A conversationId, modelName, reasoningEffort, and runtime are required.');
+                          reasoningEffort: string): Observable<AiConversationModelResponse> {
+    if (!conversationId.trim() || !modelName.trim() || !reasoningEffort.trim()) {
+      throw new Error('A conversationId, modelName, and reasoningEffort are required.');
     }
     return this.http.patch<AiConversationModelResponse>(
       '/api/ai/chat/conversations/' + encodeURIComponent(conversationId) + '/model',
-      {modelName, reasoningEffort, runtime, runtimeOptions: {...runtimeOptions}}
+      {modelName, reasoningEffort}
     );
   }
 

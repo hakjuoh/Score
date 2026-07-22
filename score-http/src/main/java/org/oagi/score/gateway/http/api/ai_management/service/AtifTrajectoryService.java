@@ -125,8 +125,6 @@ public class AtifTrajectoryService {
             putIfPresent(extra, "request_id", row.requestId());
             extra.put("message_kind", row.messageKind());
             extra.put("visibility", row.visibility());
-            putIfPresent(extra, "runtime", row.runtime());
-            putIfPresent(extra, "runtime_options", row.runtimeOptions());
             addMetrics(step, extra, row.source(), row.metrics());
             step.put("extra", extra);
             putIfPresent(step, "llm_call_count", row.llmCallCount());

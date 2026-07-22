@@ -2,7 +2,7 @@ import {Injectable} from '@angular/core';
 import {AI_CHAT_COMMANDS} from './ai-chat-panel.constants';
 import {AiChatCommand} from './ai-chat-panel.model';
 
-export type AiLocalCommand = 'clear' | 'cancel' | 'debug' | 'model' | 'runtime' | 'permissions';
+export type AiLocalCommand = 'clear' | 'cancel' | 'debug' | 'model' | 'permissions';
 
 export interface AiChatCommandDecision {
   kind: 'local' | 'backend' | 'none';
@@ -53,9 +53,6 @@ export class AiChatCommandService {
     }
     if (normalized === '/model') {
       return {kind: 'local', command: 'model'};
-    }
-    if (normalized === '/runtime') {
-      return {kind: 'local', command: 'runtime'};
     }
     if (normalized === '/permissions') {
       return {kind: 'local', command: 'permissions'};

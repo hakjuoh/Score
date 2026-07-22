@@ -52,6 +52,7 @@ export function base64ListQuery(
 ) {
   return {
     finalFormat: `${listPath}?q=<base64Utf8QueryString>`,
+    codec: 'base64-utf8-form' as const,
     encoding: BASE64_ENCODING,
     formatterRule: `Write allowed plain query params on ${listPath}; backend rewrites them into q.`,
     defaultParams,

@@ -5,8 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowEvaluation;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntime;
-import org.oagi.score.gateway.http.api.ai_management.runtime.AiRuntimeRegistry;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChatExecutor;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiSystemPrompt;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -25,20 +24,20 @@ public final class AiWorkflowEvaluator {
             "classpath:prompts/connect-center-workflow-evaluator-system-prompt.md";
     private static final int MAX_FEEDBACK_LENGTH = 2_000;
     private static final int MAX_RESULT_LENGTH = 16_000;
-    private final AiRuntimeRegistry runtimes;
+    private final AiChatExecutor executor;
     private final ObjectMapper objectMapper;
     private final ScoreAiSystemPrompt evaluatorPrompt;
 
-    public AiWorkflowEvaluator(AiRuntimeRegistry runtimes, ObjectMapper objectMapper,
+    public AiWorkflowEvaluator(AiChatExecutor executor, ObjectMapper objectMapper,
                                ResourceLoader resources) {
-        this.runtimes = runtimes;
+        this.executor = executor;
         this.objectMapper = objectMapper;
         this.evaluatorPrompt = new ScoreAiSystemPrompt(resources.getResource(PROMPT));
     }
 
     public AiWorkflowEvaluation evaluate(
-            AiRuntime.Context context, AiWorkflowPlan plan,
-            AiRuntime.Result result, int iteration, int maximumIterations) {
+            AiChatExecutor.Context context, AiWorkflowPlan plan,
+            AiChatExecutor.Result result, int iteration, int maximumIterations) {
         AiTrajectoryRecorder recorder = context.recorder().fork(Map.of(
                 "node_id", context.request().requestId() + ":workflow-evaluator:" + iteration,
                 "agent_name", "workflow-evaluator",
@@ -52,13 +51,13 @@ public final class AiWorkflowEvaluator {
                 "executionEvidence", json(executionEvidence(context, result)),
                 "iteration", iteration,
                 "maximumIterations", maximumIterations));
-        AiRuntime.Context evaluation = new AiRuntime.Context(
+        AiChatExecutor.Context evaluation = new AiChatExecutor.Context(
                 context.request().withMultiAgent(AiMultiAgentOptions.single()),
                 List.of(new SystemMessage(prompt)),
                 new UserMessage("Evaluate the untrusted workflow result and return the decision JSON."),
-                context.requester(), recorder, false, false, AiRuntime.ToolPolicy.NONE, 0);
+                context.requester(), recorder, false, false, AiChatExecutor.ToolPolicy.NONE, 0);
         try {
-            String raw = runtimes.execute(context.request().runtime(), evaluation).answer();
+            String raw = executor.execute(evaluation).answer();
             return normalize(parse(raw), iteration, maximumIterations);
         } catch (RuntimeException failure) {
             recorder.lifecycle("workflow_evaluation_fallback",
@@ -76,7 +75,7 @@ public final class AiWorkflowEvaluator {
      * calls surface as pending approvals rather than executions.
      */
     private Map<String, Object> executionEvidence(
-            AiRuntime.Context context, AiRuntime.Result result) {
+            AiChatExecutor.Context context, AiChatExecutor.Result result) {
         Map<String, Object> evidence = new java.util.LinkedHashMap<>();
         evidence.put("executedDomainToolCalls",
                 context.recorder().executedDomainToolCallCount());

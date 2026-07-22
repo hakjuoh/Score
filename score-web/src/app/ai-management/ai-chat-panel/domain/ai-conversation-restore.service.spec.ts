@@ -26,13 +26,9 @@ describe('AiConversationRestoreService', () => {
       setConversationId: vi.fn(),
       setModelName: vi.fn(),
       setReasoningEffort: vi.fn(),
-      setRuntime: vi.fn(),
-      setRuntimeOptions: vi.fn(),
       resetMessages: vi.fn(() => {
         messages = [];
       }),
-      resetRouteContext: vi.fn(),
-      markRouteRegistryRestored: vi.fn(),
       setRestoring: vi.fn(),
       setCurrentStatus: vi.fn(),
       clearStatus: vi.fn(),
@@ -58,15 +54,12 @@ describe('AiConversationRestoreService', () => {
     handle({
       requestId: 'r1', type: 'HISTORY_START', conversationId: 'c1',
       metadata: {
-        modelName: 'gpt-5.6-sol', reasoningEffort: 'high', runtime: 'openai',
-        runtimeOptions: {maxTurns: 40, verbose: true}
+        modelName: 'gpt-5.6-sol', reasoningEffort: 'high'
       }
     }, callbacks);
 
     expect(callbacks.setModelName).toHaveBeenCalledWith('gpt-5.6-sol');
     expect(callbacks.setReasoningEffort).toHaveBeenCalledWith('high');
-    expect(callbacks.setRuntime).toHaveBeenCalledWith('openai');
-    expect(callbacks.setRuntimeOptions).toHaveBeenCalledWith({maxTurns: 40, verbose: true});
   });
 
   afterEach(() => {
@@ -579,10 +572,4 @@ describe('AiConversationRestoreService', () => {
       .toContainEqual(expect.objectContaining({status: 'tool', content: 'get_asccp completed.'}));
   });
 
-  it('restores route registry context markers', () => {
-    handle({requestId: 'r1', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
-    handle({requestId: 'r1', type: 'HISTORY_CONTEXT', message: 'route-registry', agent: 'system', response: 'routes'}, callbacks);
-
-    expect(callbacks.markRouteRegistryRestored).toHaveBeenCalledOnce();
-  });
 });

@@ -150,7 +150,6 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.pendingContextUpdate = undefined;
     this.confirmedMutationRequests.cancel(this.activeRequestId);
     this.clearMutationRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
@@ -175,7 +174,6 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.pendingContextUpdate = undefined;
     this.confirmedMutationRequests.cancel(this.activeRequestId);
     this.clearMutationRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
@@ -205,7 +203,6 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.pendingContextUpdate = undefined;
     this.confirmedMutationRequests.cancel(this.activeRequestId);
     this.clearMutationRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
@@ -425,11 +422,6 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         this.state.messages = [];
         this.clearToolCallTracking();
       },
-      resetRouteContext: () => {
-        this.routeRegistrySent = false;
-        this.lastPageContextPath = undefined;
-      },
-      markRouteRegistryRestored: () => this.routeRegistrySent = true,
       setRestoring: restoring => this.state.restoringConversation = restoring,
       setCurrentStatus: status => this.state.currentStatus = status,
       clearStatus: () => this.clearStatusMessage(),

@@ -63,8 +63,6 @@ CREATE TABLE `ai_chat_step`
     `reasoning_content`       longtext NULL COMMENT 'Optional model reasoning content associated with the step.',
     `model_name`              varchar(240) NULL COMMENT 'The model used for the inference represented by the step.',
     `reasoning_effort`        varchar(32) NULL COMMENT 'The reasoning-effort setting used for the model inference.',
-    `agent_runtime`           varchar(32) NULL COMMENT 'The agent runtime selected for the conversation at this step.',
-    `runtime_options_json`    JSON NULL COMMENT 'JSON object containing runtime-specific options used for the step.',
     `tool_calls_json`         JSON NULL COMMENT 'JSON array containing tool calls requested by the model.',
     `observation_json`        JSON NULL COMMENT 'JSON object containing tool execution results observed by the agent.',
     `metrics_json`            JSON NULL COMMENT 'JSON object containing token usage and other execution metrics.',

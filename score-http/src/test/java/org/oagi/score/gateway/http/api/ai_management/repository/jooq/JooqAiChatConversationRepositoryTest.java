@@ -4,7 +4,7 @@ import org.jooq.DSLContext;
 import org.jooq.Field;
 import org.jooq.Record;
 import org.jooq.Record1;
-import org.jooq.Record4;
+import org.jooq.Record2;
 import org.jooq.Result;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
@@ -35,6 +35,13 @@ import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.A
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_STEP;
 
 class JooqAiChatConversationRepositoryTest {
+
+    @Test
+    void generatedStepSchemaContainsNoRuntimeColumns() {
+        assertThat(AI_CHAT_STEP.fields())
+                .extracting(Field::getName)
+                .doesNotContain("agent_runtime", "runtime_options_json");
+    }
 
     @Test
     void createsASubagentConversationLinkedToItsParentRequestAndAgent() {
@@ -91,15 +98,14 @@ class JooqAiChatConversationRepositoryTest {
         AiChatConversationSettings result =
                 repository.settingsForUpdate("conversation-1");
 
-        assertEquals(new AiChatConversationSettings(
-                "model", "high", "openai", Map.of("verbosity", "high")), result);
+        assertEquals(new AiChatConversationSettings("model", "high"), result);
         assertTrue(provider.sql.stream().anyMatch(sql -> sql.contains("for update")));
         assertTrue(provider.sql.stream().anyMatch(sql -> sql.contains("ai_chat_step")
                 && sql.contains("order by") && sql.contains("limit")), provider.sql.toString());
     }
 
     @Test
-    void readsTheLatestPersistedActiveWorkflowIndependentlyFromRuntimeSettings() {
+    void readsTheLatestPersistedActiveWorkflowIndependentlyFromModelSettings() {
         RecordingProvider provider = new RecordingProvider();
         ScoreUser requester = new ScoreUser(new UserId(BigInteger.ONE), "tester", "Test User",
                 null, false, List.of());
@@ -116,7 +122,7 @@ class JooqAiChatConversationRepositoryTest {
     @Test
     void rejectsAnIncompleteStoredSettingsChangeWithAClearError() {
         assertThatThrownBy(() -> JooqAiChatConversationRepository.validateStoredSettingsChange(
-                "settings_change", "model", null, "runtime"))
+                "settings_change", "model", null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(
                         "settings_change", "reasoning_effort", "no safe defaults");
@@ -188,13 +194,11 @@ class JooqAiChatConversationRepositoryTest {
                 return new MockResult[]{new MockResult(1, result)};
             }
             if (query.contains("ai_chat_step")) {
-                Result<Record4<String, String, String, String>> result = create.newResult(
-                        AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.REASONING_EFFORT,
-                        AI_CHAT_STEP.AGENT_RUNTIME, AI_CHAT_STEP.RUNTIME_OPTIONS_JSON);
-                Record4<String, String, String, String> record = create.newRecord(
-                        AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.REASONING_EFFORT,
-                        AI_CHAT_STEP.AGENT_RUNTIME, AI_CHAT_STEP.RUNTIME_OPTIONS_JSON);
-                record.values("model", "high", "openai", "{\"verbosity\":\"high\"}");
+                Result<Record2<String, String>> result = create.newResult(
+                        AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.REASONING_EFFORT);
+                Record2<String, String> record = create.newRecord(
+                        AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.REASONING_EFFORT);
+                record.values("model", "high");
                 result.add(record);
                 return new MockResult[]{new MockResult(1, result)};
             }
@@ -251,8 +255,7 @@ class JooqAiChatConversationRepositoryTest {
                     AI_CHAT_STEP.REQUEST_ID, AI_CHAT_STEP.SOURCE, AI_CHAT_STEP.MESSAGE_KIND,
                     AI_CHAT_STEP.VISIBILITY, AI_CHAT_STEP.MESSAGE,
                     AI_CHAT_STEP.REASONING_CONTENT, AI_CHAT_STEP.MODEL_NAME,
-                    AI_CHAT_STEP.REASONING_EFFORT, AI_CHAT_STEP.AGENT_RUNTIME,
-                    AI_CHAT_STEP.RUNTIME_OPTIONS_JSON, AI_CHAT_STEP.TOOL_CALLS_JSON,
+                    AI_CHAT_STEP.REASONING_EFFORT, AI_CHAT_STEP.TOOL_CALLS_JSON,
                     AI_CHAT_STEP.OBSERVATION_JSON, AI_CHAT_STEP.METRICS_JSON,
                     AI_CHAT_STEP.EXTRA_JSON, AI_CHAT_STEP.LLM_CALL_COUNT,
                     AI_CHAT_STEP.IS_COPIED_CONTEXT, AI_CHAT_STEP.CREATED_AT
@@ -302,8 +305,6 @@ class JooqAiChatConversationRepositoryTest {
             record.set(AI_CHAT_STEP.MESSAGE, message);
             record.set(AI_CHAT_STEP.MODEL_NAME, "model");
             record.set(AI_CHAT_STEP.REASONING_EFFORT, "medium");
-            record.set(AI_CHAT_STEP.AGENT_RUNTIME, "default");
-            record.set(AI_CHAT_STEP.RUNTIME_OPTIONS_JSON, "{}");
             record.set(AI_CHAT_STEP.METRICS_JSON, metrics);
             record.set(AI_CHAT_STEP.EXTRA_JSON, extra);
             record.set(AI_CHAT_STEP.LLM_CALL_COUNT, llmCalls);

@@ -11,7 +11,7 @@ import java.util.Set;
 
 /**
  * Complete, persistence-ready representation of one AI conversation trajectory step.
- * The record retains model, runtime, tool, observation, and metric data needed for
+ * The record retains model, tool, observation, and metric data needed for
  * audit replay and ATIF export.
  *
  * @param requestId request that produced the step
@@ -22,8 +22,6 @@ import java.util.Set;
  * @param reasoningContent optional model reasoning content
  * @param modelName optional model identifier
  * @param reasoningEffort optional reasoning effort
- * @param runtime optional agent runtime
- * @param runtimeOptions runtime-specific option values
  * @param toolCalls serialized tool calls
  * @param observation tool execution observation
  * @param metrics token and execution metrics
@@ -41,8 +39,6 @@ public record AiChatTrajectoryStep(
         String reasoningContent,
         String modelName,
         String reasoningEffort,
-        String runtime,
-        Map<String, Object> runtimeOptions,
         List<Map<String, Object>> toolCalls,
         Map<String, Object> observation,
         Map<String, Object> metrics,
@@ -59,13 +55,12 @@ public record AiChatTrajectoryStep(
         messageKind = Objects.requireNonNull(messageKind, "messageKind");
         visibility = normalizeVisibility(visibility);
         if ("settings_change".equals(messageKind)
-                && (modelName == null || reasoningEffort == null || runtime == null)) {
+                && (modelName == null || reasoningEffort == null)) {
             throw new IllegalArgumentException(
-                    "settings_change requires modelName, reasoningEffort, and runtime; "
+                    "settings_change requires modelName and reasoningEffort; "
                             + "no safe defaults are available.");
         }
         message = Objects.requireNonNullElse(message, "");
-        runtimeOptions = runtimeOptions != null ? Map.copyOf(runtimeOptions) : Map.of();
     }
 
     public static String normalizeSource(String value) {
@@ -81,7 +76,7 @@ public record AiChatTrajectoryStep(
     }
 
     /**
-     * Creates a trajectory step without explicit reasoning-effort or runtime settings.
+     * Creates a trajectory step without an explicit reasoning effort.
      */
     public AiChatTrajectoryStep(
             String requestId,
@@ -99,7 +94,7 @@ public record AiChatTrajectoryStep(
             Boolean isCopiedContext,
             Instant createdAt) {
         this(requestId, source, messageKind, visibility, message, reasoningContent, modelName,
-                null, null, Map.of(), toolCalls, observation, metrics, extra,
+                null, toolCalls, observation, metrics, extra,
                 llmCallCount, isCopiedContext, createdAt);
     }
 }

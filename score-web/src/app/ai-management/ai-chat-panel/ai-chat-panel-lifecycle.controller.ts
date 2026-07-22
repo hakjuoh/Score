@@ -210,7 +210,6 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
-    this.pendingContextUpdate = undefined;
     this.clearMutationRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
@@ -303,7 +302,6 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.clearMutationRepeatDraft(requestId);
     this.state.conversationId = conversationId || this.state.conversationId;
     this.sessionPersistence.rememberLastConversation(this.state.conversationId);
-    this.confirmContextUpdate();
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
     this.state.pending = false;
@@ -375,24 +373,11 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
   }
 
   protected nextContextUpdate(): AiChatContextUpdate {
-    return this.contextService.nextContextUpdate(this.routeRegistrySent, this.lastPageContextPath);
+    return this.contextService.nextContextUpdate();
   }
 
   protected invalidateAttachmentReads(): void {
     this.attachmentQueue.invalidate();
-  }
-
-  protected confirmContextUpdate(): void {
-    if (!this.pendingContextUpdate) {
-      return;
-    }
-    if (this.pendingContextUpdate.includesRouteRegistry) {
-      this.routeRegistrySent = true;
-    }
-    if (this.pendingContextUpdate.pagePath) {
-      this.lastPageContextPath = this.pendingContextUpdate.pagePath;
-    }
-    this.pendingContextUpdate = undefined;
   }
 
   protected updateMainPanelInset(): void {
