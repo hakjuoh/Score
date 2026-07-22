@@ -13,9 +13,17 @@ import {
   AiChatAttachment,
   AiChatSocketEvent,
   AiElicitationResponse,
+  AiMutationApprovalBatchDecision,
   AiMutationConfirmationAuthorization
 } from './domain/ai-chat-panel.model';
 import {withoutTextualToolCallPlaceholder} from './domain/ai-chat-event-semantics';
+import {
+  isUnexpiredMutationApprovalBatch,
+  mutationApprovalBatchNotice
+} from './domain/ai-mutation-approval-batch';
+
+const MAX_TIMER_DELAY_MS = 2_147_000_000;
+const MUTATION_APPROVAL_ACK_TIMEOUT_MS = 15_000;
 
 export abstract class AiChatPanelEventController extends AiChatPanelUiController {
   protected handleSocketEvent(event: AiChatSocketEvent): void {
@@ -59,6 +67,19 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       return;
     }
     this.scheduleRequestStatusWatchdog();
+    if (event.type === 'system'
+      && event.subtype === 'mutation_approval_batch_required') {
+      this.handleMutationApprovalBatchRequired(event);
+      this.scrollToBottom(true);
+      return;
+    }
+    if (event.type === 'system'
+      && (event.subtype === 'mutation_approval_decision_accepted'
+        || event.subtype === 'mutation_approval_decision_rejected')) {
+      this.handleMutationApprovalDecisionEvent(event);
+      this.scrollToBottom(true);
+      return;
+    }
     if (event.type === 'system'
       && event.subtype === 'mutation_confirmation_required') {
       this.handleMutationConfirmationNotice(event);
@@ -151,6 +172,222 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     this.state.currentStatus = 'Waiting for your input';
   }
 
+  protected handleMutationApprovalBatchRequired(event: AiChatSocketEvent): void {
+    const requestId = this.activeRequestId;
+    if (!requestId) return;
+    const eventConversationId = typeof event.conversationId === 'string'
+      && event.conversationId.trim() === event.conversationId
+      ? event.conversationId : undefined;
+    const expectedConversationId = this.state.activeRequest?.conversationId
+      || this.state.conversationId || eventConversationId;
+    const notice = mutationApprovalBatchNotice(event, requestId, expectedConversationId);
+    if (!notice) {
+      return;
+    }
+    const active = this.state.mutationApprovalBatch;
+    if (active?.batchId === notice.batchId
+      || this.state.mutationApprovalBatchQueue.some(batch => batch.batchId === notice.batchId)) {
+      return;
+    }
+    this.state.messages.push({
+      role: 'guide',
+      content: notice.items.length === 1
+        ? 'Approval requested for one data-changing action.'
+        : `Approval requested for ${notice.items.length} data-changing actions.`
+    });
+    if (active) {
+      this.state.mutationApprovalBatchQueue.push(notice);
+      return;
+    }
+    this.completeProgressMessages();
+    this.clearStatusMessage();
+    this.state.mutationApprovalBatch = notice;
+    this.state.mutationApprovalBatchBusy = false;
+    this.scheduleMutationApprovalExpiry();
+    this.state.currentStatus = notice.items.length === 1
+      ? 'Approval required' : `${notice.items.length} approvals required`;
+  }
+
+  protected handleMutationApprovalDecisionEvent(event: AiChatSocketEvent): void {
+    const active = this.state.mutationApprovalBatch;
+    if (!active || event.requestId !== active.requestId
+      || event.conversationId !== active.conversationId
+      || event.metadata?.['batchId'] !== active.batchId) {
+      return;
+    }
+    this.clearMutationApprovalAcknowledgementTimeout();
+    if (event.subtype === 'mutation_approval_decision_accepted') {
+      this.state.mutationApprovalBatch = this.nextMutationApprovalBatch();
+      this.state.mutationApprovalBatchBusy = false;
+      this.scheduleMutationApprovalExpiry();
+      this.state.currentStatus = this.state.mutationApprovalBatch
+        ? (this.state.mutationApprovalBatch.items.length === 1
+          ? 'Approval required'
+          : `${this.state.mutationApprovalBatch.items.length} approvals required`)
+        : 'Working';
+      this.state.messages.push({
+        role: 'guide',
+        content: this.primaryContent(event).trim()
+          || 'Approval decision recorded. Continuing the active request.'
+      });
+      return;
+    }
+    this.state.mutationApprovalBatchBusy = false;
+    if (!isUnexpiredMutationApprovalBatch(active)) {
+      this.expireMutationApprovalBatch(active.batchId);
+      return;
+    }
+    this.state.currentStatus = 'Approval required';
+    this.state.messages.push({
+      role: 'error',
+      content: this.primaryContent(event).trim()
+        || 'The assistant could not accept that approval decision. Please try again.'
+    });
+  }
+
+  private nextMutationApprovalBatch() {
+    let expired = 0;
+    while (this.state.mutationApprovalBatchQueue.length > 0) {
+      const next = this.state.mutationApprovalBatchQueue.shift();
+      if (next && isUnexpiredMutationApprovalBatch(next)) {
+        this.reportExpiredQueuedApprovals(expired);
+        return next;
+      }
+      if (next) expired += 1;
+    }
+    this.reportExpiredQueuedApprovals(expired);
+    return undefined;
+  }
+
+  private reportExpiredQueuedApprovals(expired: number): void {
+    if (expired > 0) {
+      this.state.messages.push({
+        role: 'error',
+        content: expired === 1
+          ? 'A queued approval request expired before it could be shown.'
+          : `${expired} queued approval requests expired before they could be shown.`
+      });
+    }
+  }
+
+  protected scheduleMutationApprovalExpiry(): void {
+    if (this.mutationApprovalExpiryTimeout !== undefined) {
+      window.clearTimeout(this.mutationApprovalExpiryTimeout);
+      this.mutationApprovalExpiryTimeout = undefined;
+    }
+    const active = this.state.mutationApprovalBatch;
+    if (!active) return;
+    const remaining = Date.parse(active.expiresAt) - Date.now();
+    if (remaining <= 0) {
+      this.expireMutationApprovalBatch(active.batchId);
+      return;
+    }
+    this.mutationApprovalExpiryTimeout = window.setTimeout(() => {
+      this.mutationApprovalExpiryTimeout = undefined;
+      const current = this.state.mutationApprovalBatch;
+      if (!current || current.batchId !== active.batchId) return;
+      if (isUnexpiredMutationApprovalBatch(current)) {
+        this.scheduleMutationApprovalExpiry();
+      } else {
+        this.expireMutationApprovalBatch(current.batchId);
+      }
+    }, Math.min(remaining, MAX_TIMER_DELAY_MS));
+  }
+
+  private expireMutationApprovalBatch(batchId: string): void {
+    const active = this.state.mutationApprovalBatch;
+    if (!active || active.batchId !== batchId) return;
+    const acknowledgementMissing = this.state.mutationApprovalBatchBusy;
+    this.clearMutationApprovalAcknowledgementTimeout();
+    this.state.mutationApprovalBatch = this.nextMutationApprovalBatch();
+    this.state.mutationApprovalBatchBusy = false;
+    this.state.currentStatus = this.state.mutationApprovalBatch
+      ? (this.state.mutationApprovalBatch.items.length === 1
+        ? 'Approval required'
+        : `${this.state.mutationApprovalBatch.items.length} approvals required`)
+      : 'Approval expired';
+    this.state.messages.push({
+      role: 'error',
+      content: this.state.mutationApprovalBatch
+        ? 'The previous approval request expired. Showing the next pending approval.'
+        : acknowledgementMissing
+          ? 'No acknowledgement was received before this approval request expired.'
+          : 'This approval request expired before a decision was sent.'
+    });
+    this.scheduleMutationApprovalExpiry();
+    this.scrollToBottom();
+  }
+
+  decideMutationApprovalBatch(
+    decision: 'APPROVE' | 'DENY' | AiMutationApprovalBatchDecision[]
+  ): void {
+    const active = this.state.mutationApprovalBatch;
+    if (!active || this.state.mutationApprovalBatchBusy || !this.state.pending
+      || this.activeRequestId !== active.requestId
+      || this.state.cancellation.phase !== 'idle') {
+      return;
+    }
+    if (!isUnexpiredMutationApprovalBatch(active)) {
+      this.expireMutationApprovalBatch(active.batchId);
+      return;
+    }
+    this.state.mutationApprovalBatchBusy = true;
+    this.state.currentStatus = 'Sending approval decision';
+    try {
+      this.transportService.publish('/app/ai/chat/mutation-approval', {
+        requestId: active.requestId,
+        conversationId: active.conversationId,
+        batchId: active.batchId,
+        decisions: Array.isArray(decision) ? decision : active.items.map(item => ({
+          confirmationRequestId: item.confirmationRequestId, decision
+        }))
+      });
+      this.scheduleMutationApprovalAcknowledgementTimeout(active.batchId);
+    } catch {
+      this.state.mutationApprovalBatchBusy = false;
+      this.state.currentStatus = 'Approval required';
+      this.state.messages.push({
+        role: 'error', content: 'Could not send the approval decision.'
+      });
+      this.scrollToBottom();
+    }
+  }
+
+  private scheduleMutationApprovalAcknowledgementTimeout(batchId: string): void {
+    this.clearMutationApprovalAcknowledgementTimeout();
+    const active = this.state.mutationApprovalBatch;
+    if (!active || active.batchId !== batchId) return;
+    const remaining = Date.parse(active.expiresAt) - Date.now();
+    const delay = Math.max(1, Math.min(MUTATION_APPROVAL_ACK_TIMEOUT_MS, remaining));
+    this.mutationApprovalAcknowledgementTimeout = window.setTimeout(() => {
+      this.mutationApprovalAcknowledgementTimeout = undefined;
+      const current = this.state.mutationApprovalBatch;
+      if (!current || current.batchId !== batchId
+        || !this.state.mutationApprovalBatchBusy) {
+        return;
+      }
+      this.state.mutationApprovalBatchBusy = false;
+      if (!isUnexpiredMutationApprovalBatch(current)) {
+        this.expireMutationApprovalBatch(batchId);
+        return;
+      }
+      this.state.currentStatus = 'Approval required';
+      this.state.messages.push({
+        role: 'error',
+        content: 'No acknowledgement was received. You can retry the approval decision.'
+      });
+      this.scheduleMutationApprovalExpiry();
+      this.scrollToBottom();
+    }, delay);
+  }
+
+  private clearMutationApprovalAcknowledgementTimeout(): void {
+    if (this.mutationApprovalAcknowledgementTimeout !== undefined) {
+      window.clearTimeout(this.mutationApprovalAcknowledgementTimeout);
+      this.mutationApprovalAcknowledgementTimeout = undefined;
+    }
+  }
+
   protected handleElicitationDecisionEvent(event: AiChatSocketEvent): void {
     const active = this.state.elicitation;
     if (!active || event.requestId !== active.requestId
@@ -208,6 +445,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
+    this.clearMutationApprovalBatch();
     const confirmationConversationId =
       this.pendingMutationConfirmation?.conversationId;
     if (confirmationConversationId

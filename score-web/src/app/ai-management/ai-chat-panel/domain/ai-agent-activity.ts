@@ -23,7 +23,7 @@ export interface AiAgentActivityEvent {
   key?: string;
   /** Stable identity of one tool invocation, shared by its started/terminal events. */
   toolKey?: string;
-  toolStatus?: 'started' | 'completed' | 'failed' | 'blocked' | 'cancelled';
+  toolStatus?: 'started' | 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled';
   detail?: string;
 }
 
@@ -242,6 +242,9 @@ export function agentToolEventContent(event: AiChatSocketEvent): string {
   if (subtype === 'blocked') {
     return toolName ? `${toolName} is awaiting approval.` : 'Awaiting approval';
   }
+  if (subtype === 'denied') {
+    return toolName ? `${toolName} was denied before execution.` : 'Denied before execution';
+  }
   if (subtype === 'cancelled') {
     return toolName ? `${toolName} was stopped before execution.` : 'Stopped before execution';
   }
@@ -265,7 +268,7 @@ export function agentToolInvocationKey(event: AiChatSocketEvent): string | undef
 
 export function agentToolEventStatus(
   event: AiChatSocketEvent
-): 'started' | 'completed' | 'failed' | 'blocked' | 'cancelled' | undefined {
+): 'started' | 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled' | undefined {
   if (event.type !== 'tool_call' && event.type !== 'tool_group') {
     return undefined;
   }
@@ -273,7 +276,8 @@ export function agentToolEventStatus(
     return 'started';
   }
   return event.subtype === 'completed' || event.subtype === 'failed'
-    || event.subtype === 'blocked' || event.subtype === 'cancelled'
+    || event.subtype === 'blocked' || event.subtype === 'denied'
+    || event.subtype === 'cancelled'
     ? event.subtype : undefined;
 }
 

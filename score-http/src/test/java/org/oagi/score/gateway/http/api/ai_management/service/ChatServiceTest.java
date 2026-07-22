@@ -13,6 +13,22 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
+import org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowExecutionCoordinator;
+import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
+import org.oagi.score.gateway.http.api.ai_management.agent.Agent;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentDefinition;
+import org.oagi.score.gateway.http.api.ai_management.agent.GatewayAgent;
+import org.oagi.score.gateway.http.api.ai_management.agent.GatewayResult;
+import org.oagi.score.gateway.http.api.ai_management.agent.ResponseOnlyAgent;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentInputGuardrail;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentInputGuardrailChain;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrailChain;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
+import org.oagi.score.gateway.http.api.ai_management.execution.AgentInputRefusedException;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor;
+import org.oagi.score.gateway.http.api.ai_management.memory.AiContextBudgetService;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
@@ -24,6 +40,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Base64;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -35,12 +52,418 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ChatServiceTest {
+
+    private static <T> T mock(Class<T> type) {
+        T value = org.mockito.Mockito.mock(type);
+        if (value instanceof AiChatExecutor executor) {
+            when(executor.rootAgentId()).thenReturn("test-root-agent");
+        }
+        return value;
+    }
+
+    @Test
+    void localTurnRefusalLoadsNoHistoryAndInvokesNoGatewayWorkflowOrToolPath() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        ChatMemory memory = mock(ChatMemory.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
+        GatewayAgent gateway = mock(GatewayAgent.class);
+        AgentInputGuardrail refuse = request -> new AgentInputGuardrail.Result.Refuse(
+                new GuardrailRefusal(GuardrailDecision.of("local-policy", "1",
+                        GuardrailDecision.Action.REFUSE), "BLOCKED", "ai.policy.refused"));
+        AgentOutputGuardrail allowOutput = request -> new AgentOutputGuardrail.Result.Allow(
+                request.candidate(), GuardrailDecision.of("output", "1",
+                GuardrailDecision.Action.ALLOW));
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        when(executor.rootAgentId()).thenReturn("external-root-agent");
+        ChatService service = new ChatService(models, executor, null,
+                memory, repository, new ObjectMapper(), null, budgets, coordinator,
+                new AgentInputGuardrailChain(List.of(refuse)),
+                new AgentOutputGuardrailChain(List.of(allowOutput)), gateway);
+
+        var response = service.chat(prepared("blocked input", List.of()),
+                mock(ScoreUser.class), ignored -> { });
+
+        assertThat(response.response()).isEqualTo("I can’t help with that request.");
+        assertThat(response.agent()).isEqualTo("external-root-agent");
+        verify(memory, never()).get(any());
+        verify(gateway, never()).route(any(), any());
+        verify(coordinator, never()).execute(any());
+    }
+
+    @Test
+    void localTurnGuardrailReceivesAttachmentBytesAndRefusesBeforeModelExecution() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        ChatMemory memory = mock(ChatMemory.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
+        byte[] attachmentBytes = "policy-visible-image".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        AgentInputGuardrail refuseAttachment = request -> {
+            assertThat(request.input().attachments()).singleElement().satisfies(attachment -> {
+                assertThat(attachment.name()).isEqualTo("evidence.png");
+                assertThat(attachment.mediaType()).isEqualTo("image/png");
+                assertThat(attachment.data()).isEqualTo(attachmentBytes);
+            });
+            return new AgentInputGuardrail.Result.Refuse(new GuardrailRefusal(
+                    GuardrailDecision.of("attachment-policy", "1",
+                            GuardrailDecision.Action.REFUSE),
+                    "ATTACHMENT_BLOCKED", "ai.policy.refused"));
+        };
+        AgentOutputGuardrail allowOutput = request -> new AgentOutputGuardrail.Result.Allow(
+                request.candidate(), GuardrailDecision.of("output", "1",
+                GuardrailDecision.Action.ALLOW));
+        ChatService service = new ChatService(models, mock(AiChatExecutor.class), null,
+                memory, repository, new ObjectMapper(), null, budgets, coordinator,
+                new AgentInputGuardrailChain(List.of(refuseAttachment)),
+                new AgentOutputGuardrailChain(List.of(allowOutput)), null);
+        ChatAttachment attachment = new ChatAttachment("evidence.png", "image/png",
+                Base64.getEncoder().encodeToString(attachmentBytes),
+                (long) attachmentBytes.length);
+
+        var response = service.chat(prepared("inspect", List.of(attachment)),
+                mock(ScoreUser.class), ignored -> { });
+
+        assertThat(response.response()).isEqualTo("I can’t help with that request.");
+        verify(memory, never()).get(any());
+        verify(coordinator, never()).execute(any());
+    }
+
+    @Test
+    void outputRewriteOccursBeforeStreamingMemoryAndTranscriptPersistence() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("conversation-1")).thenReturn(List.of());
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.latestUsage("conversation-1")).thenReturn(Optional.empty());
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        when(budgets.budget("model")).thenReturn(Optional.empty());
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
+        when(coordinator.execute(any())).thenReturn(new AiChatExecutor.Result("token=raw-secret"));
+        AgentInputGuardrail allowInput = request -> new AgentInputGuardrail.Result.Allow(
+                GuardrailDecision.of("input", "1", GuardrailDecision.Action.ALLOW));
+        AgentOutputGuardrail rewrite = request -> new AgentOutputGuardrail.Result.Rewrite(
+                new AiMessage.Assistant("token=[REDACTED]"),
+                GuardrailDecision.of("output", "1", GuardrailDecision.Action.REWRITE));
+        ChatService service = new ChatService(models, mock(AiChatExecutor.class), null,
+                memory, repository, new ObjectMapper(), null, budgets, coordinator,
+                new AgentInputGuardrailChain(List.of(allowInput)),
+                new AgentOutputGuardrailChain(List.of(rewrite)), null);
+        List<AiExecutionEvent> events = new java.util.ArrayList<>();
+
+        var response = service.chat(prepared("show it", List.of()),
+                mock(ScoreUser.class), events::add);
+
+        assertThat(response.response()).isEqualTo("token=[REDACTED]");
+        assertThat(events).filteredOn(event -> "content_delta".equals(event.subtype()))
+                .extracting(AiExecutionEvent::content).containsExactly("token=[REDACTED]");
+        verify(memory).add(eq("conversation-1"), org.mockito.ArgumentMatchers.<Message>argThat(
+                message -> "token=[REDACTED]".equals(message.getText())));
+        ArgumentCaptor<AiChatTrajectoryStep> steps = ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, org.mockito.Mockito.atLeastOnce()).append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues()).noneMatch(step -> step.message().contains("raw-secret"));
+    }
+
+    @Test
+    void responseOnlyRetryBecomesTheFinalAgentWhilePreservingWorkflowTrace() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("conversation-1")).thenReturn(List.of());
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.latestUsage("conversation-1")).thenReturn(Optional.empty());
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        when(budgets.budget("model")).thenReturn(Optional.empty());
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
+        when(coordinator.execute(any())).thenReturn(new AiChatExecutor.Result(
+                "unsafe draft", Map.of("agentId", "root-agent", "workflow", "parallel")));
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result("safe answer")
+                .withExecutionIdentity("response-only-agent", "model", "RESPONSE_ONLY_RETRY"));
+        ResponseOnlyAgent responseOnly = mock(ResponseOnlyAgent.class);
+        when(responseOnly.definition()).thenReturn(new AgentDefinition(
+                new Agent.AgentId("response-only-agent"), "Response-only Agent",
+                "Regenerates a safe response.",
+                new AgentDefinition.InstructionTemplate("Regenerate safely.")));
+        AtomicInteger outputChecks = new AtomicInteger();
+        AgentOutputGuardrail retryThenAllow = request -> outputChecks.getAndIncrement() == 0
+                ? new AgentOutputGuardrail.Result.Retry("Remove the unsafe content.",
+                        GuardrailDecision.of("output-retry", "1",
+                                GuardrailDecision.Action.RETRY))
+                : new AgentOutputGuardrail.Result.Allow(request.candidate(),
+                        GuardrailDecision.of("output-allow", "1",
+                                GuardrailDecision.Action.ALLOW));
+        ChatService service = new ChatService(models, executor, null,
+                memory, repository, new ObjectMapper(), null, budgets, coordinator,
+                null, new AgentOutputGuardrailChain(List.of(retryThenAllow)),
+                null, responseOnly);
+
+        var response = service.chat(prepared("Inspect it", List.of()),
+                mock(ScoreUser.class), ignored -> { });
+
+        assertThat(response.agent()).isEqualTo("response-only-agent");
+        assertThat(response.response()).isEqualTo("safe answer");
+        ArgumentCaptor<AiChatExecutor.Context> retry =
+                ArgumentCaptor.forClass(AiChatExecutor.Context.class);
+        verify(executor).execute(retry.capture());
+        assertThat(retry.getValue().agentId()).isEqualTo("response-only-agent");
+        assertThat(retry.getValue().executionPurpose())
+                .isEqualTo(org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.RESPONSE_ONLY_RETRY);
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, org.mockito.Mockito.atLeastOnce())
+                .append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues())
+                .filteredOn(step -> "assistant".equals(step.messageKind()))
+                .singleElement()
+                .satisfies(step -> assertThat(step.extra())
+                        .containsEntry("agent_id", "response-only-agent")
+                        .containsEntry("agentId", "response-only-agent")
+                        .containsEntry("workflow", "parallel"));
+    }
+
+    @Test
+    void propagatesTheExecutedRootAgentIdentityToResponseAndPersistence() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("conversation-1")).thenReturn(List.of());
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.latestUsage("conversation-1")).thenReturn(Optional.empty());
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        when(budgets.budget("model")).thenReturn(Optional.empty());
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        when(executor.rootAgentId()).thenThrow(
+                new IllegalStateException("ROOT definition changed after the run snapshot"));
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
+        when(coordinator.execute(any())).thenReturn(new AiChatExecutor.Result("Domain answer")
+                .withExecutionIdentity("external-root-agent", "model", "USER_RESPONSE"));
+        AgentInputGuardrail allowInput = request -> new AgentInputGuardrail.Result.Allow(
+                GuardrailDecision.of("input", "1", GuardrailDecision.Action.ALLOW));
+        AgentOutputGuardrail allowOutput = request -> new AgentOutputGuardrail.Result.Allow(
+                request.candidate(), GuardrailDecision.of("output", "1",
+                GuardrailDecision.Action.ALLOW));
+        ChatService service = new ChatService(models, executor, null, memory, repository,
+                new ObjectMapper(), null, budgets, coordinator,
+                new AgentInputGuardrailChain(List.of(allowInput)),
+                new AgentOutputGuardrailChain(List.of(allowOutput)), null);
+
+        var response = service.chat(prepared("Inspect it", List.of()),
+                mock(ScoreUser.class), ignored -> { });
+
+        assertThat(response.agent()).isEqualTo("external-root-agent");
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, org.mockito.Mockito.atLeastOnce())
+                .append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues())
+                .filteredOn(step -> "assistant".equals(step.messageKind()))
+                .singleElement()
+                .satisfies(step -> assertThat(step.extra())
+                        .containsEntry("agent_id", "external-root-agent")
+                        .containsEntry("agentId", "external-root-agent"));
+    }
+
+    @Test
+    void preservesTheRunSnapshotIdentityWhenModelInputIsRefused() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("conversation-1")).thenReturn(List.of());
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.latestUsage("conversation-1")).thenReturn(Optional.empty());
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        when(budgets.budget("model")).thenReturn(Optional.empty());
+        AiChatExecutor executor = mock(AiChatExecutor.class);
+        when(executor.rootAgentId()).thenThrow(
+                new IllegalStateException("ROOT definition changed after the run snapshot"));
+        GuardrailRefusal refusal = new GuardrailRefusal(
+                GuardrailDecision.of("model-input", "1", GuardrailDecision.Action.REFUSE),
+                "MODEL_INPUT_BLOCKED", "ai.policy.refused");
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
+        when(coordinator.execute(any())).thenThrow(new AgentInputRefusedException(
+                refusal, new Agent.AgentId("snapshot-root-agent")));
+        AgentInputGuardrail allowInput = request -> new AgentInputGuardrail.Result.Allow(
+                GuardrailDecision.of("input", "1", GuardrailDecision.Action.ALLOW));
+        AgentOutputGuardrail allowOutput = request -> new AgentOutputGuardrail.Result.Allow(
+                request.candidate(), GuardrailDecision.of("output", "1",
+                GuardrailDecision.Action.ALLOW));
+        ChatService service = new ChatService(models, executor, null, memory, repository,
+                new ObjectMapper(), null, budgets, coordinator,
+                new AgentInputGuardrailChain(List.of(allowInput)),
+                new AgentOutputGuardrailChain(List.of(allowOutput)), null);
+
+        var response = service.chat(prepared("Inspect it", List.of()),
+                mock(ScoreUser.class), ignored -> { });
+
+        assertThat(response.agent()).isEqualTo("snapshot-root-agent");
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, org.mockito.Mockito.atLeastOnce())
+                .append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues())
+                .filteredOn(step -> "assistant".equals(step.messageKind()))
+                .singleElement()
+                .satisfies(step -> assertThat(step.extra())
+                        .containsEntry("agent_id", "snapshot-root-agent")
+                        .containsEntry("agentId", "snapshot-root-agent")
+                        .containsEntry("finish_reason", "GUARDRAIL_REFUSAL"));
+    }
+
+    @Test
+    void gatewayDirectHandlesRepeatedSimpleTurnsWithoutLoadingHistoryOrNormalExecution() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        ChatMemory memory = mock(ChatMemory.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
+        GatewayAgent gateway = mock(GatewayAgent.class);
+        when(gateway.enabled()).thenReturn(true);
+        when(gateway.id()).thenReturn(new Agent.AgentId("configured-gateway"));
+        GatewayResult.GuardedTurn turn = new GatewayResult.GuardedTurn(
+                new AiMessage.User("Hello"), List.of());
+        when(gateway.route(any(), any())).thenReturn(new GatewayResult.Direct(turn,
+                GatewayResult.DirectIntent.GREETING, new AiMessage.Assistant("Hello!"), 0.99,
+                Optional.of(new GatewayResult.Execution(
+                        new Agent.AgentId("configured-gateway"),
+                        new org.oagi.score.gateway.http.api.ai_management.agent.AiModel.ModelId(
+                                "fast-gateway-model")))));
+        AgentInputGuardrail allowInput = request -> new AgentInputGuardrail.Result.Allow(
+                GuardrailDecision.of("input", "1", GuardrailDecision.Action.ALLOW));
+        AgentOutputGuardrail allowOutput = request -> new AgentOutputGuardrail.Result.Allow(
+                request.candidate(), GuardrailDecision.of("output", "1",
+                GuardrailDecision.Action.ALLOW));
+        ChatService service = new ChatService(models, mock(AiChatExecutor.class), null,
+                memory, repository, new ObjectMapper(), null, budgets, coordinator,
+                new AgentInputGuardrailChain(List.of(allowInput)),
+                new AgentOutputGuardrailChain(List.of(allowOutput)), gateway);
+
+        var first = service.chat(prepared("Hello", List.of()),
+                mock(ScoreUser.class), ignored -> { });
+        var second = service.chat(prepared("Hello again", List.of()),
+                mock(ScoreUser.class), ignored -> { });
+
+        assertThat(first.agent()).isEqualTo("configured-gateway");
+        assertThat(first.response()).isEqualTo("Hello!");
+        assertThat(second.agent()).isEqualTo("configured-gateway");
+        assertThat(second.response()).isEqualTo("Hello!");
+        verify(gateway, org.mockito.Mockito.times(2)).route(any(), any());
+        verify(memory, never()).get(any());
+        verify(coordinator, never()).execute(any());
+        ArgumentCaptor<AiChatTrajectoryStep> gatewaySteps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, org.mockito.Mockito.atLeastOnce())
+                .append(eq("conversation-1"), gatewaySteps.capture());
+        assertThat(gatewaySteps.getAllValues()).filteredOn(step ->
+                        "gateway_route".equals(step.messageKind())
+                                || "assistant".equals(step.messageKind()))
+                .allSatisfy(step -> assertThat(step.modelName())
+                        .isEqualTo("fast-gateway-model"));
+    }
+
+    @Test
+    void gatewayHandoffOnAFollowUpLoadsHistoryAndRunsTheNormalWorkflow() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("conversation-1")).thenReturn(List.of(new UserMessage("Earlier turn")));
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.latestUsage("conversation-1")).thenReturn(Optional.empty());
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        when(budgets.budget("model")).thenReturn(Optional.empty());
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
+        when(coordinator.execute(any())).thenReturn(new AiChatExecutor.Result("Domain answer"));
+        GatewayAgent gateway = mock(GatewayAgent.class);
+        when(gateway.enabled()).thenReturn(true);
+        GatewayResult.GuardedTurn turn = new GatewayResult.GuardedTurn(
+                new AiMessage.User("Continue the domain work"), List.of());
+        when(gateway.route(any(), any())).thenReturn(new GatewayResult.Handoff(
+                turn, Optional.empty(), 0.99, false,
+                Optional.of(new GatewayResult.Execution(
+                        new Agent.AgentId("configured-gateway"),
+                        new org.oagi.score.gateway.http.api.ai_management.agent.AiModel.ModelId(
+                                "fast-gateway-model")))));
+        AgentInputGuardrail allowInput = request -> new AgentInputGuardrail.Result.Allow(
+                GuardrailDecision.of("input", "1", GuardrailDecision.Action.ALLOW));
+        AgentOutputGuardrail allowOutput = request -> new AgentOutputGuardrail.Result.Allow(
+                request.candidate(), GuardrailDecision.of("output", "1",
+                GuardrailDecision.Action.ALLOW));
+        ChatService service = new ChatService(models, mock(AiChatExecutor.class), null,
+                memory, repository, new ObjectMapper(), null, budgets, coordinator,
+                new AgentInputGuardrailChain(List.of(allowInput)),
+                new AgentOutputGuardrailChain(List.of(allowOutput)), gateway);
+
+        var response = service.chat(prepared("Continue the domain work", List.of()),
+                mock(ScoreUser.class), ignored -> { });
+
+        assertThat(response.response()).isEqualTo("Domain answer");
+        verify(gateway).route(any(), any());
+        verify(memory).get("conversation-1");
+        verify(coordinator).execute(any());
+        ArgumentCaptor<AiChatTrajectoryStep> routeStep =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, org.mockito.Mockito.atLeastOnce())
+                .append(eq("conversation-1"), routeStep.capture());
+        assertThat(routeStep.getAllValues()).filteredOn(step ->
+                        "gateway_route".equals(step.messageKind()))
+                .singleElement().satisfies(step -> assertThat(step.modelName())
+                        .isEqualTo("fast-gateway-model"));
+    }
+
+    @Test
+    void gatewayHandoffWithoutModelExecutionRecordsNoLlmCall() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("conversation-1")).thenReturn(List.of());
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.latestUsage("conversation-1")).thenReturn(Optional.empty());
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        when(budgets.budget("model")).thenReturn(Optional.empty());
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
+        when(coordinator.execute(any())).thenReturn(new AiChatExecutor.Result("Domain answer"));
+        GatewayAgent gateway = mock(GatewayAgent.class);
+        when(gateway.enabled()).thenReturn(true);
+        GatewayResult.GuardedTurn turn = new GatewayResult.GuardedTurn(
+                new AiMessage.User("Inspect the attachment"), List.of());
+        when(gateway.route(any(), any())).thenReturn(new GatewayResult.Handoff(
+                turn, Optional.empty(), 1.0, false));
+        AgentInputGuardrail allowInput = request -> new AgentInputGuardrail.Result.Allow(
+                GuardrailDecision.of("input", "1", GuardrailDecision.Action.ALLOW));
+        AgentOutputGuardrail allowOutput = request -> new AgentOutputGuardrail.Result.Allow(
+                request.candidate(), GuardrailDecision.of("output", "1",
+                GuardrailDecision.Action.ALLOW));
+        ChatService service = new ChatService(models, mock(AiChatExecutor.class), null,
+                memory, repository, new ObjectMapper(), null, budgets, coordinator,
+                new AgentInputGuardrailChain(List.of(allowInput)),
+                new AgentOutputGuardrailChain(List.of(allowOutput)), gateway);
+
+        assertThat(service.chat(prepared("Inspect the attachment", List.of()),
+                mock(ScoreUser.class), ignored -> { }).response()).isEqualTo("Domain answer");
+
+        ArgumentCaptor<AiChatTrajectoryStep> routeStep =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, org.mockito.Mockito.atLeastOnce())
+                .append(eq("conversation-1"), routeStep.capture());
+        assertThat(routeStep.getAllValues()).filteredOn(step ->
+                        "gateway_route".equals(step.messageKind()))
+                .singleElement().satisfies(step -> {
+                    assertThat(step.modelName()).isNull();
+                    assertThat(step.reasoningEffort()).isNull();
+                    assertThat(step.llmCallCount()).isZero();
+                    assertThat(step.extra()).doesNotContainKey("agent_id");
+                });
+    }
 
     @Test
     void reusesThePersistedConversationModelWhenARequestOmitsIt() {
@@ -105,9 +528,9 @@ class ChatServiceTest {
         when(repository.latestUsage(eq("conversation-1"))).thenReturn(Optional.empty());
         AiContextBudgetService budgets = mock(AiContextBudgetService.class);
         when(budgets.budget("model")).thenReturn(Optional.empty());
-        AiMultiAgentManager manager = mock(AiMultiAgentManager.class);
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
         ChatService service = new ChatService(models, executor, null, memory, repository,
-                new ObjectMapper(), null, budgets, manager);
+                new ObjectMapper(), null, budgets, coordinator);
         ScoreUser requester = mock(ScoreUser.class);
 
         ChatRequest prepared = service.prepare(new ChatRequest(
@@ -119,7 +542,7 @@ class ChatServiceTest {
         assertThat(response.response()).isEqualTo(
                 "Understood. I’ll use sub-agents for subsequent requests in this conversation. "
                         + "What would you like to know?");
-        verify(manager, never()).execute(any());
+        verify(coordinator, never()).execute(any());
         ArgumentCaptor<AiChatTrajectoryStep> steps =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
         verify(repository, org.mockito.Mockito.times(5))
@@ -153,9 +576,9 @@ class ChatServiceTest {
         when(repository.latestUsage(eq("conversation-1"))).thenReturn(Optional.empty());
         AiContextBudgetService budgets = mock(AiContextBudgetService.class);
         when(budgets.budget("model")).thenReturn(Optional.empty());
-        AiMultiAgentManager manager = mock(AiMultiAgentManager.class);
+        AiWorkflowExecutionCoordinator coordinator = mock(AiWorkflowExecutionCoordinator.class);
         ChatService service = new ChatService(models, executor, null, memory, repository,
-                new ObjectMapper(), null, budgets, manager);
+                new ObjectMapper(), null, budgets, coordinator);
         ScoreUser requester = mock(ScoreUser.class);
 
         ChatRequest prepared = service.prepare(new ChatRequest(
@@ -164,7 +587,7 @@ class ChatServiceTest {
         service.chat(prepared, requester, ignored -> {});
 
         assertThat(prepared.activeWorkflow()).isNull();
-        verify(manager, never()).execute(any());
+        verify(coordinator, never()).execute(any());
         ArgumentCaptor<AiChatTrajectoryStep> steps =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
         verify(repository, org.mockito.Mockito.times(5))
@@ -488,12 +911,12 @@ class ChatServiceTest {
         when(repository.latestUsage(eq("conversation-1"))).thenReturn(Optional.empty());
         AiContextBudgetService budgets = mock(AiContextBudgetService.class);
         when(budgets.budget("model")).thenReturn(Optional.empty());
-        AiMultiAgentManager multiAgents = mock(AiMultiAgentManager.class);
-        when(multiAgents.execute(any())).thenReturn(new AiChatExecutor.Result("Final answer.", Map.of(
+        AiWorkflowExecutionCoordinator workflowCoordinator = mock(AiWorkflowExecutionCoordinator.class);
+        when(workflowCoordinator.execute(any())).thenReturn(new AiChatExecutor.Result("Final answer.", Map.of(
                 "fanout_id", "fanout-1", "node_id", "fanout-1-lead",
                 "agent_name", "lead", "depth", 0, "status", "completed")));
         ChatService service = new ChatService(models, executor, null, memory, repository,
-                new ObjectMapper(), null, budgets, multiAgents);
+                new ObjectMapper(), null, budgets, workflowCoordinator);
         ScoreUser requester = mock(ScoreUser.class);
 
         service.chat(prepared("Investigate", List.of()), requester, ignored -> {});

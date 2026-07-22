@@ -150,6 +150,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
+    this.clearMutationApprovalBatch();
     this.confirmedMutationRequests.cancel(this.activeRequestId);
     this.clearMutationRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
@@ -174,6 +175,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
+    this.clearMutationApprovalBatch();
     this.confirmedMutationRequests.cancel(this.activeRequestId);
     this.clearMutationRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
@@ -203,6 +205,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
+    this.clearMutationApprovalBatch();
     this.confirmedMutationRequests.cancel(this.activeRequestId);
     this.clearMutationRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;

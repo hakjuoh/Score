@@ -92,6 +92,8 @@
             [agentFocus]="focusedAgentActivity"
             [modelChangePending]="state.modelChangePending"
             [mutationInteraction]="mutationInteraction"
+            [mutationApprovalBatch]="state.mutationApprovalBatch"
+            [mutationApprovalBatchBusy]="mutationApprovalControlsBusy"
             [elicitation]="state.elicitation"
             [elicitationBusy]="state.elicitationBusy"
             (attachmentRemoved)="removeAttachment($event)"
@@ -109,6 +111,9 @@
             (mutationChangeRequested)="requestMutationChange()"
             (mutationRevoked)="revokeMutationInteraction()"
             (mutationDismissed)="dismissMutationInteraction()"
+            (mutationBatchApproved)="decideMutationApprovalBatch('APPROVE')"
+            (mutationBatchDenied)="decideMutationApprovalBatch('DENY')"
+            (mutationBatchDecided)="decideMutationApprovalBatch($event)"
             (elicitationResponded)="respondToElicitation($event)"
             (messageListClicked)="onMessageListClick($event)">
           </score-ai-chat-message-list>

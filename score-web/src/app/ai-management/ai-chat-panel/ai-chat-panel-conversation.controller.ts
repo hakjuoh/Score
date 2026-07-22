@@ -2,6 +2,7 @@ import {HttpErrorResponse} from '@angular/common/http';
 import {forkJoin} from 'rxjs';
 import {take} from 'rxjs/operators';
 import {AiChatPanelCommandController} from './ai-chat-panel-command.controller';
+import {pendingMutationApprovalBatches} from './domain/ai-mutation-approval-batch';
 import {
   AiChatConversationDetails,
   AiChatMessage,
@@ -52,6 +53,12 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
         this.state.pending = true;
         this.activeRequestPublished = true;
         this.state.currentStatus = 'Reconnected to running request';
+        this.requestSubscription?.unsubscribe();
+        this.requestSubscription = this.transportService.watch(
+          '/user/queue/ai/chat/' + status.requestId
+        ).subscribe(message => {
+          this.handleSocketEvent(JSON.parse(message.body));
+        });
         this.pollRecoveredRequest();
       },
       error: () => onIdle?.()
@@ -184,14 +191,34 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
       });
     }
     this.state.messages = messages;
+    const recoveredApprovals = this.isTerminalExecutionStatus(status.status)
+      ? [] : pendingMutationApprovalBatches(
+        details.messages || [], status.requestId, details.conversationId
+      );
+    const activeApproval = this.state.mutationApprovalBatch;
+    if (activeApproval
+      && recoveredApprovals.some(batch => batch.batchId === activeApproval.batchId)) {
+      this.state.mutationApprovalBatchQueue = recoveredApprovals.filter(
+        batch => batch.batchId !== activeApproval.batchId
+      );
+    } else {
+      this.state.mutationApprovalBatch = recoveredApprovals.shift();
+      this.state.mutationApprovalBatchQueue = recoveredApprovals;
+      this.state.mutationApprovalBatchBusy = false;
+      this.scheduleMutationApprovalExpiry();
+    }
     this.state.agentActivities = [...messages].reverse()
       .find(message => (message.role === 'agent_group' || message.role === 'workflow_group')
         && message.activities?.some(activity => activity.inProgress))?.activities || [];
     this.state.conversationId = details.conversationId;
     this.sessionPersistence.rememberLastConversation(details.conversationId);
     this.state.restoreConversationSettings(details);
-    this.state.currentStatus = this.isTerminalExecutionStatus(status.status)
-      ? status.status : 'Request in progress';
+    this.state.currentStatus = this.state.mutationApprovalBatch
+      ? (this.state.mutationApprovalBatch.items.length === 1
+        ? 'Approval required'
+        : `${this.state.mutationApprovalBatch.items.length} approvals required`)
+      : this.isTerminalExecutionStatus(status.status)
+        ? status.status : 'Request in progress';
     if (this.restoreChatScrollPending) {
       this.restoreChatScrollPosition();
     } else {
@@ -201,7 +228,10 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
 
   protected finishRecoveredRequest(status: AiPublicExecutionRequestStatus): void {
     this.clearActiveRecovery();
+    this.requestSubscription?.unsubscribe();
+    this.requestSubscription = undefined;
     this.clearTimers();
+    this.clearMutationApprovalBatch();
     this.completeProgressMessages();
     this.settleAgentActivity(status.status === 'COMPLETED' ? 'completed'
       : status.status === 'CANCELLED' ? 'cancelled' : 'failed');

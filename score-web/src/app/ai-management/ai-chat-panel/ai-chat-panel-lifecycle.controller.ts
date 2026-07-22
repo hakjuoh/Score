@@ -45,6 +45,14 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.clearRequestStatusWatchdog();
     this.clearResponseTimeout();
     this.clearProviderRetryCountdown();
+    if (this.mutationApprovalExpiryTimeout !== undefined) {
+      window.clearTimeout(this.mutationApprovalExpiryTimeout);
+      this.mutationApprovalExpiryTimeout = undefined;
+    }
+    if (this.mutationApprovalAcknowledgementTimeout !== undefined) {
+      window.clearTimeout(this.mutationApprovalAcknowledgementTimeout);
+      this.mutationApprovalAcknowledgementTimeout = undefined;
+    }
     if (this.acknowledgementTimeout) {
       window.clearTimeout(this.acknowledgementTimeout);
       this.acknowledgementTimeout = undefined;
@@ -210,6 +218,9 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
+    this.state.elicitation = undefined;
+    this.state.elicitationBusy = false;
+    this.clearMutationApprovalBatch();
     this.clearMutationRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
@@ -298,6 +309,9 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.settleAgentActivity('completed');
     this.clearTimers();
     this.clearStatusMessage();
+    this.state.elicitation = undefined;
+    this.state.elicitationBusy = false;
+    this.clearMutationApprovalBatch();
     this.confirmedMutationRequests.cancel(requestId);
     this.clearMutationRepeatDraft(requestId);
     this.state.conversationId = conversationId || this.state.conversationId;
@@ -307,6 +321,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.state.pending = false;
     this.state.reconciliationRequired = false;
     this.requestSubscription?.unsubscribe();
+    this.requestSubscription = undefined;
     if (content) {
       this.state.messages.push({role: 'assistant', content});
       this.assistantMessageIndexesByRequestId.set(requestId, this.state.messages.length - 1);
