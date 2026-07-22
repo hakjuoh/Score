@@ -13,6 +13,17 @@ import {
 } from './domain/ai-chat-panel.model';
 import {isExecutionActivityEvent, isSpecialistToolEvent} from './domain/ai-agent-activity';
 
+const MUTATION_APPROVAL_EVENT_SUBTYPES = new Set([
+  'mutation_approval_batch_required',
+  'mutation_approval_decision_accepted',
+  'mutation_approval_decision_rejected'
+]);
+
+function isMutationApprovalInteractionEvent(event: AiChatSocketEvent): boolean {
+  return event.type === 'system' && !!event.subtype
+    && MUTATION_APPROVAL_EVENT_SUBTYPES.has(event.subtype);
+}
+
 export abstract class AiChatPanelRequestController extends AiChatPanelControllerBase {
   protected startChatRequest(prompt: string, attachments: AiChatAttachment[]): void {
     this.invalidateDraftAttachmentRestore();
@@ -70,7 +81,9 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         if (key && liveRestEventKeys.has(key)) {
           return;
         }
-        if (event.type === 'system'
+        if (isMutationApprovalInteractionEvent(event)) {
+          this.handleSocketEvent(event);
+        } else if (event.type === 'system'
           && event.subtype === 'mutation_confirmation_required') {
           this.handleMutationConfirmationNotice(event);
         } else if (event.type === 'system'
@@ -109,6 +122,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         || event.type === 'tool_call' || event.type === 'tool_group'
         || event.type === 'system' && event.subtype === 'guide'
         || event.type === 'system' && event.subtype === 'provider_retry'
+        || isMutationApprovalInteractionEvent(event)
         || event.type === 'system' && (event.subtype === 'elicitation_required'
         || event.subtype === 'elicitation_decision_accepted'
         || event.subtype === 'elicitation_decision_rejected')) {
@@ -173,6 +187,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         this.settleAgentActivity('completed');
         this.state.elicitation = undefined;
         this.state.elicitationBusy = false;
+        this.clearMutationApprovalBatch();
         this.activeRequestId = undefined;
         this.clearToolCallTracking();
         if (response.progress?.length && this.state.debugEnabled) {
@@ -221,6 +236,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         }
         this.state.elicitation = undefined;
         this.state.elicitationBusy = false;
+        this.clearMutationApprovalBatch();
         this.activeRequestId = undefined;
         this.clearToolCallTracking();
         this.state.messages.push({
@@ -286,6 +302,9 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
+    this.state.elicitation = undefined;
+    this.state.elicitationBusy = false;
+    this.clearMutationApprovalBatch();
     this.clearMutationRepeatDraft(requestId);
     this.confirmedMutationRequests.cancel(requestId);
     this.activeRequestId = undefined;

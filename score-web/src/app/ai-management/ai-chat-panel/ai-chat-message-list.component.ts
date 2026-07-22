@@ -11,6 +11,8 @@ import {
   AiChatModelInfo,
   AiElicitationNotice,
   AiElicitationResponse,
+  AiMutationApprovalBatchDecision,
+  AiMutationApprovalBatchNotice,
   AiMutationInteraction,
   AiMutationPermissionMode,
   AiChatToolStatus,
@@ -62,13 +64,15 @@ export class AiChatMessageListComponent implements OnChanges {
   @Input() agentFocus?: AiAgentActivity;
   @Input() modelChangePending = false;
   @Input() mutationInteraction?: AiMutationInteraction;
+  @Input() mutationApprovalBatch?: AiMutationApprovalBatchNotice;
+  @Input() mutationApprovalBatchBusy = false;
   @Input() elicitation?: AiElicitationNotice;
   @Input() elicitationBusy = false;
 
   @Output() attachmentRemoved = new EventEmitter<number>();
 
   get showRequestPendingIndicator(): boolean {
-    if (!this.pending || this.elicitation) {
+    if (!this.pending || this.elicitation || this.mutationApprovalBatch) {
       return false;
     }
     let latestUserIndex = -1;
@@ -96,6 +100,9 @@ export class AiChatMessageListComponent implements OnChanges {
   @Output() mutationChangeRequested = new EventEmitter<void>();
   @Output() mutationRevoked = new EventEmitter<void>();
   @Output() mutationDismissed = new EventEmitter<void>();
+  @Output() mutationBatchApproved = new EventEmitter<void>();
+  @Output() mutationBatchDenied = new EventEmitter<void>();
+  @Output() mutationBatchDecided = new EventEmitter<AiMutationApprovalBatchDecision[]>();
   @Output() elicitationResponded = new EventEmitter<AiElicitationResponse>();
 
   readonly permissionOptions: Array<{
@@ -195,7 +202,7 @@ export class AiChatMessageListComponent implements OnChanges {
   agentToolMessage(event: AiAgentActivityEvent, agentInProgress: boolean): AiChatMessage {
     const toolStatus: AiChatToolStatus | undefined = event.toolStatus === 'completed'
       || event.toolStatus === 'failed' || event.toolStatus === 'blocked'
-      || event.toolStatus === 'cancelled'
+      || event.toolStatus === 'denied' || event.toolStatus === 'cancelled'
       ? event.toolStatus : undefined;
     return {
       role: 'tool_call',

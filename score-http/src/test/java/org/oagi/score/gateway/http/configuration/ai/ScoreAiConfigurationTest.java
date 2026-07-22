@@ -2,7 +2,9 @@ package org.oagi.score.gateway.http.configuration.ai;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.oagi.score.gateway.http.api.ai_management.service.AiMutationToolGuard;
+import org.oagi.score.gateway.http.api.ai_management.agent.ConnectCenterAssistantAgent;
+import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -43,7 +45,8 @@ class ScoreAiConfigurationTest {
     @Test
     void promptResourcesUsePlaceholdersForExecutionProtocolValues() throws Exception {
         Resource[] prompts = new PathMatchingResourcePatternResolver()
-                .getResources("classpath*:prompts/*.md");
+                .getResources("classpath*:ai/**/*.md");
+        assertThat(prompts).isNotEmpty();
         for (Resource resource : prompts) {
             String text = resource.getContentAsString(StandardCharsets.UTF_8);
             assertThat(text).as(resource.getDescription())
@@ -51,7 +54,7 @@ class ScoreAiConfigurationTest {
                             AiMutationToolGuard.REQUEST_STOPPING);
         }
         String assistant = new ClassPathResource(
-                "prompts/connect-center-assistant-system-prompt.md")
+                "ai/system/system-prompt-connect-center-assistant.md")
                 .getContentAsString(StandardCharsets.UTF_8);
         assertThat(assistant)
                 .contains("## Input", "Input interpretation rules:",
@@ -62,26 +65,47 @@ class ScoreAiConfigurationTest {
                         "${requestStopping}", "Never retry silently",
                         "Never announce or imply that approval is required before making a tool call");
         assertThat(assistant).doesNotContain("${pageContext}", "## Request-scoped input");
+        assertThat(new AiAgentCatalog(new DefaultResourceLoader())
+                .configuredRootDefinition()
+                .instruction().value())
+                .startsWith("You are the connectCenter Assistant.")
+                .doesNotContain("role:", "toolPolicy:");
     }
 
     @Test
-    void reloadsTheSystemPromptFromAnExternalFile(@TempDir Path tempDir) throws Exception {
+    void reloadsTheConfiguredRootAgentFromAnExternalFile(@TempDir Path tempDir) throws Exception {
         Path promptFile = Files.createTempFile(tempDir, "assistant-system-prompt", ".md");
-        Files.writeString(promptFile, "First prompt: ${pageContext}");
+        Files.writeString(promptFile, rootAgent("First prompt: ${pageContext}"));
         ScoreAiProperties properties = new ScoreAiProperties();
         properties.getAssistant().setSystemPromptResource(promptFile.toUri().toString());
 
-        ScoreAiSystemPrompt prompt = new ScoreAiConfiguration().scoreAiSystemPrompt(
-                properties, new DefaultResourceLoader());
+        AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader(), properties);
+        ConnectCenterAssistantAgent rootAgent = new ConnectCenterAssistantAgent(catalog);
 
-        assertEquals("First prompt: ${pageContext}", prompt.text());
+        assertEquals("First prompt: ${pageContext}", rootAgent
+                .definition().instruction().value());
         assertEquals("First prompt: page ${literal}",
-                prompt.render(Map.of("pageContext", "page ${literal}")));
-        assertThatThrownBy(() -> prompt.render(Map.of()))
+                rootAgent.definition().instruction()
+                        .render(Map.of("pageContext", "page ${literal}")).value());
+        assertThatThrownBy(() -> rootAgent.definition()
+                .instruction().render(Map.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("pageContext");
-        Files.writeString(promptFile, "Updated prompt: ${pageContext}");
-        assertEquals("Updated prompt: ${pageContext}", prompt.text());
+        Files.writeString(promptFile, rootAgent("Updated prompt: ${pageContext}"));
+        assertEquals("Updated prompt: ${pageContext}", rootAgent
+                .definition().instruction().value());
+    }
+
+    private String rootAgent(String instruction) {
+        return """
+                ---
+                id: external-root-agent
+                name: External root Agent
+                description: Configured user-facing assistant used by the test.
+                ---
+
+                %s
+                """.formatted(instruction);
     }
 
     @Test
@@ -150,8 +174,9 @@ class ScoreAiConfigurationTest {
         assertEquals(16000, properties.getModels().get("claude-fable-5").getMaxTokens());
         assertNull(properties.getModels().get("gpt-5_6-sol").getMaxTokens());
         assertEquals(200000L, properties.getModels().get("gpt-5_6-sol").getContextWindow());
-        assertEquals("classpath:prompts/connect-center-assistant-system-prompt.md",
+        assertEquals("classpath:ai/system/system-prompt-connect-center-assistant.md",
                 properties.getAssistant().getSystemPromptResource());
+        assertEquals("claude-haiku-4_5", properties.getGateway().getModelName());
         Map.of(
                 "claude-fable-5", "max",
                 "claude-opus-4_8", "max",

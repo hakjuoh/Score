@@ -111,6 +111,8 @@
 
     <score-ai-chat-interaction-panel
       [mutation]="mutationInteraction"
+      [mutationApprovalBatch]="mutationApprovalBatch"
+      [mutationApprovalBatchBusy]="mutationApprovalBatchBusy"
       [elicitation]="elicitation"
       [elicitationBusy]="elicitationBusy"
       (mutationApproved)="mutationApproved.emit()"
@@ -118,6 +120,9 @@
       (mutationChangeRequested)="mutationChangeRequested.emit()"
       (mutationRevoked)="mutationRevoked.emit()"
       (mutationDismissed)="mutationDismissed.emit()"
+      (mutationBatchApproved)="mutationBatchApproved.emit()"
+      (mutationBatchDenied)="mutationBatchDenied.emit()"
+      (mutationBatchDecided)="mutationBatchDecided.emit($event)"
       (elicitationResponded)="elicitationResponded.emit($event)">
     </score-ai-chat-interaction-panel>
 

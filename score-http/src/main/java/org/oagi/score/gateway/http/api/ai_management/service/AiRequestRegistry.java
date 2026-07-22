@@ -2,9 +2,11 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancellationResponse;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiPublicExecutionRequestStatus;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiRequestStateStore;
 import org.oagi.score.gateway.http.api.ai_management.model.AiCancellationOutcome;
 import org.oagi.score.gateway.http.api.ai_management.model.AiRequestStopSignal;
 import org.oagi.score.gateway.http.api.ai_management.model.AiSharedRequestState;
+import org.oagi.score.gateway.http.api.ai_management.conversation.ConversationCommitFence;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,8 +18,10 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
@@ -35,7 +39,7 @@ import java.util.function.Supplier;
  * ScheduledFuture), guarded exclusively by the local Entry monitor.
  */
 @Component
-public class AiRequestRegistry {
+public class AiRequestRegistry implements ConversationCommitFence {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiRequestRegistry.class);
     private static final Duration TERMINAL_RETENTION = Duration.ofMinutes(30);
@@ -58,7 +62,7 @@ public class AiRequestRegistry {
     }
 
     AiRequestRegistry(ScheduledExecutorService scheduler, Duration stopGracePeriod) {
-        this(scheduler, stopGracePeriod, new InMemoryAiRequestStateStore());
+        this(scheduler, stopGracePeriod, AiRequestStateStore.inMemory());
     }
 
     AiRequestRegistry(ScheduledExecutorService scheduler, Duration stopGracePeriod,
@@ -73,7 +77,7 @@ public class AiRequestRegistry {
     public AiRequestRegistry() {
         this(java.util.concurrent.Executors.newSingleThreadScheduledExecutor(
                         Thread.ofPlatform().name("score-ai-registry-test-", 0).daemon(true).factory()),
-                DEFAULT_STOP_GRACE_PERIOD, new InMemoryAiRequestStateStore());
+                DEFAULT_STOP_GRACE_PERIOD, AiRequestStateStore.inMemory());
     }
 
     public Entry register(String requestId, String conversationId, ScoreUser requester, Instant deadline) {
@@ -179,6 +183,52 @@ public class AiRequestRegistry {
         } finally {
             stateStore.withGlobalLock(storage -> {
                 storage.removeMaintenance(conversationId, token);
+                return null;
+            });
+        }
+    }
+
+    /**
+     * Fences a confirmation decision against both its issuing request and the
+     * path conversation. This covers child-agent confirmations whose active
+     * lifecycle is registered against a different root conversation.
+     */
+    public <T> T whileRequestAndConversationIdle(
+            String requestId, String conversationId, Supplier<T> action) {
+        if (requestId == null || requestId.isBlank()
+                || conversationId == null || conversationId.isBlank() || action == null) {
+            throw new IllegalArgumentException("An AI request maintenance action is incomplete.");
+        }
+        String token = instanceId + ":maintenance:" + UUID.randomUUID();
+        Set<String> conversations = stateStore.withGlobalLock(storage -> {
+            Instant now = Instant.now();
+            AiSharedRequestState source = storage.get(requestId);
+            if (source != null && isLogicallyActive(source, now)) {
+                throw new IllegalStateException(
+                        "Stop the active AI request before deciding its mutation confirmation.");
+            }
+            Set<String> guarded = new LinkedHashSet<>();
+            guarded.add(conversationId);
+            if (source != null && source.conversationId() != null
+                    && !source.conversationId().isBlank()) {
+                guarded.add(source.conversationId());
+            }
+            if (guarded.stream().anyMatch(id -> storage.maintenanceOwner(id) != null)
+                    || storage.values().stream().anyMatch(state ->
+                    (requestId.equals(state.requestId())
+                            || guarded.contains(state.conversationId()))
+                            && isLogicallyActive(state, now))) {
+                throw new IllegalStateException(
+                        "Stop the active AI request before deciding its mutation confirmation.");
+            }
+            guarded.forEach(id -> storage.putMaintenance(id, token, MAINTENANCE_LEASE));
+            return Set.copyOf(guarded);
+        });
+        try {
+            return action.get();
+        } finally {
+            stateStore.withGlobalLock(storage -> {
+                conversations.forEach(id -> storage.removeMaintenance(id, token));
                 return null;
             });
         }

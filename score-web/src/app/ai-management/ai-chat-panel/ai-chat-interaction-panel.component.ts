@@ -2,6 +2,8 @@ import {Component, EventEmitter, Input, OnChanges, Output, SimpleChanges} from '
 import {
   AiElicitationNotice,
   AiElicitationResponse,
+  AiMutationApprovalBatchDecision,
+  AiMutationApprovalBatchNotice,
   AiMutationInteraction
 } from './domain/ai-chat-panel.model';
 import {record} from './domain/ai-elicitation';
@@ -41,6 +43,8 @@ interface SchemaField {
 export class AiChatInteractionPanelComponent implements OnChanges {
 
   @Input() mutation?: AiMutationInteraction;
+  @Input() mutationApprovalBatch?: AiMutationApprovalBatchNotice;
+  @Input() mutationApprovalBatchBusy = false;
   @Input() elicitation?: AiElicitationNotice;
   @Input() elicitationBusy = false;
 
@@ -49,10 +53,15 @@ export class AiChatInteractionPanelComponent implements OnChanges {
   @Output() mutationChangeRequested = new EventEmitter<void>();
   @Output() mutationRevoked = new EventEmitter<void>();
   @Output() mutationDismissed = new EventEmitter<void>();
+  @Output() mutationBatchApproved = new EventEmitter<void>();
+  @Output() mutationBatchDenied = new EventEmitter<void>();
+  @Output() mutationBatchDecided = new EventEmitter<AiMutationApprovalBatchDecision[]>();
   @Output() elicitationResponded = new EventEmitter<AiElicitationResponse>();
 
   fields: SchemaField[] = [];
   private activeElicitationId?: string;
+  private activeMutationBatchId?: string;
+  private readonly mutationDecisions = new Map<string, 'APPROVE' | 'DENY'>();
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['elicitation'] && this.elicitation?.elicitationId !== this.activeElicitationId) {
@@ -60,6 +69,38 @@ export class AiChatInteractionPanelComponent implements OnChanges {
       this.fields = this.elicitation
         ? this.schemaFields(this.elicitation.requestedSchema) : [];
     }
+    if (changes['mutationApprovalBatch']
+      && this.mutationApprovalBatch?.batchId !== this.activeMutationBatchId) {
+      this.activeMutationBatchId = this.mutationApprovalBatch?.batchId;
+      this.mutationDecisions.clear();
+    }
+  }
+
+  chooseMutationDecision(confirmationRequestId: string, decision: 'APPROVE' | 'DENY'): void {
+    if (!this.mutationApprovalBatchBusy) {
+      this.mutationDecisions.set(confirmationRequestId, decision);
+    }
+  }
+
+  mutationDecisionSelected(
+    confirmationRequestId: string, decision: 'APPROVE' | 'DENY'
+  ): boolean {
+    return this.mutationDecisions.get(confirmationRequestId) === decision;
+  }
+
+  mutationBatchDecisionComplete(): boolean {
+    return !!this.mutationApprovalBatch
+      && this.mutationApprovalBatch.items.every(item =>
+        this.mutationDecisions.has(item.confirmationRequestId));
+  }
+
+  submitMutationBatchDecision(): void {
+    const batch = this.mutationApprovalBatch;
+    if (!batch || this.mutationApprovalBatchBusy || !this.mutationBatchDecisionComplete()) return;
+    this.mutationBatchDecided.emit(batch.items.map(item => ({
+      confirmationRequestId: item.confirmationRequestId,
+      decision: this.mutationDecisions.get(item.confirmationRequestId)!
+    })));
   }
 
   choose(field: SchemaField, option: SchemaOption): void {

@@ -9,24 +9,42 @@ import org.jooq.impl.DSL;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.MutationConfirmation;
+import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalResolution;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationAuthorization;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationDecision;
 import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiMutationConfirmationCommandRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiMutationConfirmationQueryRepository;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.TransactionAwareDataSourceProxy;
+import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigInteger;
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class AiMutationConfirmationServiceDatabaseTest {
 
@@ -165,6 +183,124 @@ class AiMutationConfirmationServiceDatabaseTest {
                 owner, "conversation-1", "request-3", revised,
                 "create_business_context", "{\"name\":\"Another\"}"));
         assertThat(replay.allowed()).isFalse();
+    }
+
+    @Test
+    void renewsAnApprovedGrantPastTheRequestExpiryAndGuardExecutesTheExactMutationOnce()
+            throws Exception {
+        AiRequestRegistry requests = mock(AiRequestRegistry.class);
+        when(requests.mutationStarted("request-1")).thenReturn(true);
+        AiMutationToolGuard guard = new AiMutationToolGuard(service, requests);
+        ChatRequest request = new ChatRequest(
+                "change it", "request-1", null, "conversation-1",
+                null, List.of(), null, "model", "high", "ask");
+        ToolCallback delegate = mock(ToolCallback.class);
+        when(delegate.getToolDefinition()).thenReturn(ToolDefinition.builder()
+                .name("update_business_context")
+                .description("update")
+                .inputSchema("{\"type\":\"object\"}")
+                .build());
+        when(delegate.call(anyString(), any(ToolContext.class))).thenReturn("updated");
+        AiMutationToolGuard.GuardedToolSession session = guard.session(
+                request, owner, ignored -> { }, () -> new ToolCallback[]{delegate}, Set.of());
+
+        String blocked = inTransaction(() -> session.getToolCallbacks()[0]
+                .call("{\"id\":1}", new ToolContext(Map.of())));
+        assertThat(blocked).contains(AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED);
+        String confirmationId = session.pendingApprovals().getFirst()
+                .notice().confirmationRequestId();
+        Instant requestExpiresAt = Instant.now().plusMillis(250);
+        jdbc.update("UPDATE ai_chat_mutation_confirmation SET expires_at = ? WHERE guid = ?",
+                Timestamp.from(requestExpiresAt), confirmationId);
+
+        AiMutationDecision approved = inTransaction(() -> service.decide(
+                owner, "conversation-1", confirmationId, "APPROVE"));
+        assertThat(approved.response().expiresAt())
+                .isAfter(requestExpiresAt.plus(Duration.ofMinutes(9)));
+
+        long waitMillis = Math.max(1L,
+                Duration.between(Instant.now(), requestExpiresAt.plusMillis(50)).toMillis());
+        Thread.sleep(waitMillis);
+        assertThat(Instant.now()).isAfter(requestExpiresAt);
+
+        var resolved = inTransaction(() -> session.resolveApprovals(session, Map.of(
+                confirmationId, new AiMutationApprovalResolution(
+                        confirmationId, AiMutationApprovalResolution.Decision.APPROVE,
+                        approved.response().confirmationGrant()))));
+
+        assertThat(resolved).singleElement().satisfies(result -> {
+            assertThat(result.executed()).isTrue();
+            assertThat(result.result()).isEqualTo("updated");
+        });
+        assertThat(session.getToolCallbacks()[0]
+                .call("{\"id\":1}", new ToolContext(Map.of())))
+                .isEqualTo("updated");
+        verify(delegate, times(1)).call(
+                org.mockito.ArgumentMatchers.eq("{\"id\":1}"), any(ToolContext.class));
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM ai_chat_mutation_confirmation WHERE guid = ?",
+                String.class, confirmationId)).isEqualTo("CONSUMED");
+    }
+
+    @Test
+    void legacyDenialDuringWorkerReacquisitionCannotInvalidateACommittedGrant() {
+        jdbc.update("INSERT INTO ai_chat_conversation (guid, app_user_id) VALUES (?, ?)",
+                "child-conversation", BigInteger.ONE);
+        AiRequestRegistry requests = new AiRequestRegistry();
+        requests.register("request-1", "root-conversation", owner,
+                Instant.now().plusSeconds(30));
+        AiMutationAuthorization requested = inTransaction(() -> service.authorize(
+                owner, "child-conversation", "request-1", null,
+                "update_business_context", "{\"id\":1}"));
+        String confirmationId = requested.notice().confirmationRequestId();
+        assertThat(inTransaction(() -> service.sourceRequestId(
+                owner, "child-conversation", confirmationId))).isEqualTo("request-1");
+        AiMutationDecision approved = inTransaction(() -> service.decide(
+                owner, "child-conversation", confirmationId, "APPROVE"));
+
+        assertThatThrownBy(() -> requests.whileRequestAndConversationIdle(
+                "request-1", "child-conversation", () -> inTransaction(() -> service.decide(
+                        owner, "child-conversation", confirmationId, "DENY"))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("active AI request");
+
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM ai_chat_mutation_confirmation WHERE guid = ?",
+                String.class, confirmationId)).isEqualTo("APPROVED");
+        AiMutationAuthorization consumed = inTransaction(() -> service.authorize(
+                owner, "child-conversation", "request-2",
+                new MutationConfirmation(confirmationId,
+                        approved.response().confirmationGrant()),
+                "update_business_context", "{\"id\":1}"));
+        assertThat(consumed.allowed()).isTrue();
+        AiMutationAuthorization replay = inTransaction(() -> service.authorize(
+                owner, "child-conversation", "request-3",
+                new MutationConfirmation(confirmationId,
+                        approved.response().confirmationGrant()),
+                "update_business_context", "{\"id\":1}"));
+        assertThat(replay.allowed()).isFalse();
+    }
+
+    @Test
+    void allowsExplicitRevocationAfterTheIssuingRequestIsNoLongerActive() {
+        AiMutationAuthorization requested = inTransaction(() -> service.authorize(
+                owner, "conversation-1", "terminal-request", null,
+                "update_business_context", "{\"id\":1}"));
+        String confirmationId = requested.notice().confirmationRequestId();
+        AiMutationDecision approved = inTransaction(() -> service.decide(
+                owner, "conversation-1", confirmationId, "APPROVE"));
+
+        AiMutationDecision revoked = inTransaction(() -> service.decide(
+                owner, "conversation-1", confirmationId, "DENY"));
+
+        assertThat(revoked.status()).isEqualTo(HttpStatus.OK);
+        assertThat(revoked.response().disposition()).isEqualTo("DENIED");
+        AiMutationAuthorization rejectedGrant = inTransaction(() -> service.authorize(
+                owner, "conversation-1", "request-2",
+                new MutationConfirmation(confirmationId,
+                        approved.response().confirmationGrant()),
+                "update_business_context", "{\"id\":1}"));
+        assertThat(rejectedGrant.allowed()).isFalse();
     }
 
     private <T> T inTransaction(SupplierWithResult<T> operation) {

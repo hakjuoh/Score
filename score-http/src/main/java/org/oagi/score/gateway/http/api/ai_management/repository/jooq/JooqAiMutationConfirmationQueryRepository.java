@@ -26,6 +26,14 @@ import static org.oagi.score.gateway.http.common.repository.jooq.entity.tables.A
 public class JooqAiMutationConfirmationQueryRepository extends JooqBaseRepository
         implements AiMutationConfirmationQueryRepository {
 
+    @Override
+    public Optional<AiMutationConfirmationState> findOwned(
+            String conversationId,
+            String confirmationRequestId) {
+        return ownedState(conversationId, confirmationRequestId)
+                .fetchOptional(this::state);
+    }
+
     /**
      * Creates a requester-bound repository with the application JOOQ context.
      *
@@ -42,12 +50,17 @@ public class JooqAiMutationConfirmationQueryRepository extends JooqBaseRepositor
     public Optional<AiMutationConfirmationState> findOwnedForUpdate(
             String conversationId,
             String confirmationRequestId) {
+        return ownedState(conversationId, confirmationRequestId)
+                .forUpdate()
+                .fetchOptional(this::state);
+    }
+
+    private org.jooq.SelectConditionStep<? extends Record> ownedState(
+            String conversationId, String confirmationRequestId) {
         return selectState()
                 .where(AI_CHAT_MUTATION_CONFIRMATION.GUID.eq(confirmationRequestId)
                         .and(AI_CHAT_CONVERSATION.GUID.eq(conversationId))
-                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId())))
-                .forUpdate()
-                .fetchOptional(this::state);
+                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId())));
     }
 
     @Override
@@ -75,6 +88,7 @@ public class JooqAiMutationConfirmationQueryRepository extends JooqBaseRepositor
         return dslContext().select(
                         AI_CHAT_MUTATION_CONFIRMATION.AI_CHAT_MUTATION_CONFIRMATION_ID,
                         AI_CHAT_MUTATION_CONFIRMATION.GUID,
+                        AI_CHAT_MUTATION_CONFIRMATION.REQUEST_ID,
                         AI_CHAT_MUTATION_CONFIRMATION.STATUS,
                         AI_CHAT_MUTATION_CONFIRMATION.TOOL_NAME,
                         AI_CHAT_MUTATION_CONFIRMATION.ARGUMENTS_DIGEST,
@@ -94,6 +108,7 @@ public class JooqAiMutationConfirmationQueryRepository extends JooqBaseRepositor
         return new AiMutationConfirmationState(
                 record.get(AI_CHAT_MUTATION_CONFIRMATION.AI_CHAT_MUTATION_CONFIRMATION_ID).longValue(),
                 record.get(AI_CHAT_MUTATION_CONFIRMATION.GUID),
+                record.get(AI_CHAT_MUTATION_CONFIRMATION.REQUEST_ID),
                 record.get(AI_CHAT_MUTATION_CONFIRMATION.STATUS),
                 record.get(AI_CHAT_MUTATION_CONFIRMATION.TOOL_NAME),
                 record.get(AI_CHAT_MUTATION_CONFIRMATION.ARGUMENTS_DIGEST),

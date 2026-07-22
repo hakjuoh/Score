@@ -11,6 +11,7 @@ import {
   AiChatMessage,
   AiContextUsage,
   AiElicitationNotice,
+  AiMutationApprovalBatchNotice,
   AiMutationPermissionMode,
   AiChatPanelTab
 } from './ai-chat-panel.model';
@@ -48,6 +49,9 @@ export class AiChatPanelState {
   agentFocusId?: string;
   elicitation?: AiElicitationNotice;
   elicitationBusy = false;
+  mutationApprovalBatch?: AiMutationApprovalBatchNotice;
+  mutationApprovalBatchQueue: AiMutationApprovalBatchNotice[] = [];
+  mutationApprovalBatchBusy = false;
   modelChangePending = false;
   contextUsage?: AiContextUsage;
   currentStatus = 'Ready';
@@ -84,6 +88,9 @@ export class AiChatPanelState {
     this.resetAgentActivity();
     this.elicitation = undefined;
     this.elicitationBusy = false;
+    this.mutationApprovalBatch = undefined;
+    this.mutationApprovalBatchQueue = [];
+    this.mutationApprovalBatchBusy = false;
     this.modelChangePending = false;
     this.contextUsage = undefined;
     this.currentStatus = 'Ready';
@@ -209,6 +216,9 @@ export class AiChatPanelState {
     this.resetAgentActivity();
     this.elicitation = undefined;
     this.elicitationBusy = false;
+    this.mutationApprovalBatch = undefined;
+    this.mutationApprovalBatchQueue = [];
+    this.mutationApprovalBatchBusy = false;
     this.modelChangePending = false;
     this.contextUsage = undefined;
     this.activePanelTab = activePanelTab;

@@ -31,6 +31,62 @@ describe('AiChatInteractionPanelComponent', () => {
     expect(text).toContain('{"name":"Example"}');
   });
 
+  it('renders one shared parallel approval and emits one batch decision', () => {
+    const approve = vi.fn();
+    component.mutationBatchApproved.subscribe(approve);
+    component.mutationApprovalBatch = {
+      batchId: 'batch-1', requestId: 'request-1', conversationId: 'conversation-1',
+      parallel: true, expiresAt: '2099-07-15T00:00:00Z', items: [
+        {confirmationRequestId: 'confirmation-1', toolName: 'update_bbie',
+          argumentsSummary: '{"id":1}', agentLabel: 'Material agent'},
+        {confirmationRequestId: 'confirmation-2', toolName: 'delete_bbie',
+          argumentsSummary: '{"id":2}', agentLabel: 'Context agent'}
+      ]
+    };
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent).toContain('Approve 2 actions?');
+    expect(element.textContent).toContain('Parallel assistants have reached one shared approval barrier.');
+    expect(element.textContent).toContain('Material agent');
+    expect(element.textContent).toContain('Context agent');
+    const liveRegion = element.querySelector('[role="region"][aria-live="assertive"]');
+    expect(liveRegion?.getAttribute('aria-label')).toBe('Data change approvals');
+    expect(Array.from(element.querySelectorAll('.model-command-options[role="group"]'))
+      .map(group => group.getAttribute('aria-label'))).toEqual([
+      'Decision for update_bbie', 'Decision for delete_bbie'
+    ]);
+    Array.from(element.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Approve all'))?.click();
+    expect(approve).toHaveBeenCalledOnce();
+  });
+
+  it('collects mixed per-item choices and submits them as one decision', () => {
+    const decide = vi.fn();
+    component.mutationBatchDecided.subscribe(decide);
+    component.mutationApprovalBatch = {
+      batchId: 'batch-1', requestId: 'request-1', conversationId: 'conversation-1',
+      parallel: true, expiresAt: '2099-07-15T00:00:00Z', items: [
+        {confirmationRequestId: 'confirmation-1', toolName: 'update_bbie',
+          argumentsSummary: '{"id":1}'},
+        {confirmationRequestId: 'confirmation-2', toolName: 'delete_bbie',
+          argumentsSummary: '{"id":2}'}
+      ]
+    };
+    component.ngOnChanges({mutationApprovalBatch: {
+      previousValue: undefined, currentValue: component.mutationApprovalBatch,
+      firstChange: true, isFirstChange: () => true
+    }});
+    component.chooseMutationDecision('confirmation-1', 'APPROVE');
+    component.chooseMutationDecision('confirmation-2', 'DENY');
+    component.submitMutationBatchDecision();
+
+    expect(decide).toHaveBeenCalledWith([
+      {confirmationRequestId: 'confirmation-1', decision: 'APPROVE'},
+      {confirmationRequestId: 'confirmation-2', decision: 'DENY'}
+    ]);
+  });
+
   it('sends the user to Chat without approving or denying immediately', () => {
     const requestChanges = vi.fn();
     const approve = vi.fn();

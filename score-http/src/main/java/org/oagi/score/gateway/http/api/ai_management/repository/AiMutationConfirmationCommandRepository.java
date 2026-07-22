@@ -28,7 +28,7 @@ public interface AiMutationConfirmationCommandRepository {
      * Approves a requested confirmation and binds the one-time grant to its arguments.
      */
     boolean approve(long confirmationId, String grantDigest, Instant approvedAt,
-                    String argumentsDigest);
+                    Instant grantExpiresAt, String argumentsDigest);
 
     /**
      * Denies a requested or approved confirmation and clears its active grant digest.
