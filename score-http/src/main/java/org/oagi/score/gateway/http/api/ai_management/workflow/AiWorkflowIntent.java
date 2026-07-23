@@ -4,8 +4,6 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiA
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPersistentWorkflowCommand;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -30,15 +28,10 @@ public final class AiWorkflowIntent {
                     + "\\bgoing\\s+forward\\b|\\balways\\b|\\bnever\\b)");
     private static final Pattern AUTOMATIC_WORKFLOW = Pattern.compile(
             "(?iu)\\b(?:automatic|automatically|auto|reset|default)\\b");
-    private static final Pattern WORKFLOW_TERM = Pattern.compile(
-            "(?iu)\\b(direct|chain|parallel|routing|orchestrator(?:[\\s_-]+workers?)?)\\b");
     private static final Pattern NUMERIC_AGENT_COUNT = Pattern.compile(
             "(?iu)([2-4])\\s*(?:sub[\\s-]?)?agents?");
     private static final Pattern WORD_AGENT_COUNT = Pattern.compile(
             "(?iu)\\b(two|three|four)\\s+(?:sub[\\s-]?)?agents?\\b");
-    private static final Pattern ENGLISH_COMPARISON = Pattern.compile(
-            "(?iu)\\bcompare\\s+(.{2,80}?)\\s+(?:and|with|versus|vs\\.?)\\s+"
-                    + "(.{2,80}?)(?=\\s+(?:in|for|from|on)\\b|[,.!?]|$)");
 
     private AiWorkflowIntent() {
     }
@@ -50,10 +43,8 @@ public final class AiWorkflowIntent {
         }
         int count = requestedAgentCount(request.prompt()).orElse(2);
         AiMultiAgentOptions current = request.multiAgent();
-        String workflow = explicitlyRequestsFanOut(request.prompt())
-                ? "parallel" : "orchestrator_workers";
         return request.withMultiAgent(new AiMultiAgentOptions(true, count, current.strategy()))
-                .withActiveWorkflow(workflow);
+                .withActiveWorkflow("agents");
     }
 
     public static Optional<AiPersistentWorkflowCommand> persistentWorkflowCommand(String prompt) {
@@ -67,21 +58,11 @@ public final class AiWorkflowIntent {
         }
         if (NEGATED_DELEGATION.matcher(prompt).find()) {
             return Optional.of(new AiPersistentWorkflowCommand(
-                    "direct", AiPersistentWorkflowCommand.Mode.DISABLE_AGENTS));
-        }
-        Matcher named = WORKFLOW_TERM.matcher(prompt);
-        if (named.find()) {
-            String workflow = named.group(1).toLowerCase(Locale.ROOT)
-                    .replace('-', '_').replace(' ', '_');
-            if (workflow.startsWith("orchestrator")) workflow = "orchestrator_workers";
-            return Optional.of(new AiPersistentWorkflowCommand(
-                    workflow, AiPersistentWorkflowCommand.Mode.NAMED));
+                    "assistant", AiPersistentWorkflowCommand.Mode.DISABLE_AGENTS));
         }
         if (AGENT_TERM.matcher(prompt).find()) {
-            String workflow = explicitlyRequestsFanOut(prompt)
-                    ? "parallel" : "orchestrator_workers";
             return Optional.of(new AiPersistentWorkflowCommand(
-                    workflow, AiPersistentWorkflowCommand.Mode.ENABLE_AGENTS));
+                    "agents", AiPersistentWorkflowCommand.Mode.ENABLE_AGENTS));
         }
         return Optional.empty();
     }
@@ -114,41 +95,6 @@ public final class AiWorkflowIntent {
             case "four" -> 4;
             default -> throw new IllegalStateException("Unsupported bounded agent count.");
         });
-    }
-
-    /**
-     * Extracts the two explicitly compared subjects when the wording is clear enough to use
-     * as presentation-only task labels. Ambiguous prompts deliberately keep generic role labels.
-     */
-    static List<String> comparisonWorkItems(String prompt) {
-        if (prompt == null || prompt.isBlank()) return List.of();
-        Matcher english = ENGLISH_COMPARISON.matcher(normalize(prompt));
-        if (english.find()) {
-            return boundedDistinct(english.group(1), english.group(2));
-        }
-        return List.of();
-    }
-
-    private static List<String> boundedDistinct(String first, String second) {
-        List<String> labels = new ArrayList<>(2);
-        String left = cleanLabel(first);
-        String right = cleanLabel(second);
-        if (!left.isBlank()) labels.add(left);
-        if (!right.isBlank() && !right.equalsIgnoreCase(left)) labels.add(right);
-        return labels.size() == 2 ? List.copyOf(labels) : List.of();
-    }
-
-    private static String cleanLabel(String value) {
-        String label = normalize(value)
-                .replaceFirst("(?iu)^(?:please\\s+)?(?:compare|review|inspect|check)\\s+", "")
-                .replaceFirst("^[>•*\\-]+\\s*", "")
-                .replaceFirst("(?iu)\\s+(?:please|independently)$", "")
-                .strip();
-        return label.length() <= 80 ? label : label.substring(0, 77).stripTrailing() + "...";
-    }
-
-    private static String normalize(String value) {
-        return value.replaceAll("\\s+", " ").strip();
     }
 
 }

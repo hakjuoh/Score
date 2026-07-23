@@ -2,7 +2,7 @@ package org.oagi.score.gateway.http.configuration.ai;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.oagi.score.gateway.http.api.ai_management.agent.ConnectCenterAssistantAgent;
+import org.oagi.score.gateway.http.api.ai_management.agent.AssistantAgent;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
 import org.springframework.ai.anthropic.AnthropicChatModel;
@@ -59,6 +59,7 @@ class ScoreAiConfigurationTest {
         assertThat(assistant)
                 .contains("## Input", "Input interpretation rules:",
                         "## Output", "Workflow execution rules:", "Tool-use rules:",
+                        "Capability disclosure rules:",
                         "Evidence and identity rules:", "Mutation and interruption rules:",
                         "Safety rules:", "separate request-scoped user-context block",
                         "${mutationConfirmationRequired}", "${mutationApprovalPolicy}",
@@ -73,6 +74,34 @@ class ScoreAiConfigurationTest {
     }
 
     @Test
+    void assistantDisclosesOnlyCatalogBackedCapabilities() throws Exception {
+        String assistant = new ClassPathResource(
+                "ai/system/system-prompt-connect-center-assistant.md")
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(assistant).contains(
+                "`available-deferred-tools` catalog",
+                "complete and authoritative capability surface",
+                "only when at least one tool name in that catalog directly supports it",
+                "only when the catalog contains the corresponding tool",
+                "Never replace a partial operation set with a broad umbrella verb such as \"manage\"",
+                "Group supported tools into concise user-facing categories",
+                "If the catalog is absent or empty, do not enumerate capabilities");
+    }
+
+    @Test
+    void gatewayHandsGreetingsAndCapabilityQuestionsToTheCatalogAwareAssistant()
+            throws Exception {
+        String gateway = new ClassPathResource("ai/system/system-prompt-gateway.md")
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(gateway).contains(
+                "DIRECT is allowed only for thanks",
+                "Greetings and capability/help questions are HANDOFF",
+                "requester-scoped tool catalog");
+    }
+
+    @Test
     void reloadsTheConfiguredRootAgentFromAnExternalFile(@TempDir Path tempDir) throws Exception {
         Path promptFile = Files.createTempFile(tempDir, "assistant-system-prompt", ".md");
         Files.writeString(promptFile, rootAgent("First prompt: ${pageContext}"));
@@ -80,8 +109,10 @@ class ScoreAiConfigurationTest {
         properties.getAssistant().setSystemPromptResource(promptFile.toUri().toString());
 
         AiAgentCatalog catalog = new AiAgentCatalog(new DefaultResourceLoader(), properties);
-        ConnectCenterAssistantAgent rootAgent = new ConnectCenterAssistantAgent(catalog);
+        AssistantAgent rootAgent = new AssistantAgent(catalog);
 
+        assertEquals("external-root-agent", rootAgent.id().value());
+        assertEquals("connectcenter-assistant", rootAgent.callId().value());
         assertEquals("First prompt: ${pageContext}", rootAgent
                 .definition().instruction().value());
         assertEquals("First prompt: page ${literal}",

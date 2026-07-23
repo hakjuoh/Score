@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor;
 import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionService;
 import org.oagi.score.gateway.http.api.ai_management.execution.AgentInputRefusedException;
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
@@ -9,6 +10,7 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.core.io.DefaultResourceLoader;
 
 import java.util.List;
@@ -49,6 +51,52 @@ class GatewayAgentTest {
         assertThat(captured.get().agent().tools().isEmpty()).isTrue();
         assertThat(captured.get().scope().purpose()).isEqualTo(ExecutionScope.Purpose.GATEWAY_ROUTING);
         assertThat(captured.get().history()).isEmpty();
+    }
+
+    @Test
+    void greetingAndCapabilityResponsesHandoffToTheCatalogAwareAssistant() {
+        GatewayAgent gateway = service(invocation -> result(invocation, """
+                {"policyAction":"ALLOW","route":"DIRECT","intent":"GREETING",
+                 "confidence":0.99,
+                 "candidate":"Hello! I can manage unsupported resources.",
+                 "suggestedWorkflow":null}
+                """));
+
+        AgentDecision greeting = gateway.execute(workflowContext("Hello"));
+
+        assertThat(greeting).isEqualTo(
+                new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
+
+        GatewayAgent capabilities = service(invocation -> result(invocation, """
+                {"policyAction":"ALLOW","route":"DIRECT","intent":"CAPABILITIES_HELP",
+                 "confidence":0.99,
+                 "candidate":"I can manage unsupported resources.",
+                 "suggestedWorkflow":null}
+                """));
+
+        AgentDecision capabilityHelp = capabilities.execute(
+                workflowContext("What can you do?"));
+
+        assertThat(capabilityHelp).isEqualTo(
+                new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
+    }
+
+    @Test
+    void thanksCanStillUseTheLowLatencyDirectResponse() {
+        GatewayAgent gateway = service(invocation -> result(invocation, """
+                {"policyAction":"ALLOW","route":"DIRECT","intent":"THANKS",
+                 "confidence":0.99,"candidate":"You are welcome.",
+                 "suggestedWorkflow":null}
+                """));
+
+        AgentDecision decision = gateway.execute(workflowContext("Thanks"));
+
+        assertThat(decision).isInstanceOf(AgentDecision.Complete.class);
+        AgentDecision.Complete complete = (AgentDecision.Complete) decision;
+        assertThat(complete.result().answer()).isEqualTo("You are welcome.");
+        assertThat(complete.result().traceMetadata())
+                .containsEntry("gateway", true)
+                .containsEntry("intent", "THANKS");
     }
 
     @Test
@@ -148,6 +196,16 @@ class GatewayAgentTest {
 
     private GatewayResult.GuardedTurn turn(String content) {
         return new GatewayResult.GuardedTurn(new AiMessage.User(content), List.of());
+    }
+
+    private AgentWorkflowContext workflowContext(String content) {
+        AiChatExecutor.Context execution = mock(AiChatExecutor.Context.class);
+        when(execution.userMessage()).thenReturn(new UserMessage(content));
+        when(execution.guardrailDecisionIds()).thenReturn(List.of());
+        AgentWorkflowContext.Request request = new AgentWorkflowContext.Request(
+                "request", "conversation", "user", "model", content,
+                false, false, 4, "balanced", null, false, false);
+        return AgentWorkflowContext.root(execution, request, 3);
     }
 
     private AgentRunResult result(AgentInvocation invocation, String output) {

@@ -329,6 +329,10 @@ public class AiRequestRegistry implements ConversationCommitFence {
     }
 
     private void requestTimeout(Entry entry) {
+        requestTimeout(entry, true);
+    }
+
+    private void requestTimeout(Entry entry, boolean interruptCurrentWorker) {
         boolean workerPresent;
         synchronized (entry) {
             workerPresent = entry.workerThread != null;
@@ -343,7 +347,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
             storage.put(timed);
             return timed;
         });
-        applyStopState(entry, state);
+        applyStopState(entry, state, interruptCurrentWorker);
     }
 
     private void scheduleStopWatchdog(Entry entry) {
@@ -487,6 +491,12 @@ public class AiRequestRegistry implements ConversationCommitFence {
         });
     }
 
+    /** Applies the registry's normal timeout fence when a nested execution budget expires. */
+    public void timeoutExecution(String requestId) {
+        Entry entry = localRequests.get(requestId);
+        if (entry != null) requestTimeout(entry, false);
+    }
+
     /** Atomically fences cluster-wide cancellation/deadline against final persistence. */
     public boolean commitResult(String requestId, Runnable persistence) {
         Entry entry = localRequests.get(requestId);
@@ -592,6 +602,11 @@ public class AiRequestRegistry implements ConversationCommitFence {
     }
 
     private void applyStopState(Entry entry, AiSharedRequestState state) {
+        applyStopState(entry, state, true);
+    }
+
+    private void applyStopState(Entry entry, AiSharedRequestState state,
+                                boolean interruptCurrentWorker) {
         if (state == null || state.generation() != entry.generation) {
             return;
         }
@@ -605,7 +620,8 @@ public class AiRequestRegistry implements ConversationCommitFence {
                 worker = entry.workerThread;
             }
         }
-        if (worker != null) {
+        if (worker != null
+                && (interruptCurrentWorker || worker != Thread.currentThread())) {
             worker.interrupt();
         }
         if (watchdog) {
