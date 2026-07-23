@@ -30,7 +30,7 @@ class AiAgentCatalogTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Unknown worker Agent");
         assertThat(catalog.require("workflow-planner").instruction())
-                .startsWith("You are the workflow planner")
+                .startsWith("You are the Planner Agent")
                 .doesNotContain("role: PLANNER");
         assertThat(catalog.systemDefinition("gateway-agent").id().value())
                 .isEqualTo("gateway-agent");
@@ -48,11 +48,7 @@ class AiAgentCatalogTest {
                 .contains("- evidence-researcher: Finds and verifies current connectCenter records")
                 .doesNotContain("gateway-agent", "toolPolicy", "role:", "read-only");
         assertThat(catalog.workflowInstructionIds()).containsExactly(
-                "workflow-compatibility-worker", "workflow-composed-synthesis",
-                "workflow-fallback-task", "workflow-final-synthesis",
-                "workflow-original-request-reference", "workflow-read-only-tool-recovery",
-                "workflow-replan-context", "workflow-required-tool-recovery",
-                "workflow-result-truncated", "workflow-upstream-results",
+                "workflow-original-request-reference", "workflow-upstream-results",
                 "workflow-worker-assignment", "workflow-worker-full",
                 "workflow-worker-restricted");
         assertThat(catalog.all()).extracting(AiAgentDefinition::id)

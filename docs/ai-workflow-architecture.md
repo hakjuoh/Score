@@ -1,187 +1,102 @@
-# AI workflow architecture
+# AI Workflow architecture
 
-The assistant separates deterministic workflow composition from the bounded agent loop that
-decides whether more work is required.
+The assistant uses one recursive call-flow model. A Workflow owns a queue whose members are either
+an Agent call or another Workflow. There are no `direct`, `chain`, `parallel`, `routing`, or
+`orchestrator-workers` execution classes and no node compiler registry.
 
-## Execution model
-
-```text
-request
-  -> planner -> recursive workflow specification
-  -> compiler -> Workflow object graph
-  -> workflow.process(context)
-  -> evaluator -> COMPLETE
-               -> CONTINUE -> planner (with bounded feedback and prior result)
-```
-
-`Workflow` is the common synchronous interface. Every node receives an immutable
-`WorkflowContext` and returns a `WorkflowResult`, so nodes can be nested without depending on the
-chat controller or a particular model provider.
-
-- `DirectWorkflow`: one application-defined model or worker operation.
-- `ChainWorkflow`: ordered children; the previous result becomes the next child's upstream input.
-- `ParallelizationWorkflow`: independent children on virtual threads, one shared deadline, partial
-  failure support, and an explicit aggregator.
-- `RoutingWorkflow`: selects exactly one named child.
-- `OrchestratorWorkersWorkflow`: obtains workers for the current execution, runs them concurrently,
-  and synthesizes their outputs.
-- `EvaluatorOptimizerWorkflow`: wraps planning and execution in a bounded evaluate/replan loop.
-
-The model-authored `AiWorkflowNode` is data, not executable code. `AiWorkflowPlanner` normalizes and
-validates the recursive tree before `AiWorkflowCompiler` creates the object graph. Validation bounds
-depth, total nodes, registered workers, worker count, route selection, and the minimum branch count
-for parallel workflows. Plain (non-worker) branches of parallel and orchestrator containers count
-against the same worker limit, because each one consumes a concurrent model execution.
-
-Concurrency is a property of the execution context, not of a node: parallelization and
-orchestrator-workers mark the `WorkflowContext` they hand to branches as concurrent. A direct leaf
-that executes concurrently is not the exclusive lead, so it is forced to read-only tool policy and
-must pass the same admission semaphores as a registered worker. The same applies to the synthesis
-call of a container nested inside a concurrent branch: it runs while outer siblings are still
-executing, so it is read-only, admission-controlled, and recorded at branch depth. Only the
-sequential lead path (chain steps, routing selections, root aggregation) may perform mutations.
-
-`AiWorkflowCompiler` is a registry rather than a type switch. Its five built-in node compilers use a
-restricted `CompilationContext` for recursive children, routes, execution resources, leaf calls, and
-aggregation. A new node implementation can therefore be registered through `WorkflowNodeCompiler`
-without changing the compiler or the existing workflow classes. Planner grammar and validation must
-still opt into a new model-authored type deliberately; compiler extensibility does not weaken the
-untrusted-plan boundary.
-
-## Composition semantics
-
-A chain may contain any other workflow type. For example:
+## Main call flow
 
 ```text
-Chain
-  Routing
-    evidence -> Direct(evidence-researcher)
-    review   -> Direct(critical-reviewer)
-  Parallelization
-    Direct(scope A)
-    Direct(scope B)
-  OrchestratorWorkers
-    Direct(dynamic worker 1)
-    Direct(dynamic worker 2)
+Main Workflow queue
+  Gateway Agent
+    COMPLETE -> return the bounded response
+    HANDOFF  -> Assistant Agent
+                  COMPLETE -> return the response
+                  HANDOFF  -> Planner Agent
+                                DELEGATE -> child Workflow queue
+                                              Agent or child Workflow ...
+                                              Synthesizer Agent
+                                Evaluator Agent
+                                  COMPLETE -> return
+                                  HANDOFF  -> Planner Agent (bounded feedback)
 ```
 
-Composition follows data dependencies rather than a fixed list of pattern names. Routing executes
-one route, parallelization executes all branches, and orchestrator-workers owns lead synthesis.
-Chain outputs are marked as untrusted reference data before entering the next model call.
+Every `WorkflowAgent` returns one declarative `AgentDecision`:
 
-## Evaluate and replan
+- `Complete`: the Agent finished its assigned unit.
+- `Handoff`: append another independent Agent to the current queue.
+- `Delegate`: append a recursively executable child Workflow.
 
-After one compiled graph finishes, `AiWorkflowEvaluator` returns a structured decision:
+One request-global budget is shared by the main queue, every child Workflow, handoff, Planner,
+Evaluator, worker, and Synthesizer call. It is bounded to 128 charged operations, child Workflow
+depth to 8, Workflow members to 32, Agent calls in each plan to the request's configured maximum,
+and plan/evaluate iterations to
+`score.ai.multi-agent.maximum-workflow-iterations` (default 3). The request stop fence is checked
+before each charged operation. `score.ai.multi-agent.specialist-timeout` is one absolute deadline
+for the complete recursive run; blocked Agent calls are interrupted when it expires.
 
-```json
-{
-  "decision": "COMPLETE|CONTINUE",
-  "feedback": "observable gap or null",
-  "nextObjective": "one concrete remaining objective or null"
-}
-```
+## Recursive plan contract
 
-`CONTINUE` is allowed only when another bounded workflow can make progress without new user input.
-The prior output, evaluator feedback, and next objective are supplied to the next planner iteration,
-and the user sees a visible "continuing with the remaining objective" narration for every iteration
-that actually continues (a `CONTINUE` verdict on the final iteration runs nothing further, so it is
-not narrated). The evaluator judges against structured execution evidence — request-wide counts of
-successfully executed domain tool calls (shared across all forked worker and lead recorders) and of
-data changes blocked awaiting approval, plus the executed graph's trace metadata — not only the
-narrated result text. Intermediate answers are not streamed as final answers. The loop is capped by
-`score.ai.multi-agent.maximum-workflow-iterations` (default `3`) and observes the existing request
-cancellation fence on every iteration. When a later iteration fails after an earlier one succeeded,
-the most recent successful attempt is returned with `evaluation_status=iteration_failed` instead of
-discarding completed work.
+`AiWorkflowPlan` contains a root `WorkflowDefinition`. Each ordered member contains exactly one
+`AgentTask` or one child `WorkflowDefinition`. A member never contains an execution-pattern name.
+Member order expresses data dependency: successful earlier results enter later Agent calls as
+untrusted reference evidence.
 
-## Model-directed deferred tool search
+The Planner Agent may create semantic sub-workflows to group a coherent subproblem. The same
+Workflow engine runs every level. A one-member Workflow returns that member's result directly;
+otherwise the Synthesizer Agent combines the queue into one result for its parent. At the main
+level, the Evaluator Agent either accepts the candidate or hands bounded feedback and one next
+objective back to the Planner Agent.
 
-MCP callback schemas are not placed in the model context up front. The application keeps the full
-callback registry server-side and initially gives each executing workflow model only:
+## Independent Agents
 
-- `toolSearchTool`'s schema; and
-- an alphabetized, names-only `<available-deferred-tools>` catalog.
+Gateway, Assistant, Planner, Evaluator, Synthesizer, and request-scoped assigned workers implement
+the common `WorkflowAgent` contract in the `agent` package. Workflow scheduling is not embedded in
+their implementations. Agent definitions remain catalog data; `AssignedAgent` binds a definition to
+one planner assignment and to request-bounded Tool authority (`NONE`, `READ_ONLY`, or `FULL`).
+Gateway, Assistant, Planner, Evaluator, and Synthesizer are control-plane addresses and cannot be
+selected as model-authored workers. A custom Agent must explicitly opt into assignment.
 
-For an exact selection, the model calls `toolSearchTool` with a query such as
-`select:create_context_scheme,get_context_scheme`. `ScoreToolIndex` resolves those names without
-interpreting model text as a regular expression. Natural-language retrieval remains as a safe,
-entity-weighted fallback. Search results accumulate, and only the selected tools' complete schemas
-are exposed on the next model step. The limit is ten results per search, so a workflow can issue
-multiple searches when it genuinely needs a broader capability set.
+The Workflow converts the guardrail-accepted user turn once into a protocol-neutral request snapshot. Routing,
+planning, evaluation, and synthesis use that snapshot instead of depending on controller payloads.
+Model calls enter through the Agent execution port. The assigned-worker adapter retains the existing
+tool, mutation-approval, guardrail, trajectory, and requester-scoped MCP mechanics.
 
-This is an application-level deferred mechanism rather than a provider-specific feature, so the same
-workflow contract works with Anthropic and OpenAI runtimes. Every direct leaf, delegated worker, and
-lead synthesis call passes through the same advisor; the model executing that workflow temporarily
-acts as its tool-search agent before using the selected tools.
+## Safety and failure semantics
 
-The design combines the useful parts of the frontier clients inspected during implementation:
+- Model-authored Agent IDs must resolve before execution to an explicitly assignable installed
+  Agent or a worker-only catalog definition.
+- A member can carry exactly one Agent or child Workflow; malformed plans use a bounded fallback.
+- Agent instructions, prior outputs, original user messages, and Tool results re-enter later calls as
+  untrusted data, never as system authority.
+- Tool authority belongs to an assignment, not an Agent definition. Parent request policy can only
+  reduce it, and the engine applies that reduction before any assigned Agent is invoked.
+- A failed member is retained in the result tree. Remaining queued members continue; a Workflow
+  fails only when all members fail. A partially successful response always receives an engine-authored
+  warning that successful mutations may already have taken effect; disclosure never depends on the
+  Synthesizer Agent following its prompt. Descendant failures are counted and propagated through every
+  parent Workflow so an outer Synthesizer cannot erase the warning or its metadata.
+- Evaluator feedback cannot change Tool authority, Agent limits, depth, queue, or iteration bounds.
+- If a later evaluator-requested iteration fails, the most recent successful candidate is retained
+  with explicit `evaluation_status=iteration_failed` evidence.
+- Child model usage is settled exactly once onto the still-open root trajectory on success,
+  failure, refusal, timeout, or cancellation. Workflow terminal events seal only forked recorders,
+  so response output guardrails and visible content delivery remain recordable.
 
-| Implementation | Initial exposure | Selection | Score adaptation |
-|---|---|---|---|
-| Claude Code | Deferred tool names; full schema after `ToolSearchTool`, including exact `select:` | Model-directed | Same exact-selection protocol and names-only catalog |
-| Codex | MCP tools deferred behind search; ranked search returns loadable specifications | Search/ranking | Server-side private registry and natural-language ranked fallback |
-| OpenAI tool search | Deferred functions/namespaces; relevant tools added to context | Provider-managed model search | Equivalent behavior across both configured providers |
+## Observability
 
-This also follows the official recommendation to keep the initial tool set small because function
-definitions consume input context. See [OpenAI tool search](https://developers.openai.com/api/docs/guides/function-calling#tool-search),
-[Anthropic's workflow patterns](https://www.anthropic.com/engineering/building-effective-agents), and
-[Spring AI effective agents](https://docs.spring.io/spring-ai/reference/api/effective-agents.html).
+Each main or child Workflow emits `workflow_started` and one terminal
+`workflow_completed|failed|cancelled|refused` lifecycle event. OpenTelemetry maps these to
+`invoke_workflow <workflow-id>` spans. A child span uses `parent_node_id` to nest under its parent
+Workflow span; Agent/model/tool spans use the active Workflow node when available.
 
-## Approval and failure surfacing
+Span attributes describe actual runtime identity rather than a preselected pattern:
 
-- The mutation guard intercepts unapproved data-changing calls; intercepted calls are recorded and
-  displayed as `blocked` ("awaiting approval"), never as completed. A call intercepted because the
-  user is stopping the request is recorded as `cancelled` ("stopped before execution") — nothing is
-  pending and no approval control will appear.
-- Approval is granted only through the structured approval controls; the assistant prompt forbids
-  "reply to approve" phrasing and instructs one data-changing call per turn. When a model still
-  raises several confirmations in one request, the client keeps the first notice (each notice is
-  bound server-side to one exact tool + arguments digest) and later turns regenerate the rest.
-- Terminal failures map known classes (MCP transport/authorization, provider client errors,
-  deadline) to actionable user messages, note that already-completed data changes remain applied,
-  and persist the failure class in the error step for diagnosis.
-- Transient model-provider failures are retried by one application-level loop around every model
-  call (`AiProviderRetryExecutor`; `score.ai.provider-retry.*`, default 10 attempts, exponential
-  backoff from 2s capped at 60s, honoring `Retry-After`/`Retry-After-Ms`). Each provider expresses
-  errors differently, so `AiProviderFailureClassifier` maps the Anthropic and OpenAI Java SDK
-  exception hierarchies, Spring retry markers, HTTP-client exceptions, and network failures to one
-  shape carrying the provider's own human-readable message. Retryable = 408/409/429/5xx (including
-  Anthropic's 529 overload), an explicit `X-Should-Retry: true`, and connection drops; request,
-  authentication, and entitlement errors fail immediately. SDK-internal retries are disabled
-  (`maxRetries(0)`) so this loop is the single narrator: every wait emits a live `provider_retry`
-  event (attempt, max attempts, delay, provider reason, status code) that the chat panel renders
-  as a reconnecting countdown, and the wait aborts when the user stops the request.
-- An attempt that executed a non-read-only tool is never replayed even when the failure is
-  transient — re-running the model could repeat the data change; the provider's message surfaces
-  instead. When retries are exhausted the persisted error row shows the provider's original
-  message ("… (failed after N attempts)"), not a generic notice.
+- `gen_ai.workflow.name`: model-authored or main Workflow ID
+- `score.ai.workflow.run_id`: request/iteration/node execution ID
+- `score.ai.workflow.kind`: `workflow`
+- `score.ai.workflow.partial_failure`: whether some members failed
+- `member_count`, `completed`, and `failed`: bounded direct structural outcomes
+- `failure_count`: recursively aggregated descendant failure count
 
-## Efficiency profile
-
-- Tool-less model calls (planner, evaluator, no-tool leaves) skip the MCP session handshake
-  entirely.
-- Internal calls that carry their own leading system prompt (planner, evaluator, workers) do not
-  re-send the assistant persona prompt or the volatile page context.
-- When the planner's tools-needed classification proves wrong, the direct path degrades to the
-  model's answer with `required_tool_unfulfilled` metadata after one recovery attempt instead of
-  failing the request.
-
-## Safety invariants
-
-- Model output is normalized before execution; unknown workflow types and malformed graphs fail to
-  the existing safe fallback.
-- Full deferred-tool callbacks never come from the model: exact names are resolved only against the
-  requester-scoped server registry, and session indexes are fingerprinted, isolated, and evicted.
-- Worker leaves can use only registered agents and are forced to read-only tool policy; concurrent
-  plain branches are likewise read-only and admission-controlled.
-- The sequential lead remains the only component allowed to perform mutations and read-back.
-- Worker and chain outputs re-enter model calls as untrusted user-role reference data, never with
-  system-role authority.
-- Existing mutation confirmation, MCP guard, context budget, trajectory, timeout, and usage controls
-  remain below the workflow layer.
-- Evaluator feedback cannot expand permissions, worker limits, or iteration limits.
-- The original flat `AiWorkflowPlan` constructor and execution path remain supported for stored
-  clients and focused tests while recursive plans use the new compiler.
-- Workflow type names live in `WorkflowTypes`; planner grammar, validation, compiler registry, and
-  dispatch all reference the same constants, and `WorkflowNodeCompiler` extensions are collected
-  from the Spring context in production.
+This makes the trace tree match the recursive call flow directly.

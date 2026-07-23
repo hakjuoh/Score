@@ -1,50 +1,98 @@
 package org.oagi.score.gateway.http.api.ai_management.model;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
-/** Model-authored workflow and presentation contract for one root request. */
-public record AiWorkflowPlan(String workflow, Boolean toolRequired, String guideMessage,
-                             String activeVerb, String completedVerb,
-                             String synthesisGuideMessage, String synthesisActiveVerb,
-                             String synthesisCompletedVerb, List<Task> tasks,
-                             AiWorkflowNode root) {
-
-    /** Backward-compatible constructor for the original flat planner contract. */
-    public AiWorkflowPlan(String workflow, Boolean toolRequired, String guideMessage,
-                          String activeVerb, String completedVerb,
-                          String synthesisGuideMessage, String synthesisActiveVerb,
-                          String synthesisCompletedVerb, List<Task> tasks) {
-        this(workflow, toolRequired, guideMessage, activeVerb, completedVerb,
-                synthesisGuideMessage, synthesisActiveVerb, synthesisCompletedVerb,
-                tasks, null);
-    }
+/**
+ * Model-authored recursive Workflow. A member is exactly one Agent call or one
+ * child Workflow; execution order comes from the member queue, not a type name.
+ */
+public record AiWorkflowPlan(WorkflowDefinition root,
+                             String guideMessage,
+                             String synthesisGuideMessage) {
 
     public AiWorkflowPlan {
-        tasks = tasks != null ? List.copyOf(tasks) : List.of();
+        Objects.requireNonNull(root, "root");
+        guideMessage = optionalText(guideMessage, "guideMessage", 180);
+        synthesisGuideMessage = optionalText(
+                synthesisGuideMessage, "synthesisGuideMessage", 180);
     }
 
-    public boolean toolsNeeded() {
-        return Boolean.TRUE.equals(toolRequired);
-    }
-
-    public record Task(String label, String agentId, String instruction,
-                       String guideMessage, String activeVerb, String completedVerb,
-                       ToolAccess toolAccess) {
-
-        public Task(String label, String agentId, String instruction,
-                    String guideMessage, String activeVerb, String completedVerb) {
-            this(label, agentId, instruction, guideMessage, activeVerb, completedVerb, null);
+    public record WorkflowDefinition(String id, List<Member> members) {
+        public WorkflowDefinition {
+            id = requiredId(id, "workflow id");
+            members = members != null ? List.copyOf(members) : List.of();
+            if (members.isEmpty()) {
+                throw new IllegalArgumentException("A Workflow requires at least one member.");
+            }
+            Set<String> memberIds = new HashSet<>();
+            for (Member member : members) {
+                Objects.requireNonNull(member, "Workflow member");
+                if (!memberIds.add(member.id())) {
+                    throw new IllegalArgumentException(
+                            "Duplicate Workflow member id: " + member.id());
+                }
+            }
         }
+    }
 
-        public ToolAccess effectiveToolAccess(boolean toolsNeeded) {
-            return toolsNeeded ? toolAccess != null ? toolAccess : ToolAccess.READ_ONLY : ToolAccess.NONE;
+    public record Member(String id, AgentTask agent, WorkflowDefinition workflow) {
+        public Member {
+            id = requiredId(id, "workflow member id");
+            if ((agent == null) == (workflow == null)) {
+                throw new IllegalArgumentException(
+                        "A Workflow member must contain exactly one Agent or child Workflow.");
+            }
         }
     }
 
-    /** Per-task runtime Tool authority authored by the plan, never by an Agent definition. */
+    public record AgentTask(String agentId, String label, String instruction,
+                            String guideMessage, String activeVerb,
+                            String completedVerb, ToolAccess toolAccess) {
+        public AgentTask {
+            agentId = requiredId(agentId, "agent id");
+            label = requiredText(label, "agent task label", 100);
+            instruction = requiredText(instruction, "agent task instruction", 4_000);
+            guideMessage = optionalText(guideMessage, "agent guideMessage", 180);
+            activeVerb = optionalText(activeVerb, "agent activeVerb", 32);
+            completedVerb = optionalText(completedVerb, "agent completedVerb", 32);
+            toolAccess = toolAccess != null ? toolAccess : ToolAccess.NONE;
+        }
+    }
+
+    /** Per-call Tool authority. Agent definitions never grant their own authority. */
     public enum ToolAccess {
         NONE,
         READ_ONLY,
         FULL
+    }
+
+    private static String requiredId(String value, String label) {
+        String normalized = requiredText(value, label, 100);
+        if (!normalized.matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,99}")) {
+            throw new IllegalArgumentException("Invalid " + label + ": " + value);
+        }
+        return normalized;
+    }
+
+    private static String requiredText(String value, String label, int maximumLength) {
+        String normalized = Objects.requireNonNull(value, label).strip();
+        if (normalized.isEmpty()) throw new IllegalArgumentException(label + " is required");
+        if (normalized.length() > maximumLength) {
+            throw new IllegalArgumentException(label + " exceeds " + maximumLength + " characters");
+        }
+        return normalized;
+    }
+
+    private static String optionalText(String value, String label, int maximumLength) {
+        if (value == null) return null;
+        String normalized = value.strip();
+        if (normalized.isEmpty()) return null;
+        if (normalized.length() > maximumLength) {
+            throw new IllegalArgumentException(label + " exceeds " + maximumLength + " characters");
+        }
+        return normalized;
     }
 }
