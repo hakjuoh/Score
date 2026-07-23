@@ -24,6 +24,7 @@ class DataTypeRepositoryContract(Protocol):
         limit: int,
         offset: int,
         sorts: list[tuple[str, Literal["ASC", "DESC"]]],
+        states: list[str] | None = None,
         den: str | None = None,
         representation_term: str | None = None,
         creation_timestamp_before: datetime | None = None,
@@ -42,6 +43,8 @@ class DataTypeRepositoryContract(Protocol):
             dependent_release_ids: Value for `dependent_release_ids`.
             limit: Maximum number of records to return.
             offset: Number of records to skip before collecting results.
+            sorts: Validated columns and directions used to order results.
+            states: Optional lifecycle states to include using exact match.
             den: Optional Dictionary Entry Name (DEN) filter.
             representation_term: Value for `representation_term`.
             creation_timestamp_before: Optional upper bound for creation timestamp.

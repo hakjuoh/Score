@@ -71,6 +71,7 @@ class MariaDbDataTypeRepository(DataTypeRepositoryContract):
         limit: int,
         offset: int,
         sorts: list[tuple[str, Literal["ASC", "DESC"]]],
+        states: list[str] | None = None,
         den: str | None = None,
         representation_term: str | None = None,
         creation_timestamp_before: datetime | None = None,
@@ -89,6 +90,8 @@ class MariaDbDataTypeRepository(DataTypeRepositoryContract):
             dependent_release_ids: Value for `dependent_release_ids`.
             limit: Maximum number of records to return.
             offset: Number of records to skip before collecting results.
+            sorts: Validated columns and directions used to order results.
+            states: Optional lifecycle states to include using exact match.
             den: Optional Dictionary Entry Name (DEN) filter.
             representation_term: Value for `representation_term`.
             creation_timestamp_before: Optional upper bound for creation timestamp.
@@ -106,6 +109,7 @@ class MariaDbDataTypeRepository(DataTypeRepositoryContract):
         where_clauses = _build_where_clauses(
             release_id=release_id,
             dependent_release_ids=dependent_release_ids,
+            states=states,
             den=den,
             representation_term=representation_term,
             creation_timestamp_before=creation_timestamp_before,
@@ -2059,6 +2063,7 @@ def _build_base_query():
 def _build_where_clauses(
     release_id: ReleaseId,
     dependent_release_ids: list[ReleaseId],
+    states: list[str] | None,
     den: str | None,
     representation_term: str | None,
     creation_timestamp_before: datetime | None,
@@ -2071,6 +2076,8 @@ def _build_where_clauses(
     excluded_updater_login_ids: list[str] | None = None,
 ) -> list[object]:
     clauses: list[object] = [DtManifest.release_id.in_([release_id, *[x for x in dependent_release_ids]])]
+    if states:
+        clauses.append(Dt.state.in_(states))
     if den:
         clauses.append(DtManifest.den.ilike(f"%{den}%"))
     if representation_term:

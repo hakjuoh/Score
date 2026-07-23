@@ -15,6 +15,7 @@ from app.services.models.release import ReleaseSummaryServiceRecord
 from app.services.models.tag import TagSummaryServiceRecord
 from app.services.utils.date import DateRange
 from app.services.utils.pagination import PaginationParams
+from app.services.utils.state import CcState
 from app.services.utils.string import Guid
 from app.types.identifiers import DataTypeId, DataTypeManifestId, DataTypeSupplementaryComponentId
 from app.types.identifiers import DataTypeSupplementaryComponentManifestId
@@ -34,6 +35,7 @@ class DataTypeServiceParams:
         created_on: DateRange | None = None,
         last_updated_on: DateRange | None = None,
     ) -> None:
+        """Initialize data-type list parameters."""
         self.release_id = release_id
         self.pagination = pagination
         self.den = den
@@ -60,16 +62,7 @@ class DataTypeServiceResult:
     content_component_definition: str | None = None
     commonly_used: bool
     is_deprecated: bool
-    state: Literal[
-        "Deleted",
-        "WIP",
-        "Draft",
-        "QA",
-        "Candidate",
-        "Production",
-        "ReleaseDraft",
-        "Published",
-    ]
+    state: CcState
     primitives: list[DataTypePrimitiveServiceRecord] = field(default_factory=list)
     supplementary_components: list[DataTypeSupplementaryComponentServiceRecord] = field(default_factory=list)
     tags: list[TagSummaryServiceRecord] = field(default_factory=list)
