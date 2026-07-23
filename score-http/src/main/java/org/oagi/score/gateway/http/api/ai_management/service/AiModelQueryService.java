@@ -19,7 +19,9 @@ import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionSer
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrailChain;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.stream.Collectors;
 
 import static org.springframework.util.StringUtils.hasLength;
@@ -43,19 +46,33 @@ public class AiModelQueryService {
     private final AgentFactory agents = AgentFactory.binding();
     private final DefinitionGeneratorAgent definitionGenerator;
     private final NameSuggesterAgent nameSuggester;
+    private final ScoreAiObservability observability;
 
+    @Autowired
     public AiModelQueryService(RepositoryFactory repositoryFactory,
                                AgentExecutionService execution,
                                SpringAiModelCatalog models,
                                AgentOutputGuardrailChain outputGuardrails,
                                DefinitionGeneratorAgent definitionGenerator,
-                               NameSuggesterAgent nameSuggester) {
+                               NameSuggesterAgent nameSuggester,
+                               ScoreAiObservability observability) {
         this.repositoryFactory = Objects.requireNonNull(repositoryFactory);
         this.execution = Objects.requireNonNull(execution);
         this.models = Objects.requireNonNull(models);
         this.outputGuardrails = Objects.requireNonNull(outputGuardrails);
         this.definitionGenerator = Objects.requireNonNull(definitionGenerator);
         this.nameSuggester = Objects.requireNonNull(nameSuggester);
+        this.observability = Objects.requireNonNull(observability);
+    }
+
+    AiModelQueryService(RepositoryFactory repositoryFactory,
+                        AgentExecutionService execution,
+                        SpringAiModelCatalog models,
+                        AgentOutputGuardrailChain outputGuardrails,
+                        DefinitionGeneratorAgent definitionGenerator,
+                        NameSuggesterAgent nameSuggester) {
+        this(repositoryFactory, execution, models, outputGuardrails, definitionGenerator,
+                nameSuggester, ScoreAiObservability.noop());
     }
 
     public List<String> getAvailableModels() {
@@ -64,6 +81,12 @@ public class AiModelQueryService {
 
     public String generateDefinition(
             ScoreUser requester, AccManifestId accManifestId, String model, String originalText) {
+        return generateDefinition(requester, accManifestId, model, originalText, null, null);
+    }
+
+    public String generateDefinition(
+            ScoreUser requester, AccManifestId accManifestId, String model, String originalText,
+            String traceparent, String tracestate) {
 
         var accQuery = repositoryFactory.accQueryRepository(requester);
         var acc = accQuery.getAccSummary(accManifestId);
@@ -76,16 +99,24 @@ public class AiModelQueryService {
         }
         userPrompt += prompt(accManifestId, ccDocument, 0);
 
-        return run(definitionGenerator.definition(), requester, model, userPrompt);
+        return run(definitionGenerator.definition(), requester, model, userPrompt,
+                "definition_generation", traceparent, tracestate);
     }
 
     public String generateDefinition(
             ScoreUser requester, AsccpManifestId asccpManifestId, String model, String originalText) {
+        return generateDefinition(requester, asccpManifestId, model, originalText, null, null);
+    }
+
+    public String generateDefinition(
+            ScoreUser requester, AsccpManifestId asccpManifestId, String model, String originalText,
+            String traceparent, String tracestate) {
 
         var asccpQuery = repositoryFactory.asccpQueryRepository(requester);
         var asccp = asccpQuery.getAsccpSummary(asccpManifestId);
 
-        return generateDefinition(requester, asccp.roleOfAccManifestId(), model, originalText);
+        return generateDefinition(requester, asccp.roleOfAccManifestId(), model, originalText,
+                traceparent, tracestate);
     }
 
     private String prompt(AccManifestId accManifestId, CcDocument ccDocument, int depth) {
@@ -141,6 +172,11 @@ public class AiModelQueryService {
     }
 
     public String suggestName(ScoreUser requester, AccManifestId accManifestId, String model, String originalName) {
+        return suggestName(requester, accManifestId, model, originalName, null, null);
+    }
+
+    public String suggestName(ScoreUser requester, AccManifestId accManifestId, String model,
+                              String originalName, String traceparent, String tracestate) {
 
         var accQuery = repositoryFactory.accQueryRepository(requester);
         var acc = accQuery.getAccSummary(accManifestId);
@@ -152,11 +188,13 @@ public class AiModelQueryService {
             userPrompt += "The definition is '" + acc.definition().content() + "'.\n";
         }
         userPrompt += prompt(accManifestId, ccDocument, 0);
-        return run(nameSuggester.definition(), requester, model, userPrompt);
+        return run(nameSuggester.definition(), requester, model, userPrompt,
+                "name_generation", traceparent, tracestate);
     }
 
-    private String run(AgentDefinition definition, ScoreUser requester,
-                       String modelId, String prompt) {
+    String run(AgentDefinition definition, ScoreUser requester,
+               String modelId, String prompt, String executionKind,
+               String traceparent, String tracestate) {
         ResolvedAgent agent = agents.create(definition, models.require(modelId), ToolSet.empty());
         String correlation = UUID.randomUUID().toString();
         String requesterId = requester != null && requester.userId() != null
@@ -166,15 +204,28 @@ public class AiModelQueryService {
         ExecutionScope scope = new ExecutionScope("ai-query-" + correlation,
                 "ai-query-" + correlation, requesterId, 0L,
                 ExecutionScope.Purpose.USER_RESPONSE, List.of());
-        var result = execution.execute(new AgentInvocation(null, agent,
-                new AiMessage.User(prompt), List.of(), scope, null));
-        var guarded = outputGuardrails.evaluate(new AgentOutputGuardrail.Request(
-                AgentOutputGuardrail.Scope.PUBLIC, result.response(), scope,
-                Map.of("feature", definition.id().value())));
-        if (!guarded.allowed()) {
-            throw new IllegalStateException(
-                    "The generated content was not accepted by output policy.");
+        ScoreAiObservability.Turn turn = observability.startExecution(
+                new ScoreAiObservability.ExecutionDescriptor(scope.requestId(),
+                        scope.conversationId(), modelId, executionKind, "none"),
+                requester, 0L, traceparent, tracestate);
+        turn.executionStarted();
+        try {
+            var result = execution.execute(new AgentInvocation(null, agent,
+                    new AiMessage.User(prompt), List.of(), scope, null));
+            var guarded = outputGuardrails.evaluate(new AgentOutputGuardrail.Request(
+                    AgentOutputGuardrail.Scope.PUBLIC, result.response(), scope,
+                    Map.of("feature", definition.id().value())));
+            observability.recordGuardrails(scope.requestId(), "agent_output",
+                    guarded.decisions(), guarded.refusal());
+            if (!guarded.allowed()) {
+                throw new IllegalStateException(
+                        "The generated content was not accepted by output policy.");
+            }
+            turn.complete("COMPLETED", null);
+            return removeReasoning(guarded.output().content());
+        } catch (RuntimeException failure) {
+            turn.complete(failure instanceof CancellationException ? "CANCELLED" : "FAILED", failure);
+            throw failure;
         }
-        return removeReasoning(guarded.output().content());
     }
 }

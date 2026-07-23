@@ -21,8 +21,41 @@ logging:
   level:
     org.springframework.boot.devtools: INFO
 
+management:
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+    export:
+      enabled: ${OTEL_TRACES_EXPORT_ENABLED:true}
+      otlp:
+        enabled: ${OTEL_TRACES_EXPORT_ENABLED:true}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: ${OTEL_SERVICE_NAMESPACE:oagi.score}
+      deployment.environment.name: ${OTEL_DEPLOYMENT_ENVIRONMENT:development}
+    tracing:
+      sampler: ${OTEL_TRACES_SAMPLER:parentbased_traceidratio}
+      export:
+        schedule-delay: ${OTEL_BSP_SCHEDULE_DELAY:5s}
+        timeout: ${OTEL_BSP_EXPORT_TIMEOUT:10s}
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://127.0.0.1:4318/v1/traces}
+          connect-timeout: ${OTEL_EXPORTER_OTLP_TRACES_TIMEOUT:10s}
+          timeout: ${OTEL_EXPORTER_OTLP_TRACES_TIMEOUT:10s}
+  otlp:
+    metrics:
+      export:
+        enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
+        step: ${OTEL_METRIC_EXPORT_INTERVAL:10s}
+        connect-timeout: ${OTEL_EXPORTER_OTLP_METRICS_TIMEOUT:10s}
+        read-timeout: ${OTEL_EXPORTER_OTLP_METRICS_TIMEOUT:10s}
+        url: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:http://127.0.0.1:4318/v1/metrics}
+
 score:
   ai:
+    observability:
+      enabled: ${SCORE_AI_OBSERVABILITY_ENABLED:true}
+      service-name: ${SCORE_AI_OBSERVABILITY_SERVICE_NAME:score-ai}
     gateway:
       # Keep simple-turn classification independent from the main assistant model.
       # Override with any configured low-cost, low-latency model.

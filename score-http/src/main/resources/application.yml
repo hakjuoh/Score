@@ -108,6 +108,10 @@ springdoc:
     tags-sorter: alpha
 
 score:
+  ai:
+    observability:
+      # AI-only SDK/exporters. Environment profiles opt in explicitly.
+      enabled: false
   redis:
     # Destructive maintenance switch. Keep false for every multi-instance deployment.
     flush-on-startup: ${SCORE_REDIS_FLUSH_ON_STARTUP:false}

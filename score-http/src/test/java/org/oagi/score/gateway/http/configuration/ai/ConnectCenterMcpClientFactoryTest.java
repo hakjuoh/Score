@@ -1,11 +1,15 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.application_management.service.BrokerJwtService;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.springframework.mock.env.MockEnvironment;
 
 import java.time.Duration;
+import java.net.URI;
+import java.net.http.HttpRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -13,6 +17,26 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ConnectCenterMcpClientFactoryTest {
+
+    @Test
+    void propagatesTheCurrentPrivateSpanToMcpHttpRequests() {
+        SdkTracerProvider provider = SdkTracerProvider.builder().build();
+        OpenTelemetrySdk sdk = OpenTelemetrySdk.builder().setTracerProvider(provider).build();
+        var span = sdk.getTracer("test").spanBuilder("tool").startSpan();
+        try (var ignored = span.makeCurrent()) {
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("https://mcp.example/mcp"));
+
+            ConnectCenterMcpClientFactory.injectCurrentTrace(request);
+
+            assertThat(request.build().headers().firstValue("traceparent"))
+                    .hasValueSatisfying(value -> assertThat(value)
+                            .contains(span.getSpanContext().getTraceId())
+                            .contains(span.getSpanContext().getSpanId()));
+        } finally {
+            span.end();
+            sdk.close();
+        }
+    }
 
     @Test
     void requesterTokenOutlivesTheLongestSdkRequest() {
