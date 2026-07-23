@@ -56,10 +56,6 @@ score:
     observability:
       enabled: ${SCORE_AI_OBSERVABILITY_ENABLED:true}
       service-name: ${SCORE_AI_OBSERVABILITY_SERVICE_NAME:score-ai}
-    gateway:
-      # Keep simple-turn classification independent from the main assistant model.
-      # Override with any configured low-cost, low-latency model.
-      model-name: ${SCORE_AI_GATEWAY_MODEL_NAME:claude-haiku-4_5}
     multi-agent:
       # Caps apply per application instance; cluster-wide bounding comes from the
       # per-user active-request limit enforced by the shared AI request registry.
@@ -214,7 +210,7 @@ score:
           thinking-modes: [enabled, disabled]
           default-thinking: disabled
       gpt-5_6-sol:
-        display-name: GPT-5.6 SOL
+        display-name: GPT-5.6 Sol
         description: Latest frontier agentic model for complex reasoning and tool-driven work.
         provider: azure-openai
         model: gpt-5.6-sol
