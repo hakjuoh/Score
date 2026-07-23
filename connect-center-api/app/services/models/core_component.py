@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast, get_args
 
 from dataclasses import dataclass, field
 
@@ -16,6 +16,7 @@ from app.services.models.release import ReleaseSummaryServiceRecord
 from app.services.models.tag import TagSummaryServiceRecord
 from app.services.utils.date import DateRange
 from app.services.utils.pagination import PaginationParams
+from app.services.utils.state import CcState
 from app.services.utils.string import Guid
 from app.types.identifiers import AccId, AccManifestId, AsccId, AsccManifestId, AsccpId, AsccpManifestId, BccId
 from app.types.identifiers import BccManifestId, BccpId, BccpManifestId
@@ -36,6 +37,7 @@ class CoreComponentServiceParams:
         created_on: DateRange | None = None,
         last_updated_on: DateRange | None = None,
     ) -> None:
+        """Initialize core-component list parameters."""
         self.release_id = release_id
         self.types = types
         self.pagination = pagination
@@ -46,16 +48,8 @@ class CoreComponentServiceParams:
 
 
 CoreComponentType = Literal["ACC", "ASCCP", "BCCP"]
-CoreComponentState = Literal[
-    "Deleted",
-    "WIP",
-    "Draft",
-    "QA",
-    "Candidate",
-    "Production",
-    "ReleaseDraft",
-    "Published",
-]
+CORE_COMPONENT_TYPES = cast(tuple[CoreComponentType, ...], get_args(CoreComponentType))
+CoreComponentState = CcState
 OagisComponentType = Literal[
     "Base",
     "Semantics",
