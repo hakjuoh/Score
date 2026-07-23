@@ -207,7 +207,7 @@ class ScoreAiConfigurationTest {
         assertEquals(200000L, properties.getModels().get("gpt-5_6-sol").getContextWindow());
         assertEquals("classpath:ai/system/system-prompt-connect-center-assistant.md",
                 properties.getAssistant().getSystemPromptResource());
-        assertEquals("claude-haiku-4_5", properties.getGateway().getModelName());
+        assertNull(environment.getProperty("score.ai.gateway.model-name"));
         Map.of(
                 "claude-fable-5", "max",
                 "claude-opus-4_8", "max",

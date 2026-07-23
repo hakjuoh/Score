@@ -198,7 +198,7 @@ export abstract class AiChatPanelControllerBase {
 
   get composerPlaceholder(): string {
     return this.mutationDecisionOpen && this.mutationInteractionMode === 'confirm'
-      ? 'Describe changes to this action' : 'Ask connectCenter';
+      ? 'Describe changes to this action' : 'Ask a question';
   }
 
   get mutationInteraction(): AiMutationInteraction | undefined {

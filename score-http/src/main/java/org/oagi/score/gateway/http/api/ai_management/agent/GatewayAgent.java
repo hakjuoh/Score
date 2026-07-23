@@ -49,7 +49,8 @@ public final class GatewayAgent extends CatalogBackedAgent implements WorkflowAg
         }
         GatewayResult result = route(new GatewayResult.GuardedTurn(
                 SpringAiUserMessageAdapter.toCore(context.execution().userMessage()), List.of()),
-                executionScope(context), context.observationContext(), context);
+                context.request().modelName(), executionScope(context),
+                context.observationContext(), context);
         if (result instanceof GatewayResult.Direct direct) {
             if (direct.intent() != GatewayResult.DirectIntent.THANKS) {
                 return new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID);
@@ -72,11 +73,13 @@ public final class GatewayAgent extends CatalogBackedAgent implements WorkflowAg
         return new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID);
     }
 
-    public GatewayResult route(GatewayResult.GuardedTurn turn, ExecutionScope parentScope) {
-        return route(turn, parentScope, Map.of(), null);
+    public GatewayResult route(GatewayResult.GuardedTurn turn, String modelName,
+                               ExecutionScope parentScope) {
+        return route(turn, modelName, parentScope, Map.of(), null);
     }
 
-    private GatewayResult route(GatewayResult.GuardedTurn turn, ExecutionScope parentScope,
+    private GatewayResult route(GatewayResult.GuardedTurn turn, String modelName,
+                                ExecutionScope parentScope,
                                 Map<String, Object> observationContext,
                                 AgentWorkflowContext workflowContext) {
         if (!enabled()) return handoff(turn, 1.0d, true);
@@ -86,8 +89,7 @@ public final class GatewayAgent extends CatalogBackedAgent implements WorkflowAg
         }
         GatewayResult.Execution gatewayExecution = null;
         try {
-            AiModel model = StringUtils.hasText(configuration.getModelName())
-                    ? models.require(configuration.getModelName()) : models.defaultModel();
+            AiModel model = models.require(modelName);
             ResolvedAgent gateway = factory.create(definition(), model, ToolSet.empty());
             gatewayExecution = new GatewayResult.Execution(gateway.id(), model.id());
             ExecutionScope scope = parentScope.withPurpose(ExecutionScope.Purpose.GATEWAY_ROUTING);
