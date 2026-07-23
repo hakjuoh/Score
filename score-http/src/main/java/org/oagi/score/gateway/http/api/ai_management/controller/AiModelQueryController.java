@@ -36,14 +36,17 @@ public class AiModelQueryController {
             @AuthenticationPrincipal AuthenticatedPrincipal user,
             @PathVariable("asccpManifestId") AsccpManifestId asccpManifestId,
             @RequestParam("model") String model,
-            @RequestParam(value = "originalText", required = false) String originalText) {
+            @RequestParam(value = "originalText", required = false) String originalText,
+            @RequestHeader(value = "traceparent", required = false) String traceparent,
+            @RequestHeader(value = "tracestate", required = false) String tracestate) {
 
         if (!hasLength(model)) {
             throw new IllegalArgumentException("`model` parameter must not be empty.");
         }
 
         String content = queryService.generateDefinition(
-                sessionService.asScoreUser(user), asccpManifestId, model, originalText);
+                sessionService.asScoreUser(user), asccpManifestId, model, originalText,
+                traceparent, tracestate);
         return Map.of("generation", content);
     }
 
@@ -52,14 +55,17 @@ public class AiModelQueryController {
             @AuthenticationPrincipal AuthenticatedPrincipal user,
             @PathVariable("accManifestId") AccManifestId accManifestId,
             @RequestParam("model") String model,
-            @RequestParam(value = "originalText", required = false) String originalText) {
+            @RequestParam(value = "originalText", required = false) String originalText,
+            @RequestHeader(value = "traceparent", required = false) String traceparent,
+            @RequestHeader(value = "tracestate", required = false) String tracestate) {
 
         if (!hasLength(model)) {
             throw new IllegalArgumentException("`model` parameter must not be empty.");
         }
 
         String content = queryService.generateDefinition(
-                sessionService.asScoreUser(user), accManifestId, model, originalText);
+                sessionService.asScoreUser(user), accManifestId, model, originalText,
+                traceparent, tracestate);
         return Map.of("generation", content);
     }
 
@@ -68,14 +74,17 @@ public class AiModelQueryController {
             @AuthenticationPrincipal AuthenticatedPrincipal user,
             @PathVariable("accManifestId") AccManifestId accManifestId,
             @RequestParam("model") String model,
-            @RequestParam(value = "originalName", required = false) String originalName) {
+            @RequestParam(value = "originalName", required = false) String originalName,
+            @RequestHeader(value = "traceparent", required = false) String traceparent,
+            @RequestHeader(value = "tracestate", required = false) String tracestate) {
 
         if (!hasLength(model)) {
             throw new IllegalArgumentException("`model` parameter must not be empty.");
         }
 
         String content = queryService.suggestName(
-                sessionService.asScoreUser(user), accManifestId, model, originalName);
+                sessionService.asScoreUser(user), accManifestId, model, originalName,
+                traceparent, tracestate);
         return Map.of("generation", content);
     }
 

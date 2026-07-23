@@ -443,6 +443,23 @@ public class AiRequestRegistry implements ConversationCommitFence {
         });
     }
 
+    public boolean isTimingOut(String requestId) {
+        return stateStore.withRequestLock(requestId, storage -> {
+            AiSharedRequestState state = storage.get(requestId);
+            return state != null && ("TIMED_OUT".equals(state.status())
+                    || "TIMED_OUT".equals(state.terminalTarget()));
+        });
+    }
+
+    public boolean isCancelling(String requestId) {
+        return stateStore.withRequestLock(requestId, storage -> {
+            AiSharedRequestState state = storage.get(requestId);
+            return state != null && ("CANCELLING".equals(state.status())
+                    || "CANCELLED".equals(state.status())
+                    || "CANCELLED".equals(state.terminalTarget()));
+        });
+    }
+
     public void mutationFinished(String requestId) {
         stateStore.withRequestLock(requestId, storage -> {
             AiSharedRequestState state = storage.get(requestId);

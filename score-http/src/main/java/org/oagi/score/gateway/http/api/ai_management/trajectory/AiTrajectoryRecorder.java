@@ -4,6 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiContextUsageInfo;
+import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
 import org.oagi.score.gateway.http.api.ai_management.model.AiBoundedToolOutput;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
@@ -56,7 +60,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
-/** Records one ATIF-compatible step per model inference and correlates tool observations. */
+/**
+ * Records ATIF-compatible execution history and publishes content-free lifecycle facts
+ * through {@link ExecutionObserver} for independent consumers such as OpenTelemetry.
+ */
 public final class AiTrajectoryRecorder {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiTrajectoryRecorder.class);
@@ -73,8 +80,11 @@ public final class AiTrajectoryRecorder {
     private final String requestId;
     private final String modelName;
     private final String reasoningEffort;
-    private final Consumer<AiExecutionEvent> events;
+    private final Consumer<AiExecutionEvent> realtimeEvents;
     private final AiContextBudget contextBudget;
+    private final ExecutionScope executionScope;
+    private final ExecutionObserver observer;
+    private final ExecutionObservationContext observationContext;
     private volatile PromptTokenAccounting promptTokenAccounting;
     private final AtomicLong estimatedInputFloor;
     private final AtomicLong eventSequence;
@@ -82,6 +92,7 @@ public final class AiTrajectoryRecorder {
     private final Map<String, Object> traceContext;
     private final boolean subagentScope;
     private final AiChatConversationKind conversationKind;
+    private volatile String modelProvider = "unknown";
     private final AtomicLong ownPromptTokens = new AtomicLong();
     private final AtomicLong ownCompletionTokens = new AtomicLong();
     private final AtomicLong ownModelCalls = new AtomicLong();
@@ -94,6 +105,8 @@ public final class AiTrajectoryRecorder {
     private final AtomicLong successfulDomainToolCalls = new AtomicLong();
     private final AtomicLong requestExecutedDomainToolCalls;
     private final Set<String> requestPendingApprovalIds;
+    private final Set<String> mcpToolNames = ConcurrentHashMap.newKeySet();
+    private volatile String mcpServerName = "unknown";
     private final AtomicLong executedMutationToolCalls = new AtomicLong();
     private volatile Set<String> readOnlyToolNames = Set.of();
     private volatile boolean sealed;
@@ -123,11 +136,38 @@ public final class AiTrajectoryRecorder {
                                 AiContextBudget contextBudget,
                                 long estimatedInputFloor) {
         this(repository, objectMapper, requester, conversationId, requestId, modelName,
+                reasoningEffort, events, contextBudget, estimatedInputFloor, Map.of());
+    }
+
+    public AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
+                                ScoreUser requester, String conversationId, String requestId,
+                                String modelName, String reasoningEffort,
+                                Consumer<AiExecutionEvent> events,
+                                AiContextBudget contextBudget,
+                                long estimatedInputFloor,
+                                Map<String, Object> traceContext) {
+        this(repository, objectMapper, requester, conversationId, requestId, modelName,
+                reasoningEffort, events, contextBudget, estimatedInputFloor, traceContext,
+                null, ExecutionObserver.noop(), ExecutionObservationContext.noop());
+    }
+
+    public AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
+                                ScoreUser requester, String conversationId, String requestId,
+                                String modelName, String reasoningEffort,
+                                Consumer<AiExecutionEvent> events,
+                                AiContextBudget contextBudget,
+                                long estimatedInputFloor,
+                                Map<String, Object> traceContext,
+                                ExecutionScope executionScope,
+                                ExecutionObserver observer,
+                                ExecutionObservationContext observationContext) {
+        this(repository, objectMapper, requester, conversationId, requestId, modelName,
                 reasoningEffort, events, contextBudget,
                 estimatedInputFloor, PromptTokenAccounting.UNKNOWN,
                 new AtomicLong(), new AtomicLong(),
-                new AtomicLong(), ConcurrentHashMap.newKeySet(), Map.of(), false,
-                AiChatConversationKind.ROOT);
+                new AtomicLong(), ConcurrentHashMap.newKeySet(), traceContext, executionScope,
+                observer, observationContext,
+                false, AiChatConversationKind.ROOT);
     }
 
     private AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
@@ -140,7 +180,11 @@ public final class AiTrajectoryRecorder {
                                  AtomicLong eventSequence, AtomicLong toolSequence,
                                  AtomicLong requestExecutedDomainToolCalls,
                                  Set<String> requestPendingApprovalIds,
-                                 Map<String, Object> traceContext, boolean subagentScope,
+                                 Map<String, Object> traceContext,
+                                 ExecutionScope executionScope,
+                                 ExecutionObserver observer,
+                                 ExecutionObservationContext observationContext,
+                                 boolean subagentScope,
                                  AiChatConversationKind conversationKind) {
         this.repository = repository;
         this.objectMapper = objectMapper;
@@ -149,8 +193,12 @@ public final class AiTrajectoryRecorder {
         this.requestId = requestId;
         this.modelName = modelName;
         this.reasoningEffort = reasoningEffort;
-        this.events = events != null ? events : ignored -> {};
+        this.realtimeEvents = events != null ? events : ignored -> {};
         this.contextBudget = contextBudget;
+        this.executionScope = executionScope;
+        this.observer = observer != null ? observer : ExecutionObserver.noop();
+        this.observationContext = observationContext != null
+                ? observationContext : ExecutionObservationContext.noop();
         this.promptTokenAccounting = promptTokenAccounting;
         this.estimatedInputFloor = new AtomicLong(Math.max(0L, estimatedInputFloor));
         this.eventSequence = eventSequence;
@@ -172,10 +220,10 @@ public final class AiTrajectoryRecorder {
         Map<String, Object> childContext = traceMetadata(namespace);
         AiTrajectoryRecorder child = new AiTrajectoryRecorder(
                 repository, objectMapper, requester, conversationId, requestId,
-                modelName, reasoningEffort, events, contextBudget,
+                modelName, reasoningEffort, realtimeEvents, contextBudget,
                 estimatedInputFloor.get(), promptTokenAccounting, eventSequence, toolSequence,
-                requestExecutedDomainToolCalls, requestPendingApprovalIds, childContext, true,
-                conversationKind);
+                requestExecutedDomainToolCalls, requestPendingApprovalIds, childContext,
+                executionScope, observer, observationContext, true, conversationKind);
         child.retryMessageLanguage = retryMessageLanguage;
         return child;
     }
@@ -204,10 +252,11 @@ public final class AiTrajectoryRecorder {
                 kind == AiChatConversationKind.PARALLEL ? "parallel" : "multi_agent");
         AiTrajectoryRecorder child = new AiTrajectoryRecorder(
                 repository, objectMapper, requester, childConversationId, requestId,
-                modelName, reasoningEffort, events, contextBudget,
+                modelName, reasoningEffort, realtimeEvents, contextBudget,
                 estimatedInputFloor.get(), promptTokenAccounting, eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovalIds,
-                traceMetadata(childNamespace), true, kind);
+                traceMetadata(childNamespace), executionScope, observer, observationContext,
+                true, kind);
         child.retryMessageLanguage = retryMessageLanguage;
         repository.append(childConversationId, new AiChatTrajectoryStep(
                 requestId, "system", "settings_change", "debug",
@@ -232,8 +281,34 @@ public final class AiTrajectoryRecorder {
         return conversationKind;
     }
 
+    public String requestId() { return requestId; }
+    public String modelName() { return modelName; }
+    public String modelProvider() { return modelProvider; }
+
+    public Map<String, Object> observationContext() {
+        Map<String, Object> context = new LinkedHashMap<>();
+        for (String key : List.of("fanout_id", "node_id", "parent_node_id",
+                "workflow", "workflow_iteration")) {
+            if (traceContext.get(key) != null) context.put(key, traceContext.get(key));
+        }
+        return Map.copyOf(context);
+    }
+
+    public void mcpToolNames(java.util.Collection<String> toolNames) {
+        mcpToolNames.clear();
+        if (toolNames != null) {
+            toolNames.stream().filter(StringUtils::hasText).map(String::strip)
+                    .forEach(mcpToolNames::add);
+        }
+    }
+
+    public void mcpServerName(String serverName) {
+        this.mcpServerName = StringUtils.hasText(serverName) ? serverName.strip() : "unknown";
+    }
+
     /** Selects the provider-specific mapping from Spring AI usage to ATIF prompt totals. */
     public void useModelProvider(String providerType) {
+        this.modelProvider = StringUtils.hasText(providerType) ? providerType.strip() : "unknown";
         this.promptTokenAccounting = PromptTokenAccounting.fromProviderType(providerType);
     }
 
@@ -459,7 +534,8 @@ public final class AiTrajectoryRecorder {
         emit(AiExecutionEvent.detail("mutation_approval_decision_accepted",
                 "Approved " + approved + " action" + (approved == 1 ? "" : "s")
                         + " and denied " + denied + ". Continuing the active request.",
-                Map.of("batchId", acknowledgement.batchId())));
+                Map.of("batchId", acknowledgement.batchId(),
+                        "approved", approved, "denied", denied)));
     }
 
     public synchronized void elicitationRequired(AiElicitationNotice notice) {
@@ -886,11 +962,18 @@ public final class AiTrajectoryRecorder {
                 reasoningEffort,
                 null, null, null, traceMetadata(extra), 0, null, Instant.now()));
         emit(AiExecutionEvent.tool("started", "Calling " + pending.name() + ".",
-                pending.id(), pending.name(), pending.sequence()));
+                pending.id(), pending.name(), pending.sequence(),
+                toolObservationMetadata(pending.name())));
     }
 
     private synchronized void toolCompleted(AiPendingTool pending, String output,
                                             Throwable failure, Duration duration) {
+        toolCompleted(pending, output, failure, duration, false);
+    }
+
+    private synchronized void toolCompleted(AiPendingTool pending, String output,
+                                            Throwable failure, Duration duration,
+                                            boolean resultTruncated) {
         if (sealed) return;
         if (!completedToolCallIds.add(pending.id())) {
             return;
@@ -945,11 +1028,24 @@ public final class AiTrajectoryRecorder {
         extra.put("arguments", boundedRedactedValue(pending.arguments()));
         extra.put("duration_ms", duration.toMillis());
         extra.put("success", successful);
+        extra.put("result_truncated", resultTruncated);
+        if (failure != null) extra.put("failure_type", failure.getClass().getName());
         extra = new LinkedHashMap<>(traceMetadata(extra));
         repository.append(conversationId, new AiChatTrajectoryStep(
                 requestId, "agent", "tool_call", "debug", detail, null, modelName,
                 reasoningEffort,
                 null, null, null, extra, 0, null, Instant.now()));
+        Map<String, Object> eventMetadata = new LinkedHashMap<>();
+        eventMetadata.put("toolDetail", detail);
+        eventMetadata.put("duration_ms", duration.toMillis());
+        eventMetadata.put("success", successful);
+        eventMetadata.put("result_truncated", resultTruncated);
+        eventMetadata.put("read_only", readOnlyToolNames.contains(pending.name()));
+        eventMetadata.put("mcp", mcpToolNames.contains(pending.name()));
+        if (mcpToolNames.contains(pending.name())) {
+            eventMetadata.put("mcp_server_name", mcpServerName);
+        }
+        if (failure != null) eventMetadata.put("failure_type", failure.getClass().getName());
         emit(AiExecutionEvent.tool(status,
                 switch (status) {
                     case "failed" -> pending.name() + " failed.";
@@ -958,7 +1054,7 @@ public final class AiTrajectoryRecorder {
                     case "cancelled" -> pending.name() + " was stopped before execution.";
                     default -> pending.name() + " completed.";
                 },
-                pending.id(), pending.name(), pending.sequence(), Map.of("toolDetail", detail)));
+                pending.id(), pending.name(), pending.sequence(), Map.copyOf(eventMetadata)));
     }
 
     /** Returns the stable confirmation identity embedded by the mutation guard. */
@@ -1123,12 +1219,13 @@ public final class AiTrajectoryRecorder {
             AiPendingTool pending = pending(getToolDefinition().name(), input);
             toolStarted(pending);
             Instant started = Instant.now();
-            try {
+            try (var ignored = observationContext.makeToolCurrent(requestId, pending.id())) {
                 String output = delegate.call(input, context);
-                toolCompleted(pending, output, null, Duration.between(started, Instant.now()));
                 AiBoundedToolOutput bounded = reserveToolOutput(output, toolOutputTokenLimit);
                 emitToolOutputTruncated(bounded, toolOutputTokenLimit, pending.name());
                 emitToolOutputUsage(bounded);
+                toolCompleted(pending, output, null, Duration.between(started, Instant.now()),
+                        bounded.truncated());
                 return bounded.value();
             } catch (RuntimeException exception) {
                 LOGGER.warn("AI tool {} failed for request {}", pending.name(), requestId, exception);
@@ -1188,9 +1285,15 @@ public final class AiTrajectoryRecorder {
         emit(AiExecutionEvent.detail("tool_output_truncated",
                 safeToolName + " returned more data than the active context budget allows.", Map.of(
                         "toolName", safeToolName,
+                        "mcp", mcpToolNames.contains(safeToolName),
                         "originalUtf8Bytes", bounded.originalBytes(),
                         "returnedUtf8Bytes", bounded.returnedBytes(),
                         "toolOutputTokenLimit", configuredLimit)));
+    }
+
+    private Map<String, Object> toolObservationMetadata(String toolName) {
+        if (!mcpToolNames.contains(toolName)) return Map.of("mcp", false);
+        return Map.of("mcp", true, "mcp_server_name", mcpServerName);
     }
 
     private void emitToolOutputUsage(AiBoundedToolOutput bounded) {
@@ -1220,10 +1323,20 @@ public final class AiTrajectoryRecorder {
 
     private synchronized void emit(AiExecutionEvent event) {
         if (sealed) return;
+        AiExecutionEvent realtimeEvent = new AiExecutionEvent(
+                event.type(), event.subtype(), event.content(),
+                event.toolCallId(), event.toolName(), event.toolCallSequence(),
+                realtimeMetadata(event.metadata()));
+        if (executionScope != null) {
+            try {
+                observer.observe(AiExecutionLifecycle.from(realtimeEvent).observation(executionScope));
+            } catch (RuntimeException failure) {
+                LOGGER.warn("Could not observe AI trajectory event {} for request {}",
+                        event.subtype(), requestId, failure);
+            }
+        }
         try {
-            events.accept(new AiExecutionEvent(event.type(), event.subtype(), event.content(),
-                    event.toolCallId(), event.toolName(), event.toolCallSequence(),
-                    realtimeMetadata(event.metadata())));
+            realtimeEvents.accept(realtimeEvent);
         } catch (RuntimeException failure) {
             LOGGER.warn("Could not deliver AI trajectory event {} for request {}",
                     event.subtype(), requestId, failure);
