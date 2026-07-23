@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.observability;
 
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.LongUpDownCounter;
 import io.opentelemetry.api.metrics.Meter;
 
@@ -33,6 +34,17 @@ final class AiObservationInstruments {
     final DoubleHistogram contextWindowUsage;
     final LongCounter compactions;
     final DoubleHistogram cost;
+
+    // OpenTelemetry GenAI semantic-convention instruments. Custom SCORE metrics above remain
+    // available for operational continuity while dashboards migrate to these standard names.
+    final LongHistogram genAiClientTokenUsage;
+    final DoubleHistogram genAiClientOperationDuration;
+    final DoubleHistogram genAiClientTimeToFirstChunk;
+    final DoubleHistogram genAiWorkflowDuration;
+    final DoubleHistogram genAiInvokeAgentDuration;
+    final LongHistogram genAiInvokeAgentInferenceCalls;
+    final LongHistogram genAiInvokeAgentToolCalls;
+    final DoubleHistogram genAiExecuteToolDuration;
 
     AiObservationInstruments(Meter meter) {
         turns = counter(meter, "score.ai.turn.requests", "AI turns completed by outcome");
@@ -66,6 +78,30 @@ final class AiObservationInstruments {
         cost = meter.histogramBuilder("score.ai.cost")
                 .setDescription("Provider-reported or pricing-engine AI cost")
                 .setUnit("USD").build();
+
+        genAiClientTokenUsage = meter.histogramBuilder("gen_ai.client.token.usage")
+                .setDescription("Number of input and output tokens used")
+                .setUnit("{token}")
+                .ofLongs()
+                .setExplicitBucketBoundariesAdvice(GenAiSemanticConventions.TOKEN_BUCKETS)
+                .build();
+        genAiClientOperationDuration = standardDuration(meter,
+                "gen_ai.client.operation.duration", "GenAI client operation duration");
+        genAiClientTimeToFirstChunk = standardDuration(meter,
+                "gen_ai.client.operation.time_to_first_chunk",
+                "Time to receive the first chunk of a streaming GenAI response");
+        genAiWorkflowDuration = standardDuration(meter,
+                "gen_ai.workflow.duration", "GenAI workflow duration");
+        genAiInvokeAgentDuration = standardDuration(meter,
+                "gen_ai.invoke_agent.duration", "GenAI agent invocation duration");
+        genAiInvokeAgentInferenceCalls = callHistogram(meter,
+                "gen_ai.invoke_agent.inference_calls", "Inference calls per agent invocation",
+                "{inference_call}");
+        genAiInvokeAgentToolCalls = callHistogram(meter,
+                "gen_ai.invoke_agent.tool_calls", "Tool calls per agent invocation",
+                "{tool_call}");
+        genAiExecuteToolDuration = standardDuration(meter,
+                "gen_ai.execute_tool.duration", "GenAI tool execution duration");
     }
 
     private static LongCounter counter(Meter meter, String name, String description) {
@@ -74,6 +110,20 @@ final class AiObservationInstruments {
 
     private static DoubleHistogram duration(Meter meter, String name, String description) {
         return meter.histogramBuilder(name).setDescription(description).setUnit("ms").build();
+    }
+
+    private static DoubleHistogram standardDuration(Meter meter, String name, String description) {
+        return meter.histogramBuilder(name).setDescription(description).setUnit("s")
+                .setExplicitBucketBoundariesAdvice(GenAiSemanticConventions.DURATION_BUCKETS_SECONDS)
+                .build();
+    }
+
+    private static LongHistogram callHistogram(Meter meter, String name, String description,
+                                               String unit) {
+        return meter.histogramBuilder(name).setDescription(description).setUnit(unit)
+                .ofLongs()
+                .setExplicitBucketBoundariesAdvice(GenAiSemanticConventions.CALL_BUCKETS)
+                .build();
     }
 
     static String normalized(String value) {

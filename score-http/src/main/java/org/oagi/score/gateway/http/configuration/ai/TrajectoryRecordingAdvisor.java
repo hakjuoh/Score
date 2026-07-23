@@ -51,10 +51,12 @@ public final class TrajectoryRecordingAdvisor implements CallAdvisor, StreamAdvi
         String phaseName = phase != null ? phase.toString() : null;
         return Flux.defer(() -> {
             ScoreAiObservability.ModelCall modelCall = modelCall(phaseName);
+            modelCall.streaming();
             try {
                 recorder.recordToolResponses(request.prompt().getInstructions());
                 Flux<ChatClientResponse> source = chain.nextStream(request)
                         .doOnNext(response -> {
+                            modelCall.firstChunk();
                             if (containsToken(response)) modelCall.firstToken();
                         });
                 return new ChatClientMessageAggregator().aggregateChatClientResponse(
@@ -74,7 +76,7 @@ public final class TrajectoryRecordingAdvisor implements CallAdvisor, StreamAdvi
 
     private ScoreAiObservability.ModelCall modelCall(String phase) {
         return observability.startModelCall(recorder.requestId(), recorder.modelName(),
-                recorder.modelProvider(), phase);
+                recorder.requestModelName(), recorder.modelProvider(), phase);
     }
 
     private boolean containsToken(ChatClientResponse response) {
