@@ -4,6 +4,10 @@ import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.TextMapSetter;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.application_management.service.BrokerJwtService;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.slf4j.Logger;
@@ -29,6 +33,8 @@ public class ConnectCenterMcpClientFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ConnectCenterMcpClientFactory.class);
     private static final ToolCallbackProvider NO_TOOLS = () -> new ToolCallback[0];
+    private static final TextMapSetter<HttpRequest.Builder> TRACE_HEADER_SETTER =
+            (builder, key, value) -> builder.setHeader(key, value);
 
     private final ScoreAiProperties properties;
     private final Environment environment;
@@ -59,6 +65,8 @@ public class ConnectCenterMcpClientFactory {
         HttpClientStreamableHttpTransport.Builder transport = HttpClientStreamableHttpTransport
                 .builder(baseUrl)
                 .endpoint(endpoint)
+                .httpRequestCustomizer((builder, method, uri, body, transportContext) ->
+                        injectCurrentTrace(builder))
                 .openConnectionOnStartup(false);
         if (StringUtils.hasText(token)) {
             transport.requestBuilder(HttpRequest.newBuilder()
@@ -118,6 +126,12 @@ public class ConnectCenterMcpClientFactory {
         return first.compareTo(second) >= 0 ? first : second;
     }
 
+    static void injectCurrentTrace(HttpRequest.Builder request) {
+        if (!ScoreAiObservability.currentContextCanPropagate()) return;
+        W3CTraceContextPropagator.getInstance().inject(
+                Context.current(), request, TRACE_HEADER_SETTER);
+    }
+
     public McpConnection connection(ScoreUser requester) {
         String name = properties.getMcp().getConnectionName();
         String prefix = "spring.ai.mcp.client.streamable-http.connections." + name;
@@ -128,6 +142,10 @@ public class ConnectCenterMcpClientFactory {
         String endpoint = environment.getProperty(prefix + ".endpoint", "/mcp");
         String token = bearerToken(requester);
         return new McpConnection(baseUrl.strip(), endpoint, token);
+    }
+
+    public String connectionName() {
+        return properties.getMcp().getConnectionName();
     }
 
     private String bearerToken(ScoreUser requester) {

@@ -148,6 +148,10 @@ score:
       active-key-id: ${SCORE_APP_SECRET_ACTIVE_KEY_ID:primary}
       keys:
         primary: ${SCORE_APP_SECRET_KEY:}
+  ai:
+    observability:
+      # AI-only SDK/exporters. Environment profiles opt in explicitly.
+      enabled: false
   redis:
     # Destructive maintenance switch. Keep false for every multi-instance deployment.
     flush-on-startup: ${SCORE_REDIS_FLUSH_ON_STARTUP:false}

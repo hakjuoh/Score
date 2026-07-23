@@ -81,6 +81,20 @@ import static org.mockito.Mockito.when;
 class AiChatExecutorTest {
 
     @Test
+    void classifiesRegistryTimeoutAndCancellationEvenWhenTheFailureTypeIsGeneric() {
+        AiRequestRegistry requests = mock(AiRequestRegistry.class);
+        when(requests.isTimingOut("timed-out")).thenReturn(true);
+        when(requests.isCancelling("cancelled")).thenReturn(true);
+
+        assertThat(AiChatExecutor.agentFailureEvent(requests, "timed-out",
+                new IllegalStateException("provider interrupted")))
+                .isEqualTo("agent.run.timed_out");
+        assertThat(AiChatExecutor.agentFailureEvent(requests, "cancelled",
+                new IllegalStateException("provider interrupted")))
+                .isEqualTo("agent.run.cancelled");
+    }
+
+    @Test
     void suppliesStableProtocolParametersAndSeparatesRequestContext() {
         AiUiRouteManifest routeManifest = new AiUiRouteManifest(1, List.of(
                 new AiUiRouteManifest.Route(

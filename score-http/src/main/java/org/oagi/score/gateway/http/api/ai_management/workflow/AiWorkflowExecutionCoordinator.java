@@ -403,6 +403,7 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         if (plannedSpecialists > 0) {
             leadNamespace = leadNamespace(execution.fanoutId(), execution.leadNodeId(),
                     plan, context.request().multiAgent(), "multi_agent", plannedSpecialists);
+            leadNamespace = withWorkflowIteration(leadNamespace, workflowIteration);
             leadRecorder = Objects.requireNonNull(context.recorder().fork(leadNamespace),
                     "The composed workflow lead recorder is required.");
             leadRecorder.lifecycle("multi_agent_started", composedLeadStatus(plan), lifecycleMetadata(
@@ -967,6 +968,7 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         Map<String, Object> leadNamespace = leadNamespace(
                 fanoutId, leadNodeId, plan, context.request().multiAgent(), executionKind,
                 plan.tasks().size());
+        leadNamespace = withWorkflowIteration(leadNamespace, workflowIteration);
         AiTrajectoryRecorder leadRecorder = Objects.requireNonNull(
                 context.recorder().fork(leadNamespace),
                 "The delegated workflow lead recorder is required.");
@@ -1689,6 +1691,14 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
         namespace.put("active_verb", plan.activeVerb());
         namespace.put("completed_verb", plan.completedVerb());
         return Map.copyOf(namespace);
+    }
+
+    private Map<String, Object> withWorkflowIteration(Map<String, Object> namespace,
+                                                       int workflowIteration) {
+        if (workflowIteration <= 0) return namespace;
+        Map<String, Object> iterated = new LinkedHashMap<>(namespace);
+        iterated.put("workflow_iteration", workflowIteration);
+        return Map.copyOf(iterated);
     }
 
     private Map<String, Object> specialistNamespace(String fanoutId, String parentNodeId,

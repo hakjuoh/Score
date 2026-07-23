@@ -11,7 +11,9 @@ import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCata
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrailChain;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -24,13 +26,23 @@ public final class ConversationCompactor extends CatalogBackedAgent {
     private final AgentExecutionService execution;
     private final SpringAiModelCatalog models;
     private final AgentOutputGuardrailChain outputGuardrails;
+    private final ScoreAiObservability observability;
     private final AgentFactory agents = AgentFactory.binding();
 
+    @Autowired
     public ConversationCompactor(AgentExecutionService execution, SpringAiModelCatalog models,
                                  AgentOutputGuardrailChain outputGuardrails,
-                                 AiAgentCatalog catalog) {
+                                 AiAgentCatalog catalog,
+                                 ScoreAiObservability observability) {
         super(catalog);
         this.execution = execution; this.models = models; this.outputGuardrails = outputGuardrails;
+        this.observability = observability;
+    }
+
+    ConversationCompactor(AgentExecutionService execution, SpringAiModelCatalog models,
+                          AgentOutputGuardrailChain outputGuardrails,
+                          AiAgentCatalog catalog) {
+        this(execution, models, outputGuardrails, catalog, ScoreAiObservability.noop());
     }
 
     public String compact(String modelId, List<AiMessage> history, AiMessage.User request,
@@ -41,6 +53,8 @@ public final class ConversationCompactor extends CatalogBackedAgent {
         var guarded = outputGuardrails.evaluate(new AgentOutputGuardrail.Request(
                 AgentOutputGuardrail.Scope.INTERNAL, result.response(), scope,
                 Map.of("feature", "compaction")));
+        observability.recordGuardrails(scope.requestId(), "compaction_output",
+                guarded.decisions(), guarded.refusal());
         if (!guarded.allowed()) {
             throw new IllegalStateException("The compacted memory was not accepted by output policy.");
         }

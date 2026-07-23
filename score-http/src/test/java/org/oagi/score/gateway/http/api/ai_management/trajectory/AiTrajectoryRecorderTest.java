@@ -3,6 +3,10 @@ package org.oagi.score.gateway.http.api.ai_management.trajectory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
@@ -45,6 +49,77 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AiTrajectoryRecorderTest {
+
+    @Test
+    void publishesContentFreeLifecycleObservationsIndependentlyOfRealtimeDelivery() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        List<ExecutionObservation> observations = new ArrayList<>();
+        ExecutionScope scope = new ExecutionScope("request-1", "conversation-1", "user-1", 1,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        String sensitiveContent = "DO_NOT_SEND_THIS_TRAJECTORY_CONTENT_TO_OBSERVERS";
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", "model", "high",
+                ignored -> { throw new IllegalStateException("realtime delivery failed"); },
+                null, 0L, Map.of(), scope, observations::add,
+                ExecutionObservationContext.noop());
+
+        recorder.lifecycle("parallel_workflow_started", sensitiveContent,
+                Map.of("fanout_id", "fanout-1", "workflow", "parallel",
+                        "toolDetail", sensitiveContent));
+
+        assertThat(observations).hasSize(1);
+        AiExecutionLifecycle lifecycle = AiExecutionLifecycle.from(observations.getFirst())
+                .orElseThrow();
+        assertThat(lifecycle.subtype()).isEqualTo("parallel_workflow_started");
+        assertThat(lifecycle.metadata()).containsEntry("fanout_id", "fanout-1");
+        assertThat(lifecycle.metadata()).doesNotContainKey("toolDetail");
+        assertThat(lifecycle.toString()).doesNotContain(sensitiveContent);
+        verify(repository).append(eq("conversation-1"), any());
+    }
+
+    @Test
+    void persistsBeforeObservationAndIsolatesAnObserverFailureFromRealtimeDelivery() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        List<String> order = new ArrayList<>();
+        org.mockito.Mockito.doAnswer(ignored -> {
+            order.add("persisted");
+            return null;
+        }).when(repository).append(eq("conversation-1"), any());
+        ExecutionScope scope = new ExecutionScope("request-1", "conversation-1", "user-1", 1,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", "model", "high",
+                ignored -> order.add("realtime"), null, 0L, Map.of(), scope,
+                ignored -> {
+                    order.add("observed");
+                    throw new IllegalStateException("optional listener unavailable");
+                }, ExecutionObservationContext.noop());
+
+        recorder.lifecycle("parallel_workflow_started", "private content",
+                Map.of("fanout_id", "fanout-1", "workflow", "parallel"));
+
+        assertThat(order).containsExactly("persisted", "observed", "realtime");
+    }
+
+    @Test
+    void persistsRootTraceCorrelationOnEveryDerivedTrajectoryStep() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", "model", "high",
+                ignored -> { }, null, 0L, Map.of(
+                "trace_id", "trace-1", "root_span_id", "span-1", "service_version", "3.6.0"));
+
+        recorder.lifecycle("multi_agent_started", "Started.", Map.of("fanout_id", "fanout-1"));
+        recorder.fork(Map.of("node_id", "worker-1"))
+                .lifecycle("subagent_started", "Started.", Map.of());
+
+        ArgumentCaptor<AiChatTrajectoryStep> steps = ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, times(2)).append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues()).allSatisfy(step -> assertThat(step.extra())
+                .containsEntry("trace_id", "trace-1")
+                .containsEntry("root_span_id", "span-1")
+                .containsEntry("service_version", "3.6.0"));
+    }
 
     @Test
     void forkParallelExecutionCreatesADurableParallelConversationAndWritesItsOwnSteps() {
@@ -356,6 +431,31 @@ class AiTrajectoryRecorderTest {
                     .containsEntry("max_attempts", 10)
                     .containsEntry("delay_millis", 15_000L);
         });
+    }
+
+    @Test
+    void keepsProviderResponseTextInAtifButOutOfLifecycleObservations() {
+        String secret = "SECRET-provider-body-account@example.test";
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        List<ExecutionObservation> observations = new ArrayList<>();
+        ExecutionScope scope = new ExecutionScope("request-1", "conversation-1", "user-1", 1,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", "model", "high",
+                ignored -> { }, null, 0L, Map.of(), scope, observations::add,
+                ExecutionObservationContext.noop());
+
+        recorder.providerRetry(1, 3, 250L, secret,
+                "org.springframework.ai.retry.TransientAiException", 429);
+
+        ArgumentCaptor<AiChatTrajectoryStep> persisted =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq("conversation-1"), persisted.capture());
+        assertThat(persisted.getValue().extra()).containsEntry("reason", secret);
+        AiExecutionLifecycle observed = AiExecutionLifecycle.from(observations.getFirst())
+                .orElseThrow();
+        assertThat(observed.metadata()).doesNotContainKey("reason");
+        assertThat(observed.toString()).doesNotContain(secret);
     }
 
     @Test
@@ -1177,7 +1277,8 @@ class AiTrajectoryRecorderTest {
         assertThat(output.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(96 * 3);
         assertThat(output).contains("TOOL OUTPUT TRUNCATED").doesNotContain("�");
         assertThat(events).extracting(AiExecutionEvent::subtype)
-                .containsExactly("started", "completed", "tool_output_truncated");
+                .containsExactly("started", "tool_output_truncated", "completed");
+        assertThat(events.getLast().metadata()).containsEntry("result_truncated", true);
     }
 
     @Test

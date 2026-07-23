@@ -38,9 +38,11 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiUserMessageAdapter;
 import org.oagi.score.gateway.http.api.ai_management.execution.AgentInputRefusedException;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
 import org.oagi.score.gateway.http.api.ai_management.memory.AiContextBudgetService;
 import org.oagi.score.gateway.http.api.ai_management.memory.ScoreChatMemoryFactory;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowIntent;
@@ -60,6 +62,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.content.Media;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.MimeType;
 import org.springframework.util.StringUtils;
@@ -102,6 +105,8 @@ public class ChatService {
     private final ConversationResultCommitter resultCommitter;
     private final ConversationCompactor compactor;
     private final ResponseOnlyAgent responseOnlyAgent;
+    private final ScoreAiObservability observability;
+    private final ExecutionObserver observer;
 
     @Autowired
     public ChatService(ScoreAiModelRegistry models, AiChatExecutor executor,
@@ -116,13 +121,17 @@ public class ChatService {
                        GatewayAgent gateway,
                        ConversationResultCommitter resultCommitter,
                        ConversationCompactor compactor,
-                       ResponseOnlyAgent responseOnlyAgent) {
+                       ResponseOnlyAgent responseOnlyAgent,
+                       ScoreAiObservability observability,
+                       ObjectProvider<ExecutionObserver> executionObservers) {
         this(models, executor, toolSearchAdvisor, chatMemoryFactory::create,
                 requester -> repositoryFactory.aiChatConversationRepository(
                         requester, AiChatJsonSerializer.getInstance()), objectMapper, requests,
                 contextBudgets, workflowCoordinator, atifTrajectoryService,
                 inputGuardrails, outputGuardrails, gateway, resultCommitter, compactor,
-                responseOnlyAgent);
+                responseOnlyAgent, observability,
+                ExecutionObserver.composite(executionObservers != null
+                        ? executionObservers.orderedStream().toList() : List.of()));
     }
 
     private ChatService(ScoreAiModelRegistry models, AiChatExecutor executor,
@@ -152,6 +161,49 @@ public class ChatService {
                         ConversationResultCommitter resultCommitter,
                         ConversationCompactor compactor,
                         ResponseOnlyAgent responseOnlyAgent) {
+        this(models, executor, toolSearchAdvisor, chatMemories, conversationRepositories,
+                objectMapper, requests, contextBudgets, workflowCoordinator, atifTrajectoryService,
+                inputGuardrails, outputGuardrails, gateway, resultCommitter, compactor,
+                responseOnlyAgent, ScoreAiObservability.noop());
+    }
+
+    private ChatService(ScoreAiModelRegistry models, AiChatExecutor executor,
+                        ToolSearchToolCallingAdvisor toolSearchAdvisor,
+                        Function<ScoreUser, ChatMemory> chatMemories,
+                        Function<ScoreUser, AiChatConversationRepository> conversationRepositories,
+                        ObjectMapper objectMapper, AiRequestRegistry requests,
+                        AiContextBudgetService contextBudgets,
+                        AiWorkflowExecutionCoordinator workflowCoordinator,
+                        AtifTrajectoryService atifTrajectoryService,
+                        AgentInputGuardrailChain inputGuardrails,
+                        AgentOutputGuardrailChain outputGuardrails,
+                        GatewayAgent gateway,
+                        ConversationResultCommitter resultCommitter,
+                        ConversationCompactor compactor,
+                        ResponseOnlyAgent responseOnlyAgent,
+                        ScoreAiObservability observability) {
+        this(models, executor, toolSearchAdvisor, chatMemories, conversationRepositories,
+                objectMapper, requests, contextBudgets, workflowCoordinator, atifTrajectoryService,
+                inputGuardrails, outputGuardrails, gateway, resultCommitter, compactor,
+                responseOnlyAgent, observability, ExecutionObserver.noop());
+    }
+
+    private ChatService(ScoreAiModelRegistry models, AiChatExecutor executor,
+                        ToolSearchToolCallingAdvisor toolSearchAdvisor,
+                        Function<ScoreUser, ChatMemory> chatMemories,
+                        Function<ScoreUser, AiChatConversationRepository> conversationRepositories,
+                        ObjectMapper objectMapper, AiRequestRegistry requests,
+                        AiContextBudgetService contextBudgets,
+                        AiWorkflowExecutionCoordinator workflowCoordinator,
+                        AtifTrajectoryService atifTrajectoryService,
+                        AgentInputGuardrailChain inputGuardrails,
+                        AgentOutputGuardrailChain outputGuardrails,
+                        GatewayAgent gateway,
+                        ConversationResultCommitter resultCommitter,
+                        ConversationCompactor compactor,
+                        ResponseOnlyAgent responseOnlyAgent,
+                        ScoreAiObservability observability,
+                        ExecutionObserver observer) {
         this.models = models;
         this.executor = executor;
         this.toolSearchAdvisor = toolSearchAdvisor;
@@ -168,6 +220,8 @@ public class ChatService {
         this.resultCommitter = resultCommitter;
         this.compactor = compactor;
         this.responseOnlyAgent = responseOnlyAgent;
+        this.observability = observability != null ? observability : ScoreAiObservability.noop();
+        this.observer = observer != null ? observer : ExecutionObserver.noop();
     }
 
     ChatService(ScoreAiModelRegistry models, AiChatExecutor executor,
@@ -318,6 +372,8 @@ public class ChatService {
                             SpringAiUserMessageAdapter.toCore(userMessage),
                             List.of(), turnScope, Map.of("attachment_count", prepared.attachments().size())));
             turnDecisions = guarded.decisions();
+            observability.recordGuardrails(prepared.requestId(), "turn_input",
+                    turnDecisions, guarded.refusal());
             if (!guarded.allowed()) {
                 return commitGuardrailRefusal(prepared, requester, guarded.refusal(), turnDecisions);
             }
@@ -358,10 +414,12 @@ public class ChatService {
         long projectedInputTokens = projectedInputTokens(
                 requester, prepared, initialHistory, acceptedUserMessage, budget);
         long initialProjectedInputTokens = projectedInputTokens;
+        Map<String, Object> traceContext = observability.correlation(prepared.requestId());
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(conversationRepository, objectMapper, requester,
                 prepared.conversationId(), prepared.requestId(), prepared.modelName(),
                 prepared.reasoningEffort(), progress,
-                budget.orElse(null), projectedInputTokens);
+                budget.orElse(null), projectedInputTokens, traceContext, turnScope,
+                observer, observability);
         recorder.usePromptLanguage(prepared.prompt());
         budget.ifPresent(value -> recorder.contextUsage(value.usage(
                 initialProjectedInputTokens, true, "preflight_estimate")));
@@ -373,6 +431,7 @@ public class ChatService {
         String visiblePrompt = visiblePrompt(prepared);
         String permissionMode = AiMutationPermissionMode.resolve(prepared.permissionMode()).value();
         Map<String, Object> userExtra = new LinkedHashMap<>();
+        userExtra.putAll(traceContext);
         userExtra.put("ui_projection", true);
         userExtra.put("permission_mode", permissionMode);
         userExtra.put("multi_agent", prepared.multiAgent().asMap());
@@ -507,6 +566,7 @@ public class ChatService {
                 conversationRepository.markExpanded(prepared.conversationId());
             }
             Map<String, Object> answerExtra = new LinkedHashMap<>(committedTraceMetadata);
+            answerExtra.putAll(traceContext);
             answerExtra.put("ui_projection", true);
             answerExtra.put("permission_mode", permissionMode);
             answerExtra.put("multi_agent", prepared.multiAgent().asMap());
@@ -559,6 +619,8 @@ public class ChatService {
         AgentOutputGuardrailChain.Outcome outcome = outputGuardrails.evaluate(
                 new AgentOutputGuardrail.Request(AgentOutputGuardrail.Scope.PUBLIC,
                         new AiMessage.Assistant(candidate), scope, evidence));
+        observability.recordGuardrails(scope.requestId(), "agent_output",
+                outcome.decisions(), outcome.refusal());
         return new SafeOutput(outcome.output() != null ? outcome.output().content() : null,
                 outcome.retryFeedback(), outcome.refusal(), outcome.decisions());
     }
@@ -594,6 +656,7 @@ public class ChatService {
                         new AiModel.ModelId(request.modelName())));
         String gatewayAgentId = execution.agentId().value();
         String gatewayModelId = execution.modelId().value();
+        Map<String, Object> traceContext = observability.correlation(request.requestId());
         AiChatConversationRepository repository = conversationRepository(requester);
         AssistantMessage assistantMessage = new AssistantMessage(answer);
         Runnable persistence = () -> {
@@ -603,14 +666,15 @@ public class ChatService {
             repository.append(request.conversationId(), new AiChatTrajectoryStep(
                     request.requestId(), "user", "user", "visible", userMessage.getText(), null,
                     request.modelName(), request.reasoningEffort(), null, null, null,
-                    Map.of("ui_projection", true), 0, null, null));
+                    withTrace(traceContext, Map.of("ui_projection", true)), 0, null, null));
             repository.append(request.conversationId(), new AiChatTrajectoryStep(
                     request.requestId(), "agent", "gateway_route", "debug",
                     "Gateway answered a closed direct intent.", null,
                     gatewayModelId, request.reasoningEffort(), null, null, null,
-                    Map.of("route", "DIRECT", "intent", direct.intent().name(),
-                            "confidence", direct.confidence()), 1, null, null));
+                    withTrace(traceContext, Map.of("route", "DIRECT", "intent", direct.intent().name(),
+                            "confidence", direct.confidence())), 1, null, null));
             Map<String, Object> answerExtra = new LinkedHashMap<>();
+            answerExtra.putAll(traceContext);
             answerExtra.put("ui_projection", true);
             answerExtra.put("agent_id", gatewayAgentId);
             answerExtra.put("gateway_intent", direct.intent().name());
@@ -645,11 +709,13 @@ public class ChatService {
                 .orElse(request.modelName());
         String agentId = execution.map(value -> value.agentId().value())
                 .orElseGet(this::rootAgentId);
+        Map<String, Object> traceContext = observability.correlation(request.requestId());
         AiChatConversationRepository repository = conversationRepository(requester);
         Runnable persistence = () -> {
             ChatMemory memory = chatMemory(requester);
             if (memory != null) memory.add(request.conversationId(), new AssistantMessage(answer));
             Map<String, Object> safeMetadata = new LinkedHashMap<>();
+            safeMetadata.putAll(traceContext);
             safeMetadata.put("ui_projection", true);
             safeMetadata.put("finish_reason", "GUARDRAIL_REFUSAL");
             safeMetadata.put("decision_id", refusal.decision().decisionId());
@@ -695,6 +761,7 @@ public class ChatService {
         String reasoningEffort = execution.isPresent() ? request.reasoningEffort() : null;
         int llmCallCount = execution.isPresent() ? 1 : 0;
         Map<String, Object> extra = new LinkedHashMap<>();
+        extra.putAll(observability.correlation(request.requestId()));
         extra.put("route", route);
         extra.put("routing_fallback", fallback);
         execution.ifPresent(value -> extra.put("agent_id", value.agentId().value()));
@@ -760,6 +827,16 @@ public class ChatService {
     public AiConversationModelResponse updateConversationModel(ScoreUser requester, String conversationId,
                                                                String requestedModelName,
                                                                String requestedReasoningEffort) {
+        return updateConversationModel(requester, conversationId, requestedModelName,
+                requestedReasoningEffort, null, null);
+    }
+
+    @Transactional
+    public AiConversationModelResponse updateConversationModel(ScoreUser requester, String conversationId,
+                                                               String requestedModelName,
+                                                               String requestedReasoningEffort,
+                                                               String traceparent,
+                                                               String tracestate) {
         AiChatConversationRepository conversationRepository = conversationRepository(requester);
         AiChatConversationSettings previous =
                 conversationRepository.settingsForUpdate(conversationId);
@@ -777,24 +854,41 @@ public class ChatService {
         if (modelChanged && !history.isEmpty() && targetBudget.isPresent()
                 && targetBudget.get().shouldCompact(targetInputTokens)) {
             String compactionRequestId = "model-switch-" + UUID.randomUUID();
-            Optional<AiContextBudget> sourceBudget = contextBudgets.budget(previous.modelName());
-            long sourceEstimate = contextBudgets.estimateInputTokens(history, compactMessage(null), null);
-            AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(conversationRepository, objectMapper, requester,
-                    conversationId, compactionRequestId, previous.modelName(), previous.reasoningEffort(),
-                    ignored -> {},
-                    sourceBudget.orElse(null), sourceEstimate);
             ChatRequest compactionRequest = new ChatRequest("/compact", compactionRequestId, null,
                     conversationId, null, List.of(), null, previous.modelName(), previous.reasoningEffort(),
                     "ask");
-            String summary = executeSummary(compactionRequest, history, compactMessage(null),
-                    requester, recorder, false);
-            replaceMemoryWithSummary(requester, conversationId, summary);
-            long beforeTokens = targetInputTokens;
-            history = List.of(summaryMessage(summary));
-            targetInputTokens = contextBudgets.estimateInputTokens(history, null, null);
-            recordCompaction(requester, compactionRequest, beforeTokens,
-                    targetInputTokens, summary, true);
-            contextCompacted = true;
+            ScoreAiObservability.Turn compactionTurn = observability.startExecution(
+                    new ScoreAiObservability.ExecutionDescriptor(compactionRequestId,
+                            conversationId, previous.modelName(), "context_compaction", "none"),
+                    requester, 0L, traceparent, tracestate);
+            compactionTurn.executionStarted();
+            try {
+                Optional<AiContextBudget> sourceBudget = contextBudgets.budget(previous.modelName());
+                long sourceEstimate = contextBudgets.estimateInputTokens(
+                        history, compactMessage(null), null);
+                AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                        conversationRepository, objectMapper, requester,
+                        conversationId, compactionRequestId, previous.modelName(),
+                        previous.reasoningEffort(), ignored -> {}, sourceBudget.orElse(null),
+                        sourceEstimate, observability.correlation(compactionRequestId),
+                        executionScope(compactionRequest, requester)
+                                .withPurpose(ExecutionScope.Purpose.COMPACTION),
+                        observer, observability);
+                String summary = executeSummary(compactionRequest, history, compactMessage(null),
+                        requester, recorder, false);
+                replaceMemoryWithSummary(requester, conversationId, summary);
+                long beforeTokens = targetInputTokens;
+                history = List.of(summaryMessage(summary));
+                targetInputTokens = contextBudgets.estimateInputTokens(history, null, null);
+                recordCompaction(requester, compactionRequest, beforeTokens,
+                        targetInputTokens, summary, true);
+                contextCompacted = true;
+                compactionTurn.complete("COMPLETED", null);
+            } catch (RuntimeException failure) {
+                compactionTurn.complete(failure instanceof CancellationException
+                        ? "CANCELLED" : "FAILED", failure);
+                throw failure;
+            }
         }
         if (targetBudget.isPresent() && targetBudget.get().exceedsSafeInput(targetInputTokens)) {
             throw new IllegalArgumentException("The existing conversation does not fit the selected model's safe context budget.");
@@ -837,13 +931,13 @@ public class ChatService {
         if (request == null || !StringUtils.hasText(request.conversationId())) {
             return;
         }
-        Map<String, Object> extra = StringUtils.hasText(failureClass)
-                ? Map.of("terminal", true, "failure_class", failureClass)
-                : Map.of("terminal", true);
+        Map<String, Object> extra = new LinkedHashMap<>(observability.correlation(request.requestId()));
+        extra.put("terminal", true);
+        if (StringUtils.hasText(failureClass)) extra.put("failure_class", failureClass);
         conversationRepository(requester).append(request.conversationId(), new AiChatTrajectoryStep(
                 request.requestId(), "system", "error", "visible",
                 StringUtils.hasText(message) ? message : "The assistant request failed.",
-                null, null, null, null, null, extra, 0, null, null));
+                null, null, null, null, null, Map.copyOf(extra), 0, null, null));
     }
 
     private UserMessage userMessage(ChatRequest request) {
@@ -1019,10 +1113,18 @@ public class ChatService {
                         : "Conversation context compacted.", null, request.modelName(),
                 request.reasoningEffort(), null, null,
                 Map.of("context_input_tokens", Math.max(0L, afterTokens), "context_estimated", true),
-                Map.of("automatic", automatic, "before_input_tokens", Math.max(0L, beforeTokens),
+                withTrace(observability.correlation(request.requestId()), Map.of(
+                        "automatic", automatic, "before_input_tokens", Math.max(0L, beforeTokens),
                         "after_input_tokens", Math.max(0L, afterTokens),
-                        "summary_characters", Objects.requireNonNullElse(summary, "").length()),
+                        "summary_characters", Objects.requireNonNullElse(summary, "").length())),
                 0, null, null));
+    }
+
+    private Map<String, Object> withTrace(Map<String, Object> traceContext,
+                                          Map<String, Object> metadata) {
+        Map<String, Object> merged = new LinkedHashMap<>(traceContext != null ? traceContext : Map.of());
+        if (metadata != null) merged.putAll(metadata);
+        return Map.copyOf(merged);
     }
 
     private AiCompactCommand compactCommand(String prompt) {
@@ -1111,6 +1213,7 @@ public class ChatService {
             return;
         }
         Map<String, Object> extra = new LinkedHashMap<>();
+        extra.putAll(observability.correlation(requestId));
         if (previous != null) {
             extra.put("before", settingsSnapshot(previous));
         }
@@ -1128,6 +1231,7 @@ public class ChatService {
             AiPersistentWorkflowCommand command,
             String modelName, String reasoningEffort) {
         Map<String, Object> extra = new LinkedHashMap<>();
+        extra.putAll(observability.correlation(requestId));
         if (command.activeWorkflow() != null) {
             extra.put("activeWorkflow", command.activeWorkflow());
         }

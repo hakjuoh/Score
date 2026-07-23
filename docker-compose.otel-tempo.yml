@@ -1,0 +1,46 @@
+name: score-observability-tempo
+
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: ${OTEL_STACK_LOG_MAX_SIZE:-10m}
+    max-file: ${OTEL_STACK_LOG_MAX_FILES:-3}
+
+services:
+  otel-collector:
+    command:
+      - --config=file:/etc/otelcol-contrib/config.yaml
+      - --config=file:/etc/otelcol-contrib/config-tempo.yaml
+    depends_on:
+      tempo:
+        condition: service_started
+    volumes:
+      - ./docker/otel-collector/config-tempo.yaml:/etc/otelcol-contrib/config-tempo.yaml:ro
+
+  tempo:
+    image: grafana/tempo:3.0.2
+    restart: unless-stopped
+    command: ["-target=all", "-config.file=/etc/tempo.yaml"]
+    depends_on:
+      prometheus:
+        condition: service_started
+    ports:
+      - "127.0.0.1:${TEMPO_HTTP_PORT:-3200}:3200"
+    volumes:
+      - ./docker/otel-collector/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *bounded-logging
+
+  grafana:
+    depends_on:
+      tempo:
+        condition: service_started
+    volumes:
+      - ./docker/otel-collector/grafana/traces-tempo.yaml:/etc/grafana/provisioning/datasources/02-traces.yaml:ro
+
+volumes:
+  tempo-data:

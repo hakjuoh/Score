@@ -32,6 +32,7 @@ import org.oagi.score.gateway.http.api.ai_management.tool.ToolExecutionGateway;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.configuration.ai.ConnectCenterMcpClientFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiChatOptionsFactory;
@@ -94,6 +95,7 @@ public final class AiChatExecutor {
     private final AiRequestRegistry requests;
     private final AiExecutionInstructions instructions;
     private final ExecutionObserver observer;
+    private final ScoreAiObservability observability;
 
     @Autowired
     public AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
@@ -110,11 +112,12 @@ public final class AiChatExecutor {
                           AgentInputGuardrailChain modelInputGuardrails,
                           AiRequestRegistry requests,
                           AiExecutionInstructions instructions,
+                          ScoreAiObservability observability,
                           ObjectProvider<ExecutionObserver> executionObservers) {
         this(models, mcpClients, toolSearchAdvisor, (Agent) rootAgent, mutationGuard,
                 elicitations, providerRetry, optionsFactory, approvalCoordinator,
                 toolGuardrails, callbackToolAdapter, springAiToolAdapter,
-                modelInputGuardrails, requests, instructions, executionObservers);
+                modelInputGuardrails, requests, instructions, observability, executionObservers);
     }
 
     AiChatExecutor(ScoreAiModelRegistry models,
@@ -135,7 +138,7 @@ public final class AiChatExecutor {
         this(models, mcpClients, toolSearchAdvisor, rootAgent, mutationGuard, elicitations,
                 providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
                 callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
-                AiExecutionInstructions.bundled(), executionObservers);
+                AiExecutionInstructions.bundled(), ScoreAiObservability.noop(), executionObservers);
     }
 
     private AiChatExecutor(ScoreAiModelRegistry models,
@@ -153,6 +156,7 @@ public final class AiChatExecutor {
                            AgentInputGuardrailChain modelInputGuardrails,
                            AiRequestRegistry requests,
                            AiExecutionInstructions instructions,
+                           ScoreAiObservability observability,
                            ObjectProvider<ExecutionObserver> executionObservers) {
         this.models = models;
         this.mcpClients = mcpClients;
@@ -169,6 +173,7 @@ public final class AiChatExecutor {
         this.modelInputGuardrails = modelInputGuardrails;
         this.requests = requests;
         this.instructions = Objects.requireNonNull(instructions, "instructions");
+        this.observability = observability != null ? observability : ScoreAiObservability.noop();
         this.observer = ExecutionObserver.composite(executionObservers != null
                 ? executionObservers.orderedStream().toList() : List.of());
     }
@@ -212,33 +217,38 @@ public final class AiChatExecutor {
     private Result execute(Context context, AgentDefinition rootDefinition) {
         ExecutionState state = new ExecutionState();
         ExecutionScope scope = executionScope(context);
-        observe("agent.run.started", scope, context.agentId(), context.request().modelName(), null);
-        try {
-            Result result;
-            if (context.toolPolicy() == ToolPolicy.NONE) {
-                // Tool-less calls (planner, evaluator, no-tool leaves) never consult the
-                // MCP registry, so they must not pay the per-call MCP handshake.
-                result = execute(context, null, state, rootDefinition);
-            } else {
-                try (ConnectCenterMcpClientFactory.McpSession mcp = elicitations != null
-                        ? mcpClients.open(context.requester(), elicitation -> handleElicitation(
-                        context, context.request(), context.recorder(), elicitation))
-                        : mcpClients.open(context.requester())) {
-                    result = execute(context, mcp, state, rootDefinition);
+        String runId = UUID.randomUUID().toString();
+        observe("agent.run.started", scope, runId, context.agentId(),
+                context.request().modelName(), context.recorder().observationContext(), null);
+        try (var ignored = observability.makeAgentCurrent(scope.requestId(), runId)) {
+            try {
+                Result result;
+                if (context.toolPolicy() == ToolPolicy.NONE) {
+                    // Tool-less calls (planner, evaluator, no-tool leaves) never consult the
+                    // MCP registry, so they must not pay the per-call MCP handshake.
+                    result = execute(context, null, state, rootDefinition);
+                } else {
+                    try (ConnectCenterMcpClientFactory.McpSession mcp = elicitations != null
+                            ? mcpClients.open(context.requester(), elicitation -> handleElicitation(
+                            context, context.request(), context.recorder(), elicitation))
+                            : mcpClients.open(context.requester())) {
+                        result = execute(context, mcp, state, rootDefinition);
+                    }
                 }
+                Result identified = result.withExecutionIdentity(context.agentId(),
+                        context.request().modelName(), context.executionPurpose().name());
+                observe("agent.run.completed", scope, runId, context.agentId(),
+                        context.request().modelName(), context.recorder().observationContext(), null);
+                return identified;
+            } catch (RuntimeException failure) {
+                observe(agentFailureEvent(requests, context.request().requestId(), failure),
+                        scope, runId, context.agentId(), context.request().modelName(),
+                        context.recorder().observationContext(), failure);
+                if (failure instanceof AgentInputRefusedException refused) {
+                    throw refused.identifiedBy(new Agent.AgentId(context.agentId()));
+                }
+                throw failure;
             }
-            Result identified = result.withExecutionIdentity(context.agentId(),
-                    context.request().modelName(), context.executionPurpose().name());
-            observe("agent.run.completed", scope, context.agentId(),
-                    context.request().modelName(), null);
-            return identified;
-        } catch (RuntimeException failure) {
-            observe("agent.run.failed", scope, context.agentId(),
-                    context.request().modelName(), failure);
-            if (failure instanceof AgentInputRefusedException refused) {
-                throw refused.identifiedBy(new Agent.AgentId(context.agentId()));
-            }
-            throw failure;
         }
     }
 
@@ -248,20 +258,25 @@ public final class AiChatExecutor {
 
     /** Provider-neutral Agent port used by Gateway, Guardrail, and other no-transport runs. */
     public AgentRunResult executeAgent(AgentInvocation invocation) {
-        observe("agent.run.started", invocation.scope(), invocation.agent().id().value(),
-                invocation.agent().model().id().value(), null);
-        try {
-            AgentRunResult result = executeAgentInternal(invocation);
-            observe("agent.run.completed", invocation.scope(), invocation.agent().id().value(),
-                    invocation.agent().model().id().value(), null);
-            return result;
-        } catch (RuntimeException failure) {
-            observe("agent.run.failed", invocation.scope(), invocation.agent().id().value(),
-                    invocation.agent().model().id().value(), failure);
-            if (failure instanceof AgentInputRefusedException refused) {
-                throw refused.identifiedBy(invocation.agent().id());
+        String runId = UUID.randomUUID().toString();
+        observe("agent.run.started", invocation.scope(), runId, invocation.agent().id().value(),
+                invocation.agent().model().id().value(), Map.of(), null);
+        try (var ignored = observability.makeAgentCurrent(invocation.scope().requestId(), runId)) {
+            try {
+                AgentRunResult result = executeAgentInternal(invocation);
+                observe("agent.run.completed", invocation.scope(), runId,
+                        invocation.agent().id().value(),
+                        invocation.agent().model().id().value(), Map.of(), null);
+                return result;
+            } catch (RuntimeException failure) {
+                observe(agentFailureEvent(requests, invocation.scope().requestId(), failure),
+                        invocation.scope(), runId, invocation.agent().id().value(),
+                        invocation.agent().model().id().value(), Map.of(), failure);
+                if (failure instanceof AgentInputRefusedException refused) {
+                    throw refused.identifiedBy(invocation.agent().id());
+                }
+                throw failure;
             }
-            throw failure;
         }
     }
 
@@ -276,6 +291,8 @@ public final class AiChatExecutor {
                 AgentInputGuardrail.Scope.MODEL, invocation.request(), assembled,
                 invocation.scope(), Map.of("agent_id", invocation.agent().id().value())))
                 : AgentInputGuardrailChain.Outcome.allowed(invocation.request(), List.of());
+        observability.recordGuardrails(invocation.scope().requestId(), "model_input",
+                checked.decisions(), checked.refusal());
         if (!checked.allowed()) throw new AgentInputRefusedException(checked.refusal());
 
         List<Message> messages = new ArrayList<>();
@@ -291,9 +308,19 @@ public final class AiChatExecutor {
                     invocation.agent().tools(), invocation.tools(), invocation.scope()));
         }
         String reasoningEffort = models.resolveReasoningEffort(modelId, null);
-        ChatResponse response = builder.build().prompt()
-                .options(optionsFactory.create(modelId, reasoningEffort, null).mutate())
-                .messages(messages).call().chatResponse();
+        ScoreAiModelRegistry.ModelConfiguration model = models.modelConfiguration(modelId);
+        ScoreAiObservability.ModelCall modelCall = observability.startModelCall(
+                invocation.scope().requestId(), modelId, model.providerType(), "agent");
+        ChatResponse response;
+        try {
+            response = builder.build().prompt()
+                    .options(optionsFactory.create(modelId, reasoningEffort, null).mutate())
+                    .messages(messages).call().chatResponse();
+            modelCall.complete(response);
+        } catch (RuntimeException failure) {
+            modelCall.fail(failure);
+            throw failure;
+        }
         String answer = visibleContent(response);
         if (!StringUtils.hasText(answer)) {
             throw new IllegalStateException("The Agent returned an empty response.");
@@ -306,15 +333,38 @@ public final class AiChatExecutor {
                                 .map(GuardrailDecision::decisionId).toList())));
     }
 
-    private void observe(String type, ExecutionScope scope, String agentId,
-                         String modelId, RuntimeException failure) {
+    private void observe(String type, ExecutionScope scope, String runId, String agentId,
+                         String modelId, Map<String, Object> lifecycleContext,
+                         RuntimeException failure) {
         Map<String, Object> attributes = new java.util.LinkedHashMap<>();
+        attributes.put("agent_run_id", runId);
         attributes.put("agent_id", agentId);
         attributes.put("model_id", modelId);
+        if (lifecycleContext != null) {
+            putIfPresent(attributes, "workflow_node_id", lifecycleContext.get("node_id"));
+            putIfPresent(attributes, "workflow_parent_node_id",
+                    lifecycleContext.get("parent_node_id"));
+            putIfPresent(attributes, "workflow_fanout_id", lifecycleContext.get("fanout_id"));
+            putIfPresent(attributes, "workflow", lifecycleContext.get("workflow"));
+        }
         if (failure != null) {
             attributes.put("failure_type", failure.getClass().getSimpleName());
         }
         observer.observe(ExecutionObservation.of(type, scope, Map.copyOf(attributes)));
+    }
+
+    private void putIfPresent(Map<String, Object> target, String key, Object value) {
+        if (value != null) target.put(key, value);
+    }
+
+    static String agentFailureEvent(AiRequestRegistry requests, String requestId,
+                                    RuntimeException failure) {
+        if (requests != null && requests.isTimingOut(requestId)) return "agent.run.timed_out";
+        if (failure instanceof CancellationException
+                || requests != null && requests.isCancelling(requestId)) {
+            return "agent.run.cancelled";
+        }
+        return "agent.run.failed";
     }
 
     private Message toSpringMessage(AiMessage message) {
@@ -343,12 +393,19 @@ public final class AiChatExecutor {
                 request.modelName(), request.reasoningEffort(), request.routeManifest());
         ScoreAiModelRegistry.ModelConfiguration model = models.modelConfiguration(request.modelName());
         recorder.useModelProvider(model.providerType());
+        if (mcp != null && mcp.tools() != null) {
+            recorder.mcpToolNames(java.util.Arrays.stream(mcp.tools().getToolCallbacks())
+                    .map(callback -> callback.getToolDefinition().name()).toList());
+            recorder.mcpServerName(mcpClients.connectionName());
+        } else {
+            recorder.mcpToolNames(List.of());
+        }
         long toolOutputTokenLimit = model.contextBudget() != null
                 && model.contextBudget().toolOutputTokenLimit() != null
                 ? model.contextBudget().toolOutputTokenLimit() : Long.MAX_VALUE;
         {
             ChatClient.Builder assistantBuilder = models.clientBuilder(request.modelName())
-                    .defaultAdvisors(new TrajectoryRecordingAdvisor(recorder));
+                    .defaultAdvisors(new TrajectoryRecordingAdvisor(recorder, observability));
             AiMutationToolGuard.GuardedToolSession guardedSession = null;
             org.springframework.ai.tool.ToolCallbackProvider executableTools = null;
             if (mcp != null && mcp.client() != null && context.toolPolicy() != ToolPolicy.NONE) {
@@ -675,6 +732,8 @@ public final class AiChatExecutor {
         AgentInputGuardrailChain.Outcome outcome = modelInputGuardrails.evaluate(
                 new AgentInputGuardrail.Request(AgentInputGuardrail.Scope.MODEL,
                         input, assembled, scope, Map.of("model", request.modelName())));
+        observability.recordGuardrails(scope.requestId(), "model_input",
+                outcome.decisions(), outcome.refusal());
         if (!outcome.allowed()) {
             throw new AgentInputRefusedException(outcome.refusal());
         }

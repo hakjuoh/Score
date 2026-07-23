@@ -7,12 +7,17 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChatSo
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChatSocketRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancelRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancellationResponse;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiElicitationDecisionRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMutationApprovalDecisionRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMutationConfirmationDecisionRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationConfirmationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
@@ -33,18 +38,23 @@ import java.security.Principal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -61,6 +71,59 @@ class AiChatControllerTest {
     private final SessionService sessionService = mock(SessionService.class);
     private final SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
     private final WebSocketSessionUserResolver webSocketUsers = mock(WebSocketSessionUserResolver.class);
+
+    @Test
+    void terminalizesTheRequestWhenTheExecutorRejectsSubmission() {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiChatController controller = controller(registry, new ScoreAiProperties(),
+                ignored -> { throw new RejectedExecutionException("executor closed"); });
+        ChatRequest request = request("request-rejected", "conversation-rejected");
+        when(sessionService.asScoreUser(principal)).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatThrownBy(() -> controller.chat(principal, request))
+                .isInstanceOf(RejectedExecutionException.class)
+                .hasMessage("executor closed");
+
+        assertThat(registry.status("request-rejected", user).status()).isEqualTo("FAILED");
+        verify(chatService).recordFailure(any(ChatRequest.class), eq(user),
+                any(String.class), eq(RejectedExecutionException.class.getName()));
+    }
+
+    @Test
+    void closesTheTurnWhenTheWebSocketAcceptedEventCannotBeSent() {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        ScoreAiObservability.Turn turn = mock(ScoreAiObservability.Turn.class);
+        when(observability.startTurn(any(ChatRequest.class), eq(user), anyLong(),
+                nullable(String.class), nullable(String.class))).thenReturn(turn);
+        AiChatController controller = new AiChatController(
+                chatService, sessionService, messagingTemplate, webSocketUsers, registry,
+                mock(AiMutationConfirmationService.class), mock(AiElicitationService.class),
+                mock(AiMutationApprovalCoordinator.class), new ScoreAiProperties(), observability,
+                Runnable::run);
+        Principal wsPrincipal = mock(Principal.class);
+        SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
+        when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new IllegalStateException("socket unavailable"))
+                .when(messagingTemplate).convertAndSendToUser(
+                        eq("tester"), eq("/queue/ai/chat/request-send-failed"),
+                        any(AiChatSocketEvent.class));
+
+        assertThatThrownBy(() -> controller.chat(
+                new AiChatSocketRequest("request-send-failed", "Help", null,
+                        "conversation-send-failed", null, List.of(), null),
+                wsPrincipal, headers))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("socket unavailable");
+
+        assertThat(registry.status("request-send-failed", user).status()).isEqualTo("FAILED");
+        verify(turn).admissionRejected("transport_send_failed");
+        verify(turn).complete(eq("admission_rejected"), any(IllegalStateException.class));
+    }
 
     @Test
     void preservesMultiAgentSettingsWhileAddingRestCorrelation() throws Exception {
@@ -212,6 +275,53 @@ class AiChatControllerTest {
         verify(approvals).decide(user, command);
         verify(messagingTemplate, never()).convertAndSendToUser(
                 eq("tester"), eq("/queue/ai/chat/request-1"), any());
+    }
+
+    @Test
+    void publishesSanitizedElicitationDecisionsAndIsolatesObserverFailureFromAcknowledgement() {
+        AiElicitationService elicitations = mock(AiElicitationService.class);
+        List<ExecutionObservation> observations = new ArrayList<>();
+        ExecutionObserver observer = ExecutionObserver.composite(List.of(
+                ignored -> { throw new IllegalStateException("optional observer unavailable"); },
+                observations::add));
+        AiChatController controller = new AiChatController(
+                chatService, sessionService, messagingTemplate, webSocketUsers,
+                new AiRequestRegistry(), mock(AiMutationConfirmationService.class),
+                elicitations, mock(AiMutationApprovalCoordinator.class),
+                new ScoreAiProperties(), ScoreAiObservability.noop(), observer, Runnable::run);
+        Principal wsPrincipal = mock(Principal.class);
+        SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
+        when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
+        AiElicitationDecisionRequest accepted = new AiElicitationDecisionRequest(
+                "request-accepted", "conversation-accepted", "elicitation-accepted",
+                "ACCEPT", Map.of("private", "DO_NOT_OBSERVE"));
+        AiElicitationDecisionRequest rejected = new AiElicitationDecisionRequest(
+                "request-rejected", "conversation-rejected", "elicitation-rejected",
+                "ACCEPT", Map.of("private", "DO_NOT_OBSERVE"));
+        doThrow(new IllegalArgumentException("already answered"))
+                .when(elicitations).decide(user, rejected.requestId(), rejected.conversationId(),
+                        rejected.elicitationId(), rejected.action(), rejected.content());
+
+        controller.decideElicitation(accepted, wsPrincipal, headers);
+        controller.decideElicitation(rejected, wsPrincipal, headers);
+
+        assertThat(observations).hasSize(2);
+        assertThat(observations).allSatisfy(observation -> {
+            assertThat(observation.type()).isEqualTo(AiExecutionLifecycle.OBSERVATION_TYPE);
+            assertThat(observation.scope().requesterId()).isEqualTo("1");
+            assertThat(observation.toString()).doesNotContain("DO_NOT_OBSERVE");
+        });
+        assertThat(observations).extracting(observation ->
+                        AiExecutionLifecycle.from(observation).orElseThrow().subtype())
+                .containsExactly("elicitation_decision_accepted", "elicitation_decision_rejected");
+        assertThat(observations).extracting(observation -> observation.scope().requestId())
+                .containsExactly("request-accepted", "request-rejected");
+        ArgumentCaptor<AiChatSocketEvent> acknowledgements =
+                ArgumentCaptor.forClass(AiChatSocketEvent.class);
+        verify(messagingTemplate, times(2)).convertAndSendToUser(
+                eq("tester"), any(String.class), acknowledgements.capture());
+        assertThat(acknowledgements.getAllValues()).extracting(AiChatSocketEvent::subtype)
+                .containsExactly("elicitation_decision_accepted", "elicitation_decision_rejected");
     }
 
     @Test

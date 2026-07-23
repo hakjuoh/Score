@@ -19,7 +19,11 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConv
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationSummary;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
+import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.service.ChatService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationConfirmationService;
@@ -32,6 +36,7 @@ import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +53,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -57,6 +63,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -91,6 +98,8 @@ public class AiChatController {
     private final AiElicitationService elicitations;
     private final AiMutationApprovalCoordinator mutationApprovals;
     private final Duration requestTimeout;
+    private final ScoreAiObservability observability;
+    private final ExecutionObserver observer;
 
     @Autowired
     public AiChatController(ChatService chatService, SessionService sessionService,
@@ -101,7 +110,41 @@ public class AiChatController {
                             AiElicitationService elicitations,
                             AiMutationApprovalCoordinator mutationApprovals,
                             ScoreAiProperties aiProperties,
+                            ScoreAiObservability observability,
+                            ObjectProvider<ExecutionObserver> executionObservers,
                             @Qualifier("scoreAiChatExecutor") Executor executor) {
+        this(chatService, sessionService, messagingTemplate, webSocketUsers, requests,
+                mutationConfirmations, elicitations, mutationApprovals, aiProperties,
+                observability, ExecutionObserver.composite(
+                        executionObservers.orderedStream().toList()), executor);
+    }
+
+    AiChatController(ChatService chatService, SessionService sessionService,
+                     SimpMessagingTemplate messagingTemplate,
+                     WebSocketSessionUserResolver webSocketUsers,
+                     AiRequestRegistry requests,
+                     AiMutationConfirmationService mutationConfirmations,
+                     AiElicitationService elicitations,
+                     AiMutationApprovalCoordinator mutationApprovals,
+                     ScoreAiProperties aiProperties,
+                     ScoreAiObservability observability,
+                     Executor executor) {
+        this(chatService, sessionService, messagingTemplate, webSocketUsers, requests,
+                mutationConfirmations, elicitations, mutationApprovals, aiProperties,
+                observability, ExecutionObserver.noop(), executor);
+    }
+
+    AiChatController(ChatService chatService, SessionService sessionService,
+                     SimpMessagingTemplate messagingTemplate,
+                     WebSocketSessionUserResolver webSocketUsers,
+                     AiRequestRegistry requests,
+                     AiMutationConfirmationService mutationConfirmations,
+                     AiElicitationService elicitations,
+                     AiMutationApprovalCoordinator mutationApprovals,
+                     ScoreAiProperties aiProperties,
+                     ScoreAiObservability observability,
+                     ExecutionObserver observer,
+                     Executor executor) {
         this.chatService = chatService;
         this.sessionService = sessionService;
         this.messagingTemplate = messagingTemplate;
@@ -111,6 +154,8 @@ public class AiChatController {
         this.elicitations = elicitations;
         this.mutationApprovals = mutationApprovals;
         this.requestTimeout = aiProperties.getRequestTimeout();
+        this.observability = observability;
+        this.observer = observer != null ? observer : ExecutionObserver.noop();
         this.executor = executor;
     }
 
@@ -123,58 +168,98 @@ public class AiChatController {
                      Executor executor) {
         this(chatService, sessionService, messagingTemplate, webSocketUsers, requests,
                 mutationConfirmations, new AiElicitationService(aiProperties), null,
-                aiProperties, executor);
+                aiProperties, ScoreAiObservability.noop(), executor);
+    }
+
+    AiChatController(ChatService chatService, SessionService sessionService,
+                     SimpMessagingTemplate messagingTemplate,
+                     WebSocketSessionUserResolver webSocketUsers,
+                     AiRequestRegistry requests,
+                     AiMutationConfirmationService mutationConfirmations,
+                     AiElicitationService elicitations,
+                     AiMutationApprovalCoordinator mutationApprovals,
+                     ScoreAiProperties aiProperties,
+                     Executor executor) {
+        this(chatService, sessionService, messagingTemplate, webSocketUsers, requests,
+                mutationConfirmations, elicitations, mutationApprovals, aiProperties,
+                ScoreAiObservability.noop(), executor);
     }
 
     @PostMapping
     public CompletableFuture<ResponseEntity<ChatResponse>> chat(
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
-            @RequestBody ChatRequest request) {
+            @RequestBody ChatRequest request,
+            @RequestHeader(value = "traceparent", required = false) String traceparent,
+            @RequestHeader(value = "tracestate", required = false) String tracestate) {
         ScoreUser requester = sessionService.asScoreUser(principal);
-        Admission admission = prepare(request, requester);
+        Admission admission = prepare(request, requester, traceparent, tracestate);
         ChatRequest prepared = admission.request();
         AiRequestRegistry.Entry entry = admission.entry();
+        ScoreAiObservability.Turn observation = admission.observation();
         List<AiChatSocketEvent> responseEvents = new CopyOnWriteArrayList<>();
         AtomicLong sequence = new AtomicLong();
-        CompletableFuture<ChatResponse> future = CompletableFuture.supplyAsync(() -> {
-            if (!requests.start(entry)) {
-                throw new CancellationException("The request was cancelled before execution started.");
-            }
-            ChatResponse response = chatService.chat(prepared, requester, event -> {
-                if (isRestResponseEvent(event)) {
-                    AiChatSocketEvent socketEvent = socketEvent(
-                            prepared, sequence.incrementAndGet(), event);
-                    responseEvents.add(socketEvent);
-                    // Interaction events must arrive while the HTTP request is still
-                    // running so failed tool rows and retry narration remain ordered.
-                    if (isRestLiveEvent(event)) {
-                        try {
-                            send(requester, queue(prepared.requestId()), socketEvent);
-                        } catch (RuntimeException exception) {
-                            LOGGER.warn("Could not stream an HTTP chat interaction event to the user", exception);
+        CompletableFuture<ChatResponse> future;
+        try {
+            future = CompletableFuture.supplyAsync(() -> {
+                if (!requests.start(entry)) {
+                    throw new CancellationException("The request was cancelled before execution started.");
+                }
+                observation.executionStarted();
+                ChatResponse response = chatService.chat(prepared, requester, event -> {
+                    if (isRestResponseEvent(event)) {
+                        AiChatSocketEvent socketEvent = socketEvent(
+                                prepared, sequence.incrementAndGet(), event);
+                        responseEvents.add(socketEvent);
+                        // Interaction events must arrive while the HTTP request is still
+                        // running so failed tool rows and retry narration remain ordered.
+                        if (isRestLiveEvent(event)) {
+                            try {
+                                send(requester, queue(prepared.requestId()), socketEvent);
+                            } catch (RuntimeException exception) {
+                                LOGGER.warn("Could not stream an HTTP chat interaction event to the user", exception);
+                            }
                         }
                     }
-                }
-            });
-            return response.withEvents(orderedResponseEvents(responseEvents));
-        }, executor);
+                });
+                return response.withEvents(orderedResponseEvents(responseEvents));
+            }, executor);
+        } catch (RuntimeException failure) {
+            finishBeforeExecution(entry, prepared, requester, observation,
+                    "executor_rejected", failure);
+            throw failure;
+        }
         return future.handle((response, throwable) -> {
-            String status = requests.finish(entry, throwable);
-            clearMutationApprovalState(prepared.requestId());
-            if ("FAILED".equals(status) || "TIMED_OUT".equals(status)) {
-                chatService.recordFailure(prepared, requester,
-                        terminalMessage(status, throwable), failureClass(throwable));
+            String status;
+            try {
+                status = requests.finish(entry, throwable);
+            } catch (RuntimeException finishFailure) {
+                observation.complete("FAILED", finishFailure);
+                throw finishFailure;
             }
-            if ("COMPLETED".equals(status)) {
-                return ResponseEntity.ok(response);
+            try {
+                clearMutationApprovalState(prepared.requestId());
+                if ("FAILED".equals(status) || "TIMED_OUT".equals(status)) {
+                    chatService.recordFailure(prepared, requester,
+                            terminalMessage(status, throwable), failureClass(throwable));
+                }
+                if ("COMPLETED".equals(status)) {
+                    return ResponseEntity.ok(response);
+                }
+                if (!responseEvents.isEmpty()) {
+                    return ResponseEntity.status(restTerminalStatus(status)).body(new ChatResponse(
+                            chatService.rootAgentId(), null, prepared.conversationId(),
+                            false, List.of(), orderedResponseEvents(responseEvents)));
+                }
+                throw propagate(throwable, status);
+            } finally {
+                observation.complete(status, throwable);
             }
-            if (!responseEvents.isEmpty()) {
-                return ResponseEntity.status(restTerminalStatus(status)).body(new ChatResponse(
-                        chatService.rootAgentId(), null, prepared.conversationId(),
-                        false, List.of(), orderedResponseEvents(responseEvents)));
-            }
-            throw propagate(throwable, status);
         });
+    }
+
+    CompletableFuture<ResponseEntity<ChatResponse>> chat(
+            AuthenticatedPrincipal principal, ChatRequest request) {
+        return chat(principal, request, null, null);
     }
 
     @GetMapping("/conversations")
@@ -197,10 +282,12 @@ public class AiChatController {
     public AiConversationModelResponse updateConversationModel(
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
             @PathVariable String conversationId,
-            @RequestBody AiConversationModelUpdateRequest request) {
+            @RequestBody AiConversationModelUpdateRequest request,
+            @RequestHeader(value = "traceparent", required = false) String traceparent,
+            @RequestHeader(value = "tracestate", required = false) String tracestate) {
         return requests.whileConversationIdle(conversationId, () -> chatService.updateConversationModel(
                 sessionService.asScoreUser(principal), conversationId,
-                request.modelName(), request.reasoningEffort()));
+                request.modelName(), request.reasoningEffort(), traceparent, tracestate));
     }
 
     @GetMapping("/conversations/{conversationId}/trajectory")
@@ -294,7 +381,9 @@ public class AiChatController {
         ChatRequest chatRequest = socketRequest.toChatRequest();
         Admission admission;
         try {
-            admission = prepare(chatRequest, requester);
+            admission = prepare(chatRequest, requester,
+                    headers.getFirstNativeHeader("traceparent"),
+                    headers.getFirstNativeHeader("tracestate"));
         } catch (RuntimeException failure) {
             // Without a terminal event on the reply queue the web client can only
             // report a generic acknowledgement timeout instead of the actual
@@ -306,36 +395,86 @@ public class AiChatController {
         String destination = queue(prepared.requestId());
         Instant deadline = admission.deadline();
         AiRequestRegistry.Entry entry = admission.entry();
-        send(requester, destination, AiChatSocketEvent.accepted(
-                prepared.requestId(), prepared.conversationId(), entry.generation(), deadline));
+        ScoreAiObservability.Turn observation = admission.observation();
+        try {
+            send(requester, destination, AiChatSocketEvent.accepted(
+                    prepared.requestId(), prepared.conversationId(), entry.generation(), deadline));
+        } catch (RuntimeException failure) {
+            finishBeforeExecution(entry, prepared, requester, observation,
+                    "transport_send_failed", failure);
+            throw failure;
+        }
 
         AtomicLong sequence = new AtomicLong();
-        CompletableFuture<ChatResponse> future = CompletableFuture.supplyAsync(() -> {
-            if (!requests.start(entry)) {
-                throw new CancellationException("The request was cancelled before execution started.");
-            }
-            return chatService.chat(prepared, requester,
-                    event -> send(requester, destination, socketEvent(
-                            prepared, sequence.incrementAndGet(), event)));
-        }, executor);
+        CompletableFuture<ChatResponse> future;
+        try {
+            future = CompletableFuture.supplyAsync(() -> {
+                if (!requests.start(entry)) {
+                    throw new CancellationException("The request was cancelled before execution started.");
+                }
+                observation.executionStarted();
+                return chatService.chat(prepared, requester,
+                        event -> {
+                            send(requester, destination, socketEvent(
+                                    prepared, sequence.incrementAndGet(), event));
+                        });
+            }, executor);
+        } catch (RuntimeException failure) {
+            finishBeforeExecution(entry, prepared, requester, observation,
+                    "executor_rejected", failure);
+            send(requester, destination, AiChatSocketEvent.terminalError(prepared.requestId(),
+                    prepared.conversationId(), entry.generation(), "FAILED",
+                    terminalMessage("FAILED", failure)));
+            throw failure;
+        }
         future.whenComplete((response, throwable) -> {
-            String status = requests.finish(entry, throwable);
-            clearMutationApprovalState(prepared.requestId());
-            if ("COMPLETED".equals(status)) {
-                send(requester, destination, AiChatSocketEvent.finalResponse(prepared.requestId(), response));
-            } else if ("CANCELLED".equals(status)) {
-                send(requester, destination, AiChatSocketEvent.cancelled(prepared.requestId(),
-                        prepared.conversationId(), entry.generation(), requests.cancellationRequestId(entry)));
-            } else if ("UNKNOWN_RECONCILIATION_REQUIRED".equals(status)) {
-                send(requester, destination, AiChatSocketEvent.reconciliationRequired(prepared.requestId(),
-                        prepared.conversationId(), entry.generation()));
-            } else {
-                String message = terminalMessage(status, throwable);
-                chatService.recordFailure(prepared, requester, message, failureClass(throwable));
-                send(requester, destination, AiChatSocketEvent.terminalError(prepared.requestId(),
-                        prepared.conversationId(), entry.generation(), status, message));
+            String status;
+            try {
+                status = requests.finish(entry, throwable);
+            } catch (RuntimeException finishFailure) {
+                observation.complete("FAILED", finishFailure);
+                throw finishFailure;
+            }
+            try {
+                clearMutationApprovalState(prepared.requestId());
+                if ("COMPLETED".equals(status)) {
+                    send(requester, destination, AiChatSocketEvent.finalResponse(prepared.requestId(), response));
+                } else if ("CANCELLED".equals(status)) {
+                    send(requester, destination, AiChatSocketEvent.cancelled(prepared.requestId(),
+                            prepared.conversationId(), entry.generation(), requests.cancellationRequestId(entry)));
+                } else if ("UNKNOWN_RECONCILIATION_REQUIRED".equals(status)) {
+                    send(requester, destination, AiChatSocketEvent.reconciliationRequired(prepared.requestId(),
+                            prepared.conversationId(), entry.generation()));
+                } else {
+                    String message = terminalMessage(status, throwable);
+                    chatService.recordFailure(prepared, requester, message, failureClass(throwable));
+                    send(requester, destination, AiChatSocketEvent.terminalError(prepared.requestId(),
+                            prepared.conversationId(), entry.generation(), status, message));
+                }
+            } finally {
+                observation.complete(status, throwable);
             }
         });
+    }
+
+    private void finishBeforeExecution(AiRequestRegistry.Entry entry, ChatRequest request,
+                                       ScoreUser requester, ScoreAiObservability.Turn observation,
+                                       String reason, RuntimeException failure) {
+        String status;
+        try {
+            status = requests.finish(entry, failure);
+        } catch (RuntimeException finishFailure) {
+            observation.complete("FAILED", finishFailure);
+            throw finishFailure;
+        }
+        try {
+            clearMutationApprovalState(request.requestId());
+            observation.admissionRejected(reason);
+            chatService.recordFailure(request, requester,
+                    terminalMessage(status, failure), failureClass(failure));
+        } finally {
+            observation.complete("admission_rejected", failure);
+        }
     }
 
     @MessageMapping("/ai/chat/conversation")
@@ -405,11 +544,17 @@ public class AiChatController {
         try {
             elicitations.decide(requester, command.requestId(), command.conversationId(),
                     command.elicitationId(), command.action(), command.content());
+            observeLifecycle(requester, command.requestId(), command.conversationId(),
+                    "elicitation_decision_accepted",
+                    Map.of("elicitationId", command.elicitationId()));
             send(requester, queue(command.requestId()), AiChatSocketEvent.system(
                     command.requestId(), command.conversationId(), null,
                     "elicitation_decision_accepted", "Your response was sent to the assistant.",
                     Map.of("elicitationId", command.elicitationId())));
         } catch (RuntimeException exception) {
+            observeLifecycle(requester, command.requestId(), command.conversationId(),
+                    "elicitation_decision_rejected",
+                    Map.of("elicitationId", command.elicitationId()));
             send(requester, queue(command.requestId()), AiChatSocketEvent.system(
                     command.requestId(), command.conversationId(), null,
                     "elicitation_decision_rejected",
@@ -454,7 +599,8 @@ public class AiChatController {
         }
     }
 
-    private Admission prepare(ChatRequest request, ScoreUser requester) {
+    private Admission prepare(ChatRequest request, ScoreUser requester,
+                              String traceparent, String tracestate) {
         if (request == null) {
             throw new IllegalArgumentException("Chat request must not be null.");
         }
@@ -466,14 +612,25 @@ public class AiChatController {
                 request.permissionMode(), request.multiAgent(), request.activeWorkflow(),
                 request.routeManifest());
         Instant deadline = Instant.now().plus(requestTimeout);
-        AiRequestRegistry.Entry entry = requests.register(
-                requestId, request.conversationId(), requester, deadline);
+        AiRequestRegistry.Entry entry;
+        try {
+            entry = requests.register(requestId, request.conversationId(), requester, deadline);
+        } catch (RuntimeException failure) {
+            observability.recordAdmissionRejection(correlated, requester, failure,
+                    admissionReason(failure), traceparent, tracestate);
+            throw failure;
+        }
+        ScoreAiObservability.Turn observation = observability.startTurn(
+                correlated, requester, entry.generation(), traceparent, tracestate);
         try {
             ChatRequest prepared = chatService.prepare(correlated, requester);
             requests.bindConversation(entry, prepared.conversationId());
-            return new Admission(prepared, entry, deadline);
+            observation.prepared(prepared);
+            return new Admission(prepared, entry, deadline, observation);
         } catch (RuntimeException | Error failure) {
             requests.finish(entry, failure);
+            observation.admissionRejected(admissionReason(failure));
+            observation.complete("admission_rejected", failure);
             throw failure;
         }
     }
@@ -484,7 +641,22 @@ public class AiChatController {
         }
     }
 
-    private record Admission(ChatRequest request, AiRequestRegistry.Entry entry, Instant deadline) {}
+    private String admissionReason(Throwable failure) {
+        if (failure instanceof java.util.concurrent.RejectedExecutionException) {
+            return "executor_rejected";
+        }
+        String message = Objects.toString(failure != null ? failure.getMessage() : null, "")
+                .toLowerCase(java.util.Locale.ROOT);
+        if (message.contains("registry is at capacity")) return "registry_capacity";
+        if (message.contains("too many ai requests")) return "user_limit";
+        if (message.contains("already has an active request")) return "conversation_busy";
+        if (message.contains("requestid already exists")) return "duplicate_request";
+        if (failure instanceof IllegalArgumentException) return "validation";
+        return "preparation_failed";
+    }
+
+    private record Admission(ChatRequest request, AiRequestRegistry.Entry entry, Instant deadline,
+                             ScoreAiObservability.Turn observation) {}
 
     private void sendAdmissionFailure(ScoreUser requester, ChatRequest request, RuntimeException failure) {
         if (!StringUtils.hasText(request.requestId())) {
@@ -598,6 +770,24 @@ public class AiChatController {
             case "CANCELLED" -> "Request cancelled before execution started.";
             default -> "Cancellation status updated.";
         };
+    }
+
+    private void observeLifecycle(ScoreUser requester, String requestId, String conversationId,
+                                  String subtype, Map<String, Object> metadata) {
+        if (!StringUtils.hasText(requestId) || !StringUtils.hasText(conversationId)) return;
+        String requesterId = requester != null && requester.userId() != null
+                ? requester.userId().value().toString()
+                : requester != null && StringUtils.hasText(requester.username())
+                ? requester.username() : "unknown";
+        try {
+            ExecutionScope scope = new ExecutionScope(requestId, conversationId, requesterId, 0L,
+                    ExecutionScope.Purpose.USER_RESPONSE, List.of());
+            observer.observe(new AiExecutionLifecycle(
+                    "detail", subtype, null, null, null, metadata).observation(scope));
+        } catch (RuntimeException failure) {
+            LOGGER.warn("Could not observe AI lifecycle event {} for request {}",
+                    subtype, requestId, failure);
+        }
     }
 
     private AiChatSocketEvent socketEvent(ChatRequest request, long sequence, AiExecutionEvent event) {

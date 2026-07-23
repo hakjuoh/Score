@@ -1,0 +1,144 @@
+package org.oagi.score.gateway.http.api.ai_management.execution;
+
+import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiContextUsageInfo;
+import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+
+/**
+ * Content-free lifecycle fact shared by execution observers. ATIF remains the
+ * durable, content-bearing record; observers receive only correlation and timing metadata.
+ */
+public record AiExecutionLifecycle(String eventType, String subtype,
+                                   String toolCallId, String toolName,
+                                   Long toolCallSequence, Map<String, Object> metadata) {
+
+    public static final String OBSERVATION_TYPE = "ai.lifecycle";
+    private static final String ATTRIBUTE = "lifecycle";
+    private static final Set<String> OBSERVABLE_METADATA = Set.of(
+            "attempt", "max_attempts", "delay_millis", "status_code", "failure_class",
+            "toolName", "mcp", "mcp_server_name", "duration_ms", "result_truncated",
+            "failure_type",
+            "originalUtf8Bytes", "returnedUtf8Bytes", "toolOutputTokenLimit",
+            "contextUsage", "reason", "automatic", "batchId", "approved", "denied",
+            "elicitationId",
+            "workflow", "node_id", "fanout_id", "agent_count", "max_agents", "worker_count",
+            "workflow_iteration", "iteration", "failed", "failed_count", "failure_count",
+            "failed_agents");
+    private static final Set<String> BOOLEAN_METADATA = Set.of(
+            "mcp", "result_truncated", "automatic");
+    private static final Set<String> NUMERIC_METADATA = Set.of(
+            "attempt", "max_attempts", "delay_millis", "status_code", "duration_ms",
+            "originalUtf8Bytes", "returnedUtf8Bytes", "toolOutputTokenLimit",
+            "approved", "denied", "agent_count", "max_agents", "worker_count",
+            "workflow_iteration", "iteration", "failed", "failed_count", "failure_count",
+            "failed_agents");
+    private static final Set<String> TYPE_METADATA = Set.of("failure_class", "failure_type");
+    private static final Set<String> ID_METADATA = Set.of(
+            "batchId", "elicitationId", "node_id", "fanout_id");
+
+    public AiExecutionLifecycle {
+        eventType = requiredToken(eventType, "eventType", 80);
+        subtype = requiredToken(subtype, "subtype", 120);
+        toolCallId = safeIdentifier(toolCallId, 256);
+        toolName = safeIdentifier(toolName, 160);
+        toolCallSequence = toolCallSequence != null && toolCallSequence >= 0
+                ? toolCallSequence : null;
+        metadata = observableMetadata(subtype, metadata);
+    }
+
+    public static AiExecutionLifecycle from(AiExecutionEvent event) {
+        Objects.requireNonNull(event, "event");
+        return new AiExecutionLifecycle(event.type(), event.subtype(), event.toolCallId(),
+                event.toolName(), event.toolCallSequence(), event.metadata());
+    }
+
+    public ExecutionObservation observation(ExecutionScope scope) {
+        return ExecutionObservation.of(OBSERVATION_TYPE, scope, Map.of(ATTRIBUTE, this));
+    }
+
+    public static Optional<AiExecutionLifecycle> from(ExecutionObservation observation) {
+        if (observation == null || !OBSERVATION_TYPE.equals(observation.type())) {
+            return Optional.empty();
+        }
+        Object lifecycle = observation.attributes().get(ATTRIBUTE);
+        return lifecycle instanceof AiExecutionLifecycle value
+                ? Optional.of(value) : Optional.empty();
+    }
+
+    private static String requiredToken(String value, String label, int maxLength) {
+        String normalized = Objects.requireNonNull(value, label).strip();
+        if (!normalized.matches("[A-Za-z0-9_.-]{1," + maxLength + "}")) {
+            throw new IllegalArgumentException(label + " must be a bounded identifier");
+        }
+        return normalized;
+    }
+
+    private static Map<String, Object> observableMetadata(String subtype,
+                                                           Map<String, Object> source) {
+        if (source == null || source.isEmpty()) return Map.of();
+        Map<String, Object> safe = new LinkedHashMap<>();
+        OBSERVABLE_METADATA.forEach(name -> {
+            Object sanitized = sanitizedMetadataValue(subtype, name, source.get(name));
+            if (sanitized != null) safe.put(name, sanitized);
+        });
+        return safe.isEmpty() ? Map.of() : Map.copyOf(safe);
+    }
+
+    private static Object sanitizedMetadataValue(String subtype, String name, Object value) {
+        if (value == null) return null;
+        if (BOOLEAN_METADATA.contains(name)) return value instanceof Boolean ? value : null;
+        if (NUMERIC_METADATA.contains(name)) {
+            return value instanceof Number number ? number.longValue() : null;
+        }
+        if (TYPE_METADATA.contains(name)) return safeType(value);
+        if (ID_METADATA.contains(name)) return safeIdentifier(value.toString(), 256);
+        return switch (name) {
+            case "toolName" -> safeIdentifier(value.toString(), 160);
+            case "mcp_server_name" -> safeIdentifier(value.toString(), 160);
+            case "workflow" -> safeIdentifier(value.toString(), 80);
+            case "reason" -> "context_compacted".equals(subtype)
+                    ? compactionReason(value.toString()) : null;
+            case "contextUsage" -> value instanceof AiContextUsageInfo usage
+                    ? sanitizedContextUsage(usage) : null;
+            default -> null;
+        };
+    }
+
+    private static AiContextUsageInfo sanitizedContextUsage(AiContextUsageInfo usage) {
+        return new AiContextUsageInfo(
+                Objects.requireNonNullElse(safeIdentifier(usage.modelName(), 160), "unknown"),
+                Math.max(0L, usage.currentInputTokens()),
+                Math.max(0L, usage.contextWindow()),
+                Math.max(0L, usage.safeInputLimit()),
+                Math.max(0L, usage.remainingTokens()),
+                Math.max(0.0, Math.min(100.0, usage.usedPercent())),
+                usage.estimated(),
+                Objects.requireNonNullElse(safeIdentifier(usage.source(), 80), "unknown"));
+    }
+
+    private static String compactionReason(String value) {
+        String normalized = value != null ? value.strip().toLowerCase() : "";
+        return switch (normalized) {
+            case "manual", "threshold" -> normalized;
+            default -> "other";
+        };
+    }
+
+    private static String safeType(Object value) {
+        String normalized = value.toString().strip();
+        return normalized.matches("[A-Za-z0-9_.$-]{1,160}") ? normalized : "unknown";
+    }
+
+    private static String safeIdentifier(String value, int maxLength) {
+        if (value == null) return null;
+        String normalized = value.strip();
+        return normalized.matches("[A-Za-z0-9][A-Za-z0-9_.:/-]{0," + (maxLength - 1) + "}")
+                ? normalized : "unknown";
+    }
+}
