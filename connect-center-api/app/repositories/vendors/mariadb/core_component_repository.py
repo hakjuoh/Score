@@ -2951,6 +2951,7 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
         limit: int,
         offset: int,
         sorts: list[tuple[str, Literal["ASC", "DESC"]]],
+        states: list[str] | None = None,
         den: str | None = None,
         tag_names: list[str] | None = None,
         creation_timestamp_before: datetime | None = None,
@@ -2970,6 +2971,8 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
             types: Optional component type filter list.
             limit: Maximum number of records to return.
             offset: Number of records to skip before collecting results.
+            sorts: Validated columns and directions used to order results.
+            states: Optional lifecycle states to include using exact match.
             den: Optional Dictionary Entry Name (DEN) filter.
             tag_names: Optional tag names to include by exact match.
             creation_timestamp_before: Optional upper bound for creation timestamp.
@@ -3014,6 +3017,7 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
                     tag_link_model=AccManifestTag,
                     tag_link_manifest_col=AccManifestTag.acc_manifest_id,
                     release_ids=release_ids,
+                    states=states,
                     den=den,
                     tag_names=tag_names,
                     creation_timestamp_before=creation_timestamp_before,
@@ -3054,6 +3058,7 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
                     tag_link_model=AsccpManifestTag,
                     tag_link_manifest_col=AsccpManifestTag.asccp_manifest_id,
                     release_ids=release_ids,
+                    states=states,
                     den=den,
                     tag_names=tag_names,
                     creation_timestamp_before=creation_timestamp_before,
@@ -3094,6 +3099,7 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
                     tag_link_model=BccpManifestTag,
                     tag_link_manifest_col=BccpManifestTag.bccp_manifest_id,
                     release_ids=release_ids,
+                    states=states,
                     den=den,
                     tag_names=tag_names,
                     creation_timestamp_before=creation_timestamp_before,
@@ -4126,6 +4132,7 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
                 tag_link_model=AccManifestTag,
                 tag_link_manifest_col=AccManifestTag.acc_manifest_id,
                 release_ids=None,
+                states=None,
                 den=None,
                 tag_names=None,
                 creation_timestamp_before=None,
@@ -4159,6 +4166,7 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
                 tag_link_model=AsccpManifestTag,
                 tag_link_manifest_col=AsccpManifestTag.asccp_manifest_id,
                 release_ids=None,
+                states=None,
                 den=None,
                 tag_names=None,
                 creation_timestamp_before=None,
@@ -4192,6 +4200,7 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
                 tag_link_model=BccpManifestTag,
                 tag_link_manifest_col=BccpManifestTag.bccp_manifest_id,
                 release_ids=None,
+                states=None,
                 den=None,
                 tag_names=None,
                 creation_timestamp_before=None,
@@ -4236,6 +4245,7 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
         tag_link_model: Any,
         tag_link_manifest_col: Any,
         release_ids: list[int] | None,
+        states: list[str] | None,
         den: str | None,
         tag_names: list[str] | None,
         creation_timestamp_before: datetime | None,
@@ -4277,6 +4287,7 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
             tag_link_model: Value for `tag_link_model`.
             tag_link_manifest_col: Value for `tag_link_manifest_col`.
             release_ids: Release identifiers used to scope the query.
+            states: Optional lifecycle states to include using exact match.
             den: Optional Dictionary Entry Name (DEN) filter.
             tag_names: Optional tag names to include by exact match.
             creation_timestamp_before: Optional upper bound for creation timestamp.
@@ -4294,6 +4305,8 @@ class MariaDbCoreComponentRepository(CoreComponentRepositoryContract):
         where_clauses = []
         if release_ids is not None:
             where_clauses.append(manifest_release_col.in_(release_ids))
+        if states:
+            where_clauses.append(state_col.in_(states))
         if den:
             for word in [w.strip() for w in den.split() if w.strip()]:
                 where_clauses.append(func.lower(den_col).like(func.lower(f"%{word}%")))

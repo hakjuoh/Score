@@ -38,6 +38,7 @@ from app.services.models.core_component import (
     CancelAccServiceResult,
     CancelAsccpServiceResult,
     CancelBccpServiceResult,
+    CORE_COMPONENT_TYPES,
     CoreComponentState,
     CreateAsccServiceResult,
     CreateBccServiceResult,
@@ -83,6 +84,7 @@ from app.services.release_service import ReleaseService
 from app.services.utils.date import DateRange
 from app.services.utils.owner import parse_login_id_filter, parse_owner_filter
 from app.services.utils.pagination import PaginationParams, PaginationResponse
+from app.services.utils.state import normalize_state_filter
 from app.types.unset import UNSET, UnsetType
 from app.types.identifiers import (
     AccManifestId,
@@ -173,6 +175,7 @@ class CoreComponentService:
         Args:
             core_component_repository: Core-component repository dependency.
             release_service: Release service dependency.
+            data_type_service: Data-type service dependency.
             account_service_repo: Account repository used to resolve user summaries.
             requester: Requesting user context.
         """
@@ -2704,6 +2707,7 @@ class CoreComponentService:
         limit: int,
         offset: int,
         order_by: str | None = None,
+        states: list[str] | None = None,
         den: str | None = None,
         tag: str | None = None,
         created_on: DateRange | None = None,
@@ -2719,6 +2723,13 @@ class CoreComponentService:
             limit: Maximum number of items to return.
             offset: Zero-based index of the first item in the page.
             order_by: Sort expression for the result set.
+            states: Optional lifecycle states to include using exact match.
+            den: Optional Dictionary Entry Name (DEN) filter.
+            tag: Optional tag-name filter.
+            created_on: Optional creation-time range filter.
+            last_updated_on: Optional last-update-time range filter.
+            owner: Optional owner login-ID filter.
+            updater: Optional updater login-ID filter.
 
         Returns:
             Result of the operation.
@@ -2734,14 +2745,14 @@ class CoreComponentService:
         if release is None:
             raise LookupError(f"No release exists with ID {int(release_id)}. Please verify the identifier and try again.")
 
-        valid_types = {"ACC", "ASCCP", "BCCP"}
-        invalid = [t for t in types if t not in valid_types]
+        invalid = [component_type for component_type in types if component_type not in CORE_COMPONENT_TYPES]
         if invalid:
             raise ValueError(
                 f"Invalid component types: {', '.join(invalid)}. Allowed values are: ACC, ASCCP, BCCP. "
                 "Please choose only supported component types and try again."
             )
 
+        normalized_states = normalize_state_filter(states)
         dependent_release_ids = await self._release_service.get_dependent_releases(release_id)
         tag_names = _parse_tag_filter(tag)
         included_owner_login_ids, excluded_owner_login_ids = parse_owner_filter(owner)
@@ -2756,6 +2767,7 @@ class CoreComponentService:
             limit=pagination.limit,
             offset=pagination.offset,
             sorts=[(s.column, s.direction.upper()) for s in pagination.sorts],
+            states=normalized_states,
             den=den,
             tag_names=tag_names,
             creation_timestamp_before=created_on.before if created_on else None,

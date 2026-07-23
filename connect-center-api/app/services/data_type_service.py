@@ -33,6 +33,7 @@ from app.services.release_service import ReleaseService
 from app.services.utils.date import DateRange
 from app.services.utils.owner import parse_login_id_filter, parse_owner_filter
 from app.services.utils.pagination import PaginationParams, PaginationResponse
+from app.services.utils.state import CcState, normalize_state_filter
 from app.types.unset import UNSET, UnsetType
 from app.types.identifiers import DataTypeManifestId, DataTypeSupplementaryComponentManifestId, ReleaseId
 from app.utils.core_component_constants import (
@@ -43,16 +44,7 @@ from app.utils.core_component_constants import (
 logger = logging.getLogger("connectcenter.service.data_type")
 
 
-DataTypeState = Literal[
-    "Deleted",
-    "WIP",
-    "Draft",
-    "QA",
-    "Candidate",
-    "Production",
-    "ReleaseDraft",
-    "Published",
-]
+DataTypeState = CcState
 
 DataTypeSupplementaryComponentCardinality = Literal["Prohibited", "Optional", "Required"]
 
@@ -112,6 +104,7 @@ class DataTypeService:
         limit: int,
         offset: int,
         order_by: str | None = None,
+        states: list[str] | None = None,
         den: str | None = None,
         representation_term: str | None = None,
         created_on: DateRange | None = None,
@@ -126,6 +119,13 @@ class DataTypeService:
             limit: Maximum number of items to return.
             offset: Zero-based index of the first item in the page.
             order_by: Sort expression for the result set.
+            states: Optional lifecycle states to include using exact match.
+            den: Optional Dictionary Entry Name (DEN) filter.
+            representation_term: Optional representation-term filter.
+            created_on: Optional creation-time range filter.
+            last_updated_on: Optional last-update-time range filter.
+            owner: Optional owner login-ID filter.
+            updater: Optional updater login-ID filter.
 
         Returns:
             Result of the operation.
@@ -137,6 +137,7 @@ class DataTypeService:
             order_by=order_by,
             allowed_sort_columns=self._ORDER_BY_ALLOWED,
         )
+        normalized_states = normalize_state_filter(states)
         dependent_release_ids = await self._release_service.get_dependent_releases(release_id)
         included_owner_login_ids, excluded_owner_login_ids = parse_owner_filter(owner)
         included_updater_login_ids, excluded_updater_login_ids = parse_login_id_filter(
@@ -149,6 +150,7 @@ class DataTypeService:
             limit=pagination.limit,
             offset=pagination.offset,
             sorts=[(s.column, s.direction.upper()) for s in pagination.sorts],
+            states=normalized_states,
             den=den,
             representation_term=representation_term,
             creation_timestamp_before=created_on.before if created_on else None,
