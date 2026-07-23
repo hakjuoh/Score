@@ -22,7 +22,9 @@ public record AiExecutionLifecycle(String eventType, String subtype,
     private static final String ATTRIBUTE = "lifecycle";
     private static final Set<String> OBSERVABLE_METADATA = Set.of(
             "attempt", "max_attempts", "delay_millis", "status_code", "failure_class",
-            "toolName", "mcp", "mcp_server_name", "duration_ms", "result_truncated",
+            "toolName", "mcp", "mcp_server_name", "mcp_protocol_version",
+            "server_address", "server_port", "network_protocol_name", "network_transport",
+            "duration_ms", "result_truncated",
             "failure_type",
             "originalUtf8Bytes", "returnedUtf8Bytes", "toolOutputTokenLimit",
             "contextUsage", "reason", "automatic", "batchId", "approved", "denied",
@@ -33,7 +35,7 @@ public record AiExecutionLifecycle(String eventType, String subtype,
     private static final Set<String> BOOLEAN_METADATA = Set.of(
             "mcp", "result_truncated", "automatic");
     private static final Set<String> NUMERIC_METADATA = Set.of(
-            "attempt", "max_attempts", "delay_millis", "status_code", "duration_ms",
+            "attempt", "max_attempts", "delay_millis", "status_code", "duration_ms", "server_port",
             "originalUtf8Bytes", "returnedUtf8Bytes", "toolOutputTokenLimit",
             "approved", "denied", "agent_count", "max_agents", "worker_count",
             "workflow_iteration", "iteration", "failed", "failed_count", "failure_count",
@@ -100,7 +102,9 @@ public record AiExecutionLifecycle(String eventType, String subtype,
         if (ID_METADATA.contains(name)) return safeIdentifier(value.toString(), 256);
         return switch (name) {
             case "toolName" -> safeIdentifier(value.toString(), 160);
-            case "mcp_server_name" -> safeIdentifier(value.toString(), 160);
+            case "mcp_server_name", "server_address" -> safeIdentifier(value.toString(), 160);
+            case "mcp_protocol_version", "network_protocol_name", "network_transport" ->
+                    safeIdentifier(value.toString(), 80);
             case "workflow" -> safeIdentifier(value.toString(), 80);
             case "reason" -> "context_compacted".equals(subtype)
                     ? compactionReason(value.toString()) : null;

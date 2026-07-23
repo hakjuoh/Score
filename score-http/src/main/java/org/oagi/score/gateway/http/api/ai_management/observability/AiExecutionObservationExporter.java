@@ -49,42 +49,64 @@ final class AiExecutionObservationExporter implements ExecutionObserver {
         String model = ScoreAiObservability.value(Objects.toString(attributes.get("model_id"), null));
         String workflowNodeId = ScoreAiObservability.value(
                 Objects.toString(attributes.get("workflow_node_id"), null));
+        String workflowParentNodeId = ScoreAiObservability.value(
+                Objects.toString(attributes.get("workflow_parent_node_id"), null));
         RunKey key = new RunKey(requestId, runId);
         if (observation.type().endsWith(".started")) {
             runs.start(key, () -> {
-                var parent = observability.agentParent(requestId, workflowNodeId);
-                Span span = observability.tracer().spanBuilder("score.ai.agent")
+                var parent = observability.agentParent(
+                        requestId, workflowNodeId, workflowParentNodeId);
+                var builder = observability.tracer().spanBuilder(
+                                GenAiSemanticConventions.spanName(
+                                        GenAiSemanticConventions.INVOKE_AGENT, agent))
                             .setParent(parent)
-                            .setAttribute("gen_ai.agent.id", agent)
+                            .setAttribute("gen_ai.operation.name",
+                                    GenAiSemanticConventions.INVOKE_AGENT)
+                            .setAttribute("gen_ai.agent.name", agent)
+                            .setAttribute("score.ai.agent.id", agent)
                             .setAttribute("gen_ai.request.model", model)
                             .setAttribute("score.ai.agent_run.id", runId)
                             .setAttribute("score.ai.workflow.node_id", workflowNodeId)
+                            .setAttribute("score.ai.workflow.parent_node_id", workflowParentNodeId)
                             .setAttribute("score.ai.execution.purpose",
-                                    observation.scope().purpose().name().toLowerCase())
-                            .startSpan();
+                                    observation.scope().purpose().name().toLowerCase());
+                GenAiSemanticConventions.putIfKnown(builder,
+                        "gen_ai.conversation.id", observation.scope().conversationId());
+                Span span = builder.startSpan();
                 Context context = ScoreAiObservability.privateContext(parent, span);
-                observability.registerAgentContext(requestId, runId, context);
-                return new AgentRun(span, System.nanoTime(), model, requestId, runId);
+                observability.registerAgentContext(requestId, runId, agent, context);
+                return new AgentRun(span, System.nanoTime(), agent, model, requestId, runId);
             });
             return;
         }
         AgentRun run = runs.terminate(key, () -> {
-            var parent = observability.agentParent(requestId, workflowNodeId);
-            Span span = observability.tracer().spanBuilder("score.ai.agent")
+            var parent = observability.agentParent(
+                    requestId, workflowNodeId, workflowParentNodeId);
+            var builder = observability.tracer().spanBuilder(
+                            GenAiSemanticConventions.spanName(
+                                    GenAiSemanticConventions.INVOKE_AGENT, agent))
                     .setParent(parent)
-                    .setAttribute("gen_ai.agent.id", agent)
+                    .setAttribute("gen_ai.operation.name", GenAiSemanticConventions.INVOKE_AGENT)
+                    .setAttribute("gen_ai.agent.name", agent)
+                    .setAttribute("score.ai.agent.id", agent)
                     .setAttribute("gen_ai.request.model", model)
                     .setAttribute("score.ai.agent_run.id", runId)
                     .setAttribute("score.ai.workflow.node_id", workflowNodeId)
-                    .startSpan();
-            return new AgentRun(span, System.nanoTime(), model, requestId, runId);
+                    .setAttribute("score.ai.workflow.parent_node_id", workflowParentNodeId);
+            GenAiSemanticConventions.putIfKnown(builder,
+                    "gen_ai.conversation.id", observation.scope().conversationId());
+            Span span = builder.startSpan();
+            return new AgentRun(span, System.nanoTime(), agent, model, requestId, runId);
         });
         if (run == null) return;
         String outcome = observation.type().endsWith(".completed") ? "success"
                 : observation.type().endsWith(".cancelled") ? "cancelled"
                 : observation.type().endsWith(".timed_out") ? "timeout" : "error";
         Object failure = attributes.get("failure_type");
-        if (failure != null) run.span.setAttribute("error.type", failure.toString());
+        if (failure != null) {
+            run.errorType = failure.toString();
+            run.span.setAttribute("error.type", run.errorType);
+        }
         run.finish(outcome);
     }
 
@@ -123,15 +145,18 @@ final class AiExecutionObservationExporter implements ExecutionObserver {
     private final class AgentRun {
         private final Span span;
         private final long startedNanos;
+        private final String agent;
         private final String model;
         private final String requestId;
         private final String runId;
         private final AtomicBoolean ended = new AtomicBoolean();
+        private String errorType;
 
-        private AgentRun(Span span, long startedNanos, String model,
+        private AgentRun(Span span, long startedNanos, String agent, String model,
                          String requestId, String runId) {
             this.span = span;
             this.startedNanos = startedNanos;
+            this.agent = agent;
             this.model = model;
             this.requestId = requestId;
             this.runId = runId;
@@ -143,10 +168,32 @@ final class AiExecutionObservationExporter implements ExecutionObserver {
 
         private void finish(String outcome, boolean incomplete) {
             if (!ended.compareAndSet(false, true)) return;
-            observability.removeAgentContext(requestId, runId);
+            ScoreAiObservability.AgentInvocationCounts counts =
+                    observability.removeAgentContext(requestId, runId);
+            ScoreAiObservability.AgentUsage usage = counts.usage();
             span.setAttribute("score.ai.outcome", outcome);
             if (incomplete) span.setAttribute("score.ai.observation.incomplete", true);
+            if (usage.inputTokens() > 0) {
+                span.setAttribute("gen_ai.usage.input_tokens", usage.inputTokens());
+            }
+            if (usage.outputTokens() > 0) {
+                span.setAttribute("gen_ai.usage.output_tokens", usage.outputTokens());
+            }
+            if (usage.cacheReadObserved()) {
+                span.setAttribute("gen_ai.usage.cache_read.input_tokens",
+                        usage.cacheReadTokens());
+            }
+            if (usage.cacheCreationObserved()) {
+                span.setAttribute("gen_ai.usage.cache_creation.input_tokens",
+                        usage.cacheCreationTokens());
+            }
+            if (!counts.finishReasons().isEmpty()) {
+                span.setAttribute(io.opentelemetry.api.common.AttributeKey.stringArrayKey(
+                        "gen_ai.response.finish_reasons"), counts.finishReasons());
+            }
             if (!"success".equals(outcome) && !"cancelled".equals(outcome)) {
+                if (errorType == null) errorType = outcome;
+                span.setAttribute("error.type", errorType);
                 span.setStatus(StatusCode.ERROR, outcome);
             }
             Attributes labels = Attributes.builder()
@@ -155,6 +202,15 @@ final class AiExecutionObservationExporter implements ExecutionObserver {
                     .build();
             observability.instruments().agentRuns.add(1, labels);
             observability.instruments().agentDuration.record(elapsedMillis(startedNanos), labels);
+            Attributes standard = GenAiSemanticConventions.agentDurationAttributes(
+                    agent, model, errorType);
+            observability.instruments().genAiInvokeAgentDuration.record(
+                    GenAiSemanticConventions.elapsedSeconds(startedNanos), standard);
+            Attributes calls = GenAiSemanticConventions.agentCallAttributes(agent);
+            observability.instruments().genAiInvokeAgentInferenceCalls.record(
+                    counts.inferenceCalls(), calls);
+            observability.instruments().genAiInvokeAgentToolCalls.record(
+                    counts.toolCalls(), calls);
             span.end();
         }
     }
