@@ -153,7 +153,7 @@ rejected when rendered.
 
 The configured root resource is also resolved through this catalog. An external root override uses
 the same minimal frontmatter and instruction format and is reloaded when the root
-Agent definition is requested. `ConnectCenterAssistantAgent` therefore exposes the same authoritative
+Agent definition is requested. `AssistantAgent` therefore exposes the same authoritative
 identity and instruction that `AiChatExecutor` executes; there is no separate root-prompt loader. The
 executor snapshots that definition once per root run so hot reload cannot mix one definition's identity
 with another definition's instruction in observations, persisted metadata, or the final response.

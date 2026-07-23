@@ -366,6 +366,94 @@ class ScoreAiObservabilityTest {
     }
 
     @Test
+    void nestsRecursiveWorkflowSpansByRuntimeNodeIdentity() {
+        ChatRequest request = new ChatRequest("prompt", "request-recursive", null,
+                "conversation-recursive", null, List.of(), null,
+                "gpt-5", "medium", "ask");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_started", "", Map.of(
+                        "node_id", "main", "workflow", "main", "member_count", 1)));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_started", "", Map.of(
+                        "node_id", "child-1", "parent_node_id", "main",
+                        "workflow", "research-group", "member_count", 2)));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_completed", "", Map.of(
+                        "node_id", "child-1", "parent_node_id", "main",
+                        "workflow", "research-group", "completed", 2, "failed", 0)));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_completed", "", Map.of(
+                        "node_id", "main", "workflow", "main",
+                        "completed", 1, "failed", 0)));
+        turn.complete("COMPLETED", null);
+
+        SpanData main = spans.getFinishedSpanItems().stream()
+                .filter(span -> span.getName().equals("invoke_workflow main"))
+                .findFirst().orElseThrow();
+        SpanData child = spans.getFinishedSpanItems().stream()
+                .filter(span -> span.getName().equals("invoke_workflow research-group"))
+                .findFirst().orElseThrow();
+        assertThat(child.getParentSpanId()).isEqualTo(main.getSpanId());
+        assertThat(child.getAttributes().get(
+                AttributeKey.stringKey("score.ai.workflow.run_id"))).isEqualTo("child-1");
+        assertThat(child.getAttributes().get(
+                AttributeKey.stringKey("gen_ai.workflow.name"))).isEqualTo("research-group");
+        assertThat(child.getAttributes().get(
+                AttributeKey.longKey("score.ai.workflow.completed"))).isEqualTo(2L);
+        assertThat(child.getAttributes().get(
+                AttributeKey.longKey("score.ai.workflow.failed"))).isZero();
+    }
+
+    @Test
+    void ignoresWorkflowDiagnosticEventsAndClosesRefusalWithARefusedOutcome() {
+        ChatRequest request = new ChatRequest("prompt", "request-refused-workflow", null,
+                "conversation-refused-workflow", null, List.of(), null,
+                "gpt-5", "medium", "ask");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_plan_fallback", "", Map.of("status", "fallback")));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_evaluation_fallback", "", Map.of("status", "fallback")));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_started", "", Map.of(
+                        "node_id", "main", "workflow", "main", "member_count", 1)));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_refused", "", Map.of(
+                        "node_id", "main", "workflow", "main")));
+        turn.complete("COMPLETED", null);
+
+        List<SpanData> workflows = spans.getFinishedSpanItems().stream()
+                .filter(span -> span.getName().startsWith("invoke_workflow"))
+                .toList();
+        assertThat(workflows).hasSize(1);
+        assertThat(workflows.getFirst().getAttributes().get(
+                AttributeKey.stringKey("score.ai.outcome"))).isEqualTo("refused");
+    }
+
+    @Test
+    void preservesAValidMaximumLengthWorkflowIdInTelemetry() {
+        String workflowId = "w".repeat(100);
+        ChatRequest request = new ChatRequest("prompt", "request-long-workflow", null,
+                "conversation-long-workflow", null, List.of(), null,
+                "gpt-5", "medium", "ask");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_started", "", Map.of(
+                        "node_id", "long-node", "workflow", workflowId)));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_completed", "", Map.of(
+                        "node_id", "long-node", "workflow", workflowId)));
+        turn.complete("COMPLETED", null);
+
+        SpanData workflow = spans.getFinishedSpanItems().stream()
+                .filter(span -> span.getName().startsWith("invoke_workflow"))
+                .findFirst().orElseThrow();
+        assertThat(workflow.getAttributes().get(
+                AttributeKey.stringKey("gen_ai.workflow.name"))).isEqualTo(workflowId);
+    }
+
+    @Test
     void emitsPlannerExecutorAndEvaluatorWithoutInventingSingleAgentWorkflowSpans() {
         ChatRequest request = new ChatRequest("prompt", "request-semantic-workflow", null,
                 "conversation-semantic-workflow", null, List.of(), null,
