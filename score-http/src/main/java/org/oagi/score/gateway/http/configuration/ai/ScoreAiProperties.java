@@ -303,14 +303,11 @@ public class ScoreAiProperties {
     /** Trusted per-turn no-Tool simple-request Agent configuration. */
     public static class Gateway {
         private boolean enabled = true;
-        private String modelName;
         private double directConfidenceThreshold = 0.90d;
         private int maximumInputCharacters = 4000;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
-        public String getModelName() { return modelName; }
-        public void setModelName(String modelName) { this.modelName = modelName; }
         public double getDirectConfidenceThreshold() { return directConfidenceThreshold; }
         public void setDirectConfidenceThreshold(double value) {
             if (!Double.isFinite(value) || value < 0.0d || value > 1.0d) {

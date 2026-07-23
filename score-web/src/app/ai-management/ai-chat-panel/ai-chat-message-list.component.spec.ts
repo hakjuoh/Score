@@ -300,7 +300,7 @@ describe('AiChatMessageListComponent', () => {
       'model', 'permissions'
     ]);
     expect(Array.from(values, value => value.textContent?.trim())).toEqual([
-      'GPT-5.6 SOL with High effort', 'Full access'
+      'GPT-5.6 SOL with high reasoning effort', 'Full access'
     ]);
     expect(summary.textContent).toContain('/model');
     expect(summary.textContent).not.toContain('/runtime');

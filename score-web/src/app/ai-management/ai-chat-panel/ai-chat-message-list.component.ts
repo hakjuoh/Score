@@ -235,12 +235,6 @@ export class AiChatMessageListComponent implements OnChanges {
     return this.availableModels.find(model => model.name === this.selectedModelName);
   }
 
-  get selectedReasoningEffortDisplayName(): string {
-    return this.selectedModel?.reasoningEfforts
-      .find(effort => effort.name === this.selectedReasoningEffort)?.displayName
-      || this.selectedReasoningEffort;
-  }
-
   get permissionDisplayName(): string {
     return this.permissionOptions.find(option => option.value === this.permissionMode)?.name
       || this.permissionMode;
