@@ -1404,7 +1404,7 @@ class AiWorkflowExecutionCoordinatorTest {
                 .thenReturn(child);
         when(child.conversationId()).thenReturn("mutation-child");
         when(child.successfulDomainToolCallCount()).thenReturn(0L, 1L);
-        when(root.successfulDomainToolCallCount()).thenReturn(0L, 1L);
+        when(workflowLead.successfulDomainToolCallCount()).thenReturn(0L, 1L);
         when(executor.execute(any())).thenAnswer(invocation -> {
             AiChatExecutor.Context candidate = invocation.getArgument(0);
             return new AiChatExecutor.Result(candidate.agentDepth() == 1
@@ -1758,6 +1758,10 @@ class AiWorkflowExecutionCoordinatorTest {
         ArgumentCaptor<AiChatExecutor.Context> branchCalls =
                 ArgumentCaptor.forClass(AiChatExecutor.Context.class);
         verify(executor, times(3)).execute(branchCalls.capture());
+        assertThat(branchCalls.getAllValues().stream()
+                .filter(candidate -> candidate.agentDepth() == 0)
+                .map(AiChatExecutor.Context::recorder))
+                .containsExactly(leadRecorder);
         assertThat(branchCalls.getAllValues().stream()
                 .filter(candidate -> candidate.agentDepth() == 1).toList())
                 .extracting(candidate -> candidate.request().conversationId())

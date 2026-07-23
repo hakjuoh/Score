@@ -93,6 +93,7 @@ public final class AiTrajectoryRecorder {
     private final boolean subagentScope;
     private final AiChatConversationKind conversationKind;
     private volatile String modelProvider = "unknown";
+    private volatile String requestModelName;
     private final AtomicLong ownPromptTokens = new AtomicLong();
     private final AtomicLong ownCompletionTokens = new AtomicLong();
     private final AtomicLong ownModelCalls = new AtomicLong();
@@ -107,6 +108,11 @@ public final class AiTrajectoryRecorder {
     private final Set<String> requestPendingApprovalIds;
     private final Set<String> mcpToolNames = ConcurrentHashMap.newKeySet();
     private volatile String mcpServerName = "unknown";
+    private volatile String mcpProtocolVersion;
+    private volatile String mcpServerAddress;
+    private volatile long mcpServerPort = -1;
+    private volatile String mcpNetworkProtocolName;
+    private volatile String mcpNetworkTransport;
     private final AtomicLong executedMutationToolCalls = new AtomicLong();
     private volatile Set<String> readOnlyToolNames = Set.of();
     private volatile boolean sealed;
@@ -192,6 +198,7 @@ public final class AiTrajectoryRecorder {
         this.conversationId = conversationId;
         this.requestId = requestId;
         this.modelName = modelName;
+        this.requestModelName = modelName;
         this.reasoningEffort = reasoningEffort;
         this.realtimeEvents = events != null ? events : ignored -> {};
         this.contextBudget = contextBudget;
@@ -283,6 +290,7 @@ public final class AiTrajectoryRecorder {
 
     public String requestId() { return requestId; }
     public String modelName() { return modelName; }
+    public String requestModelName() { return requestModelName; }
     public String modelProvider() { return modelProvider; }
 
     public Map<String, Object> observationContext() {
@@ -306,10 +314,32 @@ public final class AiTrajectoryRecorder {
         this.mcpServerName = StringUtils.hasText(serverName) ? serverName.strip() : "unknown";
     }
 
+    public void mcpTelemetry(String serverName, String protocolVersion, String serverAddress,
+                             long serverPort, String networkProtocolName,
+                             String networkTransport) {
+        mcpServerName(serverName);
+        this.mcpProtocolVersion = normalizedMetadata(protocolVersion);
+        this.mcpServerAddress = normalizedMetadata(serverAddress);
+        this.mcpServerPort = serverPort > 0 && serverPort <= 65_535 ? serverPort : -1;
+        this.mcpNetworkProtocolName = normalizedMetadata(networkProtocolName);
+        this.mcpNetworkTransport = normalizedMetadata(networkTransport);
+    }
+
+    private static String normalizedMetadata(String value) {
+        return StringUtils.hasText(value) ? value.strip() : null;
+    }
+
     /** Selects the provider-specific mapping from Spring AI usage to ATIF prompt totals. */
     public void useModelProvider(String providerType) {
         this.modelProvider = StringUtils.hasText(providerType) ? providerType.strip() : "unknown";
         this.promptTokenAccounting = PromptTokenAccounting.fromProviderType(providerType);
+    }
+
+    /** Configures the exact model identifier sent to the provider for GenAI telemetry. */
+    public void useModelProvider(String providerType, String requestModelName) {
+        useModelProvider(providerType);
+        this.requestModelName = StringUtils.hasText(requestModelName)
+                ? requestModelName.strip() : modelName;
     }
 
     /** Snapshot of the model usage this recorder observed, keyed by its fan-out namespace. */
@@ -1043,7 +1073,7 @@ public final class AiTrajectoryRecorder {
         eventMetadata.put("read_only", readOnlyToolNames.contains(pending.name()));
         eventMetadata.put("mcp", mcpToolNames.contains(pending.name()));
         if (mcpToolNames.contains(pending.name())) {
-            eventMetadata.put("mcp_server_name", mcpServerName);
+            eventMetadata.putAll(mcpObservationMetadata());
         }
         if (failure != null) eventMetadata.put("failure_type", failure.getClass().getName());
         emit(AiExecutionEvent.tool(status,
@@ -1293,7 +1323,21 @@ public final class AiTrajectoryRecorder {
 
     private Map<String, Object> toolObservationMetadata(String toolName) {
         if (!mcpToolNames.contains(toolName)) return Map.of("mcp", false);
-        return Map.of("mcp", true, "mcp_server_name", mcpServerName);
+        return Map.copyOf(mcpObservationMetadata());
+    }
+
+    private Map<String, Object> mcpObservationMetadata() {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("mcp", true);
+        metadata.put("mcp_server_name", mcpServerName);
+        if (mcpProtocolVersion != null) metadata.put("mcp_protocol_version", mcpProtocolVersion);
+        if (mcpServerAddress != null) metadata.put("server_address", mcpServerAddress);
+        if (mcpServerPort > 0) metadata.put("server_port", mcpServerPort);
+        if (mcpNetworkProtocolName != null) {
+            metadata.put("network_protocol_name", mcpNetworkProtocolName);
+        }
+        if (mcpNetworkTransport != null) metadata.put("network_transport", mcpNetworkTransport);
+        return metadata;
     }
 
     private void emitToolOutputUsage(AiBoundedToolOutput bounded) {

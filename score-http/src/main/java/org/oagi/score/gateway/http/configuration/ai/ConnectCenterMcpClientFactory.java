@@ -1,10 +1,14 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
+import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.propagation.TextMapSetter;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
@@ -20,10 +24,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.net.http.HttpRequest;
+import java.net.http.HttpRequest.BodyPublishers;
+import java.net.URI;
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -35,6 +43,8 @@ public class ConnectCenterMcpClientFactory {
     private static final ToolCallbackProvider NO_TOOLS = () -> new ToolCallback[0];
     private static final TextMapSetter<HttpRequest.Builder> TRACE_HEADER_SETTER =
             (builder, key, value) -> builder.setHeader(key, value);
+    private static final TextMapSetter<Map<String, String>> TRACE_META_SETTER = Map::put;
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final ScoreAiProperties properties;
     private final Environment environment;
@@ -56,7 +66,7 @@ public class ConnectCenterMcpClientFactory {
             Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler) {
         McpConnection connection = connection(requester);
         if (connection == null) {
-            return new McpSession(null, NO_TOOLS, Set.of());
+            return new McpSession(null, NO_TOOLS, Set.of(), McpTelemetry.EMPTY);
         }
         String baseUrl = connection.baseUrl();
         String endpoint = connection.endpoint();
@@ -65,8 +75,13 @@ public class ConnectCenterMcpClientFactory {
         HttpClientStreamableHttpTransport.Builder transport = HttpClientStreamableHttpTransport
                 .builder(baseUrl)
                 .endpoint(endpoint)
-                .httpRequestCustomizer((builder, method, uri, body, transportContext) ->
-                        injectCurrentTrace(builder))
+                .httpRequestCustomizer((builder, method, uri, body, transportContext) -> {
+                    injectCurrentTrace(builder);
+                    String enrichedBody = injectTraceIntoMcpBody(body);
+                    if (enrichedBody != null && !enrichedBody.equals(body)) {
+                        builder.method(method, BodyPublishers.ofString(enrichedBody));
+                    }
+                })
                 .openConnectionOnStartup(false);
         if (StringUtils.hasText(token)) {
             transport.requestBuilder(HttpRequest.newBuilder()
@@ -81,11 +96,12 @@ public class ConnectCenterMcpClientFactory {
         }
         McpSyncClient client = clientBuilder.build();
         try {
-            client.initialize();
+            McpSchema.InitializeResult initialized = client.initialize();
             ToolCallbackProvider tools = SyncMcpToolCallbackProvider.builder()
                     .mcpClients(List.of(client))
                     .build();
-            return new McpSession(client, tools, readOnlyToolNames(client));
+            return new McpSession(client, tools, readOnlyToolNames(client),
+                    McpTelemetry.from(connectionName(), connection, initialized));
         } catch (RuntimeException exception) {
             client.closeGracefully();
             throw exception;
@@ -132,6 +148,36 @@ public class ConnectCenterMcpClientFactory {
                 Context.current(), request, TRACE_HEADER_SETTER);
     }
 
+    /** Injects W3C context into MCP params._meta and captures the real JSON-RPC tool request ID. */
+    static String injectTraceIntoMcpBody(String body) {
+        if (!StringUtils.hasText(body) || !ScoreAiObservability.currentContextCanPropagate()
+                || !Span.current().getSpanContext().isValid()) return body;
+        try {
+            JsonNode parsed = JSON.readTree(body);
+            if (!(parsed instanceof ObjectNode root)
+                    || !(root.get("params") instanceof ObjectNode params)) return body;
+            JsonNode id = root.get("id");
+            if ("tools/call".equals(root.path("method").asText()) && id != null
+                    && !id.isNull() && id.isValueNode()) {
+                String requestId = id.isTextual() ? id.textValue() : id.toString();
+                if (requestId != null && requestId.length() <= 128) {
+                    Span.current().setAttribute("jsonrpc.request.id", requestId);
+                }
+            }
+            Map<String, String> trace = new LinkedHashMap<>();
+            W3CTraceContextPropagator.getInstance().inject(
+                    Context.current(), trace, TRACE_META_SETTER);
+            if (trace.isEmpty()) return body;
+            ObjectNode meta = params.get("_meta") instanceof ObjectNode existing
+                    ? existing : params.putObject("_meta");
+            trace.forEach(meta::put);
+            return JSON.writeValueAsString(root);
+        } catch (RuntimeException | java.io.IOException ignored) {
+            // Trace propagation must never change MCP request behavior.
+            return body;
+        }
+    }
+
     public McpConnection connection(ScoreUser requester) {
         String name = properties.getMcp().getConnectionName();
         String prefix = "spring.ai.mcp.client.streamable-http.connections." + name;
@@ -162,12 +208,45 @@ public class ConnectCenterMcpClientFactory {
     }
 
     public record McpSession(McpSyncClient client, ToolCallbackProvider tools,
-                             Set<String> readOnlyToolNames) implements AutoCloseable {
+                             Set<String> readOnlyToolNames,
+                             McpTelemetry telemetry) implements AutoCloseable {
+        public McpSession(McpSyncClient client, ToolCallbackProvider tools,
+                          Set<String> readOnlyToolNames) {
+            this(client, tools, readOnlyToolNames, McpTelemetry.EMPTY);
+        }
+
+        public McpSession {
+            telemetry = telemetry != null ? telemetry : McpTelemetry.EMPTY;
+        }
+
         @Override
         public void close() {
             if (client != null) {
                 client.closeGracefully();
             }
+        }
+    }
+
+    /** Content-free MCP connection metadata used for semantic-convention span enrichment. */
+    public record McpTelemetry(String serverName, String protocolVersion, String serverAddress,
+                               long serverPort, String networkProtocolName,
+                               String networkTransport) {
+        public static final McpTelemetry EMPTY =
+                new McpTelemetry(null, null, null, -1, null, null);
+
+        private static McpTelemetry from(String serverName, McpConnection connection,
+                                         McpSchema.InitializeResult initialized) {
+            URI uri = URI.create(connection.baseUrl());
+            String scheme = uri.getScheme() != null ? uri.getScheme().toLowerCase() : null;
+            long port = uri.getPort();
+            if (port < 0) {
+                port = "https".equals(scheme) ? 443 : "http".equals(scheme) ? 80 : -1;
+            }
+            return new McpTelemetry(serverName,
+                    initialized != null ? initialized.protocolVersion() : null,
+                    uri.getHost(), port,
+                    "http".equals(scheme) || "https".equals(scheme) ? "http" : scheme,
+                    "http".equals(scheme) || "https".equals(scheme) ? "tcp" : null);
         }
     }
 
