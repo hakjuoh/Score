@@ -30,7 +30,7 @@ export class AiChatComposerComponent {
   @Input() showCommandSuggestions = false;
   @Input() commandSuggestions: AiChatCommand[] = [];
   @Input() selectedCommandIndex = 0;
-  @Input() placeholder = 'Ask connectCenter';
+  @Input() placeholder = 'Ask a question';
 
   @Output() promptChange = new EventEmitter<string>();
   @Output() keydownEvent = new EventEmitter<KeyboardEvent>();

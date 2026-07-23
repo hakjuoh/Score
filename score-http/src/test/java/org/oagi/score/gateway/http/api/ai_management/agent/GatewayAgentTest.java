@@ -42,7 +42,7 @@ class GatewayAgentTest {
         };
         GatewayAgent gateway = service(execution);
 
-        GatewayResult routed = gateway.route(turn("Hello"), scope);
+        GatewayResult routed = gateway.route(turn("Hello"), model.id().value(), scope);
 
         assertThat(routed).isInstanceOf(GatewayResult.Direct.class);
         assertThat(((GatewayResult.Direct) routed).intent()).isEqualTo(GatewayResult.DirectIntent.GREETING);
@@ -100,31 +100,28 @@ class GatewayAgentTest {
     }
 
     @Test
-    void usesTheDedicatedConfiguredGatewayModel() {
-        AiModel fastModel = new AiModel(new AiModel.ModelId("fast-model"),
-                new AiModel.ProviderId("fast-provider"), null, null);
+    void usesTheModelSelectedForTheWorkflowRequest() {
+        AiModel selectedModel = new AiModel(new AiModel.ModelId("selected-model"),
+                new AiModel.ProviderId("selected-provider"), null, null);
         AtomicReference<AgentInvocation> captured = new AtomicReference<>();
         AgentExecutionService execution = invocation -> {
             captured.set(invocation);
             return result(invocation, """
-                    {"policyAction":"ALLOW","route":"DIRECT","intent":"GREETING",
-                     "confidence":0.99,"candidate":"Hello!","suggestedWorkflow":null}
+                    {"policyAction":"ALLOW","route":"DIRECT","intent":"THANKS",
+                     "confidence":0.99,"candidate":"You are welcome.","suggestedWorkflow":null}
                     """);
         };
         SpringAiModelCatalog modelCatalog = mock(SpringAiModelCatalog.class);
-        when(modelCatalog.require("fast-model")).thenReturn(fastModel);
+        when(modelCatalog.require("selected-model")).thenReturn(selectedModel);
         ScoreAiProperties properties = new ScoreAiProperties();
-        properties.getGateway().setModelName("fast-model");
         GatewayAgent gateway = new GatewayAgent(
                 execution, modelCatalog, agentCatalog(), new ObjectMapper(), properties);
 
-        GatewayResult routed = gateway.route(turn("Hello"), scope);
-        assertThat(routed).isInstanceOf(GatewayResult.Direct.class);
-        assertThat(routed.execution()).contains(new GatewayResult.Execution(
-                new Agent.AgentId("gateway-agent"), fastModel.id()));
-        assertThat(captured.get().agent().model()).isEqualTo(fastModel);
-        org.mockito.Mockito.verify(modelCatalog).require("fast-model");
-        org.mockito.Mockito.verify(modelCatalog, org.mockito.Mockito.never()).defaultModel();
+        AgentDecision decision = gateway.execute(workflowContext("Thanks", "selected-model"));
+
+        assertThat(decision).isInstanceOf(AgentDecision.Complete.class);
+        assertThat(captured.get().agent().model()).isEqualTo(selectedModel);
+        org.mockito.Mockito.verify(modelCatalog).require("selected-model");
     }
 
     @Test
@@ -135,8 +132,10 @@ class GatewayAgentTest {
                 """));
         GatewayAgent malformed = service(invocation -> result(invocation, "not-json"));
 
-        assertThat(lowConfidence.route(turn("Thanks"), scope)).isInstanceOf(GatewayResult.Review.class);
-        GatewayResult fallback = malformed.route(turn("Research this"), scope);
+        assertThat(lowConfidence.route(turn("Thanks"), model.id().value(), scope))
+                .isInstanceOf(GatewayResult.Review.class);
+        GatewayResult fallback = malformed.route(
+                turn("Research this"), model.id().value(), scope);
         assertThat(fallback).isInstanceOf(GatewayResult.Handoff.class);
         assertThat(((GatewayResult.Handoff) fallback).routingFallback()).isTrue();
     }
@@ -148,7 +147,7 @@ class GatewayAgentTest {
                  "confidence":0.9,"candidate":null,"suggestedWorkflow":null}
                 """));
 
-        GatewayResult result = gateway.route(turn("sensitive"), scope);
+        GatewayResult result = gateway.route(turn("sensitive"), model.id().value(), scope);
 
         assertThat(result).isInstanceOf(GatewayResult.Refuse.class);
         assertThat(((GatewayResult.Refuse) result).refusal().publicMessageKey())
@@ -164,7 +163,7 @@ class GatewayAgentTest {
             throw new AgentInputRefusedException(refusal);
         });
 
-        GatewayResult result = gateway.route(turn("sensitive"), scope);
+        GatewayResult result = gateway.route(turn("sensitive"), model.id().value(), scope);
 
         assertThat(result).isInstanceOf(GatewayResult.Refuse.class);
         assertThat(((GatewayResult.Refuse) result).refusal()).isSameAs(refusal);
@@ -176,14 +175,14 @@ class GatewayAgentTest {
             throw new CancellationException("request stopped");
         });
 
-        assertThatThrownBy(() -> gateway.route(turn("Hello"), scope))
+        assertThatThrownBy(() -> gateway.route(turn("Hello"), model.id().value(), scope))
                 .isInstanceOf(CancellationException.class)
                 .hasMessage("request stopped");
     }
 
     private GatewayAgent service(AgentExecutionService execution) {
         SpringAiModelCatalog catalog = mock(SpringAiModelCatalog.class);
-        when(catalog.defaultModel()).thenReturn(model);
+        when(catalog.require(model.id().value())).thenReturn(model);
         ScoreAiProperties properties = new ScoreAiProperties();
         properties.getGateway().setDirectConfidenceThreshold(0.9);
         return new GatewayAgent(
@@ -199,11 +198,15 @@ class GatewayAgentTest {
     }
 
     private AgentWorkflowContext workflowContext(String content) {
+        return workflowContext(content, model.id().value());
+    }
+
+    private AgentWorkflowContext workflowContext(String content, String modelName) {
         AiChatExecutor.Context execution = mock(AiChatExecutor.Context.class);
         when(execution.userMessage()).thenReturn(new UserMessage(content));
         when(execution.guardrailDecisionIds()).thenReturn(List.of());
         AgentWorkflowContext.Request request = new AgentWorkflowContext.Request(
-                "request", "conversation", "user", "model", content,
+                "request", "conversation", "user", modelName, content,
                 false, false, 4, "balanced", null, false, false);
         return AgentWorkflowContext.root(execution, request, 3);
     }
