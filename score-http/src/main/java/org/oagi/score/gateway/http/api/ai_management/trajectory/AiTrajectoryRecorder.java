@@ -421,6 +421,12 @@ public final class AiTrajectoryRecorder {
         }
     }
 
+    /** Silently rejects callbacks that arrive after an enclosing execution has terminated. */
+    public synchronized void sealAgainstLateCallbacks() {
+        sealed = true;
+        pendingTools.clear();
+    }
+
     private void appendLifecycle(String subtype, String content, Map<String, Object> metadata) {
         Map<String, Object> lifecycle = new LinkedHashMap<>(metadata != null ? metadata : Map.of());
         lifecycle.put("lifecycle_subtype", subtype);

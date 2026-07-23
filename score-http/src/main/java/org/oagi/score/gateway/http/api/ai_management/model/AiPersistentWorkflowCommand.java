@@ -21,12 +21,10 @@ public record AiPersistentWorkflowCommand(String activeWorkflow, Mode mode) {
                     + "in this conversation. What would you like to know?";
             case AUTOMATIC -> "Understood. I’ll choose the workflow separately for each subsequent "
                     + "request in this conversation. What would you like to know?";
-            case NAMED -> "Understood. I’ll use the " + activeWorkflow
-                    + " workflow for subsequent requests in this conversation. What would you like to know?";
         };
     }
 
     public enum Mode {
-        ENABLE_AGENTS, DISABLE_AGENTS, AUTOMATIC, NAMED
+        ENABLE_AGENTS, DISABLE_AGENTS, AUTOMATIC
     }
 }

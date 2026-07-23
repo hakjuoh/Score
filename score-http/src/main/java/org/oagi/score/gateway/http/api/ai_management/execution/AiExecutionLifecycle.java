@@ -29,7 +29,8 @@ public record AiExecutionLifecycle(String eventType, String subtype,
             "originalUtf8Bytes", "returnedUtf8Bytes", "toolOutputTokenLimit",
             "contextUsage", "reason", "automatic", "batchId", "approved", "denied",
             "elicitationId",
-            "workflow", "node_id", "fanout_id", "agent_count", "max_agents", "worker_count",
+            "workflow", "node_id", "parent_node_id", "fanout_id", "depth", "member_count",
+            "agent_count", "max_agents", "worker_count", "completed",
             "workflow_iteration", "iteration", "failed", "failed_count", "failure_count",
             "failed_agents");
     private static final Set<String> BOOLEAN_METADATA = Set.of(
@@ -37,12 +38,13 @@ public record AiExecutionLifecycle(String eventType, String subtype,
     private static final Set<String> NUMERIC_METADATA = Set.of(
             "attempt", "max_attempts", "delay_millis", "status_code", "duration_ms", "server_port",
             "originalUtf8Bytes", "returnedUtf8Bytes", "toolOutputTokenLimit",
-            "approved", "denied", "agent_count", "max_agents", "worker_count",
+            "approved", "denied", "depth", "member_count", "agent_count", "max_agents", "worker_count",
+            "completed",
             "workflow_iteration", "iteration", "failed", "failed_count", "failure_count",
             "failed_agents");
     private static final Set<String> TYPE_METADATA = Set.of("failure_class", "failure_type");
     private static final Set<String> ID_METADATA = Set.of(
-            "batchId", "elicitationId", "node_id", "fanout_id");
+            "batchId", "elicitationId", "node_id", "parent_node_id", "fanout_id");
 
     public AiExecutionLifecycle {
         eventType = requiredToken(eventType, "eventType", 80);
@@ -105,7 +107,7 @@ public record AiExecutionLifecycle(String eventType, String subtype,
             case "mcp_server_name", "server_address" -> safeIdentifier(value.toString(), 160);
             case "mcp_protocol_version", "network_protocol_name", "network_transport" ->
                     safeIdentifier(value.toString(), 80);
-            case "workflow" -> safeIdentifier(value.toString(), 80);
+            case "workflow" -> safeIdentifier(value.toString(), 100);
             case "reason" -> "context_compacted".equals(subtype)
                     ? compactionReason(value.toString()) : null;
             case "contextUsage" -> value instanceof AiContextUsageInfo usage

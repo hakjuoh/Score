@@ -315,6 +315,23 @@ class AiRequestRegistryTest {
     }
 
     @Test
+    void nestedDeadlineFencesTheRequestWithoutSelfInterruptingItsWorker() {
+        Thread.interrupted();
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-nested", "conversation-nested", user,
+                Instant.now().plusSeconds(60));
+        assertThat(registry.start(entry)).isTrue();
+
+        registry.timeoutExecution("request-nested");
+
+        assertThat(Thread.currentThread().isInterrupted()).isFalse();
+        assertThat(registry.shouldDiscardResult("request-nested")).isTrue();
+        assertThat(registry.status("request-nested", user).status()).isEqualTo("CANCELLING");
+        assertThat(registry.finish(entry, new CancellationException())).isEqualTo("TIMED_OUT");
+    }
+
+    @Test
     void mutationInFlightDuringCancellationRequiresReconciliation() {
         AiRequestRegistry registry = new AiRequestRegistry();
         AiRequestRegistry.Entry entry = registry.register("request-1", "conversation-1", user,

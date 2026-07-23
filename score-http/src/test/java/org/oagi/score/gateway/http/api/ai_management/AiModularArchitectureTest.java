@@ -23,10 +23,10 @@ class AiModularArchitectureTest {
             "org.oagi.score.gateway.http.api.ai_management.conversation.AiChatRetentionService",
             "org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard",
             "org.oagi.score.gateway.http.api.ai_management.tool.AiToolFailureMessage",
-            "org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowEvaluator",
-            "org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowExecutionCoordinator",
+            "org.oagi.score.gateway.http.api.ai_management.agent.AssignedAgent",
+            "org.oagi.score.gateway.http.api.ai_management.agent.PlannerAgent",
             "org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowIntent",
-            "org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowPlanner");
+            "org.oagi.score.gateway.http.api.ai_management.workflow.Workflow");
 
     private static final DescribedPredicate<JavaClass> PROTOCOL_NEUTRAL_TYPES =
             DescribedPredicate.describe("established protocol-neutral AI types", type -> {

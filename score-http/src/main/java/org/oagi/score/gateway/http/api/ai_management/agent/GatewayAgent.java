@@ -2,9 +2,11 @@ package org.oagi.score.gateway.http.api.ai_management.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor;
 import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionService;
 import org.oagi.score.gateway.http.api.ai_management.execution.AgentInputRefusedException;
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
+import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiUserMessageAdapter;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
@@ -12,14 +14,16 @@ import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CancellationException;
 
 /** Low-latency no-Tool Agent for bounded simple-request routing and direct responses. */
 @Component("gateway-agent")
-public final class GatewayAgent extends CatalogBackedAgent {
+public final class GatewayAgent extends CatalogBackedAgent implements WorkflowAgent {
 
     private final AgentExecutionService execution;
     private final SpringAiModelCatalog models;
@@ -38,7 +42,43 @@ public final class GatewayAgent extends CatalogBackedAgent {
 
     public boolean enabled() { return configuration.isEnabled(); }
 
+    @Override
+    public AgentDecision execute(AgentWorkflowContext context) {
+        if (context.request().mutationConfirmation()) {
+            return new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID);
+        }
+        GatewayResult result = route(new GatewayResult.GuardedTurn(
+                SpringAiUserMessageAdapter.toCore(context.execution().userMessage()), List.of()),
+                executionScope(context), context.observationContext(), context);
+        if (result instanceof GatewayResult.Direct direct) {
+            if (direct.intent() != GatewayResult.DirectIntent.THANKS) {
+                return new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID);
+            }
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("gateway", true);
+            metadata.put("intent", direct.intent().name());
+            metadata.put("confidence", direct.confidence());
+            direct.execution().ifPresent(value -> {
+                metadata.put("agentId", value.agentId().value());
+                metadata.put("modelId", value.modelId().value());
+                metadata.put("executionPurpose", ExecutionScope.Purpose.GATEWAY_ROUTING.name());
+            });
+            return new AgentDecision.Complete(new AiChatExecutor.Result(
+                    direct.candidate().content(), Map.copyOf(metadata)));
+        }
+        if (result instanceof GatewayResult.Refuse refuse) {
+            throw new AgentInputRefusedException(refuse.refusal(), id());
+        }
+        return new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID);
+    }
+
     public GatewayResult route(GatewayResult.GuardedTurn turn, ExecutionScope parentScope) {
+        return route(turn, parentScope, Map.of(), null);
+    }
+
+    private GatewayResult route(GatewayResult.GuardedTurn turn, ExecutionScope parentScope,
+                                Map<String, Object> observationContext,
+                                AgentWorkflowContext workflowContext) {
         if (!enabled()) return handoff(turn, 1.0d, true);
         if (turn.turn().content().length() > configuration.getMaximumInputCharacters()
                 || !turn.turn().attachments().isEmpty()) {
@@ -52,7 +92,10 @@ public final class GatewayAgent extends CatalogBackedAgent {
             gatewayExecution = new GatewayResult.Execution(gateway.id(), model.id());
             ExecutionScope scope = parentScope.withPurpose(ExecutionScope.Purpose.GATEWAY_ROUTING);
             AgentRunResult result = execution.execute(new AgentInvocation(null, gateway, turn.turn(),
-                    List.of(), scope, null));
+                    List.of(), scope, null, observationContext));
+            if (workflowContext != null) {
+                workflowContext.recordUsage(definition().name(), result);
+            }
             return decode(turn, result.response().content(), gatewayExecution);
         } catch (AgentInputRefusedException refused) {
             return new GatewayResult.Refuse(refused.refusal(),
@@ -129,4 +172,12 @@ public final class GatewayAgent extends CatalogBackedAgent {
         JsonNode value = root.get(field);
         return value == null || value.isNull() || !value.isTextual() ? null : value.asText().strip();
     }
+
+    private ExecutionScope executionScope(AgentWorkflowContext context) {
+        return new ExecutionScope(context.request().requestId(),
+                context.request().conversationId(), context.request().requesterId(), 0L,
+                ExecutionScope.Purpose.GATEWAY_ROUTING,
+                context.execution().guardrailDecisionIds());
+    }
+
 }

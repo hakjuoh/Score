@@ -5,7 +5,6 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiA
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -19,10 +18,8 @@ class AiWorkflowIntentTest {
 
         ChatRequest resolved = AiWorkflowIntent.applyExplicitDelegation(request);
 
-        assertThat(resolved.activeWorkflow()).isEqualTo("parallel");
+        assertThat(resolved.activeWorkflow()).isEqualTo("agents");
         assertThat(resolved.multiAgent()).isEqualTo(new AiMultiAgentOptions(true, 2, "balanced"));
-        assertThat(AiWorkflowIntent.comparisonWorkItems(request.prompt()))
-                .containsExactly("Sync Purchase Order", "Get Purchase Order");
     }
 
     @Test
@@ -37,7 +34,7 @@ class AiWorkflowIntentTest {
         ChatRequest resolved = AiWorkflowIntent.applyExplicitDelegation(configured);
         assertThat(resolved.multiAgent())
                 .isEqualTo(new AiMultiAgentOptions(true, 2, "verification"));
-        assertThat(resolved.activeWorkflow()).isEqualTo("parallel");
+        assertThat(resolved.activeWorkflow()).isEqualTo("agents");
     }
 
     @Test
@@ -51,7 +48,7 @@ class AiWorkflowIntentTest {
         assertThat(AiWorkflowIntent.explicitlyRequestsAgents(followUp.prompt())).isTrue();
         assertThat(AiWorkflowIntent.explicitlyRequestsFanOut(first.prompt())).isFalse();
         assertThat(AiWorkflowIntent.applyExplicitDelegation(followUp).activeWorkflow())
-                .isEqualTo("orchestrator_workers");
+                .isEqualTo("agents");
     }
 
     @Test
@@ -67,13 +64,6 @@ class AiWorkflowIntentTest {
     }
 
     @Test
-    void extractsEnglishComparisonSubjectsForTaskLabels() {
-        assertThat(AiWorkflowIntent.comparisonWorkItems(
-                "Compare Sync Purchase Order with Get Purchase Order in release 10.13."))
-                .containsExactly("Sync Purchase Order", "Get Purchase Order");
-    }
-
-    @Test
     void resolvesPersistentAgentPreferencesToAnActiveWorkflow() {
         var enabled = AiWorkflowIntent.persistentWorkflowCommand(
                 "Use sub-agents for the following prompts").orElseThrow();
@@ -82,9 +72,9 @@ class AiWorkflowIntentTest {
         var automatic = AiWorkflowIntent.persistentWorkflowCommand(
                 "Choose the workflow automatically from now on").orElseThrow();
 
-        assertThat(enabled.activeWorkflow()).isEqualTo("orchestrator_workers");
+        assertThat(enabled.activeWorkflow()).isEqualTo("agents");
         assertThat(enabled.acknowledgement()).startsWith("Understood. I’ll use sub-agents");
-        assertThat(disabled.activeWorkflow()).isEqualTo("direct");
+        assertThat(disabled.activeWorkflow()).isEqualTo("assistant");
         assertThat(disabled.acknowledgement()).startsWith("Understood. I won’t use sub-agents");
         assertThat(automatic.activeWorkflow()).isNull();
     }

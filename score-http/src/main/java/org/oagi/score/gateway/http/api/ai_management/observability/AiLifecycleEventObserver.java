@@ -202,13 +202,14 @@ final class AiLifecycleEventObserver {
         String workflowKind = workflowPrefix(subtype);
         String operationId = ScoreAiObservability.value(Objects.toString(
                 metadata.getOrDefault("node_id", metadata.get("fanout_id")), workflowPrefix(subtype)));
+        Context parent = workflowParent(requestId, metadata);
         OperationKey key = new OperationKey(requestId, operationId);
         if ("started".equals(lifecycle) || "planned".equals(lifecycle)
                 || "synthesizing".equals(lifecycle)) {
             workflows.start(key, () -> {
                 var builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
                                 GenAiSemanticConventions.INVOKE_WORKFLOW, selectedWorkflow))
-                        .setParent(parents.apply(requestId))
+                        .setParent(parent)
                         .setSpanKind(SpanKind.INTERNAL)
                         .setAttribute("gen_ai.operation.name",
                                 GenAiSemanticConventions.INVOKE_WORKFLOW)
@@ -216,9 +217,10 @@ final class AiLifecycleEventObserver {
                         .setAttribute("score.ai.workflow.name", selectedWorkflow)
                         .setAttribute("score.ai.workflow.run_id", operationId)
                         .setAttribute("score.ai.workflow.kind", workflowKind);
+                setWorkflowShapeAttributes(builder, metadata);
                 Span span = builder.startSpan();
                 recordWorkflowShape(selectedWorkflow, metadata);
-                return new TimedSpan(span, parents.apply(requestId), System.nanoTime(),
+                return new TimedSpan(span, parent, System.nanoTime(),
                         workflowMetricName(selectedWorkflow), selectedWorkflow, null, true);
             });
             return;
@@ -226,7 +228,7 @@ final class AiLifecycleEventObserver {
         TimedSpan operation = workflows.terminate(key, () -> {
             var builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
                             GenAiSemanticConventions.INVOKE_WORKFLOW, selectedWorkflow))
-                    .setParent(parents.apply(requestId))
+                    .setParent(parent)
                     .setSpanKind(SpanKind.INTERNAL)
                     .setAttribute("gen_ai.operation.name",
                             GenAiSemanticConventions.INVOKE_WORKFLOW)
@@ -234,24 +236,45 @@ final class AiLifecycleEventObserver {
                     .setAttribute("score.ai.workflow.name", selectedWorkflow)
                     .setAttribute("score.ai.workflow.run_id", operationId)
                     .setAttribute("score.ai.workflow.kind", workflowKind);
+            setWorkflowShapeAttributes(builder, metadata);
             Span span = builder.startSpan();
-            return new TimedSpan(span, parents.apply(requestId), System.nanoTime(),
+            return new TimedSpan(span, parent, System.nanoTime(),
                     workflowMetricName(selectedWorkflow), selectedWorkflow, null, true);
         });
         if (operation == null) return;
         String result = outcome(lifecycle);
         boolean partial = "success".equals(result) && hasFailures(metadata);
+        setTerminalWorkflowCounts(operation.span, metadata);
         operation.span.setAttribute("score.ai.workflow.partial_failure", partial);
         operation.finish(partial ? "partial_failure" : result, false);
+    }
+
+    private void setTerminalWorkflowCounts(Span span, Map<String, Object> metadata) {
+        long completed = number(metadata.get("completed"));
+        if (completed >= 0) span.setAttribute("score.ai.workflow.completed", completed);
+        long failed = number(metadata.get("failed"));
+        if (failed >= 0) span.setAttribute("score.ai.workflow.failed", failed);
+        long failureCount = number(metadata.get("failure_count"));
+        if (failureCount >= 0) {
+            span.setAttribute("score.ai.workflow.failure_count", failureCount);
+        }
     }
 
     private void recordWorkflowShape(String workflow, Map<String, Object> metadata) {
         Attributes attributes = Attributes.builder()
                 .put("score.ai.workflow.name", workflowMetricName(workflow)).build();
-        long agents = firstPositive(metadata, "agent_count", "max_agents", "worker_count");
+        long agents = firstPositive(metadata, "member_count", "agent_count", "max_agents", "worker_count");
         if (agents > 0) instruments.workflowFanout.add(agents, attributes);
         long iteration = firstPositive(metadata, "workflow_iteration", "iteration");
         if (iteration > 0) instruments.workflowIterations.add(1, attributes);
+    }
+
+    private void setWorkflowShapeAttributes(io.opentelemetry.api.trace.SpanBuilder builder,
+                                            Map<String, Object> metadata) {
+        long depth = number(metadata.get("depth"));
+        if (depth >= 0) builder.setAttribute("score.ai.workflow.depth", depth);
+        long members = number(metadata.get("member_count"));
+        if (members >= 0) builder.setAttribute("score.ai.workflow.member_count", members);
     }
 
     private void observeTool(String requestId, String subtype, AiExecutionLifecycle event) {
@@ -319,13 +342,17 @@ final class AiLifecycleEventObserver {
     }
 
     private static boolean workflowEvent(String subtype) {
-        return subtype.startsWith("multi_agent_")
-                || subtype.startsWith("parallel_workflow_");
+        String prefix = workflowPrefix(subtype);
+        return !"unknown".equals(terminalSuffix(subtype))
+                && ("workflow".equals(prefix)
+                || "multi_agent".equals(prefix)
+                || "parallel_workflow".equals(prefix));
     }
 
     private static String terminalSuffix(String subtype) {
         for (String suffix : new String[]{
-                "started", "planned", "synthesizing", "completed", "failed", "cancelled"}) {
+                "started", "planned", "synthesizing", "completed", "failed", "cancelled",
+                "refused"}) {
             if (subtype.endsWith("_" + suffix)) return suffix;
         }
         return "unknown";
@@ -340,9 +367,15 @@ final class AiLifecycleEventObserver {
     private static String workflowMetricName(String workflow) {
         String normalized = AiObservationInstruments.normalized(workflow);
         return switch (normalized) {
-            case "direct", "chain", "parallel", "routing", "orchestrator_workers" -> normalized;
-            default -> "unknown";
+            case "main", "direct", "chain", "parallel", "routing", "orchestrator_workers" -> normalized;
+            default -> "recursive";
         };
+    }
+
+    private Context workflowParent(String requestId, Map<String, Object> metadata) {
+        String parentId = Objects.toString(metadata.get("parent_node_id"), null);
+        Context parent = workflowContext(requestId, parentId);
+        return parent != null ? parent : parents.apply(requestId);
     }
 
     static String outcome(String status) {

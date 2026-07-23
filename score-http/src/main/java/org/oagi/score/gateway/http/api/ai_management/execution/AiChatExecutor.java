@@ -27,7 +27,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.Agent;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentDefinition;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentInvocation;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentRunResult;
-import org.oagi.score.gateway.http.api.ai_management.agent.ConnectCenterAssistantAgent;
+import org.oagi.score.gateway.http.api.ai_management.agent.AssistantAgent;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolExecutionGateway;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
@@ -100,7 +100,7 @@ public final class AiChatExecutor {
     @Autowired
     public AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                           ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                          ConnectCenterAssistantAgent rootAgent,
+                          AssistantAgent rootAgent,
                           AiMutationToolGuard mutationGuard,
                           AiElicitationService elicitations,
                           AiProviderRetryExecutor providerRetry,
@@ -220,7 +220,7 @@ public final class AiChatExecutor {
         String runId = UUID.randomUUID().toString();
         String telemetryModel = telemetryModel(context.request().modelName());
         observe("agent.run.started", scope, runId, context.agentId(),
-                telemetryModel, context.recorder().observationContext(), null);
+                telemetryModel, observationContext(context), null);
         try (var ignored = observability.makeAgentCurrent(scope.requestId(), runId)) {
             try {
                 Result identified;
@@ -248,12 +248,12 @@ public final class AiChatExecutor {
                     }
                 }
                 observe("agent.run.completed", scope, runId, context.agentId(),
-                        telemetryModel, context.recorder().observationContext(), null);
+                        telemetryModel, observationContext(context), null);
                 return identified;
             } catch (RuntimeException failure) {
                 observe(agentFailureEvent(requests, context.request().requestId(), failure),
                         scope, runId, context.agentId(), telemetryModel,
-                        context.recorder().observationContext(), failure);
+                        observationContext(context), failure);
                 if (failure instanceof AgentInputRefusedException refused) {
                     throw refused.identifiedBy(new Agent.AgentId(context.agentId()));
                 }
@@ -278,18 +278,18 @@ public final class AiChatExecutor {
         String runId = UUID.randomUUID().toString();
         String telemetryModel = telemetryModel(invocation.agent().model().id().value());
         observe("agent.run.started", invocation.scope(), runId, invocation.agent().id().value(),
-                telemetryModel, Map.of(), null);
+                telemetryModel, invocation.observationContext(), null);
         try (var ignored = observability.makeAgentCurrent(invocation.scope().requestId(), runId)) {
             try {
                 AgentRunResult result = executeAgentInternal(invocation);
                 observe("agent.run.completed", invocation.scope(), runId,
                         invocation.agent().id().value(),
-                        telemetryModel, Map.of(), null);
+                        telemetryModel, invocation.observationContext(), null);
                 return result;
             } catch (RuntimeException failure) {
                 observe(agentFailureEvent(requests, invocation.scope().requestId(), failure),
                         invocation.scope(), runId, invocation.agent().id().value(),
-                        telemetryModel, Map.of(), failure);
+                        telemetryModel, invocation.observationContext(), failure);
                 if (failure instanceof AgentInputRefusedException refused) {
                     throw refused.identifiedBy(invocation.agent().id());
                 }
@@ -345,11 +345,22 @@ public final class AiChatExecutor {
             throw new IllegalStateException("The Agent returned an empty response.");
         }
         AiMessage.Assistant assistant = new AiMessage.Assistant(answer);
-        return new AgentRunResult(assistant, List.of(assistant), Optional.empty(),
+        org.springframework.ai.chat.metadata.Usage providerUsage =
+                response.getMetadata().getUsage();
+        Optional<AgentRunResult.Usage> usage = providerUsage != null
+                ? Optional.of(new AgentRunResult.Usage(
+                nonNegative(providerUsage.getPromptTokens()),
+                nonNegative(providerUsage.getCompletionTokens())))
+                : Optional.empty();
+        return new AgentRunResult(assistant, List.of(assistant), usage,
                 new AgentRunResult.RunMetadata(invocation.agent().id(),
                         invocation.agent().model().id(), null,
                         Map.of("guardrail_decisions", checked.decisions().stream()
                                 .map(GuardrailDecision::decisionId).toList())));
+    }
+
+    private long nonNegative(Number value) {
+        return value != null ? Math.max(0L, value.longValue()) : 0L;
     }
 
     private void observe(String type, ExecutionScope scope, String runId, String agentId,
@@ -370,6 +381,13 @@ public final class AiChatExecutor {
             attributes.put("failure_type", failure.getClass().getSimpleName());
         }
         observer.observe(ExecutionObservation.of(type, scope, Map.copyOf(attributes)));
+    }
+
+    private Map<String, Object> observationContext(Context context) {
+        Map<String, Object> attributes = new java.util.LinkedHashMap<>(
+                context.recorder().observationContext());
+        attributes.putAll(context.workflowObservationContext());
+        return Map.copyOf(attributes);
     }
 
     private String telemetryModel(String modelAlias) {
@@ -886,7 +904,23 @@ public final class AiChatExecutor {
                           ApprovalWaitLifecycle approvalWaitLifecycle,
                           String agentId,
                           org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
-                          List<String> guardrailDecisionIds) {
+                          List<String> guardrailDecisionIds,
+                          Map<String, Object> workflowObservationContext) {
+
+        public Context(ChatRequest request, List<Message> history, UserMessage userMessage,
+                       ScoreUser requester, AiTrajectoryRecorder recorder,
+                       boolean toolsEnabled, boolean streamVisibleContent,
+                       ToolPolicy toolPolicy, int agentDepth,
+                       AiMutationApprovalScope approvalScope,
+                       ApprovalWaitLifecycle approvalWaitLifecycle,
+                       String agentId,
+                       org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
+                       List<String> guardrailDecisionIds) {
+            this(request, history, userMessage, requester, recorder, toolsEnabled,
+                    streamVisibleContent, toolPolicy, agentDepth, approvalScope,
+                    approvalWaitLifecycle, agentId, executionPurpose, guardrailDecisionIds,
+                    Map.of());
+        }
 
         public Context(ChatRequest request, List<Message> history, UserMessage userMessage,
                        ScoreUser requester, AiTrajectoryRecorder recorder,
@@ -961,13 +995,15 @@ public final class AiChatExecutor {
         public Context withApprovalScope(AiMutationApprovalScope scope) {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth, scope,
-                    approvalWaitLifecycle, agentId, executionPurpose, guardrailDecisionIds);
+                    approvalWaitLifecycle, agentId, executionPurpose, guardrailDecisionIds,
+                    workflowObservationContext);
         }
 
         public Context withApprovalWaitLifecycle(ApprovalWaitLifecycle lifecycle) {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
-                    approvalScope, lifecycle, agentId, executionPurpose, guardrailDecisionIds);
+                    approvalScope, lifecycle, agentId, executionPurpose, guardrailDecisionIds,
+                    workflowObservationContext);
         }
 
         public Context withAgentIdentity(String identity,
@@ -975,14 +1011,31 @@ public final class AiChatExecutor {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, approvalWaitLifecycle, identity, purpose,
-                    guardrailDecisionIds);
+                    guardrailDecisionIds, workflowObservationContext);
         }
 
         public Context withGuardrailDecisions(List<String> decisionIds) {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, approvalWaitLifecycle, agentId, executionPurpose,
-                    decisionIds);
+                    decisionIds, workflowObservationContext);
+        }
+
+        public Context withWorkflowObservationContext(Map<String, Object> value) {
+            return new Context(request, history, userMessage, requester, recorder,
+                    toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
+                    approvalScope, approvalWaitLifecycle, agentId, executionPurpose,
+                    guardrailDecisionIds, value);
+        }
+
+        /** Applies the non-root execution scope required for every model-authored assignment. */
+        public Context forWorkflowAssignment(ToolPolicy value, String assignedAgentId) {
+            ToolPolicy reduced = value != null ? value : ToolPolicy.NONE;
+            return new Context(request, history, userMessage, requester, recorder,
+                    reduced != ToolPolicy.NONE, false, reduced, 1,
+                    approvalScope, approvalWaitLifecycle, assignedAgentId,
+                    org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.WORKER,
+                    guardrailDecisionIds, workflowObservationContext);
         }
 
         public Context {
@@ -999,6 +1052,8 @@ public final class AiChatExecutor {
             guardrailDecisionIds = guardrailDecisionIds != null
                     ? guardrailDecisionIds.stream().filter(Objects::nonNull).distinct().toList()
                     : List.of();
+            workflowObservationContext = workflowObservationContext != null
+                    ? Map.copyOf(workflowObservationContext) : Map.of();
             if (agentDepth < 0 || agentDepth > 1) {
                 throw new IllegalArgumentException("AI agent depth must be 0 or 1.");
             }

@@ -127,6 +127,11 @@ public final class AiAgentCatalog {
         return runtimeDefinition(require(id));
     }
 
+    /** Returns only a Planner-addressable worker definition. */
+    public AgentDefinition workerDefinition(String id) {
+        return runtimeDefinition(requireWorker(id));
+    }
+
     private AgentDefinition runtimeDefinition(AiAgentDefinition agent) {
         return new AgentDefinition(new Agent.AgentId(agent.id()), agent.name(), agent.description(),
                 new AgentDefinition.InstructionTemplate(agent.instruction()));
