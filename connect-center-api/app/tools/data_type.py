@@ -63,6 +63,7 @@ from app.services.app_user_service import AppUserService
 from app.services.data_type_service import DataTypeService
 from app.services.models.data_type import DataTypePrimitiveServiceRecord
 from app.services.release_service import ReleaseService
+from app.services.utils.state import CcState
 from app.tools import _to_tool_error, get_tool_authenticated_user, tool_session
 from app.tools.models.data_type import (
     CreateDataTypeResponse,
@@ -618,6 +619,10 @@ async def get_app_user_service(
 )
 async def get_data_types(
     release_id: Annotated[int, Field(gt=0, description="Filter by release ID using exact match.")],
+    states: Annotated[
+        list[CcState] | None,
+        Field(description="Optional lifecycle states to include using exact match."),
+    ] = None,
     den: Annotated[
         str | None, Field(description="Filter by data type DEN using partial match (case-insensitive).")
     ] = None,
@@ -664,11 +669,14 @@ async def get_data_types(
 
     Args:
         release_id (int): Filter by release ID using exact match (required).
+        states (list[str] | None, optional): Filter by lifecycle states using exact match. Defaults to None.
         den (str | None, optional): Filter by Dictionary Entry Name (DEN) using partial match (case-insensitive).
             DEN format: '((qualifier) ? qualifier + "_ " : "") + data_type_term + ". Type"'. Defaults to None.
         representation_term (str | None, optional): Filter by representation term using partial match (case-insensitive). Defaults to None.
         owner (str | None, optional): Comma-separated owner login IDs using exact match.
             Prefix a login ID with '!' to exclude it. Login IDs cannot contain '!' or ','. Defaults to None.
+        updater (str | None, optional): Comma-separated updater login IDs using exact match.
+            Prefix a login ID with '!' to exclude it. Defaults to None.
         created_on (str | None, optional): Filter by creation date using an inclusive range: '[before~after]'.
             'before' and 'after' are date-time strings. Default date format: YYYY-MM-DD.
             Examples: '[2025-01-01~2025-02-01]'. Either 'before' or 'after' can be omitted,
@@ -684,6 +692,7 @@ async def get_data_types(
             Defaults to None.
         offset (int, optional): The offset from the beginning of the list. Must be a non-negative number. Defaults to 0.
         limit (int, optional): The maximum number of items to return. Must be between 1 and 100 (inclusive). Defaults to 10.
+        data_type_service: Request-scoped data-type service dependency.
 
     Returns:
         GetDataTypePaginationResponse: Response object containing:
@@ -743,6 +752,7 @@ async def get_data_types(
             limit=limit,
             offset=offset,
             order_by=order_by,
+            states=list(states) if states else None,
             den=den,
             representation_term=representation_term,
             owner=owner,

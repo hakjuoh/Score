@@ -31,6 +31,9 @@ from app.routes.models.data_type import (
 from app.utils.date import parse_date_range
 from app.services.data_type_service import DataTypeService
 from app.services.models.data_type import DataTypePrimitiveServiceRecord
+from app.services.utils.state import CC_STATES
+from app.utils.query import comma_separated_enum_schema
+from app.utils.state import split_state_filter
 from app.types.unset import UNSET
 from app.types.identifiers import DataTypeManifestId, DataTypeSupplementaryComponentManifestId
 from app.types.identifiers import ReleaseId
@@ -46,6 +49,11 @@ router = APIRouter(prefix="/data-types", tags=["data-type"])
 )
 async def get_data_type_list(
     release_id: ReleaseId = Query(..., ge=1, description="Filter by release ID."),
+    states: str | None = Query(
+        default=None,
+        json_schema_extra=comma_separated_enum_schema(CC_STATES, examples=["WIP", "WIP,Draft"]),
+        description="Comma-separated lifecycle states to filter by exact match.",
+    ),
     den: str | None = Query(default=None, description="Filter by DEN (partial match)."),
     representation_term: str | None = Query(default=None, description="Filter by representation term (partial match)."),
     owner: str | None = Query(
@@ -74,8 +82,11 @@ async def get_data_type_list(
 
     Args:
         release_id: Release identifier used to scope the query.
+        states: Optional comma-separated lifecycle-state filter.
         den: Optional Dictionary Entry Name (DEN) filter.
         representation_term: Value for `representation_term`.
+        owner: Optional owner login-ID filter.
+        updater: Optional updater login-ID filter.
         created_on: Optional creation-time filter in ISO-8601 range form.
         last_updated_on: Optional last-update-time filter in ISO-8601 range form.
         order_by: Sort expression used for ordering the result set.
@@ -87,6 +98,7 @@ async def get_data_type_list(
         Paginated response containing matching resources.
     """
     try:
+        states_list = split_state_filter(states)
         created_range = parse_date_range(created_on)
         updated_range = parse_date_range(last_updated_on)
         page = await data_type_service.list(
@@ -94,6 +106,7 @@ async def get_data_type_list(
             limit=limit,
             offset=offset,
             order_by=order_by,
+            states=states_list,
             den=den,
             representation_term=representation_term,
             owner=owner,

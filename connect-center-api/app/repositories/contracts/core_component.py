@@ -607,6 +607,7 @@ class CoreComponentRepositoryContract(Protocol):
         limit: int,
         offset: int,
         sorts: list[tuple[str, Literal["ASC", "DESC"]]],
+        states: list[str] | None = None,
         den: str | None = None,
         tag_names: list[str] | None = None,
         creation_timestamp_before: datetime | None = None,
@@ -626,6 +627,8 @@ class CoreComponentRepositoryContract(Protocol):
             types: Optional component type filter list.
             limit: Maximum number of records to return.
             offset: Number of records to skip before collecting results.
+            sorts: Validated columns and directions used to order results.
+            states: Optional lifecycle states to include using exact match.
             den: Optional Dictionary Entry Name (DEN) filter.
             tag_names: Optional tag names to include by exact match.
             creation_timestamp_before: Optional upper bound for creation timestamp.

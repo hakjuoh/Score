@@ -20,6 +20,7 @@ import {
 } from './openapi';
 import { buildExampleFromSchema } from './schema-example';
 import { flattenSchemaFields } from './schema-traversal';
+import { extractParamEnumValues, normalizeParamSchema } from './parameter-schema';
 
 export type ResourceKey =
   | 'context_categories'
@@ -267,28 +268,6 @@ function sortParamsRequiredFirst<T extends ParamDoc>(params: T[]): T[] {
     .map(({ param }) => param);
 }
 
-type ParamSchemaLike = {
-  type?: string;
-  enum?: unknown[];
-  items?: { enum?: unknown[] };
-  anyOf?: Array<{ type?: string; enum?: unknown[]; items?: { enum?: unknown[] } }>;
-  [key: string]: unknown;
-};
-
-function normalizeParamSchema(raw: unknown): ParamSchemaLike {
-  const schema = (raw as ParamSchemaLike | undefined) ?? {};
-  if (Array.isArray(schema.anyOf) && schema.anyOf.length > 0) {
-    const preferred = schema.anyOf.find((item) => item?.type && item.type !== 'null') ?? schema.anyOf[0];
-    return {
-      ...schema,
-      type: schema.type ?? preferred?.type,
-      enum: schema.enum ?? preferred?.enum,
-      items: schema.items ?? preferred?.items,
-    };
-  }
-  return schema;
-}
-
 function buildFallbackRequestExample(method: MethodType, endpoint: string): string {
   const base = resolveBackendApiBase();
   const url = `${base}${endpoint}`;
@@ -318,8 +297,7 @@ function buildMethodDocFromOperation(
         type: schema?.type ?? 'string',
         required: Boolean(param.required),
         description: param.description ?? 'Path parameter.',
-        enum_values:
-          Array.isArray(schema?.enum) && schema.enum.length > 0 ? schema.enum.map((value) => String(value)) : undefined,
+        enum_values: extractParamEnumValues(schema),
         is_multi_select: false,
         order_by_columns: undefined,
       };
@@ -334,14 +312,7 @@ function buildMethodDocFromOperation(
         type: schema?.type ?? 'string',
         required: Boolean(param.required),
         description: param.description ?? 'Query parameter.',
-        enum_values:
-          Array.isArray(schema?.enum) && schema.enum.length > 0
-            ? schema.enum.map((value) => String(value))
-            : Array.isArray(schema?.items?.enum) && schema.items.enum.length > 0
-              ? schema.items.enum.map((value) => String(value))
-              : schema?.type === 'boolean'
-                ? ['true', 'false']
-              : undefined,
+        enum_values: extractParamEnumValues(schema) ?? (schema?.type === 'boolean' ? ['true', 'false'] : undefined),
         is_multi_select: Boolean(schema?.['x-comma-separated']) || schema?.type === 'array',
         order_by_columns: param.name === 'order_by' ? extractAllowedOrderByColumns(param.description) : undefined,
       };

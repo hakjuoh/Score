@@ -55,6 +55,10 @@ from app.routes.models.core_component import (
 )
 from app.utils.date import parse_date_range
 from app.services.core_component_service import CoreComponentService
+from app.services.models.core_component import CORE_COMPONENT_TYPES
+from app.services.utils.state import CC_STATES
+from app.utils.query import comma_separated_enum_schema
+from app.utils.state import split_state_filter
 from app.types.unset import UNSET
 from app.types.identifiers import (
     AccManifestId,
@@ -88,11 +92,19 @@ async def get_core_component_list(
     release_id: ReleaseId = Query(..., ge=1, description="Filter by release ID."),
     types: str | None = Query(
         default=None,
-        json_schema_extra={"enum": ["ACC", "ASCCP", "BCCP"], "x-comma-separated": True},
+        json_schema_extra=comma_separated_enum_schema(
+            CORE_COMPONENT_TYPES,
+            examples=["ACC", "ACC,ASCCP"],
+        ),
         description=(
             "Comma-separated component types: ACC, ASCCP, BCCP. "
             "If omitted or empty, all component types are included."
         ),
+    ),
+    states: str | None = Query(
+        default=None,
+        json_schema_extra=comma_separated_enum_schema(CC_STATES, examples=["WIP", "WIP,Draft"]),
+        description="Comma-separated lifecycle states to filter by exact match.",
     ),
     den: str | None = Query(default=None, description="Filter by DEN (partial match)."),
     tag: str | None = Query(default=None, description="Comma-separated tag names to filter by exact match."),
@@ -122,8 +134,11 @@ async def get_core_component_list(
     Args:
         release_id: Release identifier used to scope the query.
         types: Optional component type filter list.
+        states: Optional comma-separated lifecycle-state filter.
         den: Optional Dictionary Entry Name (DEN) filter.
         tag: Optional tag filter.
+        owner: Optional owner login-ID filter.
+        updater: Optional updater login-ID filter.
         created_on: Optional creation-time filter in ISO-8601 range form.
         last_updated_on: Optional last-update-time filter in ISO-8601 range form.
         order_by: Sort expression used for ordering the result set.
@@ -134,12 +149,12 @@ async def get_core_component_list(
     Returns:
         Paginated response containing matching resources.
     """
-    all_types = ["ACC", "ASCCP", "BCCP"]
+    all_types = list(CORE_COMPONENT_TYPES)
     types_list = all_types
     if types is not None:
         parsed = [item.strip().upper() for item in types.split(",") if item.strip()]
         types_list = parsed if parsed else all_types
-    invalid_types = [item for item in types_list if item not in {"ACC", "ASCCP", "BCCP"}]
+    invalid_types = [item for item in types_list if item not in CORE_COMPONENT_TYPES]
     if invalid_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -148,6 +163,7 @@ async def get_core_component_list(
                 "cause": f"Invalid component types: {', '.join(invalid_types)}.",
             },
         )
+    states_list = split_state_filter(states)
 
     try:
         created_range = parse_date_range(created_on)
@@ -158,6 +174,7 @@ async def get_core_component_list(
             limit=limit,
             offset=offset,
             order_by=order_by,
+            states=states_list,
             den=den,
             tag=tag,
             owner=owner,
