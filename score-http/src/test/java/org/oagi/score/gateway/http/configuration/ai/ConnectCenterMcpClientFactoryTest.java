@@ -1,7 +1,10 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
 import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
+import io.opentelemetry.api.common.AttributeKey;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.application_management.service.BrokerJwtService;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -20,22 +23,32 @@ class ConnectCenterMcpClientFactoryTest {
 
     @Test
     void propagatesTheCurrentPrivateSpanToMcpHttpRequests() {
-        SdkTracerProvider provider = SdkTracerProvider.builder().build();
+        InMemorySpanExporter spans = InMemorySpanExporter.create();
+        SdkTracerProvider provider = SdkTracerProvider.builder()
+                .addSpanProcessor(SimpleSpanProcessor.create(spans)).build();
         OpenTelemetrySdk sdk = OpenTelemetrySdk.builder().setTracerProvider(provider).build();
         var span = sdk.getTracer("test").spanBuilder("tool").startSpan();
         try (var ignored = span.makeCurrent()) {
             HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("https://mcp.example/mcp"));
 
             ConnectCenterMcpClientFactory.injectCurrentTrace(request);
+            String body = ConnectCenterMcpClientFactory.injectTraceIntoMcpBody(
+                    "{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"tools/call\","
+                            + "\"params\":{\"name\":\"search\"}}");
 
             assertThat(request.build().headers().firstValue("traceparent"))
                     .hasValueSatisfying(value -> assertThat(value)
                             .contains(span.getSpanContext().getTraceId())
                             .contains(span.getSpanContext().getSpanId()));
+            assertThat(body).contains("\"_meta\"")
+                    .contains("\"traceparent\":\"00-" + span.getSpanContext().getTraceId());
         } finally {
             span.end();
-            sdk.close();
         }
+        assertThat(spans.getFinishedSpanItems()).singleElement().satisfies(exported ->
+                assertThat(exported.getAttributes().get(
+                        AttributeKey.stringKey("jsonrpc.request.id"))).isEqualTo("42"));
+        sdk.close();
     }
 
     @Test

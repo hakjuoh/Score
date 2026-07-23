@@ -218,31 +218,41 @@ public final class AiChatExecutor {
         ExecutionState state = new ExecutionState();
         ExecutionScope scope = executionScope(context);
         String runId = UUID.randomUUID().toString();
+        String telemetryModel = telemetryModel(context.request().modelName());
         observe("agent.run.started", scope, runId, context.agentId(),
-                context.request().modelName(), context.recorder().observationContext(), null);
+                telemetryModel, context.recorder().observationContext(), null);
         try (var ignored = observability.makeAgentCurrent(scope.requestId(), runId)) {
             try {
-                Result result;
-                if (context.toolPolicy() == ToolPolicy.NONE) {
-                    // Tool-less calls (planner, evaluator, no-tool leaves) never consult the
-                    // MCP registry, so they must not pay the per-call MCP handshake.
-                    result = execute(context, null, state, rootDefinition);
-                } else {
-                    try (ConnectCenterMcpClientFactory.McpSession mcp = elicitations != null
-                            ? mcpClients.open(context.requester(), elicitation -> handleElicitation(
-                            context, context.request(), context.recorder(), elicitation))
-                            : mcpClients.open(context.requester())) {
-                        result = execute(context, mcp, state, rootDefinition);
+                Result identified;
+                try (var planning = planningOperation(context, scope)) {
+                    try {
+                        Result result;
+                        if (context.toolPolicy() == ToolPolicy.NONE) {
+                            // Tool-less calls (planner, evaluator, no-tool leaves) never consult the
+                            // MCP registry, so they must not pay the per-call MCP handshake.
+                            result = execute(context, null, state, rootDefinition);
+                        } else {
+                            try (ConnectCenterMcpClientFactory.McpSession mcp = elicitations != null
+                                    ? mcpClients.open(context.requester(), elicitation -> handleElicitation(
+                                    context, context.request(), context.recorder(), elicitation))
+                                    : mcpClients.open(context.requester())) {
+                                result = execute(context, mcp, state, rootDefinition);
+                            }
+                        }
+                        identified = result.withExecutionIdentity(context.agentId(),
+                                context.request().modelName(), context.executionPurpose().name());
+                    } catch (RuntimeException failure) {
+                        if (failure instanceof CancellationException) planning.cancel();
+                        else planning.fail(failure);
+                        throw failure;
                     }
                 }
-                Result identified = result.withExecutionIdentity(context.agentId(),
-                        context.request().modelName(), context.executionPurpose().name());
                 observe("agent.run.completed", scope, runId, context.agentId(),
-                        context.request().modelName(), context.recorder().observationContext(), null);
+                        telemetryModel, context.recorder().observationContext(), null);
                 return identified;
             } catch (RuntimeException failure) {
                 observe(agentFailureEvent(requests, context.request().requestId(), failure),
-                        scope, runId, context.agentId(), context.request().modelName(),
+                        scope, runId, context.agentId(), telemetryModel,
                         context.recorder().observationContext(), failure);
                 if (failure instanceof AgentInputRefusedException refused) {
                     throw refused.identifiedBy(new Agent.AgentId(context.agentId()));
@@ -252,6 +262,13 @@ public final class AiChatExecutor {
         }
     }
 
+    private ExecutionObservationContext.Operation planningOperation(
+            Context context, ExecutionScope scope) {
+        return context.executionPurpose() == ExecutionScope.Purpose.WORKFLOW_PLANNING
+                ? observability.startPlan(scope.requestId(), context.agentId())
+                : ExecutionObservationContext.Operation.noop();
+    }
+
     public String rootAgentId() {
         return rootAgent.id().value();
     }
@@ -259,19 +276,20 @@ public final class AiChatExecutor {
     /** Provider-neutral Agent port used by Gateway, Guardrail, and other no-transport runs. */
     public AgentRunResult executeAgent(AgentInvocation invocation) {
         String runId = UUID.randomUUID().toString();
+        String telemetryModel = telemetryModel(invocation.agent().model().id().value());
         observe("agent.run.started", invocation.scope(), runId, invocation.agent().id().value(),
-                invocation.agent().model().id().value(), Map.of(), null);
+                telemetryModel, Map.of(), null);
         try (var ignored = observability.makeAgentCurrent(invocation.scope().requestId(), runId)) {
             try {
                 AgentRunResult result = executeAgentInternal(invocation);
                 observe("agent.run.completed", invocation.scope(), runId,
                         invocation.agent().id().value(),
-                        invocation.agent().model().id().value(), Map.of(), null);
+                        telemetryModel, Map.of(), null);
                 return result;
             } catch (RuntimeException failure) {
                 observe(agentFailureEvent(requests, invocation.scope().requestId(), failure),
                         invocation.scope(), runId, invocation.agent().id().value(),
-                        invocation.agent().model().id().value(), Map.of(), failure);
+                        telemetryModel, Map.of(), failure);
                 if (failure instanceof AgentInputRefusedException refused) {
                     throw refused.identifiedBy(invocation.agent().id());
                 }
@@ -310,7 +328,8 @@ public final class AiChatExecutor {
         String reasoningEffort = models.resolveReasoningEffort(modelId, null);
         ScoreAiModelRegistry.ModelConfiguration model = models.modelConfiguration(modelId);
         ScoreAiObservability.ModelCall modelCall = observability.startModelCall(
-                invocation.scope().requestId(), modelId, model.providerType(), "agent");
+                invocation.scope().requestId(), modelId, model.model(),
+                model.providerType(), "agent");
         ChatResponse response;
         try {
             response = builder.build().prompt()
@@ -353,6 +372,17 @@ public final class AiChatExecutor {
         observer.observe(ExecutionObservation.of(type, scope, Map.copyOf(attributes)));
     }
 
+    private String telemetryModel(String modelAlias) {
+        try {
+            ScoreAiModelRegistry.ModelConfiguration configuration =
+                    models.modelConfiguration(modelAlias);
+            return configuration != null && StringUtils.hasText(configuration.model())
+                    ? configuration.model().strip() : modelAlias;
+        } catch (RuntimeException ignored) {
+            return modelAlias;
+        }
+    }
+
     private void putIfPresent(Map<String, Object> target, String key, Object value) {
         if (value != null) target.put(key, value);
     }
@@ -392,11 +422,14 @@ public final class AiChatExecutor {
         ChatOptions options = optionsFactory.create(
                 request.modelName(), request.reasoningEffort(), request.routeManifest());
         ScoreAiModelRegistry.ModelConfiguration model = models.modelConfiguration(request.modelName());
-        recorder.useModelProvider(model.providerType());
+        recorder.useModelProvider(model.providerType(), model.model());
         if (mcp != null && mcp.tools() != null) {
             recorder.mcpToolNames(java.util.Arrays.stream(mcp.tools().getToolCallbacks())
                     .map(callback -> callback.getToolDefinition().name()).toList());
-            recorder.mcpServerName(mcpClients.connectionName());
+            var telemetry = mcp.telemetry();
+            recorder.mcpTelemetry(telemetry.serverName(), telemetry.protocolVersion(),
+                    telemetry.serverAddress(), telemetry.serverPort(),
+                    telemetry.networkProtocolName(), telemetry.networkTransport());
         } else {
             recorder.mcpToolNames(List.of());
         }

@@ -343,8 +343,8 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
 
     private Workflow plannedWorkflow(AiWorkflowPlan plan, int iteration) {
         return new DirectWorkflow("planned-iteration-" + iteration, workflowContext -> {
-            AiChatExecutor.Result result = executePlan(
-                    legacyContext(workflowContext), plan, iteration);
+            AiChatExecutor.Context iterationContext = legacyContext(workflowContext);
+            AiChatExecutor.Result result = executePlan(iterationContext, plan, iteration);
             Map<String, Object> metadata = new LinkedHashMap<>(result.traceMetadata());
             metadata.putIfAbsent("workflow", plan.workflow());
             metadata.put("workflow_iteration", iteration);
@@ -420,7 +420,10 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                     this::aggregateComposedResults,
                     workflowCompilerExtensions, parallelApprovalLifecycle())
                     .compile(plan.root());
-            WorkflowResult result = workflow.process(WorkflowContext.root(workflowInvocation(context)));
+            AiChatExecutor.Context workflowExecution = finalLeadRecorder != null
+                    ? withRecorder(context, finalLeadRecorder) : context;
+            WorkflowResult result = workflow.process(
+                    WorkflowContext.root(workflowInvocation(workflowExecution)));
             if (composedCancellationObserved(context, execution)) {
                 throw new CancellationException("The composed workflow was cancelled.");
             }
@@ -865,6 +868,16 @@ public final class AiWorkflowExecutionCoordinator implements AutoCloseable {
                 context.streamVisibleContent(), policy, context.agentDepth(),
                 context.approvalScope(), context.approvalWaitLifecycle(),
                 context.agentId(), context.executionPurpose(), context.guardrailDecisionIds());
+    }
+
+    private AiChatExecutor.Context withRecorder(
+            AiChatExecutor.Context context, AiTrajectoryRecorder recorder) {
+        return new AiChatExecutor.Context(
+                context.request(), context.history(), context.userMessage(), context.requester(),
+                recorder, context.toolsEnabled(), context.streamVisibleContent(),
+                context.toolPolicy(), context.agentDepth(), context.approvalScope(),
+                context.approvalWaitLifecycle(), context.agentId(), context.executionPurpose(),
+                context.guardrailDecisionIds());
     }
 
     private boolean containsMutationWorkerResult(List<WorkflowResult> results) {

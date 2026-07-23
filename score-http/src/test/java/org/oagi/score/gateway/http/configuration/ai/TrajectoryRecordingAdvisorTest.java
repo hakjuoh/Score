@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.configuration.ai;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
@@ -24,10 +25,13 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,6 +56,59 @@ class TrajectoryRecordingAdvisorTest {
         verify(recorder).recordStreamingModelResponse(argThat(response -> response != null
                 && "Hello".equals(response.getResult().getOutput().getText())),
                 org.mockito.ArgumentMatchers.eq("assistant"));
+    }
+
+    @Test
+    void recordsFirstChunkSeparatelyFromFirstContentToken() {
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.requestId()).thenReturn("request-stream");
+        when(recorder.modelName()).thenReturn("claude-fable-5_alias");
+        when(recorder.requestModelName()).thenReturn("claude-fable-5");
+        when(recorder.modelProvider()).thenReturn("anthropic");
+        ChatClientRequest request = request("assistant");
+        StreamAdvisorChain chain = mock(StreamAdvisorChain.class);
+        when(chain.nextStream(request)).thenReturn(Flux.just(chunk(""), chunk("done")));
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        ScoreAiObservability.ModelCall modelCall = mock(ScoreAiObservability.ModelCall.class);
+        when(observability.startModelCall(
+                "request-stream", "claude-fable-5_alias", "claude-fable-5",
+                "anthropic", "assistant"))
+                .thenReturn(modelCall);
+
+        new TrajectoryRecordingAdvisor(recorder, observability)
+                .adviseStream(request, chain).collectList().block();
+
+        verify(modelCall).streaming();
+        verify(modelCall, times(2)).firstChunk();
+        verify(modelCall).firstToken();
+    }
+
+    @Test
+    void marksStreamingWhenProviderFailsBeforeFirstChunk() {
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.requestId()).thenReturn("request-failure");
+        when(recorder.modelName()).thenReturn("claude-fable-5_alias");
+        when(recorder.requestModelName()).thenReturn("claude-fable-5");
+        when(recorder.modelProvider()).thenReturn("anthropic");
+        ChatClientRequest request = request("assistant");
+        StreamAdvisorChain chain = mock(StreamAdvisorChain.class);
+        IllegalStateException failure = new IllegalStateException("provider unavailable");
+        when(chain.nextStream(request)).thenReturn(Flux.error(failure));
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        ScoreAiObservability.ModelCall modelCall = mock(ScoreAiObservability.ModelCall.class);
+        when(observability.startModelCall(
+                "request-failure", "claude-fable-5_alias", "claude-fable-5",
+                "anthropic", "assistant"))
+                .thenReturn(modelCall);
+
+        assertThatThrownBy(() -> new TrajectoryRecordingAdvisor(recorder, observability)
+                .adviseStream(request, chain).collectList().block())
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(modelCall).streaming();
+        verify(modelCall, never()).firstChunk();
+        verify(modelCall, never()).firstToken();
+        verify(modelCall).fail(failure);
     }
 
     @Test
@@ -90,6 +147,16 @@ class TrajectoryRecordingAdvisorTest {
 
     private ChatClientResponse chunk(String content) {
         return chunk(content, null);
+    }
+
+    private ChatClientRequest request(String phase) {
+        ChatClientRequest request = mock(ChatClientRequest.class);
+        Prompt prompt = mock(Prompt.class);
+        when(request.prompt()).thenReturn(prompt);
+        when(prompt.getInstructions()).thenReturn(List.of());
+        when(request.context()).thenReturn(Map.of(
+                AiTrajectoryRecorder.PHASE_CONTEXT_KEY, phase));
+        return request;
     }
 
     private ChatClientResponse chunk(String content, DefaultUsage usage) {

@@ -22,6 +22,7 @@ final class AiLifecycleEventObserver {
     private final Tracer tracer;
     private final AiObservationInstruments instruments;
     private final Function<String, Context> parents;
+    private final Function<String, String> agents;
     private final AiLifecycleOperationRegistry<OperationKey, TimedSpan> workflows =
             new AiLifecycleOperationRegistry<>();
     private final AiLifecycleOperationRegistry<OperationKey, TimedSpan> tools =
@@ -32,10 +33,12 @@ final class AiLifecycleEventObserver {
             new AiLifecycleOperationRegistry<>();
 
     AiLifecycleEventObserver(Tracer tracer, AiObservationInstruments instruments,
-                             Function<String, Context> parents) {
+                             Function<String, Context> parents,
+                             Function<String, String> agents) {
         this.tracer = tracer;
         this.instruments = instruments;
         this.parents = parents;
+        this.agents = agents;
     }
 
     void observe(String requestId, AiExecutionLifecycle event) {
@@ -194,35 +197,46 @@ final class AiLifecycleEventObserver {
 
     private void observeWorkflow(String requestId, String subtype, Map<String, Object> metadata) {
         String lifecycle = terminalSuffix(subtype);
-        String workflow = ScoreAiObservability.value(Objects.toString(
+        String selectedWorkflow = ScoreAiObservability.value(Objects.toString(
                 metadata.getOrDefault("workflow", workflowPrefix(subtype)), null));
+        String workflowKind = workflowPrefix(subtype);
         String operationId = ScoreAiObservability.value(Objects.toString(
                 metadata.getOrDefault("node_id", metadata.get("fanout_id")), workflowPrefix(subtype)));
         OperationKey key = new OperationKey(requestId, operationId);
         if ("started".equals(lifecycle) || "planned".equals(lifecycle)
                 || "synthesizing".equals(lifecycle)) {
             workflows.start(key, () -> {
-                Span span = tracer.spanBuilder("score.ai.workflow")
+                var builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
+                                GenAiSemanticConventions.INVOKE_WORKFLOW, selectedWorkflow))
                         .setParent(parents.apply(requestId))
-                        .setAttribute("score.ai.workflow.name", workflow)
+                        .setSpanKind(SpanKind.INTERNAL)
+                        .setAttribute("gen_ai.operation.name",
+                                GenAiSemanticConventions.INVOKE_WORKFLOW)
+                        .setAttribute("gen_ai.workflow.name", selectedWorkflow)
+                        .setAttribute("score.ai.workflow.name", selectedWorkflow)
                         .setAttribute("score.ai.workflow.run_id", operationId)
-                        .setAttribute("score.ai.workflow.kind", workflowPrefix(subtype))
-                        .startSpan();
-                recordWorkflowShape(workflow, metadata);
+                        .setAttribute("score.ai.workflow.kind", workflowKind);
+                Span span = builder.startSpan();
+                recordWorkflowShape(selectedWorkflow, metadata);
                 return new TimedSpan(span, parents.apply(requestId), System.nanoTime(),
-                        workflowMetricName(workflow), true);
+                        workflowMetricName(selectedWorkflow), selectedWorkflow, null, true);
             });
             return;
         }
         TimedSpan operation = workflows.terminate(key, () -> {
-            Span span = tracer.spanBuilder("score.ai.workflow")
+            var builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
+                            GenAiSemanticConventions.INVOKE_WORKFLOW, selectedWorkflow))
                     .setParent(parents.apply(requestId))
-                    .setAttribute("score.ai.workflow.name", workflow)
+                    .setSpanKind(SpanKind.INTERNAL)
+                    .setAttribute("gen_ai.operation.name",
+                            GenAiSemanticConventions.INVOKE_WORKFLOW)
+                    .setAttribute("gen_ai.workflow.name", selectedWorkflow)
+                    .setAttribute("score.ai.workflow.name", selectedWorkflow)
                     .setAttribute("score.ai.workflow.run_id", operationId)
-                    .setAttribute("score.ai.workflow.kind", workflowPrefix(subtype))
-                    .startSpan();
+                    .setAttribute("score.ai.workflow.kind", workflowKind);
+            Span span = builder.startSpan();
             return new TimedSpan(span, parents.apply(requestId), System.nanoTime(),
-                    workflowMetricName(workflow), true);
+                    workflowMetricName(selectedWorkflow), selectedWorkflow, null, true);
         });
         if (operation == null) return;
         String result = outcome(lifecycle);
@@ -244,51 +258,69 @@ final class AiLifecycleEventObserver {
         String callId = ScoreAiObservability.value(event.toolCallId());
         String tool = ScoreAiObservability.value(event.toolName());
         boolean mcp = Boolean.TRUE.equals(event.metadata().get("mcp"));
-        String mcpServerName = ScoreAiObservability.value(
-                Objects.toString(event.metadata().get("mcp_server_name"), null));
+        String agent = agents.apply(requestId);
         OperationKey key = new OperationKey(requestId, callId);
         if ("started".equals(subtype)) {
             tools.start(key, () -> new TimedSpan(
-                    startToolSpan(requestId, tool, callId, mcp, mcpServerName), parents.apply(requestId),
-                    System.nanoTime(), mcp ? "mcp" : "local", false));
+                    startToolSpan(requestId, tool, callId, agent, mcp, event.metadata()),
+                    parents.apply(requestId), System.nanoTime(), mcp ? "mcp" : "local",
+                    tool, agent, false));
             return;
         }
         TimedSpan operation = tools.terminate(key, () ->
-                new TimedSpan(startToolSpan(requestId, tool, callId, mcp, mcpServerName),
-                    parents.apply(requestId), System.nanoTime(),
-                    mcp ? "mcp" : "local", false));
+                new TimedSpan(startToolSpan(requestId, tool, callId, agent, mcp, event.metadata()),
+                    parents.apply(requestId), System.nanoTime(), mcp ? "mcp" : "local",
+                    tool, agent, false));
         if (operation == null) return;
-        long recordedDuration = number(event.metadata().get("duration_ms"));
-        if (recordedDuration >= 0) operation.recordedDurationMillis = recordedDuration;
         if (Boolean.TRUE.equals(event.metadata().get("result_truncated"))) {
             operation.span.setAttribute("score.ai.tool.result_truncated", true);
         }
         Object failure = event.metadata().get("failure_type");
-        if (failure != null) operation.span.setAttribute("error.type", boundedType(failure));
+        if (failure != null) {
+            operation.errorType = boundedType(failure);
+            operation.span.setAttribute("error.type", operation.errorType);
+        }
         operation.finish(outcome(subtype), false);
     }
 
-    private Span startToolSpan(String requestId, String tool, String callId, boolean mcp,
-                               String mcpServerName) {
-        var builder = tracer.spanBuilder("score.ai.tool")
+    private Span startToolSpan(String requestId, String tool, String callId, String agent,
+                               boolean mcp,
+                               Map<String, Object> metadata) {
+        var builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
+                        GenAiSemanticConventions.EXECUTE_TOOL, tool))
                 .setParent(parents.apply(requestId))
-                .setAttribute("gen_ai.operation.name", "execute_tool")
+                // This is the existing outer GenAI tool-execution span. MCP instrumentation
+                // enriches it instead of creating a separate transport CLIENT span.
+                .setSpanKind(SpanKind.INTERNAL)
+                .setAttribute("gen_ai.operation.name", GenAiSemanticConventions.EXECUTE_TOOL)
                 .setAttribute("gen_ai.tool.name", tool)
+                .setAttribute("gen_ai.tool.type", "function")
                 .setAttribute("gen_ai.tool.call.id", callId);
+        setStringAttribute(builder, "gen_ai.agent.name", agent);
         if (mcp) {
-            builder.setSpanKind(SpanKind.CLIENT)
-                    .setAttribute("rpc.system", "jsonrpc")
-                    .setAttribute("rpc.method", "tools/call")
-                    .setAttribute("mcp.server.name", mcpServerName)
-                    .setAttribute("mcp.method.name", "tools/call")
-                    .setAttribute("mcp.protocol.name", "streamable-http");
+            builder.setAttribute("mcp.method.name", "tools/call");
+            setStringAttribute(builder, "score.ai.mcp.server.name", metadata.get("mcp_server_name"));
+            setStringAttribute(builder, "mcp.protocol.version", metadata.get("mcp_protocol_version"));
+            setStringAttribute(builder, "network.protocol.name", metadata.get("network_protocol_name"));
+            setStringAttribute(builder, "network.transport", metadata.get("network_transport"));
+            setStringAttribute(builder, "server.address", metadata.get("server_address"));
+            long port = number(metadata.get("server_port"));
+            if (port > 0 && port <= 65_535) builder.setAttribute("server.port", port);
         }
         return builder.startSpan();
     }
 
+    private static void setStringAttribute(io.opentelemetry.api.trace.SpanBuilder builder,
+                                           String key, Object value) {
+        String candidate = Objects.toString(value, null);
+        if (candidate != null && !candidate.isBlank() && !"unknown".equals(candidate)) {
+            builder.setAttribute(key, candidate);
+        }
+    }
+
     private static boolean workflowEvent(String subtype) {
-        return subtype.startsWith("multi_agent_") || subtype.startsWith("subagent_")
-                || subtype.startsWith("parallel_workflow_") || subtype.startsWith("parallel_task_");
+        return subtype.startsWith("multi_agent_")
+                || subtype.startsWith("parallel_workflow_");
     }
 
     private static String terminalSuffix(String subtype) {
@@ -366,16 +398,21 @@ final class AiLifecycleEventObserver {
         private final Span span;
         private final long startedNanos;
         private final String metricName;
+        private final String semanticTarget;
+        private final String semanticAgent;
         private final boolean workflow;
         private final Context context;
         private final AtomicBoolean ended = new AtomicBoolean();
-        private double recordedDurationMillis = -1;
+        private String errorType;
 
         private TimedSpan(Span span, Context parent, long startedNanos,
-                          String metricName, boolean workflow) {
+                          String metricName, String semanticTarget, String semanticAgent,
+                          boolean workflow) {
             this.span = span;
             this.startedNanos = startedNanos;
             this.metricName = metricName;
+            this.semanticTarget = semanticTarget;
+            this.semanticAgent = semanticAgent;
             this.workflow = workflow;
             this.context = ScoreAiObservability.privateContext(parent, span);
         }
@@ -385,18 +422,30 @@ final class AiLifecycleEventObserver {
             String normalized = outcome(result);
             span.setAttribute("score.ai.outcome", normalized);
             if (abandoned) span.setAttribute("score.ai.observation.incomplete", true);
-            if (!"success".equals(normalized)) span.setStatus(StatusCode.ERROR, normalized);
-            double duration = recordedDurationMillis >= 0
-                    ? recordedDurationMillis : elapsedMillis(startedNanos);
+            if (errorType == null && !"success".equals(normalized)
+                    && !"cancelled".equals(normalized)) errorType = normalized;
+            if (errorType != null) {
+                span.setAttribute("error.type", errorType);
+                span.setStatus(StatusCode.ERROR, normalized);
+            }
+            double duration = elapsedMillis(startedNanos);
             AttributesBuilder labels = Attributes.builder().put(
                     workflow ? "score.ai.workflow.name" : "score.ai.tool.source", metricName)
                     .put("score.ai.outcome", normalized);
             if (workflow) {
                 instruments.workflows.add(1, labels.build());
                 instruments.workflowDuration.record(duration, labels.build());
+                instruments.genAiWorkflowDuration.record(
+                        GenAiSemanticConventions.elapsedSeconds(startedNanos),
+                        GenAiSemanticConventions.workflowDurationAttributes(
+                                semanticTarget, errorType));
             } else {
                 instruments.toolCalls.add(1, labels.build());
                 instruments.toolDuration.record(duration, labels.build());
+                instruments.genAiExecuteToolDuration.record(
+                        GenAiSemanticConventions.elapsedSeconds(startedNanos),
+                        GenAiSemanticConventions.toolDurationAttributes(
+                                semanticTarget, semanticAgent, errorType));
             }
             span.end();
         }

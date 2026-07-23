@@ -12,6 +12,11 @@ scheduler, JVM, and other application-wide signals are intentionally excluded. P
 AI metrics exposed by the Collector, and Grafana is pre-provisioned with the relevant trace
 datasource plus Prometheus.
 
+Grafana also provisions **SCORE AI / SCORE AI · GenAI OpenTelemetry** at
+<http://127.0.0.1:3000/d/score-ai-genai-otel>. The dashboard uses the standard GenAI client,
+agent, tool, and workflow metrics for latency and token panels, while retaining SCORE-specific
+turn, queue, retry, and outcome panels for application-level signals.
+
 Only the AI-specific enable switch and service name live under `score.ai.observability`. Shared
 resource attributes, sampling, trace OTLP export, and metrics OTLP export use Spring Boot's
 `management.opentelemetry`, `management.tracing`, and `management.otlp.metrics.export` property
@@ -43,7 +48,33 @@ compaction, agents, workflows, model calls, and tool/MCP calls. W3C trace contex
 from inbound `traceparent` headers and propagated to MCP HTTP calls. Request,
 conversation, user, tool-call, workflow-node, and agent-run IDs are trace/ATIF attributes only;
 they are never metric labels. Prompt, tool content, exception messages, and stack traces are not
-exported. TTFT is recorded only for streaming calls where a first response chunk can be observed.
+exported. The standard time-to-first-chunk metric observes the first emitted streaming chunk,
+including metadata-only chunks; SCORE's custom TTFT remains gated on the first content/tool token.
+
+GenAI telemetry is pinned to the OpenTelemetry `semantic-conventions-genai` development
+specification at commit `2e994c6d59a93bb4fc1752c5378eedb9b8e14d6b` (2026-07-21). Span names follow
+`invoke_agent <agent>`, `chat <model>`, `execute_tool <tool>`, and
+`invoke_workflow <workflow>`. An `invoke_workflow` boundary is emitted only when execution
+actually coordinates multiple agents or generative-AI operations (the `multi_agent_*` and
+`parallel_workflow_*` lead lifecycles). A planner-selected single-agent path, including the
+evaluator/optimizer control loop, does not become a workflow span merely because it has an
+internal workflow name. Individual `subagent_*` and `parallel_task_*` lifecycles are represented
+by their `invoke_agent` spans beneath the one coordinating workflow span. The planner model call is nested as
+`invoke_agent workflow-planner` → `plan workflow-planner` → `chat <model>`, matching the agent
+semantic conventions. Standard duration metrics use seconds, token usage is a histogram,
+and cache-token span attributes use the nested `gen_ai.usage.cache_read.input_tokens` and
+`gen_ai.usage.cache_creation.input_tokens` names. Anthropic input-token totals include both cache
+categories. Standard model names are the exact identifiers sent to the provider; SCORE registry
+aliases are retained only as `score.ai.model.alias`. MCP attributes enrich the existing internal
+`execute_tool` span, while W3C context is
+still propagated through MCP `params._meta`. When the development specification changes,
+update the pin and the compatibility tests together.
+
+SCORE does not emit `create_agent` for its in-process multi-agent execution. Catalog lookup,
+ephemeral branch definitions, and invoking an existing worker are not discrete agent-creation
+operations. Add the span only if SCORE gains an actual local or remote agent creation/provisioning
+operation; a remote implementation must emit the specification's required provider and client
+attributes.
 
 Capacity signals include active requests, queue delay, and bounded admission-rejection reasons.
 The AI executor uses an unbounded virtual-thread-per-task design, so a pool-saturation percentage
@@ -127,7 +158,8 @@ curl --fail 'http://127.0.0.1:3000/api/datasources/uid/tempo/health'
 curl --fail 'http://127.0.0.1:9090/api/v1/targets'
 ```
 
-In Grafana, open **Explore**, select **Prometheus**, and query
+Open the provisioned **SCORE AI · GenAI OpenTelemetry** dashboard, or in Grafana **Explore** select
+**Prometheus** and query
 `{service_name="score-ai"}` or `score_ai_turn_duration_milliseconds_count` for AI metrics, and
 `traces_spanmetrics_calls_total` for
 Tempo-derived span metrics. Tempo's service graph requires traces containing a client/server or
