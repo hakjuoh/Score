@@ -1,0 +1,95 @@
+name: score-observability-jaeger
+
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: ${OTEL_STACK_LOG_MAX_SIZE:-10m}
+    max-file: ${OTEL_STACK_LOG_MAX_FILES:-3}
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.157.0
+    command: ["--config=file:/etc/otelcol-contrib/config.yaml"]
+    restart: unless-stopped
+    depends_on:
+      jaeger:
+        condition: service_started
+    ports:
+      # Bind receivers to loopback so the unauthenticated local collector is not exposed
+      # to other hosts. Override the host ports when the defaults are already occupied.
+      - "127.0.0.1:${OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "127.0.0.1:${OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+      - "127.0.0.1:${OTEL_COLLECTOR_HEALTH_PORT:-13133}:13133"
+    volumes:
+      - ./docker/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *bounded-logging
+
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.20.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${JAEGER_UI_PORT:-16686}:16686"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *bounded-logging
+
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-24h}
+      - --storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-2GB}
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+    ports:
+      - "127.0.0.1:${PROMETHEUS_UI_PORT:-9090}:9090"
+    volumes:
+      - ./docker/otel-collector/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *bounded-logging
+
+  grafana:
+    image: grafana/grafana:13.1.1
+    restart: unless-stopped
+    depends_on:
+      jaeger:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    ports:
+      - "127.0.0.1:${GRAFANA_UI_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/otel-collector/grafana/prometheus.yaml:/etc/grafana/provisioning/datasources/01-prometheus.yaml:ro
+      - ./docker/otel-collector/grafana/traces-jaeger.yaml:/etc/grafana/provisioning/datasources/02-traces.yaml:ro
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *bounded-logging
+
+volumes:
+  grafana-data:
+  prometheus-data:
