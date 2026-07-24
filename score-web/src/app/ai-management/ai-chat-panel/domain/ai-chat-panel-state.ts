@@ -13,7 +13,8 @@ import {
   AiElicitationNotice,
   AiMutationApprovalBatchNotice,
   AiMutationPermissionMode,
-  AiChatPanelTab
+  AiChatPanelTab,
+  normalizeAiReasoningEffort
 } from './ai-chat-panel.model';
 
 export class AiChatPanelState {
@@ -111,6 +112,7 @@ export class AiChatPanelState {
       this.selectedModelName = this.defaultModelName;
     }
     const selectedModel = this.availableModels.find(model => model.name === this.selectedModelName);
+    this.selectedReasoningEffort = normalizeAiReasoningEffort(this.selectedReasoningEffort);
     if (!selectedModel?.reasoningEfforts.some(effort => effort.name === this.selectedReasoningEffort)) {
       this.selectedReasoningEffort = selectedModel?.defaultReasoningEffort || '';
     }
@@ -125,14 +127,17 @@ export class AiChatPanelState {
       : this.selectedModel();
     if (!model && settings.modelName) {
       this.selectedModelName = settings.modelName;
-      if (settings.reasoningEffort) this.selectedReasoningEffort = settings.reasoningEffort;
+      if (settings.reasoningEffort) {
+        this.selectedReasoningEffort = normalizeAiReasoningEffort(settings.reasoningEffort);
+      }
     } else if (model) {
       this.selectedModelName = model.name;
       const modelChanged = previousModelName !== model.name;
       if (settings.reasoningEffort || modelChanged) {
+        const reasoningEffort = normalizeAiReasoningEffort(settings.reasoningEffort || '');
         this.selectedReasoningEffort = model.reasoningEfforts
-          .some(effort => effort.name === settings.reasoningEffort)
-          ? settings.reasoningEffort! : model.defaultReasoningEffort;
+          .some(effort => effort.name === reasoningEffort)
+          ? reasoningEffort : model.defaultReasoningEffort;
       }
     }
     if (settings.permissionMode === 'ask' || settings.permissionMode === 'auto'

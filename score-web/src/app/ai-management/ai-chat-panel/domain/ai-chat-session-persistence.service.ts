@@ -6,7 +6,8 @@ import {
   AiChatAttachment,
   AiChatDock,
   AiChatPanelTab,
-  AiMutationPermissionMode
+  AiMutationPermissionMode,
+  normalizeAiReasoningEffort
 } from './ai-chat-panel.model';
 
 export const AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY = 'score.ai-chat.selection-preference';
@@ -54,8 +55,9 @@ export class AiChatSessionPersistenceService {
       || state.defaultModel();
     if (!model) return;
 
-    const requestedReasoningEffort = typeof preference?.reasoningEffort === 'string'
+    const storedReasoningEffort = typeof preference?.reasoningEffort === 'string'
       ? preference.reasoningEffort : '';
+    const requestedReasoningEffort = normalizeAiReasoningEffort(storedReasoningEffort);
     const reasoningEffort = model.reasoningEfforts
       .some(candidate => candidate.name === requestedReasoningEffort)
       ? requestedReasoningEffort : model.defaultReasoningEffort;

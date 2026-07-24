@@ -13,7 +13,8 @@ import {
   AiPublicExecutionRequestStatus,
   AiChatRequest,
   AiChatRestResponse,
-  AiConversationModelResponse
+  AiConversationModelResponse,
+  normalizeAiReasoningEffort
 } from './ai-chat-panel.model';
 
 interface AiChatModelWire {
@@ -109,6 +110,7 @@ export class AiChatApiService {
     ).pipe(
       map(models => models.map(model => ({
         ...model,
+        defaultReasoningEffort: normalizeAiReasoningEffort(model.defaultReasoningEffort),
         description: model.description?.trim() || this.defaultModelDescription(model.provider),
         reasoningEfforts: (model.reasoningEfforts || []).map(effort => this.normalizeReasoningEffort(effort)),
         contextWindow: this.positiveIntegerOrNull(model.contextWindow),
@@ -128,6 +130,11 @@ export class AiChatApiService {
       '/api/ai/chat/conversations/' + encodeURIComponent(conversationId) + '/model',
       {modelName, reasoningEffort},
       this.localErrorHandling()
+    ).pipe(
+      map(response => ({
+        ...response,
+        reasoningEffort: normalizeAiReasoningEffort(response.reasoningEffort)
+      }))
     );
   }
 
@@ -165,13 +172,18 @@ export class AiChatApiService {
 
   private normalizeReasoningEffort(effort: AiReasoningEffortInfo | string): AiReasoningEffortInfo {
     if (typeof effort !== 'string') {
-      return effort;
+      const name = normalizeAiReasoningEffort(effort.name);
+      return {
+        ...effort,
+        name,
+        displayName: name === 'disabled' ? 'Disabled' : effort.displayName
+      };
     }
-    const name = effort.trim().toLowerCase();
+    const name = normalizeAiReasoningEffort(effort);
     return {
       name,
       displayName: name === 'xhigh' || name === 'max'
-        ? 'Max' : name.charAt(0).toUpperCase() + name.slice(1),
+        ? 'Extra High' : name === 'disabled' ? 'Disabled' : name.charAt(0).toUpperCase() + name.slice(1),
       description: this.defaultReasoningDescription(name)
     };
   }
@@ -184,6 +196,7 @@ export class AiChatApiService {
 
   private defaultReasoningDescription(name: string): string {
     switch (name) {
+      case 'disabled': return 'Reasoning is disabled for this session.';
       case 'low': return 'Fast responses with lighter reasoning.';
       case 'medium': return 'Balances speed and reasoning depth for everyday tasks.';
       case 'high': return 'Greater reasoning depth for complex problems.';
