@@ -7,7 +7,6 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.toolsearch.ToolIndex;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.env.YamlPropertySourceLoader;
@@ -140,7 +139,7 @@ class ScoreAiConfigurationTest {
     }
 
     @Test
-    void configuresAzureOpenAiWithDeploymentAndApiVersion() {
+    void configuresAzureOpenAiToUseTheResponsesEndpoint() {
         ScoreAiProperties properties = properties("gpt-5.6-sol", "azure-openai");
         ScoreAiProperties.Provider provider = properties.getProviders().get("azure-openai");
         provider.setType("azure-openai");
@@ -150,12 +149,12 @@ class ScoreAiConfigurationTest {
 
         Map<String, ChatModel> models = chatModels(properties);
 
-        OpenAiChatModel model = assertInstanceOf(
-                OpenAiChatModel.class, models.get("gpt-5.6-sol"));
+        ScoreOpenAiResponsesChatModel model = assertInstanceOf(
+                ScoreOpenAiResponsesChatModel.class, models.get("gpt-5.6-sol"));
         assertEquals("https://example.openai.azure.com", model.getOptions().getBaseUrl());
+        assertEquals("https://example.openai.azure.com/openai/v1", model.responsesBaseUrl());
         assertEquals("gpt-5.6-sol", model.getOptions().getDeploymentName());
         assertEquals("gpt-5.6-sol", model.getOptions().getModel());
-        assertEquals("2024-10-21", model.getOptions().getMicrosoftFoundryServiceVersion().value());
         assertTrue(model.getOptions().isMicrosoftFoundry());
     }
 

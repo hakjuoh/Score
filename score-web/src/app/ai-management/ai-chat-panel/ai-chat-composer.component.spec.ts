@@ -128,6 +128,13 @@ describe('AiChatComposerComponent cancellation actions', () => {
     expect(prompt.getAttribute('aria-label')).toBe('Message to connectCenter Assistant');
   });
 
+  it('keeps the divider above the composer before the first request', () => {
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('.command-row') as HTMLElement;
+    expect(row.className).toBe('command-row');
+  });
+
   it('caps the composer at four message lines', async () => {
     fixture.detectChanges();
 

@@ -1,14 +1,12 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
 import com.anthropic.models.messages.OutputConfig;
-import com.openai.azure.AzureOpenAIServiceVersion;
 import org.springframework.ai.anthropic.AnthropicCacheOptions;
 import org.springframework.ai.anthropic.AnthropicCacheStrategy;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.chat.client.advisor.toolsearch.ToolSearchToolCallingAdvisor;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.toolsearch.ToolIndex;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -30,6 +28,8 @@ import java.util.concurrent.ScheduledExecutorService;
 @EnableConfigurationProperties({ScoreAiProperties.class, AnthropicChatProperties.class,
         OpenAiChatProperties.class})
 public class ScoreAiConfiguration {
+
+    private static final String DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 
     @Bean("scoreAiChatModels")
     public Map<String, ChatModel> scoreAiChatModels(ScoreAiProperties properties,
@@ -141,24 +141,23 @@ public class ScoreAiConfiguration {
         OpenAiChatOptions.Builder options = openAiOptions(configuredName, model, provider, chatProperties)
                 .deploymentName(StringUtils.hasText(model.getModel()) ? model.getModel() : configuredName)
                 .azure(true);
-        if (StringUtils.hasText(provider.getApiVersion())) {
-            options.azureOpenAIServiceVersion(AzureOpenAIServiceVersion.fromString(provider.getApiVersion()));
-        }
-        return openAiChatModel(options, requestTimeout);
+        return openAiResponsesModel(options, provider, requestTimeout, true);
     }
 
     private ChatModel openAiModel(String configuredName, ScoreAiProperties.Model model,
                                   ScoreAiProperties.Provider provider,
                                   Duration requestTimeout,
                                   OpenAiChatProperties chatProperties) {
-        return openAiChatModel(openAiOptions(configuredName, model, provider, chatProperties), requestTimeout);
+        return openAiResponsesModel(openAiOptions(configuredName, model, provider, chatProperties),
+                provider, requestTimeout, false);
     }
 
-    private ChatModel openAiChatModel(OpenAiChatOptions.Builder options, Duration requestTimeout) {
-        return OpenAiChatModel.builder()
-                .options(options.build())
-                .httpClientBuilderCustomizer(builder -> builder.timeout(requestTimeout))
-                .build();
+    private ChatModel openAiResponsesModel(OpenAiChatOptions.Builder options,
+                                           ScoreAiProperties.Provider provider,
+                                           Duration requestTimeout,
+                                           boolean azure) {
+        return ScoreOpenAiResponsesChatModel.create(options.build(),
+                responsesBaseUrl(provider, azure), requestTimeout, azure);
     }
 
     private void validateContextBudget(String name, ScoreAiProperties.Model model) {
@@ -288,5 +287,12 @@ public class ScoreAiConfiguration {
 
     private String trimTrailingSlashes(String value) {
         return StringUtils.hasText(value) ? value.replaceAll("/+$", "") : null;
+    }
+
+    private String responsesBaseUrl(ScoreAiProperties.Provider provider, boolean azure) {
+        String baseUrl = trimTrailingSlashes(provider.getBaseUrl());
+        if (!StringUtils.hasText(baseUrl)) return DEFAULT_OPENAI_BASE_URL;
+        if (!azure || baseUrl.endsWith("/openai/v1")) return baseUrl;
+        return baseUrl + "/openai/v1";
     }
 }

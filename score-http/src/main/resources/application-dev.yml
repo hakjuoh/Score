@@ -230,8 +230,8 @@ score:
           tool-output-token-limit: 32000
           provider-compaction-enabled: false
         reasoning-efforts:
-          - name: low
-            display-name: Low
+          - name: light
+            display-name: Light
             description: Fast responses with lighter reasoning.
           - name: medium
             display-name: Medium
@@ -260,8 +260,8 @@ score:
           tool-output-token-limit: 32000
           provider-compaction-enabled: false
         reasoning-efforts:
-          - name: low
-            display-name: Low
+          - name: light
+            display-name: Light
             description: Fast responses with lighter reasoning.
           - name: medium
             display-name: Medium
@@ -281,7 +281,7 @@ score:
         description: Fast and affordable agentic model for lightweight everyday tasks.
         provider: azure-openai
         model: gpt-5.6-luna
-        reasoning-effort: low
+        reasoning-effort: light
         context-window: ${GPT_5_6_LUNA_CONTEXT_WINDOW:200000}
         context-budget:
           output-reserve-tokens: 32768
@@ -290,8 +290,8 @@ score:
           tool-output-token-limit: 32000
           provider-compaction-enabled: false
         reasoning-efforts:
-          - name: low
-            display-name: Low
+          - name: light
+            display-name: Light
             description: Fast responses with lighter reasoning.
           - name: medium
             display-name: Medium

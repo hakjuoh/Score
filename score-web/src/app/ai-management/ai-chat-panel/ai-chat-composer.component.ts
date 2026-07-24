@@ -26,7 +26,6 @@ export class AiChatComposerComponent {
   @Input() blocked = false;
   @Input() cancellationInProgress = false;
   @Input() cancellationDelayed = false;
-  @Input() isInitialPrompt = false;
   @Input() showCommandSuggestions = false;
   @Input() commandSuggestions: AiChatCommand[] = [];
   @Input() selectedCommandIndex = 0;

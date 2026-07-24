@@ -165,12 +165,6 @@
   background: #ffffff;
 }
 
-.command-row.initial {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
-}
-
 .command-box {
   display: flex;
   align-items: flex-start;

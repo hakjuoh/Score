@@ -173,10 +173,6 @@ export abstract class AiChatPanelControllerBase {
     return this.mutationInteractions.interactionMode;
   }
 
-  get isInitialPrompt(): boolean {
-    return this.state.messages.length === 0 && !this.state.pending;
-  }
-
   get commandSuggestions(): AiChatCommand[] {
     return this.commandService.suggestions(
       this.state.prompt, this.state.pending && !!this.activeRequestId);
