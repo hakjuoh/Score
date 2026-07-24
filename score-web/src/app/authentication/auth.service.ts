@@ -312,6 +312,13 @@ export class ErrorAlertInterceptor implements HttpInterceptor {
           return throwError(error);
         }
 
+        // The assistant popout is a focused surface. Its own API requests render
+        // failures in the chat transcript, so unrelated application requests
+        // must not open the global error alert over that surface.
+        if (this.isAssistantPopout() && !this.isAiRequest(req.url) && error?.status !== 401) {
+          return throwError(error);
+        }
+
         if (error instanceof HttpErrorResponse || error.name === 'HttpErrorResponse') {
           if (this.auth.isServiceUnavailableFailure(error, req.url)) {
             this.router.navigate(['/service-unavailable'], {
@@ -384,6 +391,14 @@ export class ErrorAlertInterceptor implements HttpInterceptor {
 
         return throwError(error);
       }));
+  }
+
+  private isAssistantPopout(): boolean {
+    return new URLSearchParams(window.location.search).get('aiAssistantPopout') === '1';
+  }
+
+  private isAiRequest(url: string): boolean {
+    return url.includes('/api/ai/');
   }
 }
 

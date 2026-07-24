@@ -7,7 +7,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Function;
 
 /** Resolves the models used by the connectCenter assistant. */
 @Component
@@ -50,8 +53,11 @@ public class ScoreAiModelRegistry {
         String resolvedModelName = resolveModelName(modelName);
         ScoreAiProperties.Model model = properties.getModels().get(resolvedModelName);
         List<ReasoningEffortDescriptor> efforts = reasoningEfforts(model);
-        String requested = StringUtils.hasText(requestedReasoningEffort)
+        String normalizedRequested = StringUtils.hasText(requestedReasoningEffort)
                 ? requestedReasoningEffort.strip().toLowerCase() : defaultReasoningEffort(model);
+        boolean legacyDisabled = "none".equals(normalizedRequested)
+                && efforts.stream().anyMatch(effort -> "disabled".equals(effort.name()));
+        String requested = legacyDisabled ? "disabled" : normalizedRequested;
         return efforts.stream()
                 .map(ReasoningEffortDescriptor::name)
                 .filter(effort -> effort.equalsIgnoreCase(requested))
@@ -150,26 +156,46 @@ public class ScoreAiModelRegistry {
     }
 
     private List<ReasoningEffortDescriptor> reasoningEfforts(ScoreAiProperties.Model model) {
-        List<ReasoningEffortDescriptor> efforts = model.getReasoningEfforts().stream()
+        List<ReasoningEffortDescriptor> configuredEfforts = model.getReasoningEfforts().stream()
                 .filter(effort -> effort != null && StringUtils.hasText(effort.getName()))
-                .map(effort -> new ReasoningEffortDescriptor(
-                        effort.getName().strip().toLowerCase(),
-                        StringUtils.hasText(effort.getDisplayName())
-                                ? effort.getDisplayName().strip() : effort.getName().strip(),
-                        StringUtils.hasText(effort.getDescription()) ? effort.getDescription().strip() : ""))
-                .distinct()
-                .toList();
+                .map(effort -> {
+                    String name = canonicalReasoningEffortName(effort.getName());
+                    String displayName = "disabled".equals(name) ? "Disabled"
+                            : StringUtils.hasText(effort.getDisplayName())
+                            ? effort.getDisplayName().strip() : effort.getName().strip();
+                    return new ReasoningEffortDescriptor(name, displayName,
+                            StringUtils.hasText(effort.getDescription()) ? effort.getDescription().strip() : "");
+                })
+                .collect(java.util.stream.Collectors.collectingAndThen(
+                        java.util.stream.Collectors.toMap(ReasoningEffortDescriptor::name, Function.identity(),
+                                (first, ignored) -> first, LinkedHashMap::new),
+                        values -> List.copyOf(values.values())));
+        List<ReasoningEffortDescriptor> efforts = new ArrayList<>(configuredEfforts);
+        if ((Boolean.TRUE.equals(model.getModelCapabilities().getReasoningModel())
+                || model.getModelCapabilities().getThinkingModes().stream()
+                .filter(StringUtils::hasText)
+                .map(value -> value.strip().toLowerCase())
+                .anyMatch("disabled"::equals))
+                && efforts.stream().noneMatch(effort -> "disabled".equals(effort.name()))) {
+            efforts.addFirst(new ReasoningEffortDescriptor(
+                    "disabled", "Disabled", "Disable additional reasoning."));
+        }
         return efforts.isEmpty() ? List.of(
                 new ReasoningEffortDescriptor("low", "Low", "Fast responses with lighter reasoning."),
                 new ReasoningEffortDescriptor("medium", "Medium", "Balanced reasoning depth."),
                 new ReasoningEffortDescriptor("high", "High", "Greater reasoning depth.")) : efforts;
     }
 
+    private String canonicalReasoningEffortName(String name) {
+        String normalized = name.strip().toLowerCase();
+        return "none".equals(normalized) ? "disabled" : normalized;
+    }
+
     private String defaultReasoningEffort(ScoreAiProperties.Model model) {
         String configured = StringUtils.hasText(model.getReasoningEffort())
                 ? model.getReasoningEffort() : model.getOutputEffort();
         if (StringUtils.hasText(configured)) {
-            String normalized = configured.strip().toLowerCase();
+            String normalized = canonicalReasoningEffortName(configured);
             if (reasoningEfforts(model).stream().anyMatch(effort -> effort.name().equals(normalized))) {
                 return normalized;
             }

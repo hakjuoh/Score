@@ -91,6 +91,18 @@ export interface AiReasoningEffortInfo {
   description: string;
 }
 
+export function normalizeAiReasoningEffort(reasoningEffort: string): string {
+  const normalized = reasoningEffort.trim().toLowerCase();
+  return normalized === 'none' ? 'disabled' : normalized;
+}
+
+export function aiModelSessionLabel(displayName: string, reasoningEffort: string): string {
+  const normalizedEffort = normalizeAiReasoningEffort(reasoningEffort);
+  return normalizedEffort === 'disabled'
+    ? `${displayName} without reasoning`
+    : `${displayName} with ${normalizedEffort} reasoning effort`;
+}
+
 export interface AiConversationModelResponse {
   conversationId: string;
   modelName: string;

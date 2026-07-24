@@ -70,6 +70,24 @@ describe('ErrorAlertInterceptor local error handling', () => {
     );
     expect(auth.logout).toHaveBeenCalledWith(window.location.pathname);
   });
+
+  it('does not open unrelated global alerts in the assistant popout', async () => {
+    const originalUrl = window.location.href;
+    window.history.pushState({}, '', '/?aiAssistantPopout=1');
+    const error = new HttpErrorResponse({status: 500, statusText: 'Server Error'});
+    const request = new HttpRequest('GET', '/api/messages/count-of-unread');
+
+    try {
+      await expect(firstValueFrom(interceptor.intercept(
+        request, failingHandler(error)
+      ))).rejects.toBe(error);
+    } finally {
+      window.history.pushState({}, '', new URL(originalUrl).pathname + new URL(originalUrl).search);
+    }
+
+    expect(snackBar.open).not.toHaveBeenCalled();
+    expect(snackBar.openFromComponent).not.toHaveBeenCalled();
+  });
 });
 
 function failingHandler(error: HttpErrorResponse): HttpHandler {

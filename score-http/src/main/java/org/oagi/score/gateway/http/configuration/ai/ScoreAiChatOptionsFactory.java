@@ -47,17 +47,23 @@ public final class ScoreAiChatOptionsFactory {
             builder.temperature(model.temperature());
         }
         String thinking = model.resolvedDefaultThinking();
-        if ("adaptive".equals(thinking)) {
+        String normalizedReasoningEffort = StringUtils.hasText(reasoningEffort)
+                ? reasoningEffort.strip().toLowerCase() : "";
+        boolean thinkingDisabled = "disabled".equals(normalizedReasoningEffort)
+                || "disabled".equals(thinking);
+        if ("disabled".equals(normalizedReasoningEffort)) {
+            builder.thinkingDisabled();
+        } else if ("adaptive".equals(thinking)) {
             builder.thinkingAdaptive();
         } else if ("enabled".equals(thinking) && model.thinkingBudgetTokens() != null) {
             builder.thinkingEnabled(model.thinkingBudgetTokens());
         } else if ("disabled".equals(thinking)) {
             builder.thinkingDisabled();
         }
-        if (!"disabled".equals(thinking) && model.supportsOutputEffort()
-                && StringUtils.hasText(reasoningEffort)
-                && !"default".equalsIgnoreCase(reasoningEffort)) {
-            builder.effort(OutputConfig.Effort.of(reasoningEffort.strip().toLowerCase()));
+        if (!thinkingDisabled && model.supportsOutputEffort()
+                && StringUtils.hasText(normalizedReasoningEffort)
+                && !"default".equals(normalizedReasoningEffort)) {
+            builder.effort(OutputConfig.Effort.of(normalizedReasoningEffort));
         }
         if ("conversation-history".equalsIgnoreCase(model.cacheStrategy())) {
             builder.cacheOptions(AnthropicCacheOptions.builder()
@@ -85,9 +91,14 @@ public final class ScoreAiChatOptionsFactory {
         if (model.temperature() != null && model.supportsTemperature()) {
             builder.temperature(model.temperature());
         }
-        if (reasoningModel && StringUtils.hasText(reasoningEffort)
-                && !"default".equalsIgnoreCase(reasoningEffort)) {
-            builder.reasoningEffort(reasoningEffort.strip().toLowerCase());
+        if (reasoningModel) {
+            // OpenAI's reasoning models require an explicit effort when the setting is absent.
+            String effectiveReasoningEffort = !StringUtils.hasText(reasoningEffort)
+                    || "disabled".equalsIgnoreCase(reasoningEffort) ? "none" : reasoningEffort;
+            if (StringUtils.hasText(effectiveReasoningEffort)
+                    && !"default".equalsIgnoreCase(effectiveReasoningEffort)) {
+                builder.reasoningEffort(effectiveReasoningEffort.strip().toLowerCase());
+            }
         }
         if (routeManifest != null) builder.promptCacheKey(routeManifest.promptCacheKey());
         builder.streamUsage(true);

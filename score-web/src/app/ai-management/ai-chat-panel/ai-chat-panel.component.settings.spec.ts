@@ -34,6 +34,24 @@ describe('AiChatPanelComponent settings and active recovery', () => {
     });
   });
 
+  it('restores the legacy none preference as disabled reasoning', () => {
+    localStorage.setItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY, JSON.stringify({
+      version: 1, modelName: 'claude-sonnet-5', reasoningEffort: 'none', permissionMode: 'ask'
+    }));
+    api.getAvailableModels.mockReturnValueOnce(of([{
+      name: 'claude-sonnet-5', displayName: 'Claude Sonnet 5', description: 'Claude model.',
+      provider: 'azure-foundry', defaultModel: true, defaultReasoningEffort: 'medium',
+      reasoningEfforts: [
+        {name: 'disabled', displayName: 'Disabled', description: 'Disable reasoning.'},
+        {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'}
+      ]
+    }]));
+
+    (component as any).loadAvailableModels();
+
+    expect(component.state.selectedReasoningEffort).toBe('disabled');
+  });
+
   it('replaces stale preference capabilities and versions with current defaults', () => {
     localStorage.setItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY, JSON.stringify({
       version: 1,
@@ -89,6 +107,23 @@ describe('AiChatPanelComponent settings and active recovery', () => {
       version: 1, modelName: 'gpt-5_6-sol', reasoningEffort: 'high',
       permissionMode: 'ask'
     });
+  });
+
+  it('describes a model change without reasoning when disabled', () => {
+    (component as any).loadAvailableModels();
+    const model = component.state.availableModels[0];
+    model.reasoningEfforts = [
+      ...model.reasoningEfforts,
+      {name: 'disabled', displayName: 'Disabled', description: 'Disable reasoning.'}
+    ];
+    component.state.modelSettingsOpen = true;
+    component.state.modelDraftName = model.name;
+    component.state.modelDraftReasoningEffort = 'disabled';
+
+    component.applyModelSettings();
+
+    expect(component.state.messages.at(-1)?.content)
+      .toBe('Model changed to Claude Fable 5 without reasoning.');
   });
 
   it('removes the model command from history when its settings are cancelled', () => {
