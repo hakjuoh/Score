@@ -526,6 +526,32 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
     expect(component.state.activeWorkflow).toBe('');
   });
 
+  it('normalizes the legacy none reasoning setting when restoring a conversation', () => {
+    component.state.availableModels = [{
+      name: 'claude-sonnet-5', displayName: 'Claude Sonnet 5', description: 'Claude model.',
+      provider: 'azure-foundry', defaultModel: true, defaultReasoningEffort: 'medium',
+      reasoningEfforts: [
+        {name: 'disabled', displayName: 'Disabled', description: 'Disable reasoning.'},
+        {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'}
+      ]
+    }];
+    component.state.selectedModelName = 'claude-sonnet-5';
+
+    component.state.restoreConversationSettings({
+      modelName: 'claude-sonnet-5', reasoningEffort: 'none', permissionMode: 'ask', activeWorkflow: ''
+    });
+
+    expect(component.state.selectedReasoningEffort).toBe('disabled');
+  });
+
+  it('normalizes legacy reasoning when the restored model is not loaded yet', () => {
+    component.state.restoreConversationSettings({
+      modelName: 'model-not-loaded', reasoningEffort: 'none', permissionMode: 'ask', activeWorkflow: ''
+    });
+
+    expect(component.state.selectedReasoningEffort).toBe('disabled');
+  });
+
   it('clears the draft prompt and attachments when switching conversations', () => {
     component.state.conversationId = 'conversation-a';
     component.state.prompt = 'Draft intended for A';

@@ -307,6 +307,24 @@ describe('AiChatMessageListComponent', () => {
     expect(summary.textContent).toContain('/permissions');
   });
 
+  it('shows without reasoning when the selected model disables reasoning', () => {
+    fixture.componentInstance.availableModels = [{
+      name: 'claude-sonnet-5', displayName: 'Claude Sonnet 5', description: 'Claude model.',
+      provider: 'azure-foundry', defaultModel: true,
+      defaultReasoningEffort: 'medium', reasoningEfforts: [
+        {name: 'disabled', displayName: 'Disabled', description: 'Disable reasoning.'},
+        {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'}
+      ]
+    }];
+    fixture.componentInstance.selectedModelName = 'claude-sonnet-5';
+    fixture.componentInstance.selectedReasoningEffort = 'disabled';
+    fixture.detectChanges();
+
+    const value = fixture.nativeElement.querySelector('.session-summary-details dd') as HTMLElement;
+    expect(value.textContent?.trim()).toBe('Claude Sonnet 5 without reasoning');
+  });
+
+
   it('keeps the session settings at the top after the conversation starts', () => {
     fixture.componentInstance.messages = [{role: 'user', content: '/model'}];
     fixture.componentInstance.availableModels = [{

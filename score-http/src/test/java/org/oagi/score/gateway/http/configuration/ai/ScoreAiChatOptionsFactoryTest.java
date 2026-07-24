@@ -37,6 +37,20 @@ class ScoreAiChatOptionsFactoryTest {
     }
 
     @Test
+    void omitsOutputEffortWhenAnthropicReasoningIsDisabled() {
+        when(models.modelConfiguration("claude-test")).thenReturn(configuration(
+                "claude-test", "claude-deployment", "anthropic", 16_000,
+                4_096, true, false, List.of("adaptive", "disabled"), "adaptive"));
+
+        ChatOptions options = factory.create("claude-test", "disabled", null);
+
+        assertThat(options).isInstanceOfSatisfying(AnthropicChatOptions.class, anthropic -> {
+            assertThat(anthropic.getThinking()).isNotNull();
+            assertThat(anthropic.getOutputConfig()).isNull();
+        });
+    }
+
+    @Test
     void createsAzureOpenAiOptionsAndUsesTheRouteManifestAsTheCacheKey() {
         when(models.modelConfiguration("gpt-test")).thenReturn(configuration(
                 "gpt-test", "gpt-deployment", "azure-openai", 8_000,
@@ -55,6 +69,28 @@ class ScoreAiChatOptionsFactoryTest {
             assertThat(openAi.getPromptCacheKey()).isEqualTo(manifest.promptCacheKey());
             assertThat(openAi.getStreamOptions().includeUsage()).isTrue();
         });
+    }
+
+    @Test
+    void sendsNoneReasoningEffortWhenOpenAiReasoningEffortIsAbsent() {
+        when(models.modelConfiguration("gpt-test")).thenReturn(configuration(
+                "gpt-test", "gpt-deployment", "openai", 8_000,
+                null, false, true, List.of(), null));
+
+        ChatOptions options = factory.create("gpt-test", null, null);
+
+        assertThat(options).isInstanceOfSatisfying(OpenAiChatOptions.class, openAi ->
+                assertThat(openAi.getReasoningEffort()).isEqualTo("none"));
+
+        ChatOptions blankOptions = factory.create("gpt-test", "  ", null);
+
+        assertThat(blankOptions).isInstanceOfSatisfying(OpenAiChatOptions.class, openAi ->
+                assertThat(openAi.getReasoningEffort()).isEqualTo("none"));
+
+        ChatOptions disabledOptions = factory.create("gpt-test", "disabled", null);
+
+        assertThat(disabledOptions).isInstanceOfSatisfying(OpenAiChatOptions.class, openAi ->
+                assertThat(openAi.getReasoningEffort()).isEqualTo("none"));
     }
 
     @Test

@@ -16,7 +16,8 @@ import {
   AiMutationInteraction,
   AiMutationPermissionMode,
   AiChatToolStatus,
-  AiReasoningEffortInfo
+  AiReasoningEffortInfo,
+  aiModelSessionLabel
 } from './domain/ai-chat-panel.model';
 
 type AiChatMessageDisplayItem =
@@ -233,6 +234,10 @@ export class AiChatMessageListComponent implements OnChanges {
 
   get selectedModel(): AiChatModelInfo | undefined {
     return this.availableModels.find(model => model.name === this.selectedModelName);
+  }
+
+  get selectedModelSessionLabel(): string {
+    return aiModelSessionLabel(this.selectedModel?.displayName || '', this.selectedReasoningEffort);
   }
 
   get permissionDisplayName(): string {

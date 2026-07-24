@@ -214,7 +214,7 @@ class ScoreAiConfigurationTest {
                 "gpt-5_6-sol", "xhigh",
                 "gpt-5_6-terra", "xhigh",
                 "gpt-5_6-luna", "xhigh"
-        ).forEach((modelName, effortName) -> assertEquals("Max", properties.getModels().get(modelName)
+        ).forEach((modelName, effortName) -> assertEquals("Extra High", properties.getModels().get(modelName)
                 .getReasoningEfforts().stream()
                 .filter(effort -> effortName.equals(effort.getName()))
                 .findFirst().orElseThrow().getDisplayName()));
@@ -249,6 +249,28 @@ class ScoreAiConfigurationTest {
         assertEquals("medium", registry.availableModels().getFirst().defaultReasoningEffort());
         assertEquals(List.of("Low", "Medium", "High"), registry.availableModels().getFirst()
                 .reasoningEfforts().stream().map(ScoreAiModelRegistry.ReasoningEffortDescriptor::displayName).toList());
+    }
+
+    @Test
+    void canonicalizesLegacyNoneAndDeduplicatesDisabledReasoningEffort() {
+        ScoreAiProperties properties = properties("claude-sonnet-5", "azure-foundry");
+        ScoreAiProperties.Provider provider = properties.getProviders().get("azure-foundry");
+        provider.setType("anthropic");
+        provider.setBaseUrl("https://example.services.ai.azure.com");
+        provider.setKey("test-key");
+        ScoreAiProperties.Model model = properties.getModels().get("claude-sonnet-5");
+        model.setReasoningEfforts(List.of(
+                reasoningEffort("none", "Legacy None", "Legacy disabled setting."),
+                reasoningEffort("disabled", "Disabled", "Disable reasoning."),
+                reasoningEffort("medium", "Medium", "Balanced reasoning.")));
+        model.getModelCapabilities().setThinkingModes(List.of("ADAPTIVE", "DISABLED"));
+
+        ScoreAiModelRegistry registry = new ScoreAiModelRegistry(
+                properties, Map.of("claude-sonnet-5", mock(ChatModel.class)));
+
+        assertEquals("disabled", registry.resolveReasoningEffort("claude-sonnet-5", "none"));
+        assertEquals(1, registry.availableModels().getFirst().reasoningEfforts().stream()
+                .filter(effort -> "disabled".equals(effort.name())).count());
     }
 
     @Test

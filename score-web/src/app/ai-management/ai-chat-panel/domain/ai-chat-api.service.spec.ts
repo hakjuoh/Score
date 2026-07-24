@@ -2,7 +2,7 @@ import {provideHttpClient} from '@angular/common/http';
 import {HttpTestingController, provideHttpClientTesting} from '@angular/common/http/testing';
 import {TestBed} from '@angular/core/testing';
 import {AiChatApiService} from './ai-chat-api.service';
-import {AiChatModelInfo} from './ai-chat-panel.model';
+import {AiChatModelInfo, AiConversationModelResponse} from './ai-chat-panel.model';
 import {HANDLE_HTTP_ERROR_LOCALLY} from '../../../authentication/auth.service';
 
 describe('AiChatApiService cancellation contract', () => {
@@ -125,18 +125,22 @@ describe('AiChatApiService cancellation contract', () => {
     const request = httpTesting.expectOne('/api/ai/chat/models');
     request.flush([{
       name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL',
-      provider: 'azure-openai', defaultModel: true, defaultReasoningEffort: 'medium',
-      reasoningEfforts: ['low', 'medium', 'high', 'xhigh']
+      provider: 'azure-openai', defaultModel: true, defaultReasoningEffort: 'none',
+      reasoningEfforts: ['none', 'low', 'medium', 'high', 'xhigh']
     }]);
 
     expect(models[0].reasoningEfforts.map(effort => effort.displayName))
-      .toEqual(['Low', 'Medium', 'High', 'Max']);
-    expect(models[0].reasoningEfforts[0].description).toContain('lighter reasoning');
+      .toEqual(['Disabled', 'Low', 'Medium', 'High', 'Extra High']);
+    expect(models[0].defaultReasoningEffort).toBe('disabled');
+    expect(models[0].reasoningEfforts[0].description).toContain('disabled');
+    expect(models[0].reasoningEfforts[1].description).toContain('lighter reasoning');
     expect(models[0].description).toContain('Azure OpenAI');
   });
 
   it('updates the model for an owner-scoped conversation', () => {
-    service.updateConversationModel('conversation/one', 'gpt-5_6-sol', 'high').subscribe();
+    let response: AiConversationModelResponse | undefined;
+    service.updateConversationModel('conversation/one', 'gpt-5_6-sol', 'high')
+      .subscribe(value => response = value);
 
     const request = httpTesting.expectOne(
       '/api/ai/chat/conversations/conversation%2Fone/model'
@@ -149,6 +153,40 @@ describe('AiChatApiService cancellation contract', () => {
       conversationId: 'conversation/one', modelName: 'gpt-5_6-sol',
       reasoningEffort: 'high'
     });
+    expect(response?.reasoningEffort).toBe('high');
+  });
+
+  it('normalizes a legacy none name in structured reasoning effort data', () => {
+    let models: AiChatModelInfo[] = [];
+    service.getAvailableModels().subscribe(response => models = response);
+
+    const request = httpTesting.expectOne('/api/ai/chat/models');
+    request.flush([{
+      name: 'claude-sonnet-5', displayName: 'Claude Sonnet 5',
+      provider: 'azure-foundry', defaultModel: true, defaultReasoningEffort: 'none',
+      reasoningEfforts: [{name: 'none', displayName: 'Legacy None', description: 'Legacy setting.'}]
+    }]);
+
+    expect(models[0].defaultReasoningEffort).toBe('disabled');
+    expect(models[0].reasoningEfforts).toEqual([{
+      name: 'disabled', displayName: 'Disabled', description: 'Legacy setting.'
+    }]);
+  });
+
+  it('normalizes a legacy none reasoning effort in model updates', () => {
+    let response: AiConversationModelResponse | undefined;
+    service.updateConversationModel('conversation/one', 'claude-sonnet-5', 'disabled')
+      .subscribe(value => response = value);
+
+    const request = httpTesting.expectOne(
+      '/api/ai/chat/conversations/conversation%2Fone/model'
+    );
+    request.flush({
+      conversationId: 'conversation/one', modelName: 'claude-sonnet-5',
+      reasoningEffort: 'none'
+    });
+
+    expect(response?.reasoningEffort).toBe('disabled');
   });
 
   it.each(['APPROVE', 'DENY'] as const)(
