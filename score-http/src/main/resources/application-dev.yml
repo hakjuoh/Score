@@ -101,7 +101,7 @@ score:
             display-name: High
             description: Greater reasoning depth for complex problems.
           - name: max
-            display-name: Max
+            display-name: Extra High
             description: Maximum reasoning depth for the most complex problems.
         max-tokens: 16000
         context-window: ${CLAUDE_FABLE_5_CONTEXT_WINDOW:200000}
@@ -137,7 +137,7 @@ score:
             display-name: High
             description: Greater reasoning depth for complex problems.
           - name: max
-            display-name: Max
+            display-name: Extra High
             description: Maximum reasoning depth for the most complex problems.
         max-tokens: 16000
         context-window: ${CLAUDE_OPUS_4_8_CONTEXT_WINDOW:200000}
@@ -172,7 +172,7 @@ score:
             display-name: High
             description: Greater reasoning depth for complex problems.
           - name: max
-            display-name: Max
+            display-name: Extra High
             description: Maximum reasoning depth for the most complex problems.
         max-tokens: 16000
         context-window: ${CLAUDE_SONNET_5_CONTEXT_WINDOW:200000}
@@ -230,8 +230,11 @@ score:
           tool-output-token-limit: 32000
           provider-compaction-enabled: false
         reasoning-efforts:
-          - name: light
-            display-name: Light
+          - name: minimal
+            display-name: Minimal
+            description: Use only minimal reasoning for simple requests.
+          - name: low
+            display-name: Low
             description: Fast responses with lighter reasoning.
           - name: medium
             display-name: Medium
@@ -240,7 +243,7 @@ score:
             display-name: High
             description: Greater reasoning depth for complex problems.
           - name: xhigh
-            display-name: Max
+            display-name: Extra High
             description: Maximum reasoning depth for the most complex problems.
         model-capabilities:
           reasoning-model: true
@@ -260,8 +263,11 @@ score:
           tool-output-token-limit: 32000
           provider-compaction-enabled: false
         reasoning-efforts:
-          - name: light
-            display-name: Light
+          - name: minimal
+            display-name: Minimal
+            description: Use only minimal reasoning for simple requests.
+          - name: low
+            display-name: Low
             description: Fast responses with lighter reasoning.
           - name: medium
             display-name: Medium
@@ -270,7 +276,7 @@ score:
             display-name: High
             description: Greater reasoning depth for complex problems.
           - name: xhigh
-            display-name: Max
+            display-name: Extra High
             description: Maximum reasoning depth for the most complex problems.
         model-capabilities:
           reasoning-model: true
@@ -281,7 +287,7 @@ score:
         description: Fast and affordable agentic model for lightweight everyday tasks.
         provider: azure-openai
         model: gpt-5.6-luna
-        reasoning-effort: light
+        reasoning-effort: low
         context-window: ${GPT_5_6_LUNA_CONTEXT_WINDOW:200000}
         context-budget:
           output-reserve-tokens: 32768
@@ -290,8 +296,11 @@ score:
           tool-output-token-limit: 32000
           provider-compaction-enabled: false
         reasoning-efforts:
-          - name: light
-            display-name: Light
+          - name: minimal
+            display-name: Minimal
+            description: Use only minimal reasoning for simple requests.
+          - name: low
+            display-name: Low
             description: Fast responses with lighter reasoning.
           - name: medium
             display-name: Medium
@@ -300,7 +309,7 @@ score:
             display-name: High
             description: Greater reasoning depth for complex problems.
           - name: xhigh
-            display-name: Max
+            display-name: Extra High
             description: Maximum reasoning depth for the most complex problems.
         model-capabilities:
           reasoning-model: true

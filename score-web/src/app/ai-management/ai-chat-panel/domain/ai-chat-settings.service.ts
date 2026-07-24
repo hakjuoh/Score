@@ -1,6 +1,7 @@
 import {Injectable, inject} from '@angular/core';
 import {AiChatPanelState} from './ai-chat-panel-state';
 import {AiChatSessionPersistenceService} from './ai-chat-session-persistence.service';
+import {aiModelSessionLabel} from './ai-chat-panel.model';
 
 @Injectable()
 export class AiChatSettingsService {
@@ -55,7 +56,7 @@ export class AiChatSettingsService {
     this.persistence.persistSelection(state);
     state.messages.push({
       role: 'debug',
-      content: `Model changed to ${displayName} with ${reasoningEffort} reasoning effort.`
+      content: `Model changed to ${aiModelSessionLabel(displayName, reasoningEffort)}.`
     });
   }
 
