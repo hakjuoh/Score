@@ -18,6 +18,21 @@ public interface WorkflowRunControl {
 
     void recordUsage(AiUsageSnapshot usage);
 
+    /**
+     * Records a model attempt that was already admitted before a terminal fence.
+     * Implementations may accept it until settlement even when its enclosing call
+     * completes exactly on the deadline boundary.
+     */
+    default void recordAttemptUsage(AiUsageSnapshot usage) {
+        recordUsage(usage);
+    }
+
     /** Registers a live usage source and a fence that suppresses post-terminal writes. */
     void registerUsage(Supplier<AiUsageSnapshot> usage, Runnable lateWriteFence);
+
+    /** Registers usage owned by an already admitted model attempt. */
+    default void registerAttemptUsage(Supplier<AiUsageSnapshot> usage,
+                                      Runnable lateWriteFence) {
+        registerUsage(usage, lateWriteFence);
+    }
 }

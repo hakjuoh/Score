@@ -21,7 +21,7 @@ class AgentFactoryTest {
         ToolSet available = new ToolSet(List.of(tool("read", AiTool.ToolEffect.READ_ONLY),
                 tool("write", AiTool.ToolEffect.MUTATION)));
 
-        ResolvedAgent agent = AgentFactory.binding().create(definition, model, available);
+        AgentSession agent = AgentFactory.binding().create(definition, model, available);
 
         assertThat(agent.model()).isSameAs(model);
         assertThat(agent.instruction().value()).isEqualTo("Stay grounded.");
@@ -30,7 +30,7 @@ class AgentFactoryTest {
     }
 
     @Test
-    void emptyToolSetIsAValidResolvedAgent() {
+    void emptyToolSetIsAValidAgentSession() {
         AgentDefinition definition = new AgentDefinition(new Agent.AgentId("gateway-agent"),
                 "Gateway", "Routes",
                 new AgentDefinition.InstructionTemplate("Route safely."));

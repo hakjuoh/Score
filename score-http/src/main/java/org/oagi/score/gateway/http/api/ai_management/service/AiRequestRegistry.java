@@ -491,6 +491,23 @@ public class AiRequestRegistry implements ConversationCommitFence {
         });
     }
 
+    /**
+     * Linearizes Tool admission with cancellation/timeout state changes.
+     * The Tool may run after this method returns because its execution was
+     * admitted before a later stop signal; a stop that wins the lock rejects it.
+     */
+    public void admitToolExecution(String requestId) {
+        boolean admitted = stateStore.withRequestLock(requestId, storage -> {
+            AiSharedRequestState state = storage.get(requestId);
+            return state != null && instanceId.equals(state.workerInstanceId())
+                    && "RUNNING".equals(state.status());
+        });
+        if (!admitted) {
+            throw new java.util.concurrent.CancellationException(
+                    "The assistant request stopped before Tool execution.");
+        }
+    }
+
     /** Applies the registry's normal timeout fence when a nested execution budget expires. */
     public void timeoutExecution(String requestId) {
         Entry entry = localRequests.get(requestId);

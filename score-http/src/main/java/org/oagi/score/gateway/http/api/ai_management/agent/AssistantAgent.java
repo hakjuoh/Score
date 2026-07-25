@@ -1,65 +1,69 @@
 package org.oagi.score.gateway.http.api.ai_management.agent;
 
-import org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor;
-import org.springframework.beans.factory.ObjectProvider;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrailChain;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
 /**
- * User-facing default Agent. It handles ordinary requests itself and hands
- * explicitly delegated work to the Planner Agent.
+ * User-facing Agent definition.
+ *
+ * <p>The definition supplies the request policy for the shared
+ * {@code AgentRunner}; it does not execute the chat model itself.</p>
  */
 @Component("connectcenter-assistant")
-public final class AssistantAgent implements WorkflowAgent {
+public final class AssistantAgent implements Agent {
 
-    public static final AgentId ASSISTANT_ID = new AgentId("connectcenter-assistant");
-    public static final AgentId PLANNER_ID = new AgentId("workflow-planner");
+    public static final Agent.AgentId ASSISTANT_ID = new Agent.AgentId("connectcenter-assistant");
+    public static final Agent.AgentId PLANNER_ID = new Agent.AgentId("workflow-planner");
 
     private final AiAgentCatalog agents;
-    private final ObjectProvider<AiChatExecutor> executors;
-
-    @Autowired
-    public AssistantAgent(AiAgentCatalog agents,
-                          ObjectProvider<AiChatExecutor> executors) {
-        this.agents = agents;
-        this.executors = executors;
-    }
+    private final AgentOutputGuardrailChain outputGuardrails;
+    private final ScoreAiObservability observability;
 
     public AssistantAgent(AiAgentCatalog agents) {
-        this(agents, null);
+        this(agents, null, ScoreAiObservability.noop());
+    }
+
+    @Autowired
+    public AssistantAgent(AiAgentCatalog agents, AgentOutputGuardrailChain outputGuardrails,
+                          ScoreAiObservability observability) {
+        this.agents = agents;
+        this.outputGuardrails = outputGuardrails;
+        this.observability = observability;
     }
 
     @Override
     public AgentDefinition definition() {
-        return agents.configuredRootDefinition();
+        AgentDefinition configured = agents.configuredRootDefinition();
+        return new AgentDefinition(configured.id(), configured.name(), configured.description(),
+                configured.instruction(), this::prepare, AgentToolHandler.transport(),
+                AgentResponseHandler.complete(), AgentGuardrailHandlers.publicOutput(
+                        outputGuardrails, observability, "assistant_output",
+                        Map.of("agent_id", ASSISTANT_ID.value())), false);
     }
 
-    public Instruction instruction(Map<String, ?> parameters) {
+    /** Exposes the configured definition without making the Agent an executor. */
+    public AgentDefinition configuredDefinition() {
+        return definition();
+    }
+
+    public Agent.Instruction instruction(Map<String, ?> parameters) {
         return definition().instruction().render(parameters);
     }
 
     @Override
-    public AgentId callId() {
+    public Agent.AgentId callId() {
         return ASSISTANT_ID;
     }
 
-    @Override
-    public AgentDecision execute(AgentWorkflowContext context) {
-        if (delegationRequested(context)) {
-            return new AgentDecision.Handoff(PLANNER_ID);
+    private AgentRunRequest prepare(Agent agent, AgentWorkflowContext context) {
+        if (context.request().delegationRequested()) {
+            return new AgentRunRequest.Skip(new AgentDecision.Handoff(PLANNER_ID));
         }
-        AiChatExecutor executor = executors != null ? executors.getIfAvailable() : null;
-        if (executor == null) {
-            throw new IllegalStateException("No AI chat executor is configured.");
-        }
-        return new AgentDecision.Complete(executor.execute(
-                context.execution().withWorkflowObservationContext(
-                        context.observationContext())));
-    }
-
-    private boolean delegationRequested(AgentWorkflowContext context) {
-        return context.request().delegationRequested();
+        return new AgentRunRequest.Chat(context.execution().withWorkflowObservationContext(
+                context.observationContext()));
     }
 }

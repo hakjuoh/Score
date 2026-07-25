@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /** Single mandatory Tool boundary used by every provider and Spring AI callback. */
 public final class ToolExecutionGateway {
@@ -56,9 +57,32 @@ public final class ToolExecutionGateway {
 
     public static ToolExecutionGateway disabled() { return DISABLED; }
 
+    /** Adds a terminal execution fence without changing the Tool authorization policy. */
+    public ToolExecutionGateway withAdditionalFence(RequestFence additional) {
+        if (disabled || additional == null || additional == RequestFence.ALLOW) return this;
+        return new ToolExecutionGateway(tools, guardrails, authorization,
+                new RequestFence() {
+                    @Override
+                    public void verifyActive(ExecutionScope scope) {
+                        fence.verifyActive(scope);
+                        additional.verifyActive(scope);
+                    }
+
+                    @Override
+                    public <T> T callIfActive(ExecutionScope scope, Supplier<T> action) {
+                        return fence.callIfActive(scope,
+                                () -> additional.callIfActive(scope, action));
+                    }
+                }, observer, state, rawOutputByteLimit);
+    }
+
+    /** Whether this binding can execute a Tool. */
+    public boolean enabled() { return !disabled; }
+
     public AiTool.ToolResult execute(AiTool.ToolId toolId, AiTool.ToolArguments supplied,
                                      ExecutionScope scope) {
         if (disabled) throw new IllegalStateException("This Agent has no Tool execution gateway.");
+        fence.verifyActive(scope);
         AiTool tool = tools.find(toolId).orElseThrow(() ->
                 new IllegalArgumentException("Tool is not authorized for this Agent: " + toolId.value()));
         ToolGuardrailRegistry.Set policies = guardrails.resolve(toolId, scope);
@@ -110,7 +134,13 @@ public final class ToolExecutionGateway {
     private AiTool.ToolResult invoke(AiTool tool, AiTool.ToolArguments arguments,
                                      List<ToolOutputGuardrail> outputPolicies,
                                      ExecutionScope scope) {
-        fence.verifyActive(scope);
+        return fence.callIfActive(scope,
+                () -> invokeActive(tool, arguments, outputPolicies, scope));
+    }
+
+    private AiTool.ToolResult invokeActive(AiTool tool, AiTool.ToolArguments arguments,
+                                           List<ToolOutputGuardrail> outputPolicies,
+                                           ExecutionScope scope) {
         ToolAuthorizationPolicy.Request authorizationRequest =
                 new ToolAuthorizationPolicy.Request(tool.specification(), arguments, scope);
         java.util.ArrayList<ToolAuthorizationPolicy> executionPolicies = new java.util.ArrayList<>();
@@ -257,9 +287,25 @@ public final class ToolExecutionGateway {
         byte[] bytes = raw.json().getBytes(StandardCharsets.UTF_8);
         if (bytes.length <= rawOutputByteLimit) return raw;
         int limit = Math.toIntExact(Math.min(rawOutputByteLimit, Integer.MAX_VALUE));
-        String bounded = new String(bytes, 0, limit, StandardCharsets.UTF_8)
+        int safeEnd = completeUtf8Prefix(raw.json(), limit);
+        String bounded = raw.json().substring(0, safeEnd)
                 + "\n[Tool output truncated by the application boundary]";
         return new AiTool.ToolResult(bounded, raw.metadata());
+    }
+
+    private int completeUtf8Prefix(String value, int byteLimit) {
+        int bytes = 0;
+        int characterEnd = 0;
+        for (int offset = 0; offset < value.length();) {
+            int codePoint = value.codePointAt(offset);
+            int codePointBytes = new String(Character.toChars(codePoint))
+                    .getBytes(StandardCharsets.UTF_8).length;
+            if (bytes + codePointBytes > byteLimit) break;
+            bytes += codePointBytes;
+            offset += Character.charCount(codePoint);
+            characterEnd = offset;
+        }
+        return characterEnd;
     }
 
     private void observeDecision(GuardrailDecision decision, ExecutionScope scope, AiTool tool) {
@@ -274,5 +320,10 @@ public final class ToolExecutionGateway {
     public interface RequestFence {
         RequestFence ALLOW = ignored -> { };
         void verifyActive(ExecutionScope scope);
+
+        default <T> T callIfActive(ExecutionScope scope, Supplier<T> action) {
+            verifyActive(scope);
+            return Objects.requireNonNull(action, "action").get();
+        }
     }
 }

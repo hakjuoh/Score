@@ -7,20 +7,26 @@ import org.oagi.score.gateway.http.api.cc_management.model.acc.AccSummaryRecord;
 import org.oagi.score.gateway.http.api.cc_management.model.asccp.AsccpManifestId;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentDecision;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentDefinition;
-import org.oagi.score.gateway.http.api.ai_management.agent.AgentFactory;
-import org.oagi.score.gateway.http.api.ai_management.agent.AgentInvocation;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrails;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrailHandlers;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentRunRequest;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutput;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentWorkflowContext;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
-import org.oagi.score.gateway.http.api.ai_management.agent.ResolvedAgent;
+import org.oagi.score.gateway.http.api.ai_management.agent.DefinedAgent;
 import org.oagi.score.gateway.http.api.ai_management.agent.DefinitionGeneratorAgent;
 import org.oagi.score.gateway.http.api.ai_management.agent.NameSuggesterAgent;
-import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionService;
-import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
+import org.oagi.score.gateway.http.api.ai_management.execution.ChatExecutionContext;
+import org.oagi.score.gateway.http.api.ai_management.agent.AiModelCatalog;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrailChain;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
-import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
+import org.oagi.score.gateway.http.api.ai_management.workflow.AgentRunner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,38 +46,40 @@ import static org.springframework.util.StringUtils.hasLength;
 public class AiModelQueryService {
 
     private final RepositoryFactory repositoryFactory;
-    private final AgentExecutionService execution;
-    private final SpringAiModelCatalog models;
+    private final AgentRunner runner;
+    private final AiModelCatalog models;
     private final AgentOutputGuardrailChain outputGuardrails;
-    private final AgentFactory agents = AgentFactory.binding();
     private final DefinitionGeneratorAgent definitionGenerator;
     private final NameSuggesterAgent nameSuggester;
     private final ScoreAiObservability observability;
+    private final PublicOutputDisclosureGate disclosureGate;
 
     @Autowired
     public AiModelQueryService(RepositoryFactory repositoryFactory,
-                               AgentExecutionService execution,
-                               SpringAiModelCatalog models,
+                               AgentRunner runner,
+                               AiModelCatalog models,
                                AgentOutputGuardrailChain outputGuardrails,
                                DefinitionGeneratorAgent definitionGenerator,
                                NameSuggesterAgent nameSuggester,
                                ScoreAiObservability observability) {
         this.repositoryFactory = Objects.requireNonNull(repositoryFactory);
-        this.execution = Objects.requireNonNull(execution);
+        this.runner = Objects.requireNonNull(runner);
         this.models = Objects.requireNonNull(models);
         this.outputGuardrails = Objects.requireNonNull(outputGuardrails);
         this.definitionGenerator = Objects.requireNonNull(definitionGenerator);
         this.nameSuggester = Objects.requireNonNull(nameSuggester);
         this.observability = Objects.requireNonNull(observability);
+        this.disclosureGate = new PublicOutputDisclosureGate(
+                this.outputGuardrails, this.observability);
     }
 
     AiModelQueryService(RepositoryFactory repositoryFactory,
-                        AgentExecutionService execution,
-                        SpringAiModelCatalog models,
+                        AgentRunner runner,
+                        AiModelCatalog models,
                         AgentOutputGuardrailChain outputGuardrails,
                         DefinitionGeneratorAgent definitionGenerator,
                         NameSuggesterAgent nameSuggester) {
-        this(repositoryFactory, execution, models, outputGuardrails, definitionGenerator,
+        this(repositoryFactory, runner, models, outputGuardrails, definitionGenerator,
                 nameSuggester, ScoreAiObservability.noop());
     }
 
@@ -195,7 +203,6 @@ public class AiModelQueryService {
     String run(AgentDefinition definition, ScoreUser requester,
                String modelId, String prompt, String executionKind,
                String traceparent, String tracestate) {
-        ResolvedAgent agent = agents.create(definition, models.require(modelId), ToolSet.empty());
         String correlation = UUID.randomUUID().toString();
         String requesterId = requester != null && requester.userId() != null
                 ? requester.userId().value().toString()
@@ -210,22 +217,46 @@ public class AiModelQueryService {
                 requester, 0L, traceparent, tracestate);
         turn.executionStarted();
         try {
-            var result = execution.execute(new AgentInvocation(null, agent,
-                    new AiMessage.User(prompt), List.of(), scope, null));
-            var guarded = outputGuardrails.evaluate(new AgentOutputGuardrail.Request(
-                    AgentOutputGuardrail.Scope.PUBLIC, result.response(), scope,
-                    Map.of("feature", definition.id().value())));
-            observability.recordGuardrails(scope.requestId(), "agent_output",
-                    guarded.decisions(), guarded.refusal());
-            if (!guarded.allowed()) {
-                throw new IllegalStateException(
-                        "The generated content was not accepted by output policy.");
+            AgentDefinition runDefinition = new AgentDefinition(definition.id(), definition.name(),
+                    definition.description(), definition.instruction(),
+                    (agent, context) -> new AgentRunRequest.Model(modelId,
+                            definition.instruction().render(), new AiMessage.User(prompt),
+                            List.of(), scope,
+                            Map.of("feature", definition.id().value())),
+                    org.oagi.score.gateway.http.api.ai_management.agent.AgentToolHandler.none(),
+                    response -> new AgentDecision.Complete(new AgentOutput(
+                            removeReasoning(response.result().response().content()),
+                            response.result().metadata().attributes())),
+                    guardrails(), false);
+            ChatRequest transport = new ChatRequest(prompt, scope.requestId(),
+                    definition.id().value(), scope.conversationId(), null, List.of(), null,
+                    modelId, null, null);
+            ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
+                    transport, List.of(), new AiMessage.User(prompt), requester, null,
+                    false, false,
+                    org.oagi.score.gateway.http.api.ai_management.agent.AgentToolPolicy.NONE, 0);
+            AgentWorkflowContext workflow = AgentWorkflowContext.root(execution,
+                    new AgentWorkflowContext.Request(scope.requestId(), scope.conversationId(),
+                            requesterId, modelId, prompt, false, false, 1, "balanced",
+                            null, false, false), 1);
+            AgentDecision decision = runner.run(new DefinedAgent(runDefinition), workflow);
+            if (!(decision instanceof AgentDecision.Complete complete)) {
+                throw new IllegalStateException("Standalone Agent did not return a completed result.");
             }
+            String generated = disclosureGate.require(complete.result(), scope,
+                    Map.of("feature", definition.id().value()), definition.id());
             turn.complete("COMPLETED", null);
-            return removeReasoning(guarded.output().content());
+            return generated;
         } catch (RuntimeException failure) {
             turn.complete(failure instanceof CancellationException ? "CANCELLED" : "FAILED", failure);
             throw failure;
         }
+    }
+
+    private AgentGuardrails guardrails() {
+        return new AgentGuardrails(List.of(), List.of(AgentGuardrailHandlers.output(
+                outputGuardrails, observability, AgentOutputGuardrail.Scope.PUBLIC,
+                "agent_output", Map.of("feature", "standalone"))),
+                AgentOutputGuardrail.Scope.PUBLIC);
     }
 }

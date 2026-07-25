@@ -1,17 +1,16 @@
 package org.oagi.score.gateway.http.api.ai_management.agent;
 
-import org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 
 import java.util.Objects;
 
-/** Declarative result of one Workflow Agent call. */
+/** Declarative result returned by one {@code AgentRunner} call. */
 public sealed interface AgentDecision permits AgentDecision.Complete,
         AgentDecision.Handoff, AgentDecision.Delegate {
 
     /** Finishes this Agent's assigned unit of work. */
-    record Complete(AiChatExecutor.Result result) implements AgentDecision {
+    record Complete(AgentOutput result) implements AgentDecision {
         public Complete {
             Objects.requireNonNull(result, "result");
         }
