@@ -1,18 +1,25 @@
 package org.oagi.score.gateway.http.api.ai_management.conversation;
 
-import org.oagi.score.gateway.http.api.ai_management.agent.AgentFactory;
-import org.oagi.score.gateway.http.api.ai_management.agent.AgentInvocation;
+import org.oagi.score.gateway.http.api.ai_management.agent.Agent;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentDecision;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentDefinition;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrails;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrailHandlers;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutput;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentRequestHandler;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentResponseHandler;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentRunRequest;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentWorkflowContext;
+import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
-import org.oagi.score.gateway.http.api.ai_management.agent.CatalogBackedAgent;
+import org.oagi.score.gateway.http.api.ai_management.agent.DefinedAgent;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
-import org.oagi.score.gateway.http.api.ai_management.agent.ResolvedAgent;
-import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionService;
-import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
+import org.oagi.score.gateway.http.api.ai_management.execution.ChatExecutionContext;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrailChain;
-import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
-import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
+import org.oagi.score.gateway.http.api.ai_management.tool.ToolExecutionGateway;
+import org.oagi.score.gateway.http.api.ai_management.workflow.AgentRunner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -21,44 +28,64 @@ import java.util.Map;
 
 /** Shared manual/automatic compaction implemented as a normal no-Tool Agent run. */
 @Component("compactor-agent")
-public final class ConversationCompactor extends CatalogBackedAgent {
+public final class ConversationCompactor {
 
-    private final AgentExecutionService execution;
-    private final SpringAiModelCatalog models;
+    private final AgentRunner runner;
     private final AgentOutputGuardrailChain outputGuardrails;
     private final ScoreAiObservability observability;
-    private final AgentFactory agents = AgentFactory.binding();
+    private final AgentDefinition baseDefinition;
 
     @Autowired
-    public ConversationCompactor(AgentExecutionService execution, SpringAiModelCatalog models,
+    public ConversationCompactor(AgentRunner runner,
                                  AgentOutputGuardrailChain outputGuardrails,
                                  AiAgentCatalog catalog,
                                  ScoreAiObservability observability) {
-        super(catalog);
-        this.execution = execution; this.models = models; this.outputGuardrails = outputGuardrails;
+        this.runner = runner;
+        this.outputGuardrails = outputGuardrails;
         this.observability = observability;
+        this.baseDefinition = catalog.systemDefinition("compactor-agent");
     }
 
-    ConversationCompactor(AgentExecutionService execution, SpringAiModelCatalog models,
-                          AgentOutputGuardrailChain outputGuardrails,
+    ConversationCompactor(AgentRunner runner, AgentOutputGuardrailChain outputGuardrails,
                           AiAgentCatalog catalog) {
-        this(execution, models, outputGuardrails, catalog, ScoreAiObservability.noop());
+        this(runner, outputGuardrails, catalog, ScoreAiObservability.noop());
     }
 
-    public String compact(String modelId, List<AiMessage> history, AiMessage.User request,
-                          ExecutionScope parentScope) {
-        ResolvedAgent agent = agents.create(definition(), models.require(modelId), ToolSet.empty());
+    public AgentOutput compact(String modelId, List<AiMessage> history, AiMessage.User request,
+                               ExecutionScope parentScope,
+                               AgentOutputGuardrail.Scope outputScope) {
         ExecutionScope scope = parentScope.withPurpose(ExecutionScope.Purpose.COMPACTION);
-        var result = execution.execute(new AgentInvocation(null, agent, request, history, scope, null));
-        var guarded = outputGuardrails.evaluate(new AgentOutputGuardrail.Request(
-                AgentOutputGuardrail.Scope.INTERNAL, result.response(), scope,
-                Map.of("feature", "compaction")));
-        observability.recordGuardrails(scope.requestId(), "compaction_output",
-                guarded.decisions(), guarded.refusal());
-        if (!guarded.allowed()) {
-            throw new IllegalStateException("The compacted memory was not accepted by output policy.");
+        ChatExecutionContext execution = ChatExecutionContext.standalone(
+                scope.requestId(), scope.conversationId(), baseDefinition.id().value(), modelId,
+                request, null, scope.purpose());
+        AgentWorkflowContext workflow = AgentWorkflowContext.root(execution,
+                new AgentWorkflowContext.Request(scope.requestId(), scope.conversationId(),
+                        scope.requesterId(), modelId, request.content(), false, false,
+                        1, "balanced", null, false, false), 1);
+        Agent agent = new DefinedAgent(new AgentDefinition(baseDefinition.id(),
+                baseDefinition.name(), baseDefinition.description(), baseDefinition.instruction(),
+                requestHandler(modelId, history, request, scope),
+                (ignored, context) -> new org.oagi.score.gateway.http.api.ai_management.agent.AgentToolBinding(
+                        org.oagi.score.gateway.http.api.ai_management.tool.ToolSet.empty(),
+                        ToolExecutionGateway.disabled()),
+                AgentResponseHandler.complete(), guardrails(outputScope), false));
+        AgentDecision decision = runner.run(agent, workflow);
+        if (!(decision instanceof AgentDecision.Complete complete)) {
+            throw new IllegalStateException("Compaction Agent did not return a completed result.");
         }
-        return guarded.output().content();
+        return complete.result();
     }
 
+    private AgentRequestHandler requestHandler(String modelId, List<AiMessage> history,
+                                               AiMessage.User request, ExecutionScope scope) {
+        return (agent, context) -> new AgentRunRequest.Model(modelId,
+                baseDefinition.instruction().render(), request, history, scope,
+                Map.of("feature", "compaction"));
+    }
+
+    private AgentGuardrails guardrails(AgentOutputGuardrail.Scope scope) {
+        return new AgentGuardrails(List.of(), List.of(AgentGuardrailHandlers.output(
+                outputGuardrails, observability, scope,
+                "compaction_output", Map.of("feature", "compaction"))), scope);
+    }
 }

@@ -2,16 +2,25 @@ package org.oagi.score.gateway.http.api.ai_management.agent;
 
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
-import org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor;
+import org.oagi.score.gateway.http.api.ai_management.execution.ChatExecutionContext;
+import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionService;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalScope;
+import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentInputGuardrail;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
-import org.oagi.score.gateway.http.api.ai_management.workflow.WorkflowResult;
-import org.springframework.ai.chat.messages.UserMessage;
+import org.oagi.score.gateway.http.api.ai_management.workflow.AgentRunner;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,6 +30,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 class AssignedAgentTest {
@@ -30,11 +40,11 @@ class AssignedAgentTest {
         AgentDefinition definition = new AgentDefinition(new Agent.AgentId("researcher"),
                 "Researcher", "Finds evidence",
                 new AgentDefinition.InstructionTemplate("Research safely."));
-        AiChatExecutor executor = mock(AiChatExecutor.class);
+        AgentExecutionService executor = mock(AgentExecutionService.class);
         AgentInstructions instructions = mock(AgentInstructions.class);
         when(instructions.render(any(AgentInstructions.Template.class), anyMap()))
                 .thenReturn(new Agent.Instruction("Bounded assignment context."));
-        when(executor.execute(any())).thenReturn(new AiChatExecutor.Result(
+        when(executor.executeChat(any(AgentChatSession.class))).thenReturn(new AgentChatResult(
                 "verified", Map.of("modelId", "model")));
 
         AiTrajectoryRecorder rootRecorder = mock(AiTrajectoryRecorder.class);
@@ -42,18 +52,14 @@ class AssignedAgentTest {
         when(rootRecorder.forkSubagent(eq("researcher"), any(), anyMap()))
                 .thenReturn(childRecorder);
         when(childRecorder.conversationId()).thenReturn("durable-child-42");
-        AiChatExecutor.Context execution = mock(AiChatExecutor.Context.class);
         ChatRequest chatRequest = new ChatRequest("Inspect it", "request-1", null,
                 "conversation-1", null, List.of(), null,
                 "model", "high", "ask");
-        when(execution.request()).thenReturn(chatRequest);
-        when(execution.userMessage()).thenReturn(new UserMessage("Inspect it"));
-        when(execution.recorder()).thenReturn(rootRecorder);
-        when(execution.toolsEnabled()).thenReturn(true);
-        when(execution.toolPolicy()).thenReturn(AiChatExecutor.ToolPolicy.READ_ONLY);
-        when(execution.approvalScope()).thenReturn(
-                AiMutationApprovalScope.root("conversation-1"));
-        when(execution.guardrailDecisionIds()).thenReturn(List.of("guard-1"));
+        ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
+                chatRequest, List.of(), new AiMessage.User("Inspect it"), null, rootRecorder,
+                true, false, AgentToolPolicy.READ_ONLY, 0,
+                AiMutationApprovalScope.root("conversation-1"))
+                .withGuardrailDecisions(List.of("guard-1"));
 
         AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
                 "researcher", "Research", "Verify the current record.",
@@ -73,21 +79,25 @@ class AssignedAgentTest {
                         "research-work", "main:1:research-work", "main", 1))
                 .withAssignment(plan, "research", task, List.of(upstream));
 
-        AgentDecision decision = new AssignedAgent(definition, executor, instructions)
-                .execute(context);
+        AssignedAgentHandlers handlers = new AssignedAgentHandlers(instructions);
+        AssignedAgent assigned = new AssignedAgent(definition, handlers.requestHandler(),
+                handlers.responseHandler());
+        AgentDecision decision = new AgentRunner(executor, null, null, instructions,
+                List.of(assigned)).run(assigned.callId(), context);
 
-        assertThat(((AgentDecision.Complete) decision).result().answer())
+        assertThat(((AgentDecision.Complete) decision).result().content())
                 .isEqualTo("verified");
-        var child = org.mockito.ArgumentCaptor.forClass(AiChatExecutor.Context.class);
-        verify(executor).execute(child.capture());
-        assertThat(child.getValue().request().conversationId())
+        var child = org.mockito.ArgumentCaptor.forClass(AgentChatSession.class);
+        verify(executor).executeChat(child.capture());
+        ChatExecutionContext childContext = (ChatExecutionContext) child.getValue().context();
+        assertThat(childContext.conversationId())
                 .isEqualTo("durable-child-42");
-        assertThat(child.getValue().toolPolicy())
-                .isEqualTo(AiChatExecutor.ToolPolicy.READ_ONLY);
-        assertThat(child.getValue().workflowObservationContext())
+        assertThat(childContext.toolPolicy()).isEqualTo(AgentToolPolicy.READ_ONLY);
+        assertThat(childContext.workflowObservationContext())
                 .containsEntry("node_id", "main:1:research-work")
                 .containsEntry("parent_node_id", "main");
-        assertThat(child.getValue().guardrailDecisionIds()).containsExactly("guard-1");
+        assertThat(childContext.guardrailDecisionIds())
+                .containsExactly("guard-1");
         verify(instructions).render(eq(AgentInstructions.Template.WORKER_RESTRICTED),
                 org.mockito.ArgumentMatchers.argThat(parameters ->
                         !parameters.containsKey("assignment")));
@@ -98,11 +108,154 @@ class AssignedAgentTest {
     }
 
     @Test
+    void reusesOneChildRecorderAndSettlesItsCumulativeUsageOnceAcrossRetries() {
+        AtomicInteger executions = new AtomicInteger();
+        AgentOutputGuardrail retryThenAllow = request -> executions.get() == 1
+                ? new AgentOutputGuardrail.Result.Retry("rewrite safely",
+                GuardrailDecision.of("assigned-output", "1", GuardrailDecision.Action.RETRY))
+                : new AgentOutputGuardrail.Result.Allow(request.candidate(),
+                GuardrailDecision.of("assigned-output", "1", GuardrailDecision.Action.ALLOW));
+        AgentDefinition definition = new AgentDefinition(new Agent.AgentId("researcher"),
+                "Researcher", "Finds evidence",
+                new AgentDefinition.InstructionTemplate("Research safely."),
+                AgentRequestHandler.defaultRequest(), AgentToolHandler.none(),
+                AgentResponseHandler.complete(),
+                new AgentGuardrails(List.of(), List.of(retryThenAllow)), true);
+        AgentExecutionService executor = mock(AgentExecutionService.class);
+        when(executor.executeChat(any(AgentChatSession.class))).thenAnswer(invocation -> {
+            int attempt = executions.incrementAndGet();
+            return new AgentChatResult(attempt == 1 ? "unsafe" : "safe", Map.of(),
+                    Optional.of(new AgentRunResult.Usage(4, 2, 1)));
+        });
+        AgentInstructions instructions = mock(AgentInstructions.class);
+        when(instructions.render(any(AgentInstructions.Template.class), anyMap()))
+                .thenReturn(new Agent.Instruction("Bounded assignment context."));
+
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
+        AiUsageSnapshot cumulative = new AiUsageSnapshot(
+                "member", "Researcher", 8, 4, 2);
+        when(root.forkSubagent(eq("researcher"), any(), anyMap())).thenReturn(child);
+        when(child.conversationId()).thenReturn("durable-child-42");
+        when(child.usageSnapshot()).thenReturn(cumulative);
+        ChatRequest request = new ChatRequest("Inspect it", "request-1", null,
+                "conversation-1", null, List.of(), null, "model", "high", "ask");
+        ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
+                request, List.of(), new AiMessage.User("Inspect it"), null, root,
+                false, false, AgentToolPolicy.NONE, 0,
+                AiMutationApprovalScope.root("conversation-1"));
+        AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
+                "researcher", "Research", "Verify the current record.",
+                null, null, null, AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowPlan plan = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("research-work", List.of(
+                        new AiWorkflowPlan.Member("member", task, null))), null, null);
+        List<AiUsageSnapshot> directUsage = new java.util.ArrayList<>();
+        AtomicInteger registrations = new AtomicInteger();
+        AtomicReference<Supplier<AiUsageSnapshot>> registered = new AtomicReference<>();
+        WorkflowRunControl control = new WorkflowRunControl() {
+            @Override public void checkpoint() { }
+            @Override public void recordUsage(AiUsageSnapshot snapshot) {
+                directUsage.add(snapshot);
+            }
+            @Override public void registerUsage(Supplier<AiUsageSnapshot> source,
+                                                Runnable lateWriteFence) {
+                registrations.incrementAndGet();
+                registered.set(source);
+            }
+        };
+        AgentWorkflowContext context = AgentWorkflowContext.root(execution,
+                        new AgentWorkflowContext.Request("request-1", "conversation-1",
+                                "user", "model", "Inspect it", false, false,
+                                1, "balanced", null, true, false), 1, control)
+                .inWorkflow(plan, new AgentWorkflowContext.Location(
+                        "research-work", "main:research-work", "main", 1))
+                .withAssignment(plan, "member", task, List.of());
+        AssignedAgentHandlers handlers = new AssignedAgentHandlers(instructions);
+        AssignedAgent assigned = new AssignedAgent(definition, handlers.requestHandler(),
+                handlers.responseHandler());
+
+        AgentDecision decision = new AgentRunner(executor, null, null, instructions,
+                List.of(assigned)).run(assigned.callId(), context);
+
+        assertThat(((AgentDecision.Complete) decision).result().content()).isEqualTo("safe");
+        assertThat(executions).hasValue(2);
+        assertThat(registrations).hasValue(1);
+        assertThat(directUsage).isEmpty();
+        assertThat(registered.get().get()).isEqualTo(cumulative);
+        verify(root, times(1)).forkSubagent(eq("researcher"), any(), anyMap());
+        verify(child).lifecycle(eq("subagent_retry"), any(), anyMap());
+        verify(child).terminalLifecycle(eq("subagent_completed"), any(), anyMap());
+    }
+
+    @Test
+    void inputRefusalTerminatesThePreparedChildAndRegistersItsUsageOnce() {
+        AgentInputGuardrail refuse = request -> new AgentInputGuardrail.Result.Refuse(
+                new GuardrailRefusal(GuardrailDecision.of(
+                        "assigned-input", "1", GuardrailDecision.Action.REFUSE),
+                        "BLOCKED", "ai.policy.refused"));
+        AgentDefinition definition = new AgentDefinition(new Agent.AgentId("researcher"),
+                "Researcher", "Finds evidence",
+                new AgentDefinition.InstructionTemplate("Research safely."),
+                AgentRequestHandler.defaultRequest(), AgentToolHandler.none(),
+                AgentResponseHandler.complete(),
+                new AgentGuardrails(List.of(refuse), List.of()), true);
+        AgentExecutionService executor = mock(AgentExecutionService.class);
+        AgentInstructions instructions = mock(AgentInstructions.class);
+        when(instructions.render(any(AgentInstructions.Template.class), anyMap()))
+                .thenReturn(new Agent.Instruction("Bounded assignment context."));
+        AiTrajectoryRecorder root = mock(AiTrajectoryRecorder.class);
+        AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
+        when(root.forkSubagent(eq("researcher"), any(), anyMap())).thenReturn(child);
+        when(child.conversationId()).thenReturn("durable-child-42");
+        ChatRequest request = new ChatRequest("Inspect it", "request-1", null,
+                "conversation-1", null, List.of(), null, "model", "high", "ask");
+        ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
+                request, List.of(), new AiMessage.User("Inspect it"), null, root,
+                false, false, AgentToolPolicy.NONE, 0,
+                AiMutationApprovalScope.root("conversation-1"));
+        AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
+                "researcher", "Research", "Verify the current record.",
+                null, null, null, AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowPlan plan = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("research-work", List.of(
+                        new AiWorkflowPlan.Member("member", task, null))), null, null);
+        AtomicInteger registrations = new AtomicInteger();
+        WorkflowRunControl control = new WorkflowRunControl() {
+            @Override public void checkpoint() { }
+            @Override public void recordUsage(AiUsageSnapshot usage) { }
+            @Override public void registerUsage(Supplier<AiUsageSnapshot> source,
+                                                Runnable lateWriteFence) {
+                registrations.incrementAndGet();
+            }
+        };
+        AgentWorkflowContext context = AgentWorkflowContext.root(execution,
+                        new AgentWorkflowContext.Request("request-1", "conversation-1",
+                                "user", "model", "Inspect it", false, false,
+                                1, "balanced", null, true, false), 1, control)
+                .inWorkflow(plan, new AgentWorkflowContext.Location(
+                        "research-work", "main:research-work", "main", 1))
+                .withAssignment(plan, "member", task, List.of());
+        AssignedAgentHandlers handlers = new AssignedAgentHandlers(instructions);
+        AssignedAgent assigned = new AssignedAgent(definition, handlers.requestHandler(),
+                handlers.responseHandler());
+
+        assertThatThrownBy(() -> new AgentRunner(executor, null, null, instructions,
+                List.of(assigned)).run(assigned.callId(), context))
+                .isInstanceOf(AgentGuardrailRefusedException.class);
+
+        assertThat(registrations).hasValue(1);
+        verify(root, times(1)).forkSubagent(eq("researcher"), any(), anyMap());
+        verify(child).terminalLifecycle(eq("subagent_refused"), any(), anyMap());
+        verify(executor, never()).executeChat(any());
+    }
+
+    @Test
     void classifiesCancellationAsCancellationInsteadOfFailure() {
         AgentDefinition definition = new AgentDefinition(new Agent.AgentId("worker"),
                 "Worker", "Worker", new AgentDefinition.InstructionTemplate("Safe."));
-        AiChatExecutor executor = mock(AiChatExecutor.class);
-        when(executor.execute(any())).thenThrow(new CancellationException("stopped"));
+        AgentExecutionService executor = mock(AgentExecutionService.class);
+        when(executor.executeChat(any(AgentChatSession.class))).thenThrow(new CancellationException("stopped"));
         AgentInstructions instructions = mock(AgentInstructions.class);
         when(instructions.render(any(AgentInstructions.Template.class), anyMap()))
                 .thenReturn(new Agent.Instruction("Bounded."));
@@ -110,12 +263,12 @@ class AssignedAgentTest {
         AiTrajectoryRecorder child = mock(AiTrajectoryRecorder.class);
         when(root.forkSubagent(eq("worker"), any(), anyMap())).thenReturn(child);
         when(child.conversationId()).thenReturn("child");
-        AiChatExecutor.Context execution = mock(AiChatExecutor.Context.class);
         ChatRequest request = new ChatRequest("prompt", "request-1", null,
                 "conversation-1", null, List.of(), null, "model", "high", "ask");
-        when(execution.request()).thenReturn(request);
-        when(execution.userMessage()).thenReturn(new UserMessage("prompt"));
-        when(execution.recorder()).thenReturn(root);
+        ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
+                request, List.of(), new AiMessage.User("prompt"), null, root,
+                false, false, AgentToolPolicy.NONE, 0,
+                AiMutationApprovalScope.root("conversation-1"));
         AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
                 "worker", "Work", "Do work", null, null, null,
                 AiWorkflowPlan.ToolAccess.NONE);
@@ -130,8 +283,12 @@ class AssignedAgentTest {
                         "work", "main:work", "main", 1))
                 .withAssignment(plan, "member", task, List.of());
 
-        assertThatThrownBy(() -> new AssignedAgent(definition, executor, instructions)
-                .execute(context)).isInstanceOf(CancellationException.class);
+        AssignedAgentHandlers handlers = new AssignedAgentHandlers(instructions);
+        AssignedAgent assigned = new AssignedAgent(definition, handlers.requestHandler(),
+                handlers.responseHandler());
+        assertThatThrownBy(() -> new AgentRunner(executor, null, null, instructions,
+                List.of(assigned)).run(assigned.callId(), context))
+                .isInstanceOf(CancellationException.class);
         verify(child).terminalLifecycle(eq("subagent_cancelled"), any(), anyMap());
         verify(child, never()).terminalLifecycle(eq("subagent_failed"), any(), anyMap());
     }

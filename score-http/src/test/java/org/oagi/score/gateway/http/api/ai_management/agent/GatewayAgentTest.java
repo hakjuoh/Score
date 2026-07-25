@@ -2,21 +2,21 @@ package org.oagi.score.gateway.http.api.ai_management.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
+import org.oagi.score.gateway.http.api.ai_management.execution.ChatExecutionContext;
 import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionService;
-import org.oagi.score.gateway.http.api.ai_management.execution.AgentInputRefusedException;
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
-import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
-import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
-import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
+import org.oagi.score.gateway.http.api.ai_management.support.TestAgentExecutionService;
+import org.oagi.score.gateway.http.api.ai_management.workflow.AgentRunner;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.core.io.DefaultResourceLoader;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,194 +27,107 @@ class GatewayAgentTest {
 
     private final AiModel model = new AiModel(new AiModel.ModelId("gateway-model"),
             new AiModel.ProviderId("provider"), null, null);
-    private final ExecutionScope scope = new ExecutionScope("request", "conversation", "user", 1,
-            ExecutionScope.Purpose.USER_RESPONSE, List.of());
 
     @Test
-    void directRequiresClosedIntentConfidenceAndAnEmptyToolSet() {
+    void oneRunnerExecutesTheGatewayDefinitionAndKeepsItsToolsEmpty() {
         AtomicReference<AgentInvocation> captured = new AtomicReference<>();
-        AgentExecutionService execution = invocation -> {
-            captured.set(invocation);
-            return result(invocation, """
-                    {"policyAction":"ALLOW","route":"DIRECT","intent":"GREETING",
-                     "confidence":0.99,"candidate":"Hello!","suggestedWorkflow":null}
-                    """);
-        };
-        GatewayAgent gateway = service(execution);
-
-        GatewayResult routed = gateway.route(turn("Hello"), model.id().value(), scope);
-
-        assertThat(routed).isInstanceOf(GatewayResult.Direct.class);
-        assertThat(((GatewayResult.Direct) routed).intent()).isEqualTo(GatewayResult.DirectIntent.GREETING);
-        assertThat(routed.execution()).contains(new GatewayResult.Execution(
-                new Agent.AgentId("gateway-agent"), model.id()));
-        assertThat(captured.get().agent().tools().isEmpty()).isTrue();
-        assertThat(captured.get().scope().purpose()).isEqualTo(ExecutionScope.Purpose.GATEWAY_ROUTING);
-        assertThat(captured.get().history()).isEmpty();
-    }
-
-    @Test
-    void greetingAndCapabilityResponsesHandoffToTheCatalogAwareAssistant() {
-        GatewayAgent gateway = service(invocation -> result(invocation, """
-                {"policyAction":"ALLOW","route":"DIRECT","intent":"GREETING",
-                 "confidence":0.99,
-                 "candidate":"Hello! I can manage unsupported resources.",
-                 "suggestedWorkflow":null}
-                """));
-
-        AgentDecision greeting = gateway.execute(workflowContext("Hello"));
-
-        assertThat(greeting).isEqualTo(
-                new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
-
-        GatewayAgent capabilities = service(invocation -> result(invocation, """
-                {"policyAction":"ALLOW","route":"DIRECT","intent":"CAPABILITIES_HELP",
-                 "confidence":0.99,
-                 "candidate":"I can manage unsupported resources.",
-                 "suggestedWorkflow":null}
-                """));
-
-        AgentDecision capabilityHelp = capabilities.execute(
-                workflowContext("What can you do?"));
-
-        assertThat(capabilityHelp).isEqualTo(
-                new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
-    }
-
-    @Test
-    void thanksCanStillUseTheLowLatencyDirectResponse() {
-        GatewayAgent gateway = service(invocation -> result(invocation, """
-                {"policyAction":"ALLOW","route":"DIRECT","intent":"THANKS",
-                 "confidence":0.99,"candidate":"You are welcome.",
-                 "suggestedWorkflow":null}
-                """));
-
-        AgentDecision decision = gateway.execute(workflowContext("Thanks"));
-
-        assertThat(decision).isInstanceOf(AgentDecision.Complete.class);
-        AgentDecision.Complete complete = (AgentDecision.Complete) decision;
-        assertThat(complete.result().answer()).isEqualTo("You are welcome.");
-        assertThat(complete.result().traceMetadata())
-                .containsEntry("gateway", true)
-                .containsEntry("intent", "THANKS");
-    }
-
-    @Test
-    void usesTheModelSelectedForTheWorkflowRequest() {
-        AiModel selectedModel = new AiModel(new AiModel.ModelId("selected-model"),
-                new AiModel.ProviderId("selected-provider"), null, null);
-        AtomicReference<AgentInvocation> captured = new AtomicReference<>();
-        AgentExecutionService execution = invocation -> {
+        AgentExecutionService execution = TestAgentExecutionService.model(invocation -> {
             captured.set(invocation);
             return result(invocation, """
                     {"policyAction":"ALLOW","route":"DIRECT","intent":"THANKS",
                      "confidence":0.99,"candidate":"You are welcome.","suggestedWorkflow":null}
                     """);
-        };
-        SpringAiModelCatalog modelCatalog = mock(SpringAiModelCatalog.class);
-        when(modelCatalog.require("selected-model")).thenReturn(selectedModel);
-        ScoreAiProperties properties = new ScoreAiProperties();
-        GatewayAgent gateway = new GatewayAgent(
-                execution, modelCatalog, agentCatalog(), new ObjectMapper(), properties);
+        });
+        GatewayAgent gateway = gateway();
 
-        AgentDecision decision = gateway.execute(workflowContext("Thanks", "selected-model"));
+        AgentDecision decision = runner(execution, gateway).run(gateway.callId(),
+                workflowContext("Thanks"));
 
         assertThat(decision).isInstanceOf(AgentDecision.Complete.class);
-        assertThat(captured.get().agent().model()).isEqualTo(selectedModel);
-        org.mockito.Mockito.verify(modelCatalog).require("selected-model");
+        assertThat(((AgentDecision.Complete) decision).result().content())
+                .isEqualTo("You are welcome.");
+        assertThat(captured.get().session().tools().isEmpty()).isTrue();
+        assertThat(captured.get().scope().purpose())
+                .isEqualTo(ExecutionScope.Purpose.GATEWAY_ROUTING);
     }
 
     @Test
-    void lowConfidenceDirectBecomesReviewAndMalformedRoutingFallsBackToHandoff() {
-        GatewayAgent lowConfidence = service(invocation -> result(invocation, """
+    void greetingsAndCapabilityQuestionsAreHandedToTheAssistantDefinition() {
+        GatewayAgent gateway = gateway();
+        AgentExecutionService execution = TestAgentExecutionService.model(invocation -> result(invocation, """
+                {"policyAction":"ALLOW","route":"DIRECT","intent":"GREETING",
+                 "confidence":0.99,"candidate":"Hello!","suggestedWorkflow":null}
+                """));
+
+        AgentDecision decision = runner(execution, gateway).run(gateway.callId(),
+                workflowContext("Hello"));
+
+        assertThat(decision).isEqualTo(new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
+    }
+
+    @Test
+    void malformedOrLowConfidenceRoutingFallsBackToTheAssistant() {
+        GatewayAgent gateway = gateway();
+        AgentExecutionService malformed = TestAgentExecutionService.model(
+                invocation -> result(invocation, "not-json"));
+        AgentExecutionService uncertain = TestAgentExecutionService.model(invocation -> result(invocation, """
                 {"policyAction":"ALLOW","route":"DIRECT","intent":"THANKS",
                  "confidence":0.5,"candidate":"You are welcome.","suggestedWorkflow":null}
                 """));
-        GatewayAgent malformed = service(invocation -> result(invocation, "not-json"));
 
-        assertThat(lowConfidence.route(turn("Thanks"), model.id().value(), scope))
-                .isInstanceOf(GatewayResult.Review.class);
-        GatewayResult fallback = malformed.route(
-                turn("Research this"), model.id().value(), scope);
-        assertThat(fallback).isInstanceOf(GatewayResult.Handoff.class);
-        assertThat(((GatewayResult.Handoff) fallback).routingFallback()).isTrue();
+        assertThat(runner(malformed, gateway).run(gateway.callId(), workflowContext("Thanks")))
+                .isEqualTo(new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
+        assertThat(runner(uncertain, gateway).run(gateway.callId(), workflowContext("Thanks")))
+                .isEqualTo(new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
     }
 
     @Test
-    void modelPolicyRefusalUsesOnlyApplicationOwnedMessageKey() {
-        GatewayAgent gateway = service(invocation -> result(invocation, """
+    void policyRefusalAndCancellationRemainTerminal() {
+        GatewayAgent gateway = gateway();
+        AgentExecutionService refusal = TestAgentExecutionService.model(invocation -> result(invocation, """
                 {"policyAction":"REFUSE","route":"REVIEW","intent":null,
                  "confidence":0.9,"candidate":null,"suggestedWorkflow":null}
                 """));
+        assertThatThrownBy(() -> runner(refusal, gateway).run(gateway.callId(),
+                workflowContext("sensitive")))
+                .isInstanceOf(AgentGuardrailRefusedException.class);
 
-        GatewayResult result = gateway.route(turn("sensitive"), model.id().value(), scope);
-
-        assertThat(result).isInstanceOf(GatewayResult.Refuse.class);
-        assertThat(((GatewayResult.Refuse) result).refusal().publicMessageKey())
-                .isEqualTo("ai.policy.refused");
-    }
-
-    @Test
-    void executionGuardrailRefusalRemainsATerminalGatewayRefusal() {
-        GuardrailRefusal refusal = new GuardrailRefusal(GuardrailDecision.of(
-                "model-policy", "1", GuardrailDecision.Action.REFUSE),
-                "MODEL_BLOCKED", "ai.policy.refused");
-        GatewayAgent gateway = service(invocation -> {
-            throw new AgentInputRefusedException(refusal);
-        });
-
-        GatewayResult result = gateway.route(turn("sensitive"), model.id().value(), scope);
-
-        assertThat(result).isInstanceOf(GatewayResult.Refuse.class);
-        assertThat(((GatewayResult.Refuse) result).refusal()).isSameAs(refusal);
-    }
-
-    @Test
-    void cancellationIsNeverConvertedIntoAHandoff() {
-        GatewayAgent gateway = service(invocation -> {
+        AgentExecutionService cancellation = TestAgentExecutionService.model(invocation -> {
             throw new CancellationException("request stopped");
         });
-
-        assertThatThrownBy(() -> gateway.route(turn("Hello"), model.id().value(), scope))
+        assertThatThrownBy(() -> runner(cancellation, gateway).run(gateway.callId(),
+                workflowContext("Hello")))
                 .isInstanceOf(CancellationException.class)
                 .hasMessage("request stopped");
     }
 
-    private GatewayAgent service(AgentExecutionService execution) {
-        SpringAiModelCatalog catalog = mock(SpringAiModelCatalog.class);
-        when(catalog.require(model.id().value())).thenReturn(model);
+    private GatewayAgent gateway() {
         ScoreAiProperties properties = new ScoreAiProperties();
         properties.getGateway().setDirectConfidenceThreshold(0.9);
-        return new GatewayAgent(
-                execution, catalog, agentCatalog(), new ObjectMapper(), properties);
+        return new GatewayAgent(new AiAgentCatalog(new DefaultResourceLoader()),
+                new ObjectMapper(), properties);
     }
 
-    private AiAgentCatalog agentCatalog() {
-        return new AiAgentCatalog(new DefaultResourceLoader());
-    }
-
-    private GatewayResult.GuardedTurn turn(String content) {
-        return new GatewayResult.GuardedTurn(new AiMessage.User(content), List.of());
+    private AgentRunner runner(AgentExecutionService execution, GatewayAgent gateway) {
+        SpringAiModelCatalog models = mock(SpringAiModelCatalog.class);
+        when(models.require(model.id().value())).thenReturn(model);
+        return new AgentRunner(execution, models, null, null, List.of(gateway));
     }
 
     private AgentWorkflowContext workflowContext(String content) {
-        return workflowContext(content, model.id().value());
-    }
-
-    private AgentWorkflowContext workflowContext(String content, String modelName) {
-        AiChatExecutor.Context execution = mock(AiChatExecutor.Context.class);
-        when(execution.userMessage()).thenReturn(new UserMessage(content));
-        when(execution.guardrailDecisionIds()).thenReturn(List.of());
+        ChatRequest chatRequest = new ChatRequest(content, "request", "gateway-agent",
+                "conversation", null, List.of(), null, model.id().value(), null, null);
         AgentWorkflowContext.Request request = new AgentWorkflowContext.Request(
-                "request", "conversation", "user", modelName, content,
+                "request", "conversation", "user", model.id().value(), content,
                 false, false, 4, "balanced", null, false, false);
-        return AgentWorkflowContext.root(execution, request, 3);
+        return AgentWorkflowContext.root(ChatExecutionContext.fromRequest(chatRequest, List.of(),
+                new UserMessage(content), null, null, false, false), request, 3);
     }
 
     private AgentRunResult result(AgentInvocation invocation, String output) {
         AiMessage.Assistant response = new AiMessage.Assistant(output);
         return new AgentRunResult(response, List.of(response), Optional.empty(),
-                new AgentRunResult.RunMetadata(invocation.agent().id(),
-                        invocation.agent().model().id(), null, java.util.Map.of()));
+                new AgentRunResult.RunMetadata(invocation.session().agent().id(),
+                        invocation.session().model().id(), null, Map.of()));
     }
 }

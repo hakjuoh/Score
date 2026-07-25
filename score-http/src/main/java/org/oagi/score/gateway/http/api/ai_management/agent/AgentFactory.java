@@ -6,11 +6,16 @@ import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
 @FunctionalInterface
 public interface AgentFactory {
 
-    ResolvedAgent create(AgentDefinition definition, AiModel model, ToolSet availableTools);
+    AgentSession create(Agent agent, AiModel model, ToolSet availableTools);
+
+    default AgentSession create(AgentDefinition definition, AiModel model,
+                                ToolSet availableTools) {
+        return create(new DefinedAgent(definition), model, availableTools);
+    }
 
     static AgentFactory binding() {
-        return (definition, model, availableTools) -> new ResolvedAgent(
-                definition, model, definition.instruction().render(),
+        return (agent, model, availableTools) -> new AgentSession(
+                agent, model, agent.definition().instruction().render(),
                 availableTools != null ? availableTools : ToolSet.empty());
     }
 }

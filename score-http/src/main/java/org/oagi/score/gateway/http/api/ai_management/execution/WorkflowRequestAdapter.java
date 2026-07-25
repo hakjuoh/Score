@@ -10,13 +10,11 @@ public final class WorkflowRequestAdapter {
 
     private WorkflowRequestAdapter() { }
 
-    public static AgentWorkflowContext.Request from(AiChatExecutor.Context context) {
+    public static AgentWorkflowContext.Request from(ChatExecutionContext context) {
+        Objects.requireNonNull(context, "context");
         var request = context.request();
         var accepted = context.userMessage();
-        String requesterId = context.requester() != null && context.requester().userId() != null
-                ? context.requester().userId().value().toString()
-                : context.requester() != null && StringUtils.hasText(context.requester().username())
-                ? context.requester().username() : "unknown";
+        String requesterId = context.requesterId();
         int maximumAgents = request.multiAgent() != null
                 ? request.multiAgent().maxAgents() : 1;
         String strategy = request.multiAgent() != null
@@ -29,10 +27,10 @@ public final class WorkflowRequestAdapter {
         return new AgentWorkflowContext.Request(request.requestId(),
                 request.conversationId(), requesterId,
                 StringUtils.hasText(request.modelName()) ? request.modelName() : "unknown",
-                accepted != null ? Objects.requireNonNullElse(accepted.getText(), "")
+                accepted != null ? Objects.requireNonNullElse(accepted.content(), "")
                         : Objects.requireNonNullElse(request.prompt(), ""),
-                accepted != null && accepted.getMedia() != null
-                        ? !accepted.getMedia().isEmpty()
+                accepted != null && accepted.attachments() != null
+                        ? !accepted.attachments().isEmpty()
                         : request.attachments() != null && !request.attachments().isEmpty(),
                 StringUtils.hasText(request.pageContext()), maximumAgents,
                 strategy, request.activeWorkflow(), delegation,
