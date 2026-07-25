@@ -7,15 +7,55 @@ import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Reusable Agent template; it does not execute until a model and concrete tools are bound. */
+/**
+ * Reusable Agent definition.
+ *
+ * <p>The definition contains both sides of a model turn: preparation and
+ * resource policy before the call, and interpretation and policy after it.
+ * The shared {@code AgentRunner} owns the loop and invokes these handlers; an
+ * Agent definition never executes itself.</p>
+ */
 public record AgentDefinition(Agent.AgentId id, String name, String description,
-                              InstructionTemplate instruction) {
+                              InstructionTemplate instruction,
+                              AgentRequestHandler requestHandler,
+                              AgentToolHandler toolHandler,
+                              AgentResponseHandler responseHandler,
+                              AgentGuardrails guardrails,
+                              boolean assignable) {
+
+    public AgentDefinition(Agent.AgentId id, String name, String description,
+                           InstructionTemplate instruction) {
+        this(id, name, description, instruction,
+                AgentRequestHandler.defaultRequest(), AgentToolHandler.none(),
+                AgentResponseHandler.complete(), AgentGuardrails.none(), false);
+    }
+
+    public AgentDefinition(Agent.AgentId id, String name, String description,
+                           InstructionTemplate instruction,
+                           AgentRequestHandler requestHandler,
+                           AgentToolHandler toolHandler,
+                           AgentResponseHandler responseHandler,
+                           AgentGuardrails guardrails) {
+        this(id, name, description, instruction, requestHandler, toolHandler,
+                responseHandler, guardrails, false);
+    }
+
+    public AgentDefinition(Agent.AgentId id, String name, String description,
+                           InstructionTemplate instruction, boolean assignable) {
+        this(id, name, description, instruction,
+                AgentRequestHandler.defaultRequest(), AgentToolHandler.none(),
+                AgentResponseHandler.complete(), AgentGuardrails.none(), assignable);
+    }
 
     public AgentDefinition {
         Objects.requireNonNull(id, "id");
         name = requireText(name, "name");
         description = requireText(description, "description");
         Objects.requireNonNull(instruction, "instruction");
+        Objects.requireNonNull(requestHandler, "requestHandler");
+        Objects.requireNonNull(toolHandler, "toolHandler");
+        Objects.requireNonNull(responseHandler, "responseHandler");
+        Objects.requireNonNull(guardrails, "guardrails");
     }
 
     public record InstructionTemplate(String value) {

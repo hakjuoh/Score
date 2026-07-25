@@ -61,7 +61,7 @@ class ToolExecutionGatewayTest {
 
         assertThat(result.json()).isEqualTo("[REDACTED]");
         assertThat(authorizations).hasValue(2);
-        assertThat(order).containsExactly("PRE_AUTHORIZATION", "authorize:{\"value\":1}",
+        assertThat(order).containsExactly("fence", "PRE_AUTHORIZATION", "authorize:{\"value\":1}",
                 "PRE_EXECUTION", "authorize:{\"value\":2}", "PRE_EXECUTION", "fence",
                 "execute:{\"value\":2}", "output");
         assertThat(state.completedMutations()).isEqualTo(1);
@@ -108,6 +108,57 @@ class ToolExecutionGatewayTest {
         assertThat(result.json()).contains("TOOL_POLICY_UNAVAILABLE");
         assertThat(result.metadata()).containsEntry("policy_unavailable", true);
         assertThat(state.completedMutations()).isEqualTo(1);
+    }
+
+    @Test
+    void sideEffectAndExecutionAuthorizationRunInsideTheAtomicFence() {
+        java.util.concurrent.atomic.AtomicBoolean insideFence =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        AiTool mutation = tool(AiTool.ToolEffect.MUTATION, ignored -> {
+            assertThat(insideFence).isTrue();
+            return new AiTool.ToolResult("completed");
+        });
+        ToolGuardrailRegistry registry = new ToolGuardrailRegistry(
+                new ToolGuardrailRegistry.Set(List.of(request ->
+                        new ToolInputGuardrail.Result.Allow(request.arguments(),
+                                decision(GuardrailDecision.Action.ALLOW))),
+                        List.of(request -> new ToolOutputGuardrail.Result.Allow(
+                                request.output(), decision(GuardrailDecision.Action.ALLOW)))), Map.of());
+        ToolAuthorizationPolicy authorization = new ToolAuthorizationPolicy() {
+            @Override
+            public Result authorize(Request request) {
+                return new Result.Allow("grant");
+            }
+
+            @Override
+            public Result beforeExecution(Request request) {
+                assertThat(insideFence).isTrue();
+                return new Result.Allow("grant");
+            }
+        };
+        ToolExecutionGateway.RequestFence fence = new ToolExecutionGateway.RequestFence() {
+            @Override
+            public void verifyActive(ExecutionScope ignored) {
+            }
+
+            @Override
+            public <T> T callIfActive(ExecutionScope ignored,
+                                      java.util.function.Supplier<T> action) {
+                assertThat(insideFence.compareAndSet(false, true)).isTrue();
+                try {
+                    return action.get();
+                } finally {
+                    insideFence.set(false);
+                }
+            }
+        };
+        ToolExecutionGateway gateway = new ToolExecutionGateway(
+                new ToolSet(List.of(mutation)), registry, List.of(authorization), fence,
+                ExecutionObserver.noop(), new ExecutionState(), 1024);
+
+        assertThat(gateway.execute(mutation.specification().id(),
+                new AiTool.ToolArguments("{}"), scope).json()).isEqualTo("completed");
+        assertThat(insideFence).isFalse();
     }
 
     private AiTool tool(AiTool.ToolEffect effect,

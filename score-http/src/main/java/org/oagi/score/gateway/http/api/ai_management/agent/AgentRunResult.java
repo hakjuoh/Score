@@ -16,9 +16,15 @@ public record AgentRunResult(AiMessage.Assistant response, List<AiMessage> gener
         metadata = metadata != null ? metadata : RunMetadata.empty();
     }
 
-    public record Usage(long inputTokens, long outputTokens) {
+    public record Usage(long inputTokens, long outputTokens, long modelCalls) {
+        public Usage(long inputTokens, long outputTokens) {
+            this(inputTokens, outputTokens, 1L);
+        }
+
         public Usage {
-            if (inputTokens < 0 || outputTokens < 0) throw new IllegalArgumentException("usage is negative");
+            if (inputTokens < 0 || outputTokens < 0 || modelCalls < 1) {
+                throw new IllegalArgumentException("usage is invalid");
+            }
         }
     }
 

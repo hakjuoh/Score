@@ -52,6 +52,23 @@ class AiRequestRegistryTest {
     }
 
     @Test
+    void toolAdmissionRejectsAStopThatWinsTheRequestStateLock() {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-tool", "conversation-tool", user,
+                Instant.now().plusSeconds(60));
+        assertThat(registry.start(entry)).isTrue();
+
+        registry.admitToolExecution(entry.requestId());
+        registry.cancel(entry.requestId(), "cancel-tool", user);
+        Thread.interrupted();
+
+        assertThatThrownBy(() -> registry.admitToolExecution(entry.requestId()))
+                .isInstanceOf(CancellationException.class)
+                .hasMessageContaining("stopped before Tool execution");
+    }
+
+    @Test
     void rollsBackRegistrationWhenTheLifecycleSchedulerRejectsTheDeadline() {
         var scheduler = Executors.newSingleThreadScheduledExecutor(
                 Thread.ofPlatform().daemon(true).factory());

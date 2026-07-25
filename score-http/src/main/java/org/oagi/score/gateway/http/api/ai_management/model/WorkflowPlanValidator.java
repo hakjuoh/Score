@@ -1,6 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.workflow;
-
-import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
+package org.oagi.score.gateway.http.api.ai_management.model;
 
 import java.util.Objects;
 import java.util.function.Predicate;

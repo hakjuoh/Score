@@ -1,10 +1,8 @@
 package org.oagi.score.gateway.http.api.ai_management.agent;
 
-import org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
-import org.oagi.score.gateway.http.api.ai_management.workflow.WorkflowResult;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,13 +12,13 @@ import java.util.function.Supplier;
 
 /** Immutable input supplied to every Agent invoked by a Workflow. */
 public record AgentWorkflowContext(
-        AiChatExecutor.Context execution,
+        AgentExecutionContext execution,
         Request request,
         List<WorkflowResult> inputs,
         AiWorkflowPlan workflow,
         String assignmentId,
         AiWorkflowPlan.AgentTask assignment,
-        AiChatExecutor.Result candidate,
+        AgentOutput candidate,
         List<AiWorkflowFeedback> feedback,
         int iteration,
         int maximumIterations,
@@ -43,12 +41,12 @@ public record AgentWorkflowContext(
         runControl = runControl != null ? runControl : WorkflowRunControl.NOOP;
     }
 
-    public static AgentWorkflowContext root(AiChatExecutor.Context execution, Request request,
+    public static AgentWorkflowContext root(AgentExecutionContext execution, Request request,
                                             int maximumIterations) {
         return root(execution, request, maximumIterations, WorkflowRunControl.NOOP);
     }
 
-    public static AgentWorkflowContext root(AiChatExecutor.Context execution, Request request,
+    public static AgentWorkflowContext root(AgentExecutionContext execution, Request request,
                                             int maximumIterations,
                                             WorkflowRunControl runControl) {
         return new AgentWorkflowContext(execution, request, List.of(), null, null,
@@ -77,7 +75,7 @@ public record AgentWorkflowContext(
     }
 
     public AgentWorkflowContext withCandidate(AiWorkflowPlan plan,
-                                              AiChatExecutor.Result result,
+                                              AgentOutput result,
                                               int currentIteration) {
         return new AgentWorkflowContext(execution, request, inputs, plan, assignmentId,
                 assignment, result, feedback, currentIteration, maximumIterations, location,
@@ -85,7 +83,7 @@ public record AgentWorkflowContext(
     }
 
     public AgentWorkflowContext forIteration(AiWorkflowPlan plan,
-                                             AiChatExecutor.Result priorCandidate,
+                                             AgentOutput priorCandidate,
                                              int currentIteration) {
         return new AgentWorkflowContext(execution, request, List.of(), plan, null, null,
                 priorCandidate, feedback, currentIteration, maximumIterations, location,
@@ -101,10 +99,24 @@ public record AgentWorkflowContext(
                 runControl);
     }
 
-    public AgentWorkflowContext withExecution(AiChatExecutor.Context value) {
+    public AgentWorkflowContext withExecution(AgentExecutionContext value) {
         return new AgentWorkflowContext(Objects.requireNonNull(value, "execution"), request,
                 inputs, workflow, assignmentId, assignment, candidate, feedback, iteration,
                 maximumIterations, location, runControl);
+    }
+
+    /** Installs the request-global Workflow budget without changing the definition input. */
+    public AgentWorkflowContext withRunControl(WorkflowRunControl value) {
+        return new AgentWorkflowContext(execution, request, inputs, workflow, assignmentId,
+                assignment, candidate, feedback, iteration, maximumIterations, location,
+                Objects.requireNonNull(value, "runControl"));
+    }
+
+    /** Builds the trusted scope shared by every definition-owned model turn and policy check. */
+    public ExecutionScope executionScope(ExecutionScope.Purpose purpose) {
+        return new ExecutionScope(request.requestId(), request.conversationId(),
+                request.requesterId(), execution.agentDepth(),
+                Objects.requireNonNull(purpose, "purpose"), execution.guardrailDecisionIds());
     }
 
     public void checkpoint() {
@@ -117,14 +129,20 @@ public record AgentWorkflowContext(
 
     public void recordUsage(String agentName, AgentRunResult result) {
         if (result == null) return;
-        result.usage().ifPresent(usage -> recordUsage(new AiUsageSnapshot(
+        result.usage().ifPresent(usage -> runControl.recordAttemptUsage(new AiUsageSnapshot(
                 location != null ? location.nodeId() : null,
-                agentName, usage.inputTokens(), usage.outputTokens(), 1)));
+                agentName, usage.inputTokens(), usage.outputTokens(), usage.modelCalls())));
     }
 
     public void registerUsage(Supplier<AiUsageSnapshot> usage,
                               Runnable lateWriteFence) {
         runControl.registerUsage(Objects.requireNonNull(usage, "usage"),
+                Objects.requireNonNull(lateWriteFence, "lateWriteFence"));
+    }
+
+    public void registerAttemptUsage(Supplier<AiUsageSnapshot> usage,
+                                     Runnable lateWriteFence) {
+        runControl.registerAttemptUsage(Objects.requireNonNull(usage, "usage"),
                 Objects.requireNonNull(lateWriteFence, "lateWriteFence"));
     }
 

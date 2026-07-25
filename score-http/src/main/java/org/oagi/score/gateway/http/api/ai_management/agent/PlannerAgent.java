@@ -2,14 +2,9 @@ package org.oagi.score.gateway.http.api.ai_management.agent;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionService;
-import org.oagi.score.gateway.http.api.ai_management.execution.AgentInputRefusedException;
-import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
 import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDefinition;
-import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
-import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
-import org.oagi.score.gateway.http.api.ai_management.workflow.WorkflowPlanValidator;
+import org.oagi.score.gateway.http.api.ai_management.model.WorkflowPlanValidator;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -20,62 +15,74 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
 
-/** Selects Agents and nested Workflows without selecting an execution pattern type. */
+/** Definition for the Agent that selects workers and recursive Workflows. */
 @Component("workflow-planner")
-public final class PlannerAgent extends CatalogBackedAgent implements WorkflowAgent {
+public final class PlannerAgent implements Agent {
 
     private static final int MAX_INSTRUCTION_LENGTH = 4_000;
     private static final int MAX_HISTORY_MESSAGES = 8;
     private static final int MAX_HISTORY_MESSAGE_LENGTH = 1_500;
-    private final AgentExecutionService execution;
-    private final SpringAiModelCatalog models;
+
     private final AiAgentCatalog agents;
     private final ObjectMapper objectMapper;
     private final WorkflowPlanValidator validator = new WorkflowPlanValidator();
+    private final AgentDefinition definition;
 
-    public PlannerAgent(AgentExecutionService execution, SpringAiModelCatalog models,
-                        AiAgentCatalog agents, ObjectMapper objectMapper) {
-        super(agents);
-        this.execution = execution;
-        this.models = models;
+    public PlannerAgent(AiAgentCatalog agents, ObjectMapper objectMapper) {
         this.agents = agents;
         this.objectMapper = objectMapper;
+        AgentDefinition configured = agents.systemDefinition("workflow-planner");
+        this.definition = new AgentDefinition(configured.id(), configured.name(),
+                configured.description(), configured.instruction(), this::prepare,
+                AgentToolHandler.none(), responses(), AgentGuardrails.none(), false);
     }
 
     @Override
-    public AgentDecision execute(AgentWorkflowContext context) {
-        return new AgentDecision.Delegate(plan(context));
+    public AgentDefinition definition() {
+        return definition;
     }
 
-    public AiWorkflowPlan plan(AgentWorkflowContext context) {
-        AgentWorkflowContext current = context;
-        String prompt = definition().instruction().render().value();
-        ResolvedAgent resolved = new ResolvedAgent(definition(),
-                models.require(current.request().modelName()),
-                new Instruction(prompt), ToolSet.empty());
-        AgentInvocation invocation = new AgentInvocation(null, resolved,
+    private AgentRunRequest prepare(Agent agent, AgentWorkflowContext context) {
+        return new AgentRunRequest.Model(context.request().modelName(),
+                definition.instruction().render(),
                 new AiMessage.User("UNTRUSTED_PLANNING_INPUT\n"
-                        + json(planningParameters(current))
+                        + json(planningParameters(context))
                         + "\nReturn the recursive Workflow JSON for this input."),
-                List.of(), scope(current), null, current.observationContext());
-        try {
-            AgentRunResult result = execution.execute(invocation);
-            current.recordUsage(definition().name(), result);
-            String raw = result.response().content();
-            AiWorkflowPlan parsed = parse(raw);
-            validator.validate(parsed, current.request().maximumAgents(), id -> {
-                agents.requireWorker(id);
-                return true;
-            });
-            return normalize(parsed);
-        } catch (CancellationException | AgentInputRefusedException terminal) {
-            throw terminal;
-        } catch (RuntimeException failure) {
-            current.execution().recorder().lifecycle("workflow_plan_fallback",
-                    "The Planner Agent returned an unusable Workflow; using a bounded fallback.",
-                    Map.of("status", "fallback", "reason", failure.getClass().getSimpleName()));
-            return fallback(current);
-        }
+                List.of(), scope(context), context.observationContext());
+    }
+
+    private AgentResponseHandler responses() {
+        return new AgentResponseHandler() {
+            @Override
+            public AgentDecision handle(AgentResponseContext response) {
+                try {
+                    AiWorkflowPlan parsed = normalize(parse(response.result().response().content()));
+                    validator.validate(parsed, response.workflow().request().maximumAgents(), id -> {
+                        agents.requireWorker(id);
+                        return true;
+                    });
+                    return new AgentDecision.Delegate(parsed);
+                } catch (RuntimeException failure) {
+                    return fallbackDecision(response.workflow(), failure);
+                }
+            }
+
+            @Override
+            public AgentDecision onFailure(AgentFailure failure) {
+                if (failure.exception() instanceof CancellationException
+                        || failure.exception() instanceof AgentGuardrailRefusedException) {
+                    throw failure.exception();
+                }
+                return fallbackDecision(failure.workflow(), failure.exception());
+            }
+        };
+    }
+
+    private AgentDecision fallbackDecision(AgentWorkflowContext context, RuntimeException failure) {
+        context.execution().recorder().lifecycle("workflow_plan_fallback",
+                "The Planner Agent returned an unusable Workflow; using a bounded fallback.",
+                Map.of("status", "fallback", "reason", failure.getClass().getSimpleName()));
+        return new AgentDecision.Delegate(fallback(context));
     }
 
     private Map<String, Object> planningParameters(AgentWorkflowContext context) {
@@ -129,13 +136,14 @@ public final class PlannerAgent extends CatalogBackedAgent implements WorkflowAg
                         normalizeWorkflow(member.workflow())));
             }
         }
-        return new AiWorkflowPlan.WorkflowDefinition(workflow.id(), normalized);
+        return new AiWorkflowPlan.WorkflowDefinition(
+                workflow.id(), normalized, workflow.edges());
     }
 
     private AiWorkflowPlan.AgentTask normalizeTask(AiWorkflowPlan.AgentTask task) {
         AiAgentDefinition definition = agents.requireWorker(task.agentId());
-        return new AiWorkflowPlan.AgentTask(definition.id(),
-                bounded(task.label(), 100), bounded(task.instruction(), MAX_INSTRUCTION_LENGTH),
+        return new AiWorkflowPlan.AgentTask(definition.id(), bounded(task.label(), 100),
+                bounded(task.instruction(), MAX_INSTRUCTION_LENGTH),
                 bounded(task.guideMessage(), 180), bounded(task.activeVerb(), 32),
                 bounded(task.completedVerb(), 32), task.toolAccess());
     }
@@ -161,10 +169,7 @@ public final class PlannerAgent extends CatalogBackedAgent implements WorkflowAg
     }
 
     private ExecutionScope scope(AgentWorkflowContext context) {
-        return new ExecutionScope(context.request().requestId(),
-                context.request().conversationId(), context.request().requesterId(), 0L,
-                ExecutionScope.Purpose.WORKFLOW_PLANNING,
-                context.execution().guardrailDecisionIds());
+        return context.executionScope(ExecutionScope.Purpose.WORKFLOW_PLANNING);
     }
 
     private List<Map<String, String>> recentConversation(AgentWorkflowContext context) {
@@ -173,10 +178,16 @@ public final class PlannerAgent extends CatalogBackedAgent implements WorkflowAg
         List<Map<String, String>> result = new ArrayList<>();
         for (int index = from; index < history.size(); index++) {
             var message = history.get(index);
-            if (message == null || !StringUtils.hasText(message.getText())) continue;
-            String text = bounded(message.getText(), MAX_HISTORY_MESSAGE_LENGTH);
-            result.add(Map.of("role", message.getMessageType().name().toLowerCase(Locale.ROOT),
-                    "content", text));
+            if (message == null || !StringUtils.hasText(message.content())) continue;
+            String text = bounded(message.content(), MAX_HISTORY_MESSAGE_LENGTH);
+            String role = switch (message) {
+                case AiMessage.System ignored -> "system";
+                case AiMessage.User ignored -> "user";
+                case AiMessage.Assistant ignored -> "assistant";
+                case AiMessage.ToolCall ignoredCall -> "tool";
+                case AiMessage.ToolResult ignoredResult -> "tool";
+            };
+            result.add(Map.of("role", role, "content", text));
         }
         return List.copyOf(result);
     }

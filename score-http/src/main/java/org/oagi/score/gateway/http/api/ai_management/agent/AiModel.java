@@ -2,7 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.agent;
 
 import java.util.Objects;
 
-/** Immutable, provider-neutral model metadata used when binding a {@link ResolvedAgent}. */
+/** Immutable, provider-neutral model metadata used when binding an {@link AgentSession}. */
 public record AiModel(ModelId id, ProviderId provider, ModelCapabilities capabilities,
                       ContextWindow contextWindow) {
 

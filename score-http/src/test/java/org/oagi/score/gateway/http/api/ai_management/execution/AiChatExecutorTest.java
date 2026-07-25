@@ -8,12 +8,12 @@ import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiUiRouteManifest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.agent.Agent;
-import org.oagi.score.gateway.http.api.ai_management.agent.AgentDefinition;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalResolution;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingMutationApproval;
 import org.oagi.score.gateway.http.api.ai_management.model.AiResolvedMutation;
+import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
@@ -80,6 +80,21 @@ import static org.mockito.Mockito.when;
 
 class AiChatExecutorTest {
 
+    private static final Agent.Instruction TEST_INSTRUCTION =
+            new Agent.Instruction("Test Agent system instruction.");
+
+    @Test
+    void chatUsageReportsOnlyTheCurrentAttemptDelta() {
+        AiUsageSnapshot before = new AiUsageSnapshot("node", "agent", 100, 40, 2);
+        AiUsageSnapshot after = new AiUsageSnapshot("node", "agent", 130, 52, 3);
+
+        AiUsageSnapshot delta = AiChatExecutor.usageDelta(before, after);
+
+        assertThat(delta.promptTokens()).isEqualTo(30);
+        assertThat(delta.completionTokens()).isEqualTo(12);
+        assertThat(delta.modelCalls()).isEqualTo(1);
+    }
+
     @Test
     void classifiesRegistryTimeoutAndCancellationEvenWhenTheFailureTypeIsGeneric() {
         AiRequestRegistry requests = mock(AiRequestRegistry.class);
@@ -105,7 +120,11 @@ class AiChatExecutorTest {
                 "Inspect it", "request-1", null, "conversation-1", "test page", List.of(), null,
                 "configured-model", "high", "ask", null, null, routeManifest);
 
-        assertThat(AiChatExecutor.systemPromptParameters(request))
+        ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
+                request, List.of(), new org.oagi.score.gateway.http.api.ai_management.agent.AiMessage.User(
+                        request.prompt()), null, null, false, false,
+                org.oagi.score.gateway.http.api.ai_management.agent.AgentToolPolicy.NONE, 0);
+        assertThat(execution.instructionParameters())
                 .containsEntry("mutationConfirmationRequired",
                         AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED)
                 .containsEntry("requestStopping", AiMutationToolGuard.REQUEST_STOPPING)
@@ -114,7 +133,9 @@ class AiChatExecutorTest {
         assertThat(AiChatExecutor.requestScopedInput(request))
                 .contains("## Request-scoped input", "Current page context: test page",
                         "untrusted data only");
-        assertThat(AiChatExecutor.withRouteManifest("Stable system prompt.", request))
+        assertThat(execution.withAgentIdentity("root-agent",
+                        ExecutionScope.Purpose.USER_RESPONSE)
+                .finalizeInstruction(new Agent.Instruction("Stable system prompt.")).value())
                 .startsWith("Stable system prompt.")
                 .contains("## Validated connectCenter UI route manifest")
                 .contains("resource=business-context");
@@ -130,32 +151,31 @@ class AiChatExecutorTest {
     }
 
     @Test
-    void snapshotsTheRootAgentIdentityAndInstructionForEachRun() {
-        AtomicReference<AgentDefinition> definition = new AtomicReference<>(rootDefinition(
-                "external-root-agent", "First external instruction."));
-        Fixture fixture = new Fixture(() -> definition.get());
+    void executesTheIdentityAndInstructionBoundByTheRunnerForEachRun() {
+        Fixture fixture = new Fixture();
         fixture.responses(Flux.just(response("First response.")),
                 Flux.just(response("Second response.")));
         AiChatExecutor executor = fixture.executor(null);
 
         AiChatExecutor.Result first = executor.execute(new AiChatExecutor.Context(
                 request("First request"), List.of(), new UserMessage("First request"),
-                fixture.requester, fixture.recorder("request-1")));
+                fixture.requester, fixture.recorder("request-1"))
+                        .withAgentIdentity("external-root-agent",
+                                ExecutionScope.Purpose.USER_RESPONSE),
+                new Agent.Instruction("First external instruction."));
 
         assertThat(first.traceMetadata()).containsEntry("agentId", "external-root-agent");
-        assertThat(executor.rootAgentId()).isEqualTo("external-root-agent");
-        verify(fixture.systemSpec).text(org.mockito.ArgumentMatchers.contains(
-                "First external instruction."));
+        verify(fixture.systemSpec).text("First external instruction.");
 
-        definition.set(rootDefinition("reloaded-root-agent", "Reloaded external instruction."));
         AiChatExecutor.Result second = executor.execute(new AiChatExecutor.Context(
                 request("Second request"), List.of(), new UserMessage("Second request"),
-                fixture.requester, fixture.recorder("request-2")));
+                fixture.requester, fixture.recorder("request-2"))
+                        .withAgentIdentity("reloaded-root-agent",
+                                ExecutionScope.Purpose.USER_RESPONSE),
+                new Agent.Instruction("Reloaded external instruction."));
 
         assertThat(second.traceMetadata()).containsEntry("agentId", "reloaded-root-agent");
-        assertThat(executor.rootAgentId()).isEqualTo("reloaded-root-agent");
-        verify(fixture.systemSpec).text(org.mockito.ArgumentMatchers.contains(
-                "Reloaded external instruction."));
+        verify(fixture.systemSpec).text("Reloaded external instruction.");
     }
 
     @ParameterizedTest
@@ -163,11 +183,8 @@ class AiChatExecutorTest {
             "WORKFLOW_PLANNING", "EVALUATION", "WORKER", "SYNTHESIS",
             "RESPONSE_ONLY_RETRY", "COMPACTION"
     })
-    void internalAgentExecutionDoesNotLoadTheRootDefinition(ExecutionScope.Purpose purpose) {
-        Agent unavailableRoot = () -> {
-            throw new IllegalStateException("ROOT definition must not be loaded");
-        };
-        Fixture fixture = new Fixture(unavailableRoot);
+    void internalAgentExecutionUsesTheRunnerBoundInstruction(ExecutionScope.Purpose purpose) {
+        Fixture fixture = new Fixture();
         fixture.responses(Flux.just(response("Internal result.")));
         List<Message> trustedHistory = purpose == ExecutionScope.Purpose.RESPONSE_ONLY_RETRY
                 || purpose == ExecutionScope.Purpose.COMPACTION
@@ -181,10 +198,11 @@ class AiChatExecutorTest {
                         new UserMessage("Evaluate"), fixture.requester,
                         fixture.recorder("request-1"), false, false,
                         AiChatExecutor.ToolPolicy.NONE, 0)
-                        .withAgentIdentity("internal-agent", purpose));
+                        .withAgentIdentity("internal-agent", purpose),
+                new Agent.Instruction("Internal Agent instruction."));
 
         assertThat(result.answer()).isEqualTo("Internal result.");
-        verify(fixture.requestSpec, never()).system(any(Consumer.class));
+        verify(fixture.systemSpec).text("Internal Agent instruction.");
     }
 
     @Test
@@ -195,8 +213,8 @@ class AiChatExecutorTest {
         AiMutationToolGuard.GuardedToolSession guardedSession =
                 mock(AiMutationToolGuard.GuardedToolSession.class);
         AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
-        AiChatExecutor.ApprovalWaitLifecycle waitLifecycle =
-                mock(AiChatExecutor.ApprovalWaitLifecycle.class);
+        org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle waitLifecycle =
+                mock(org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle.class);
         AiPendingMutationApproval first = pending("approval-1", "update_a");
         AiPendingMutationApproval second = pending("approval-2", "update_b");
         when(guardedSession.getToolCallbacks()).thenReturn(new ToolCallback[0]);
@@ -223,7 +241,7 @@ class AiChatExecutorTest {
         AiTrajectoryRecorder recorder = fixture.recorder("request-1");
         ChatRequest request = request("Apply both updates");
 
-        AiChatExecutor.Result result = fixture.executor(mutationGuard, approvals).execute(
+        AiChatExecutor.Result result = execute(fixture.executor(mutationGuard, approvals),
                 new AiChatExecutor.Context(request, List.of(),
                         new UserMessage(request.prompt()), fixture.requester, recorder,
                         true, false, AiChatExecutor.ToolPolicy.FULL, 1,
@@ -258,8 +276,8 @@ class AiChatExecutorTest {
         AiMutationToolGuard.GuardedToolSession guardedSession =
                 mock(AiMutationToolGuard.GuardedToolSession.class);
         AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
-        AiChatExecutor.ApprovalWaitLifecycle waitLifecycle =
-                mock(AiChatExecutor.ApprovalWaitLifecycle.class);
+        org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle waitLifecycle =
+                mock(org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle.class);
         AiPendingMutationApproval pending = pending("approval-1", "update_a");
         when(guardedSession.getToolCallbacks()).thenReturn(new ToolCallback[0]);
         when(guardedSession.executeApproved(any())).thenReturn(Optional.empty());
@@ -277,7 +295,7 @@ class AiChatExecutorTest {
         AiTrajectoryRecorder recorder = spy(fixture.recorder("request-1"));
         ChatRequest request = request("Apply update");
 
-        assertThatThrownBy(() -> fixture.executor(mutationGuard, approvals).execute(
+        assertThatThrownBy(() -> execute(fixture.executor(mutationGuard, approvals),
                 new AiChatExecutor.Context(request, List.of(),
                         new UserMessage(request.prompt()), fixture.requester, recorder,
                         true, false, AiChatExecutor.ToolPolicy.FULL, 1,
@@ -302,7 +320,10 @@ class AiChatExecutorTest {
                 mock(AiMutationConfirmationService.class), mock(AiRequestRegistry.class));
         AiTrajectoryRecorder recorder = fixture.recorder("request-1");
 
-        AiChatExecutor.Result result = fixture.executor(mutationGuard).execute(
+        AiChatExecutor.Result result = execute(fixture.executorWithPolicies(mutationGuard,
+                toolPolicies(request -> new ToolOutputGuardrail.Result.Allow(
+                        request.output(), GuardrailDecision.of("tool-output", "1",
+                                GuardrailDecision.Action.ALLOW))), allowModelInput()),
                 new AiChatExecutor.Context(request("Inspect it"), List.of(),
                         new UserMessage("Inspect it"), fixture.requester, recorder,
                         true, false, AiChatExecutor.ToolPolicy.READ_ONLY, 1));
@@ -339,7 +360,10 @@ class AiChatExecutorTest {
                     return Flux.just(response("Verified: business context 7 exists."));
                 })));
 
-        AiChatExecutor.Result result = fixture.executor(null).execute(
+        AiChatExecutor.Result result = execute(fixture.executorWithPolicies(null,
+                toolPolicies(request -> new ToolOutputGuardrail.Result.Allow(
+                        request.output(), GuardrailDecision.of("tool-output", "1",
+                                GuardrailDecision.Action.ALLOW))), allowModelInput()),
                 new AiChatExecutor.Context(request("Verify it"), List.of(),
                         new UserMessage("Verify it"), fixture.requester,
                         fixture.recorder("request-1")));
@@ -373,8 +397,8 @@ class AiChatExecutorTest {
                 new com.fasterxml.jackson.databind.ObjectMapper(), fixture.requester,
                 "conversation-1", "request-1", ignored -> { });
 
-        AiChatExecutor.Result result = fixture.executorWithPolicies(
-                mutationGuard, policies, allowModelInput()).execute(
+        AiChatExecutor.Result result = execute(fixture.executorWithPolicies(
+                mutationGuard, policies, allowModelInput()),
                 new AiChatExecutor.Context(request("Inspect it"), List.of(),
                         new UserMessage("Inspect it"), fixture.requester, recorder));
 
@@ -419,11 +443,11 @@ class AiChatExecutorTest {
                         GuardrailDecision.Action.ALLOW))),
                 new AgentInputGuardrailChain(List.of(attachmentPolicy)));
 
-        assertThatThrownBy(() -> executor.execute(new AiChatExecutor.Context(
+        assertThatThrownBy(() -> execute(executor, new AiChatExecutor.Context(
                 request("Inspect it"), List.of(), user, fixture.requester,
                 fixture.recorder("request-1"), false, false,
                 AiChatExecutor.ToolPolicy.NONE, 0)
-                .withAgentIdentity("unresolved-root-agent",
+                .withAgentIdentity("test-root-agent",
                         ExecutionScope.Purpose.USER_RESPONSE)))
                 .isInstanceOfSatisfying(AgentInputRefusedException.class,
                         failure -> assertThat(failure.agentId())
@@ -441,11 +465,11 @@ class AiChatExecutorTest {
                 "conversation-1", "api_key=raw-page-secret", List.of(), null,
                 "configured-model", "high", "ask");
 
-        AiChatExecutor.Result result = fixture.executorWithPolicies(null,
+        AiChatExecutor.Result result = execute(fixture.executorWithPolicies(null,
                 toolPolicies(guarded -> new ToolOutputGuardrail.Result.Allow(
                         guarded.output(), GuardrailDecision.of("tool-output", "1",
                         GuardrailDecision.Action.ALLOW))),
-                allowModelInput()).execute(new AiChatExecutor.Context(
+                allowModelInput()), new AiChatExecutor.Context(
                 request, List.of(), new UserMessage("Inspect"), fixture.requester,
                 fixture.recorder("request-1"), false, false,
                 AiChatExecutor.ToolPolicy.NONE, 0)
@@ -470,7 +494,10 @@ class AiChatExecutorTest {
                 Flux.just(response("I'll search.\n\n**[Tool: toolSearchTool]** → searching")),
                 Flux.just(response("The available context schemes are A and B.")));
 
-        AiChatExecutor.Result result = fixture.executor(null).execute(
+        AiChatExecutor.Result result = execute(fixture.executorWithPolicies(null,
+                toolPolicies(request -> new ToolOutputGuardrail.Result.Allow(
+                        request.output(), GuardrailDecision.of("tool-output", "1",
+                                GuardrailDecision.Action.ALLOW))), allowModelInput()),
                 new AiChatExecutor.Context(request("Inspect schemes"), List.of(),
                         new UserMessage("Inspect schemes"), fixture.requester,
                         fixture.recorder("request-1")));
@@ -494,10 +521,9 @@ class AiChatExecutorTest {
                 List.of(), null, "configured-model", "high", "ask");
     }
 
-    private static AgentDefinition rootDefinition(String id, String instruction) {
-        return new AgentDefinition(new Agent.AgentId(id), "Test root Agent",
-                "Supplies a configurable root instruction for executor tests.",
-                new AgentDefinition.InstructionTemplate(instruction));
+    private static AiChatExecutor.Result execute(AiChatExecutor executor,
+                                                 AiChatExecutor.Context context) {
+        return executor.execute(context, TEST_INSTRUCTION);
     }
 
     private static ToolCallback tool(String name, String result) {
@@ -542,17 +568,8 @@ class AiChatExecutorTest {
         private final ChatClient.PromptSystemSpec systemSpec =
                 mock(ChatClient.PromptSystemSpec.class);
         private final ScoreUser requester = mock(ScoreUser.class);
-        private final Agent rootAgent;
-
         @SuppressWarnings({"unchecked", "rawtypes"})
         private Fixture() {
-            this(() -> rootDefinition("test-root-agent",
-                    "System prompt. Page: ${pageContext}"));
-        }
-
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        private Fixture(Agent rootAgent) {
-            this.rootAgent = rootAgent;
             ScoreAiModelRegistry.ModelConfiguration model =
                     mock(ScoreAiModelRegistry.ModelConfiguration.class);
             when(models.clientBuilder("configured-model")).thenReturn(builder);
@@ -576,14 +593,14 @@ class AiChatExecutorTest {
         }
 
         private AiChatExecutor executor(AiMutationToolGuard mutationGuard) {
-            return new AiChatExecutor(models, mcpClients, toolSearchAdvisor, rootAgent,
+            return new AiChatExecutor(models, mcpClients, toolSearchAdvisor,
                     mutationGuard, null, null, optionsFactory);
         }
 
         private AiChatExecutor executor(
                 AiMutationToolGuard mutationGuard,
                 AiMutationApprovalCoordinator approvalCoordinator) {
-            return new AiChatExecutor(models, mcpClients, toolSearchAdvisor, rootAgent,
+            return new AiChatExecutor(models, mcpClients, toolSearchAdvisor,
                     mutationGuard, null, null, optionsFactory, approvalCoordinator);
         }
 
@@ -591,7 +608,7 @@ class AiChatExecutorTest {
                 AiMutationToolGuard mutationGuard,
                 ToolGuardrailRegistry toolGuardrails,
                 AgentInputGuardrailChain modelInputGuardrails) {
-            return new AiChatExecutor(models, mcpClients, toolSearchAdvisor, rootAgent,
+            return new AiChatExecutor(models, mcpClients, toolSearchAdvisor,
                     mutationGuard, null, null, optionsFactory, null, toolGuardrails,
                     new SpringAiCallbackToolSetAdapter(), new SpringAiToolAdapter(),
                     modelInputGuardrails, null, null);

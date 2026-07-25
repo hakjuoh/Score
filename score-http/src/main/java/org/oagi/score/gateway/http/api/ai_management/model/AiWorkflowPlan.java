@@ -1,13 +1,18 @@
 package org.oagi.score.gateway.http.api.ai_management.model;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
- * Model-authored recursive Workflow. A member is exactly one Agent call or one
- * child Workflow; execution order comes from the member queue, not a type name.
+ * Model-authored recursive Workflow graph. A member is exactly one Agent vertex
+ * or one child Workflow graph, while edges define execution dependencies.
  */
 public record AiWorkflowPlan(WorkflowDefinition root,
                              String guideMessage,
@@ -20,7 +25,13 @@ public record AiWorkflowPlan(WorkflowDefinition root,
                 synthesisGuideMessage, "synthesisGuideMessage", 180);
     }
 
-    public record WorkflowDefinition(String id, List<Member> members) {
+    public record WorkflowDefinition(String id, List<Member> members, List<Edge> edges) {
+
+        /** Backward-compatible chain: each member depends on its predecessor. */
+        public WorkflowDefinition(String id, List<Member> members) {
+            this(id, members, null);
+        }
+
         public WorkflowDefinition {
             id = requiredId(id, "workflow id");
             members = members != null ? List.copyOf(members) : List.of();
@@ -35,6 +46,78 @@ public record AiWorkflowPlan(WorkflowDefinition root,
                             "Duplicate Workflow member id: " + member.id());
                 }
             }
+            edges = edges != null ? List.copyOf(edges) : chainEdges(members);
+            validateEdges(members, edges);
+        }
+
+        public List<String> predecessors(String memberId) {
+            Set<String> predecessorIds = edges.stream()
+                    .filter(edge -> edge.to().equals(memberId))
+                    .map(Edge::from)
+                    .collect(Collectors.toUnmodifiableSet());
+            return members.stream().map(Member::id)
+                    .filter(predecessorIds::contains).toList();
+        }
+
+        private static List<Edge> chainEdges(List<Member> members) {
+            if (members == null || members.size() < 2) return List.of();
+            ArrayList<Edge> chain = new ArrayList<>(members.size() - 1);
+            for (int index = 1; index < members.size(); index++) {
+                chain.add(new Edge(members.get(index - 1).id(), members.get(index).id()));
+            }
+            return List.copyOf(chain);
+        }
+
+        private static void validateEdges(List<Member> members, List<Edge> edges) {
+            Set<String> ids = members.stream().map(Member::id)
+                    .collect(Collectors.toUnmodifiableSet());
+            Set<Edge> unique = new HashSet<>();
+            Map<String, Integer> indegree = new HashMap<>();
+            Map<String, List<String>> outgoing = new HashMap<>();
+            ids.forEach(id -> {
+                indegree.put(id, 0);
+                outgoing.put(id, new ArrayList<>());
+            });
+            for (Edge edge : edges) {
+                Objects.requireNonNull(edge, "Workflow edge");
+                if (!ids.contains(edge.from()) || !ids.contains(edge.to())) {
+                    throw new IllegalArgumentException(
+                            "Workflow edge references an unknown member: " + edge);
+                }
+                if (edge.from().equals(edge.to())) {
+                    throw new IllegalArgumentException("A Workflow edge cannot reference itself.");
+                }
+                if (!unique.add(edge)) {
+                    throw new IllegalArgumentException("Duplicate Workflow edge: " + edge);
+                }
+                outgoing.get(edge.from()).add(edge.to());
+                indegree.compute(edge.to(), (ignored, value) -> value + 1);
+            }
+            ArrayDeque<String> ready = new ArrayDeque<>();
+            indegree.forEach((member, count) -> {
+                if (count == 0) ready.addLast(member);
+            });
+            int visited = 0;
+            while (!ready.isEmpty()) {
+                String member = ready.removeFirst();
+                visited++;
+                for (String target : outgoing.get(member)) {
+                    int remaining = indegree.compute(target,
+                            (ignored, value) -> value - 1);
+                    if (remaining == 0) ready.addLast(target);
+                }
+            }
+            if (visited != members.size()) {
+                throw new IllegalArgumentException("Workflow dependency edges contain a cycle.");
+            }
+        }
+    }
+
+    /** Directed dependency: {@code to} may start only after {@code from} settles. */
+    public record Edge(String from, String to) {
+        public Edge {
+            from = requiredId(from, "workflow edge source");
+            to = requiredId(to, "workflow edge target");
         }
     }
 

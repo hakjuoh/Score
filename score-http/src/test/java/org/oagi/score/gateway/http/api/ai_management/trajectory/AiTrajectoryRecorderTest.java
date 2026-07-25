@@ -36,6 +36,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -49,6 +55,48 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AiTrajectoryRecorderTest {
+
+    @Test
+    void terminalSealAndSideEffectStartHaveOneAtomicOrdering() throws Exception {
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                mock(AiChatConversationRepository.class), new ObjectMapper(), null,
+                "conversation", "request", ignored -> { });
+        CountDownLatch actionStarted = new CountDownLatch(1);
+        CountDownLatch releaseAction = new CountDownLatch(1);
+        CountDownLatch sealStarted = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            var action = pool.submit(() -> recorder.callWhileActive(() -> {
+                actionStarted.countDown();
+                try {
+                    if (!releaseAction.await(2, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("test action was not released");
+                    }
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new CancellationException("test action interrupted");
+                }
+                return "completed";
+            }));
+            assertThat(actionStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            var seal = pool.submit(() -> {
+                sealStarted.countDown();
+                recorder.sealAgainstLateCallbacks();
+            });
+            assertThat(sealStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+            assertThatThrownBy(() -> seal.get(50, TimeUnit.MILLISECONDS))
+                    .isInstanceOf(TimeoutException.class);
+            releaseAction.countDown();
+            assertThat(action.get(2, TimeUnit.SECONDS)).isEqualTo("completed");
+            seal.get(2, TimeUnit.SECONDS);
+            assertThatThrownBy(() -> recorder.callWhileActive(() -> "too late"))
+                    .isInstanceOf(CancellationException.class);
+        } finally {
+            releaseAction.countDown();
+            pool.shutdownNow();
+        }
+    }
 
     @Test
     void publishesContentFreeLifecycleObservationsIndependentlyOfRealtimeDelivery() {
@@ -217,10 +265,10 @@ class AiTrajectoryRecorderTest {
                 Map.of("status", "failed", "reason", "timeout"));
         recorder.progress("late progress");
         recorder.contentDelta("late content");
-        String output = recorder.recordingTools(() -> new ToolCallback[]{callback})
-                .getToolCallbacks()[0].call("{}", new ToolContext(Map.of()));
-
-        assertThat(output).isEqualTo("{\"items\":[]}");
+        assertThatThrownBy(() -> recorder.recordingTools(() -> new ToolCallback[]{callback})
+                .getToolCallbacks()[0].call("{}", new ToolContext(Map.of())))
+                .isInstanceOf(java.util.concurrent.CancellationException.class);
+        verify(callback, org.mockito.Mockito.never()).call(anyString(), any(ToolContext.class));
         verify(repository, times(1)).append(eq("conversation-1"), any());
         assertThat(events).extracting(AiExecutionEvent::subtype)
                 .containsExactly("subagent_failed");
@@ -1167,6 +1215,30 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
+    void disclosureSealAllowsOnlyBoundedLateUsageAccounting() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), mock(ScoreUser.class),
+                "conversation-1", "request-1", "model", "high", ignored -> { });
+        ChatResponse response = new ChatResponse(
+                List.of(new Generation(new AssistantMessage("late candidate"))),
+                ChatResponseMetadata.builder().usage(new DefaultUsage(2, 4, 6)).build());
+
+        recorder.sealAgainstLateCallbacks();
+        recorder.recordModelResponse(response, "assistant");
+
+        assertThat(recorder.usageSnapshot().completionTokens()).isEqualTo(4L);
+        assertThat(recorder.usageSnapshot().modelCalls()).isEqualTo(1L);
+        verify(repository, org.mockito.Mockito.never()).append(any(), any());
+
+        recorder.sealUsageAccounting();
+        recorder.recordModelResponse(response, "assistant");
+
+        assertThat(recorder.usageSnapshot().completionTokens()).isEqualTo(4L);
+        assertThat(recorder.usageSnapshot().modelCalls()).isEqualTo(1L);
+    }
+
+    @Test
     void recordFanOutUsageAggregatesChildSnapshotsIntoOneAuthoritativeStep() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
@@ -1257,6 +1329,28 @@ class AiTrajectoryRecorderTest {
                 new AiUsageSnapshot(null, null, 100L, 10L, 1L)));
 
         verify(repository, times(1)).append(eq("conversation-1"), any());
+    }
+
+    @Test
+    void settledAccountingPersistsAfterTheDisclosureFenceCloses() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
+                "conversation-1", "request-1", ignored -> { });
+
+        recorder.terminalLifecycle("workflow_timed_out", "Workflow timed out.",
+                Map.of("status", "failed"));
+        recorder.recordSettledFanOutUsage("fanout-late", "recursive_workflow", List.of(
+                new AiUsageSnapshot("worker-1", "worker", 100L, 10L, 1L)));
+
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, times(2)).append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues().getLast().messageKind())
+                .isEqualTo(AiTrajectoryRecorder.FANOUT_USAGE_STEP_KIND);
+        assertThat(steps.getAllValues().getLast().metrics())
+                .containsEntry("fanout_prompt_tokens", 100L)
+                .containsEntry("fanout_completion_tokens", 10L);
     }
 
     @Test

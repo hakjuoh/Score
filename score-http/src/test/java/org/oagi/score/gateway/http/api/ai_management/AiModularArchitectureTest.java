@@ -23,10 +23,7 @@ class AiModularArchitectureTest {
             "org.oagi.score.gateway.http.api.ai_management.conversation.AiChatRetentionService",
             "org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard",
             "org.oagi.score.gateway.http.api.ai_management.tool.AiToolFailureMessage",
-            "org.oagi.score.gateway.http.api.ai_management.agent.AssignedAgent",
-            "org.oagi.score.gateway.http.api.ai_management.agent.PlannerAgent",
-            "org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowIntent",
-            "org.oagi.score.gateway.http.api.ai_management.workflow.Workflow");
+            "org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowIntent");
 
     private static final DescribedPredicate<JavaClass> PROTOCOL_NEUTRAL_TYPES =
             DescribedPredicate.describe("established protocol-neutral AI types", type -> {
@@ -59,7 +56,32 @@ class AiModularArchitectureTest {
                             "..ai_management.repository..",
                             "org.jooq..")
                     .because("established Agent, Guardrail, Tool, Workflow, and Conversation "
-                            + "contracts must not depend on HTTP or persistence adapters");
+                    + "contracts must not depend on HTTP or persistence adapters");
+
+    @ArchTest
+    static final ArchRule agent_contracts_do_not_depend_on_application_or_execution_adapters =
+            noClasses().that().resideInAnyPackage(
+                            "..ai_management.agent..", "..ai_management.guardrail..")
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "..ai_management.execution..",
+                            "..ai_management.service..",
+                            "..ai_management.controller..",
+                            "..ai_management.repository..")
+                    .because("Agent definitions and Guardrails are provider-neutral contracts");
+
+    @ArchTest
+    static final ArchRule agent_definitions_do_not_depend_on_workflow_execution =
+            noClasses().that().resideInAPackage("..ai_management.agent..")
+                    .should().dependOnClassesThat().resideInAPackage(
+                            "..ai_management.workflow..")
+                    .because("Agent definitions are vertices, not Workflow executors");
+
+    @ArchTest
+    static final ArchRule provider_adapters_do_not_depend_on_workflow_execution =
+            noClasses().that().resideInAPackage("..ai_management.execution..")
+                    .should().dependOnClassesThat().resideInAPackage(
+                            "..ai_management.workflow..")
+                    .because("provider adapters implement inward ports without a Workflow cycle");
 
     @ArchTest
     static final ArchRule workflow_implementations_do_not_construct_model_clients =
@@ -76,4 +98,12 @@ class AiModularArchitectureTest {
                             "org.springframework.ai.openai.api..",
                             "org.springframework.ai.anthropic.api..")
                     .because("all application inference enters through AgentExecutionService");
+
+    @ArchTest
+    static final ArchRule application_services_do_not_depend_on_the_provider_executor =
+            noClasses().that().resideInAPackage("..ai_management.service..")
+                    .should().dependOnClassesThat().haveFullyQualifiedName(
+                            "org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor")
+                    .because("application services use AgentRunner and AgentIdentityProvider, "
+                            + "never the provider execution adapter");
 }

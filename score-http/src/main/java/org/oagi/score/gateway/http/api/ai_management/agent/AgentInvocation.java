@@ -7,21 +7,21 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-/** One immutable execution request for a fully resolved Agent. */
-public record AgentInvocation(AgentRunId runId, ResolvedAgent agent, AiMessage.User request,
+/** One immutable execution request for a definition-bound Agent session. */
+public record AgentInvocation(AgentRunId runId, AgentSession session, AiMessage.User request,
                               List<AiMessage> history, ExecutionScope scope,
                               ToolExecutionGateway tools,
                               Map<String, Object> observationContext) {
 
-    public AgentInvocation(AgentRunId runId, ResolvedAgent agent, AiMessage.User request,
+    public AgentInvocation(AgentRunId runId, AgentSession session, AiMessage.User request,
                            List<AiMessage> history, ExecutionScope scope,
                            ToolExecutionGateway tools) {
-        this(runId, agent, request, history, scope, tools, Map.of());
+        this(runId, session, request, history, scope, tools, Map.of());
     }
 
     public AgentInvocation {
         runId = runId != null ? runId : AgentRunId.create();
-        Objects.requireNonNull(agent, "agent");
+        Objects.requireNonNull(session, "session");
         Objects.requireNonNull(request, "request");
         history = history != null ? List.copyOf(history) : List.of();
         Objects.requireNonNull(scope, "scope");

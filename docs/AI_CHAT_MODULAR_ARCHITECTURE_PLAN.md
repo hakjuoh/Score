@@ -1,6 +1,6 @@
 # AI Chat Modular Architecture and Refactoring Plan
 
-> Status: **IN PROGRESS — FOUNDATION IMPLEMENTED**
+> Status: **AGENT/RUNNER SEPARATION IMPLEMENTED — FOLLOW-UP EXTRACTIONS TRACKED**
 >
 > Date: **2026-07-22**
 >
@@ -13,8 +13,9 @@
 
 The first production slice and the protocol-neutral seams for the following slices are implemented:
 
-- a common `Agent` identity contract implemented by static pipeline Agents, plus configured `AiModel`,
-  `ResolvedAgent`, `ToolSet`, immutable invocation/result, and trusted `ExecutionScope` types;
+- a common definition-only `Agent` contract implemented by static pipeline Agents, plus configured
+  `AiModel`, request-scoped `AgentSession`, `ToolSet`, immutable invocation/result, and trusted
+  `ExecutionScope` types;
 - mandatory Agent input/output and Tool input/output Guardrail chains, including pre-disclosure output
   buffering and bounded response-only retry;
 - the per-turn no-Tool Gateway Agent with the closed direct-intent set, a separately configurable
@@ -22,21 +23,39 @@ The first production slice and the protocol-neutral seams for the following slic
 - one protocol-neutral `ToolExecutionGateway`, with MCP callbacks adapted through it, exact mutation
   confirmation implemented as authorization middleware, cancellation fencing, output bounds, and
   retained-session approval resume;
-- a registration-driven installed Workflow catalog and a protocol-neutral `WorkflowInvocation` that no
-  longer exposes `AiChatExecutor.Context` to Workflow implementations;
+- a registration-driven installed Agent catalog and a bounded recursive `WorkflowRunner`; Agent
+  definitions return declarative `AgentDecision` values and do not expose an executor implementation;
 - conversation snapshot/store/commit ports, generation-fenced result commit, mandatory `ExecutionState`,
-  failure-isolated observer composites, and a no-Tool Compactor Agent;
-- configured model publication and the legacy definition/name generators routed through the same
-  `AgentExecutionService` instead of a provider-specific Ollama inference path; and
+  failure-isolated observer composites, and a no-Tool Compactor Agent definition;
+- configured model publication and the legacy definition/name generators routed through the shared
+  `AgentRunner` instead of a provider-specific Ollama inference path; and
 - ArchUnit checks that prevent Spring AI/MCP, HTTP, persistence, and provider SDK types from entering the
   new core boundaries.
 
-The compatibility migration is intentionally not marked complete yet. The remaining work is to make
-`ChatService.prepare`/`chat` thin orchestration, move all legacy `AiChatExecutor.Context` mechanics and
-trajectory-owned progress/state into focused execution/observer adapters, back every conversation port
-with its final production adapter, and pass the complete optional-feature removal matrix in Section 8.2.
-The compatibility path remains behind the new boundaries while those extractions proceed; the protected
-approval, cancellation, retry, read-back, and commit-fence behaviors remain covered by regression tests.
+The requested Agent/Runner boundary is complete: production wiring has exactly one shared
+`AgentRunner`, every addressable Agent is definition-only, and Workflow traversal is the sole owner of
+Agent-to-Agent control flow. The application port keeps model invocation as its functional contract
+and offers a compatibility Chat hook that the production adapter overrides. Provider
+context translation remains private to the execution adapter, and application services use the shared
+runner plus the narrow root-identity seam rather than `AiChatExecutor`.
+
+Follow-up work remains for making `ChatService.prepare`/`chat` thinner, moving remaining legacy
+`AiChatExecutor` provider mechanics and trajectory-owned progress/state into focused
+execution/observer collaborators, backing every conversation port with its final production adapter, and
+passing the complete optional-feature removal matrix in Section 8.2. Those are extraction and cleanup
+tasks; they must not reintroduce execution methods into Agent definitions or provider types into the
+neutral Agent/Workflow contracts. Approval, cancellation, input/output retry, read-back, and
+commit-fence behaviors are covered by regression tests.
+
+The boundary is enforced by the following checks:
+
+| Contract | Enforcement |
+| --- | --- |
+| Agent definitions do not execute | `StaticAgentContractTest` and role type assertions |
+| One shared runner owns many definitions | `AgentRunner` construction and `AgentDirectoryTest` |
+| Workflow is declarative traversal | `WorkflowTest` and the workflow ArchUnit rule |
+| Provider execution is behind one required port | `AgentExecutionService`, Spring context startup, and public-seam reflection tests |
+| Application services do not depend on provider executor | `AiModularArchitectureTest` |
 
 ## 1. Core concepts
 
@@ -94,13 +113,18 @@ Unknown effects are treated conservatively according to deployment policy.
 
 ### 1.3 Agent
 
-`Agent` is the common identity contract for every AI Agent. Static pipeline Agents such as Gateway,
-Workflow Planner, Workflow Evaluator, and Compactor implement it directly, so Agent implementations can
-be found and inspected through one type:
+`Agent` is the definition-only identity contract for every addressable AI Agent. Static pipeline
+Agents such as Gateway, Workflow Planner, and Workflow Evaluator implement it directly, so Agent
+definitions can be found and inspected through one type:
 
 ```java
 public interface Agent {
     AgentDefinition definition();
+
+    AgentRequestHandler requestHandler();
+    AgentToolHandler toolHandler();
+    AgentResponseHandler responseHandler();
+    AgentGuardrails guardrails();
 
     default AgentId id() {
         return definition().id();
@@ -108,32 +132,14 @@ public interface Agent {
 }
 ```
 
-A `ResolvedAgent` is the immutable execution subject composed of exactly the concepts required by the
-simple definition:
-
-```text
-Resolved Agent = Model + Instruction + Tool Set
-```
-
-```java
-public record ResolvedAgent(
-        AgentDefinition definition,
-        AiModel model,
-        Instruction instruction,
-        ToolSet tools) implements Agent {
-}
-```
-
-When executed, a resolved Agent asks its Model for a response and may use its assigned Tools. All Agent
-inference is executed through the application's Spring AI integration.
-
 An Agent is not a workflow, conversation, trajectory record, or Spring AI client object.
 
 ### 1.4 Agent definition and Agent run
 
-An `AgentDefinition` is a reusable identity and instruction template from which a fully bound
-`ResolvedAgent` is created. It does not declare a role or Tool policy and is not executable until a
-Model and request-authorized concrete ToolSet are resolved. Prompt resources use three self-contained groups:
+An `AgentDefinition` is a reusable identity, instruction, and turn-policy definition. It owns request
+preparation, Tool resolution, response interpretation, and Agent-specific input/output guardrails;
+it does not execute a model. The shared `AgentRunner` binds the selected Model and request-authorized
+ToolSet, invokes those handlers, and owns the run lifecycle. Prompt resources use three self-contained groups:
 
 - `resources/ai/system/system-prompt-*.md` for fixed system Agents such as the root assistant, Gateway,
   Planner, Evaluator, and Compactor;
@@ -146,7 +152,7 @@ Model and request-authorized concrete ToolSet are resolved. Prompt resources use
 by fixed application Agents, and `workflow/*` and `execution/*` entries are closed instruction templates
 rendered into Root, Worker, Synthesizer, or execution-recovery Agent runs. Instruction templates are not additional selectable Agent
 identities; every model invocation that uses one is still owned by a catalog-backed static Agent or a
-catalog-resolved `ResolvedAgent`. System and Worker definition frontmatter contains only `id`, `name`,
+catalog-resolved request-scoped Agent definition. System and Worker definition frontmatter contains only `id`, `name`,
 and `description`; execution capabilities are not prompt metadata. Workflow and execution templates
 contain only the instruction body and declared `${...}` placeholders, with missing or unused values
 rejected when rendered.
@@ -163,26 +169,29 @@ An `AgentRun` is one execution of an Agent for one request:
 ```java
 public record AgentRun(
         RunId id,
-        ResolvedAgent agent,
+        AgentSession session,
         AiUserMessage request,
         List<AiMessage> history,
         ExecutionScope scope) {
 }
 ```
 
-The same Agent may have many runs. A run owns transient execution identity and lifecycle; the Agent owns
-stable behavior and capabilities.
+The same Agent definition may have many runs. A run owns transient execution identity and lifecycle;
+the Agent owns stable behavior and capabilities. `AgentExecutionService` remains the lower-level
+provider/model port called by `AgentRunner`, not a per-Agent runner implementation.
 
 ### 1.5 Spring AI execution boundary
 
 Spring AI is the single model-execution stack. The application does not define an alternative execution
 SPI, execution implementation registry, execution ID, or SDK-selection policy.
 
-The application-facing `AgentExecutionService` port accepts an `AgentInvocation` and returns an
-`AgentRunResult`. Its only production implementation is `SpringAiAgentExecutionService`, which resolves
-the selected model's Spring AI `ChatModel`, builds a `ChatClient` request, and adapts the Agent's Tools to
+The application-facing `AgentExecutionService` port requires an `AgentInvocation` operation for
+provider-neutral model turns and exposes a default, unsupported Runner-bound `AgentChatSession` hook
+for full transport Chat turns. This preserves model-only lambda integrations. Its production adapter
+is `SpringAiAgentExecutionService`, which implements both forms through the configured Spring AI executor,
+resolves the selected model's `ChatModel`, builds a `ChatClient` request, and adapts the Agent's Tools to
 Spring AI callbacks. The port exists to keep orchestration independent of library types and to support
-focused tests; it has no implementation selection, identity, registry, or capability negotiation.
+focused tests; it has no per-Agent implementation selection, identity, registry, or capability negotiation.
 Provider-specific differences are handled by configured Spring AI model beans and option factories.
 
 The Spring AI boundary does not own canonical conversation history, mutation confirmation, compaction,
@@ -190,22 +199,17 @@ or trajectory persistence. It receives an immutable execution request and return
 
 ### 1.6 Workflow
 
-A `Workflow` describes how one or more Agent runs are composed to produce a result. `direct` is the
-standard workflow and requires no optional executor registration.
+A `Workflow` is an immutable composition graph for one or more Agent runs. Its Agent tasks and nested
+Workflows are vertices, and explicit acyclic edges express data dependencies. A Workflow definition
+describes relationships and evidence flow only. It never owns a model call and never implements an
+Agent executor.
 
-Examples include:
-
-- direct;
-- chain;
-- parallel;
-- routing;
-- orchestrator-workers; and
-- evaluator-optimizer.
-
-Advanced Workflow implementations are registered globally by `WorkflowId`. Because every model call is
-made through Spring AI, Workflow availability does not vary by SDK. An explicitly requested Workflow
-that is not installed returns a capability error. Automatic selection chooses only installed Workflows
-and falls back to `direct` when no suitable advanced Workflow is present.
+`WorkflowRunner` is the single scheduler for the current recursive plan contract. It starts with the
+Gateway call, follows handoffs, enqueues child Workflows produced by the Planner, and invokes the shared
+`AgentRunner` for every Agent vertex. It concurrently executes each ready DAG layer, propagates only
+direct-predecessor evidence, cancels siblings on terminal cancellation/failure, and joins results in
+declaration order. A one-member child returns its result directly; larger children combine successful
+results through the Synthesizer.
 
 ### 1.7 Conversation and history
 
@@ -368,7 +372,7 @@ factual memory. It requires only:
 - the standard Spring AI execution path.
 
 Automatic compaction is a policy that decides when to invoke this Agent; manual `/compact` is a command
-that invokes the same service. Compaction does not require an advanced Workflow or a separate model-call
+that invokes the same service. Compaction does not require Workflow traversal or a separate model-call
 mechanism.
 
 ### 1.14 Mutation confirmation
@@ -433,13 +437,13 @@ PreparedChatTurn ----------------> LocalTurnGuardrailChain
            Guardrails       policy   ModelSelector
                   |                      |
                   v                      v
-          fenced commit       AgentFactory -- Model + Instruction + ToolSet --> ResolvedAgent
+          fenced commit       AgentRunner -- Model + Instruction + ToolSet --> AgentSession
                                          |
                                          v
-                            WorkflowResolver -- installed WorkflowId set
+                            WorkflowRunner -- traverses recursive Workflow graph
                                          |
                                          v
-                            WorkflowExecutor -- composes Agent runs
+                            AgentRunner -- invokes definition handlers and execution port
                                          |
                                          v
                                AgentExecutionService
@@ -516,11 +520,9 @@ normalized turn plus bounded policy/routing context, has an empty ToolSet, and c
 the configured closed intent set. The root Agent receives canonical conversation context and the
 request-authorized ToolSet and is responsible for normal domain assistance.
 
-`GatewayResult` contains two independently validated parts: the model-assisted `TURN` Guardrail
-decision and the route decision. A valid `ALLOW + HANDOFF` is reused by the normal path. A missing,
-malformed, or unavailable required policy classification must be completed by an approved evaluator on
-the normal path and fails closed if none is available. A missing or invalid route after policy has safely
-allowed the turn falls back to the normal path. Low confidence is `REVIEW`, never `DIRECT`.
+The Gateway Agent response handler validates the model-assisted `TURN` policy and route together. A
+missing, malformed, unavailable, or low-confidence route becomes a handoff; it never becomes an
+implicit policy allow. The normal path then continues through the shared Agent and Workflow pipeline.
 
 The Gateway Agent is used for every eligible turn, including follow-ups. It receives only the current
 normalized turn and directly handles only the closed context-free intent set; all contextual or domain
@@ -532,12 +534,12 @@ duplicated as constants, and prompt metadata does not determine Tool access.
 
 ### 2.4 Agent and Model
 
-The Model belongs to the Agent. `SpringAiModelCatalog` resolves each configured `ModelId` to exactly one
-Spring AI `ChatModel` plus model metadata. Model selection never selects a separate execution mechanism.
-
-`AgentFactory` resolves an `AgentDefinition`, selected Model, user/request-specific Tool permissions, and
-the currently installed Tool providers into a concrete `ResolvedAgent`. Missing optional Tool providers
-produce a smaller ToolSet rather than an invalid Agent.
+The Model is selected for an Agent run, not stored as mutable state on the Agent definition.
+`AgentRunner` depends on the provider-neutral `AiModelCatalog`; `SpringAiModelCatalog` implements that
+port from configured Spring AI models and metadata. Model selection never selects a separate execution mechanism. `AgentRunner` binds the
+definition, selected Model, user/request-specific Tool permissions, and currently installed Tool
+providers into an `AgentSession`. Missing optional Tool providers produce a smaller ToolSet rather
+than an invalid Agent.
 
 ### 2.5 Agent and Tool
 
@@ -577,8 +579,8 @@ text, the fallback emits no guide sentence and uses only language-neutral progre
 invents an English guide, label, or verb for a non-English request.
 
 Worker Tool authority is authored per task by the Workflow plan, not by the Worker definition. A task
-selects `NONE`, `READ_ONLY`, or `FULL`; an omitted value defaults to `READ_ONLY` whenever the task needs
-Tools. The executor intersects that request with the parent request's Tool authority, so a plan can
+selects `NONE`, `READ_ONLY`, or `FULL`; an omitted value defaults to `NONE`, and Tool use must be
+requested explicitly. The executor intersects that request with the parent request's Tool authority, so a plan can
 reduce authority but cannot increase it. `FULL` is valid only for an assignment that explicitly requires
 mutation, and the normal approval barrier still governs every data-changing Tool call. This keeps one
 Worker reusable for research, analysis, and mutation assignments without encoding a permanent role or
@@ -591,13 +593,13 @@ retain `FULL` only when mutation work remains assigned to the parent rather than
 
 ### 2.7 Workflow availability
 
-Direct execution belongs to `AgentExecutionService` and is always available when a selected Spring AI
-model is configured. Advanced Workflow implementations are zero-or-more application extensions indexed
-only by `WorkflowId`.
+Agent execution belongs to the shared `AgentRunner` and is always available when a selected Spring AI
+model is configured. `WorkflowRunner` traverses the recursive `AiWorkflowPlan`; the plan is the graph
+of Agent vertices and child Workflows, not an executable Agent or a registry of per-pattern runners.
 
-Workflow planning receives the installed Workflow descriptor set. An explicit unsupported choice fails
-before inference; an automatic choice falls back to `direct` when no suitable advanced Workflow is
-installed.
+Workflow planning targets the bounded set of installed, assignable Agent IDs and emits a recursive DAG.
+Unknown, control-plane, or otherwise non-assignable Agent IDs are rejected by validation; there is no
+Workflow descriptor registry, per-pattern executor selection, or implicit direct-execution fallback.
 
 ### 2.8 Conversation and execution
 
@@ -617,6 +619,10 @@ is only a cache and may be discarded whenever the model changes or the handle be
   policy decisions precede Workflow or general Agent execution.
 - Model Agent Input Guardrails validate final model-bound messages.
 - Agent Output Guardrails validate, redact, regenerate, or suppress candidate results before disclosure.
+- A caller may reuse a definition-owned output decision only when the exact final `AgentOutput` carries
+  opaque Runner-issued `PUBLIC` evidence. Guardrail metadata is diagnostic and cannot grant trust.
+  Missing or `INTERNAL` evidence must pass the shared public boundary policy exactly once before
+  disclosure; manual compaction is public, automatic compaction is internal.
 - Tool Input/Output Guardrails protect every Tool call at the common execution gateway.
 - Compaction invokes a dedicated no-Tool Agent through the standard execution service.
 - Mutation confirmation participates only in the Tool middleware chain.
@@ -632,29 +638,31 @@ the composition root supplies an empty composite, an empty chain, or no policy r
 
 ### 3.1 Core Agent API
 
-Keep reusable configuration separate from a fully resolved Agent and from a single run:
+Keep reusable definition, request-scoped session, and single-run invocation separate. The Agent owns
+turn handlers; the shared AgentRunner owns execution:
 
 ```java
 public record AgentDefinition(
         AgentId id,
         String name,
         String description,
-        InstructionTemplate instruction) {
+        InstructionTemplate instruction,
+        AgentRequestHandler requestHandler,
+        AgentToolHandler toolHandler,
+        AgentResponseHandler responseHandler,
+        AgentGuardrails guardrails) {
 }
 
-public interface AgentFactory {
-    ResolvedAgent create(AgentDefinition definition,
-                         AiModel model,
-                         ToolSet availableTools);
+public final class AgentRunner {
+    AgentDecision run(Agent.AgentId id, AgentWorkflowContext context);
+    AgentDecision run(Agent agent, AgentWorkflowContext context);
 }
 
-public record AgentInvocation(
-        AgentRunId runId,
-        ResolvedAgent agent,
-        AiUserMessage request,
-        List<AiMessage> history,
-        ExecutionScope scope,
-        ToolExecutionGateway tools) {
+public record AgentSession(
+        Agent agent,
+        AiModel model,
+        Agent.Instruction instruction,
+        ToolSet tools) {
 }
 
 public record AgentRunResult(
@@ -665,15 +673,16 @@ public record AgentRunResult(
 }
 ```
 
-`AgentExecutionService` is the single application entry point for running an Agent. It validates the
-selected Model, builds and invokes the Spring AI request, and returns a result. It does not load or save
-conversation data.
+`AgentRunner` is the single application entry point for running definition-owned Agent turns. It
+prepares the request, binds the Model and the definition's `AgentToolBinding`, invokes
+`AgentExecutionService`, delegates response interpretation back to the definition, then applies
+output guardrails and bounded retry to the final handler-produced content. `AgentExecutionService` is the lower-level
+provider/model port used by that runner; it does not load or save conversation data.
 
 The Gateway, user-facing assistant, planner, evaluator, workers, synthesizer, and compactor all use this
-API. Statically declared pipeline Agents implement `Agent`; request-resolved workers and other dynamic
-subjects are represented by `ResolvedAgent`, which implements the same contract.
-There must be no remaining inference path that constructs a Spring AI request directly outside the
-Spring AI integration boundary.
+API. Statically declared pipeline Agents implement `Agent`; request-resolved workers are definition
+bindings installed into the same runner. There must be no remaining inference path that constructs a
+Spring AI request directly outside the shared runner or its provider adapter.
 
 ### 3.2 Guardrail API
 
@@ -782,52 +791,16 @@ restrictions, logging redaction, context limits, or cancellation. This execution
 by trusted application code and cannot be supplied through an HTTP payload, persisted preference,
 prompt, or Tool result.
 
-### 3.3 Gateway API
+### 3.3 Gateway Agent API
 
-The Gateway result is a sealed type so a direct response cannot exist without an allowed, guarded turn:
+`GatewayAgent` is a definition-only `Agent`. Its request handler either prepares the bounded
+`GATEWAY_ROUTING` Model request or returns a `Handoff`; its response handler validates the structured
+route and returns `Complete` only for the configured closed direct-intent set. The shared
+`AgentRunner` applies the Agent's guardrails and invokes the lower-level execution port. There is no
+separate Gateway result type or Gateway executor.
 
-```java
-public enum DirectIntent {
-    GREETING, THANKS, CAPABILITIES_HELP
-}
-
-public sealed interface GatewayResult {
-    record Direct(
-            GuardedTurn turn,
-            DirectIntent intent,
-            AiAssistantMessage candidate,
-            double confidence) implements GatewayResult {}
-
-    record Handoff(
-            GuardedTurn turn,
-            Optional<WorkflowId> suggestedWorkflow,
-            double confidence) implements GatewayResult {}
-
-    record Review(
-            GuardedTurn turn,
-            GuardrailReviewReason reason) implements GatewayResult {}
-
-    record Refuse(GuardrailRefusal refusal) implements GatewayResult {}
-}
-```
-
-`GuardedTurn` contains the locally validated/re-written `PreparedChatTurn` plus all completed `TURN`
-Guardrail decision IDs. The shared `AiAgentCatalog` resolves the resource-backed Gateway definition, and
-the common `AgentFactory` binds its configured lightweight Model and empty ToolSet. Its Spring AI
-structured-output schema is versioned and rejects unknown intents, missing policy fields, invalid
-confidence, and a `DIRECT` result outside the closed intent set.
-
-The Gateway invocation uses trusted `GATEWAY_ROUTING` purpose. Like `GUARDRAIL_EVALUATION`, this purpose
-can be created only by application code and bypasses only recursion into the model-assisted `TURN`
-policy fields being evaluated. All other model restrictions, logging redaction, cancellation, and output
-validation remain active. The gateway has a small input/token budget and receives no broad history or
-Tool declarations.
-
-Gateway routing failure is not an implicit policy allow. If routing fails before a valid policy decision
-is available, the request enters the normal path at its remaining `TURN` Guardrail evaluation; that path
-still fails closed if a required evaluator is unavailable. If policy has safely allowed the turn but the
-route is invalid, the route defaults to `HANDOFF`. Only a valid, sufficiently confident `Direct` may use
-the fast response path.
+The Gateway has an empty Tool binding and receives only the normalized current turn. A malformed,
+low-confidence, or unavailable route becomes a handoff; it never becomes an implicit policy allow.
 
 ### 3.4 Spring AI integration
 
@@ -873,26 +846,18 @@ fall back because model configuration can legitimately change between deployment
 
 ### 3.5 Workflow SPI
 
-Direct execution is not registered as an optional Workflow implementation; it is guaranteed by
-`AgentExecutionService`. Advanced Workflows use a simple global registry:
+Workflow execution is not registered as an optional per-pattern implementation. The recursive
+`WorkflowRunner` is the single scheduler:
 
 ```java
-public interface WorkflowExecutor {
-    WorkflowId workflowId();
-    WorkflowResult execute(WorkflowInvocation invocation);
-}
-
-public interface WorkflowExecutorRegistry {
-    Optional<WorkflowExecutor> find(WorkflowId workflowId);
-    Set<WorkflowId> installed();
+public final class WorkflowRunner {
+    AgentOutput execute(AgentWorkflowContext root);
 }
 ```
 
-The registry is the source of truth for both validation and planner input; a hard-coded Workflow list is
-not. Removing an advanced executor removes only that Workflow.
-
-`WorkflowInvocation` contains Agents, immutable history, execution scope, and an Agent-run function. It
-must not expose Spring `ChatClient`, MCP, repository, or HTTP types.
+`AiWorkflowPlan.WorkflowDefinition` is the source of truth for each recursive call graph. It contains
+Agent tasks or child Workflows; model/provider/history/memory/Tool execution remains in `AgentRunner`
+and its execution port.
 
 ### 3.6 Tool SPI and provider boundary
 
@@ -995,11 +960,12 @@ contract.
 
 ### 3.9 Optional features
 
-Compaction consists of three replaceable parts:
+Compaction consists of three replaceable responsibilities:
 
-- `CompactionPolicy`: decides whether automatic compaction is needed;
-- `CompactionAgentFactory`: binds the selected Model to a no-Tool compaction definition; and
-- `ConversationCompactor`: runs the Agent and replaces history/memory.
+- `AiContextBudgetService`: decides whether automatic compaction is needed;
+- `ConversationCompactor`: builds the no-Tool compaction definition and delegates it to the shared
+  `AgentRunner`; and
+- `ChatService` plus the conversation commit boundary: replace accepted history/memory.
 
 Manual and automatic compaction call the same service. Hard context-window validation belongs to core
 execution safety and remains present if the optional compaction feature is absent.
@@ -1039,9 +1005,9 @@ retains no MCP, `ChatClient`, Tool callback, or feature-specific branches.
 | Current code | Problem exposed by the new definitions | Target change |
 |---|---|---|
 | `AiAgentDefinition` contains only id, display metadata, and instruction; role and Tool policy are absent from prompt metadata | Completed: definitions no longer constrain runtime autonomy | Keep Tool access request- and Workflow-scoped, with mutations enforced by Guardrails and approval coordination |
-| `AiAgentCatalog` registers fixed Agents from `system-prompt-*`, dynamic Workers from `agent-prompt-*`, Workflow templates from `workflow/*`, and execution templates from `execution/*` | Completed: every static inference identity and every reusable orchestration/execution instruction resolves through the common catalog | Keep new inference paths on the catalog-backed `Agent` contract; render templates only within an identified Root, Worker, Synthesizer, or recovery Agent run |
+| `AiAgentCatalog` registers fixed Agents from `system-prompt-*`, dynamic Workers from `agent-prompt-*`, and reusable instruction fragments from `workflow/*` and `execution/*` | Completed: every static inference identity and every reusable orchestration instruction resolves through the common catalog | Keep new inference paths on the catalog-backed `Agent` contract; render fragments only within an identified Root, Worker, Synthesizer, or recovery Agent run |
 | `ChatRequest.agent` remains in the transport request while responses now use the actually executed Agent identity | The unused client-supplied selection field is ambiguous | Remove the transport field after compatibility migration; keep Agent selection server-authoritative |
-| `AiChatExecutor.Context` imports `ChatRequest`, `ScoreUser`, and concrete `AiTrajectoryRecorder` | Model execution is coupled to HTTP/application state and an optional feature | Replace it with `AgentInvocation`, `ExecutionScope`, `ToolExecutionGateway`, and observer-neutral results |
+| `AiChatExecutor.Context` is private Spring AI execution state | Provider context must not cross into Agent or Workflow contracts | Completed: `ChatExecutionContext` stores canonical data independently, `SpringAiExecutionContextMapper` creates provider state only at the port boundary, and definitions see `AgentExecutionContext` |
 | `AiChatExecutor` resolves models, opens MCP sessions, builds `ChatClient`, wraps Tools, retries, streams, and enforces read-back | Spring AI translation, Tool protocol, policy, state, and recovery are difficult to vary and test independently | Keep Spring AI request construction in the execution boundary; move Tool resolution/policy to the gateway and mandatory state/recovery to dedicated collaborators |
 | Safety rules are expressed only in the assistant prompt | The general Agent may begin planning or call Tools before a reliable application policy refuses the request | Add required `TURN` and `MODEL` Agent Input Guardrail chains; keep prompt rules only as defense in depth |
 | Simple turns use the same root Model, context, and orchestration as domain requests | Greetings and basic help pay unnecessary latency and load | Add a no-Tool lightweight Gateway Agent that can answer only a closed simple-intent set and otherwise hands off immediately |
@@ -1050,7 +1016,7 @@ retains no MCP, `ChatClient`, Tool callback, or feature-specific branches.
 | `AiMutationToolGuard` implements confirmation directly around Spring AI callbacks | Confirmation is tied to one callback representation | Re-express it as core Tool authorization middleware and a separate optional grant store |
 | Tool argument checks, mutation guards, output limiting, and sensitive-data redaction are implemented by separate callback wrappers/helpers | A Tool may miss a policy when it is not wrapped in exactly the same way | Resolve Tool Input/Output Guardrails and other mandatory middleware centrally in `ToolExecutionGateway` |
 | `AiTrajectoryRecorder` records, emits UI events, counts/retries, wraps Tools, and limits output | Removing recording would remove required execution behavior | Split `ExecutionState`, Tool middleware, event publisher, and optional trajectory observer |
-| `WorkflowContext` embeds `AiChatExecutor.Context` | Workflow composition depends on a concrete executor and transport-oriented request state | Pass Agents, immutable history, execution scope, and an Agent-run function through `WorkflowInvocation` |
+| `AgentWorkflowContext` carries a provider-neutral `AgentExecutionContext` | Agent and Workflow contracts must remain independent of Spring AI | Completed: canonical context storage is provider-independent and Spring AI conversion is isolated in `SpringAiExecutionContextMapper` |
 | `ScoreAiModelRegistry` mixes availability metadata, default selection, Spring AI client construction, and configuration lookup | Model catalog concerns and Spring AI construction are difficult to test separately | Keep one configured Model catalog and extract focused model selection, client factory, and options mapping collaborators |
 | Conversation settings/history are reconstructed through broad conversation/trajectory persistence | Optional diagnostics risk becoming authoritative state | Split state, history, transcript, memory, and optional trajectory projections |
 | `ChatService.prepare` and `chat` parse commands, resolve policy, compact, execute, persist, and map responses | Control flow and feature ownership are difficult to see and test | Retain a thin facade over preparation, execution, compaction, and commit use cases |
@@ -1074,8 +1040,14 @@ retains no MCP, `ChatClient`, Tool callback, or feature-specific branches.
   Its public response must not expose internal policy rules or classifier rationale.
 - Rejected Agent Output Guardrail candidates must not be streamed, committed, or published to general
   observers. Output retry must not replay completed Tool calls or mutations.
+- Chat usage returned to `AgentRunner` is the per-attempt delta from the provider recorder, including
+  the actual model-call count, so bounded output retries cannot double-count cumulative usage.
 - Every Tool call must run Tool Input Guardrails before execution and Tool Output Guardrails before its
   result reaches the Model, UI, transcript, or observers.
+- Definition-owned Tool invocation runs inside the recorder's atomic `callWhileActive` fence.
+  Transport-inherited callbacks instead enter through `AiRequestRegistry.admitToolExecution`, which
+  linearizes admission with cancellation and timeout; a later stop does not retroactively revoke an
+  already-admitted side effect.
 
 ## 5. Composition and removal semantics
 
@@ -1091,7 +1063,7 @@ checking nullable collaborators throughout the code.
 | Gateway Model or routing unavailable | The direct fast path is skipped and the request enters the normal flow, including any remaining required `TURN` Guardrails. Required policy evaluation still fails closed if no approved evaluator is available. |
 | One configured Model/provider | That Model is absent from the available model catalog. Other Spring AI-backed Models continue to work. An explicit request for the removed Model reports unavailable. |
 | MCP Tool provider | MCP Tools are absent from Tool resolution. Agents with local, web-search, Bash, or no Tools continue to work. |
-| Advanced Workflow executor | That Workflow is not advertised. Automatic planning selects another installed Workflow or direct; explicit selection reports unsupported. |
+| Assignable Agent definition | Plans that reference that Agent are rejected or replanned within the bounded planning policy; other Agent vertices remain available. |
 | Usage metadata from a model | The result contains unknown/estimated usage. Response generation and history persistence continue. |
 | Tool-calling capability for a model | The Agent receives an empty model-visible ToolSet. Direct text generation works; a Tool-required operation reports a capability error. |
 | Optional observer | Its projection/event stream is absent. Execution result is unchanged. |
@@ -1107,13 +1079,13 @@ Use collection injection and registries for zero-or-more extensions:
 new CompositeExecutionObserver(List<ExecutionObserver> observers);
 new ToolExecutionPipeline(List<ToolExecutionMiddleware> middleware);
 new ToolProviderRegistry(List<ToolProvider> providers);
-new WorkflowExecutorRegistry(List<WorkflowExecutor> executors);
+new AgentRunner(..., List<Agent> agents);
 new AgentInputGuardrailChain(List<AgentInputGuardrail> guardrails);
 new AgentOutputGuardrailChain(List<AgentOutputGuardrail> guardrails);
 new ToolGuardrailRegistry(List<ToolGuardrailRegistration> registrations);
 ```
 
-Empty observer, Tool middleware, Tool provider, and advanced Workflow collections are valid. Required
+Empty observer, Tool middleware, and Tool provider collections are valid. Required
 Guardrail chains must contain their configured baseline policies; an empty required chain is invalid.
 Required core services and the Spring AI integration have normal non-null constructor dependencies and
 fail application startup if missing. Avoid
@@ -1137,7 +1109,7 @@ Package boundaries, not build artifacts, provide separation:
 | `ai_management.guardrail` | Agent/Tool Input and Output policies, chains, redaction, classifiers, refusal mapping, retention directives |
 | `ai_management.execution` | `AgentExecutionService`, Spring AI implementation, `ChatModel` catalog, options/message mapping, Tool callback adapter |
 | `ai_management.tool` | Protocol-neutral Tools, sessions, execution gateway, effects, and middleware; protocol adapters live below `tool.provider.*`, such as `tool.provider.mcp` |
-| `ai_management.workflow` | Direct/advanced Workflow contracts, registry, and installed executors |
+| `ai_management.workflow` | Recursive DAG scheduling, the shared Agent runner, execution budgets, and assignment policy |
 | `ai_management.conversation` | Snapshot, history/state/memory ports, fenced result commit |
 | `ai_management.service` | Chat facade and application use-case orchestration |
 | `ai_management.repository` | jOOQ and other persistence adapters |
@@ -1180,13 +1152,13 @@ only if a concrete independent deployment or reuse requirement appears; it is no
     ConversationSnapshot and the remaining TURN Guardrails run only if they were not already satisfied
     by a valid Gateway decision.
 11. ModelSelector resolves an available configured Model for the root Agent.
-12. AgentFactory resolves the root definition and available/user-authorized Tools.
-13. WorkflowResolver validates the requested Workflow against installed executors.
-14. The Workflow composes Agent runs; every inference calls AgentExecutionService.
-15. The MODEL Agent Input Guardrail chain validates the assembled messages for each model call.
-16. AgentExecutionService builds and invokes the Spring AI ChatClient request.
+12. AgentRunner resolves the root definition and available/user-authorized Tools.
+13. WorkflowRunner validates the recursive Workflow plan and traverses its Agent vertices.
+14. The Workflow composes Agent runs; every inference calls the shared AgentRunner.
+15. AgentRunner and the execution adapter apply the MODEL Agent Input Guardrail chain to each model call.
+16. AgentRunner invokes AgentExecutionService, which builds and invokes the Spring AI ChatClient request.
 17. Spring AI Tool callbacks route through ToolExecutionGateway and both Tool Guardrail directions.
-18. AgentExecutionService returns a candidate AgentRunResult.
+18. AgentExecutionService returns a candidate AgentRunResult to AgentRunner.
 19. The Agent Output Guardrail chain accepts, rewrites, retries, or refuses the candidate.
 20. Only validated output is streamed and passed to ConversationResultCommitter.
 21. ConversationResultCommitter checks the request fence and commits canonical state atomically.
@@ -1261,15 +1233,16 @@ or canonical assistant messages.
 ```text
 CompactionPolicy/command
   -> load canonical history
-  -> build Compactor Agent(selected Model, compact prompt, empty ToolSet)
-  -> AgentExecutionService.execute
+  -> ConversationCompactor builds Compactor Agent(selected Model, compact prompt, empty ToolSet)
+  -> shared AgentRunner
+  -> AgentExecutionService
   -> invoke Spring AI ChatClient
   -> validate compacted memory
   -> fenced atomic history/memory replacement
 ```
 
-Compaction uses the same execution service as all other inference and does not depend on advanced
-Workflow registration.
+Compaction uses the same shared Runner and execution service as all other inference and does not
+depend on Workflow traversal.
 
 ### 6.5 Mutation Tool call
 
@@ -1290,16 +1263,16 @@ Spring AI requests Tool(name, arguments)
 
 Approval grants identify the exact conversation, requester, Tool, normalized arguments/effect, and
 request generation. They must not authorize a different invocation after retry or cancellation.
-Only truly concurrent `parallel` and `orchestrator-workers` branches participate in one batch approval
-barrier. Sequential `chain`, single-route `routing`, and other non-concurrent Worker executions use an
-individual approval scope and resume only that exact Worker.
+Only members in the same concurrently ready DAG layer may participate in one batch approval barrier.
+Members ordered by dependency edges use an individual approval scope and resume only that exact Agent
+vertex.
 
-### 6.6 Model or Workflow unavailable
+### 6.6 Model or Agent unavailable
 
-An explicitly selected unavailable Model or Workflow returns a structured capability error before
-executing inference. A stale stored Model preference may fall back to the configured default, and
-automatic Workflow selection may fall back to `direct`. These decisions are exposed in result metadata
-and observations rather than hidden.
+An explicitly selected unavailable Model returns a structured capability error before inference. A
+stale stored Model preference may fall back to the configured default. A planned Workflow that names an
+unknown or non-assignable Agent is rejected before execution and may be replanned only within the bounded
+Planner policy. These decisions are exposed in result metadata and observations rather than hidden.
 
 ## 7. Migration plan
 
@@ -1362,9 +1335,12 @@ suppressed before disclosure, and persistence, observations, and logs honor poli
 **Exit:** Agent/application code has no MCP or Spring AI Tool types, and Tool policy contract tests pass
 with fake providers.
 
-### Phase 4 — Consolidate Spring AI execution and add the Gateway fast path
+### Phase 4 — Consolidate remaining Spring AI execution mechanics and add the Gateway fast path
 
-- Replace `AiChatExecutor.Context` with `AgentInvocation` and observer-neutral results.
+- Keep `AiChatExecutor.Context` private to the Spring AI adapter; `ChatExecutionContext` must remain
+  an independent canonical value mapped only by `SpringAiExecutionContextMapper`. Continue extracting
+  remaining legacy mechanics into focused provider/observer collaborators; use `AgentInvocation` and
+  observer-neutral results for model calls that do not need the full Chat transport.
 - Separate model selection, `ChatClient` construction, option mapping, retry policy, and result mapping
   into focused collaborators behind `AgentExecutionService`.
 - Ensure every inference path calls the same service.
@@ -1382,14 +1358,18 @@ the application contains no alternate model-call path or execution-selector conc
 
 ### Phase 5 — Make Workflow support globally composable
 
-- Add the `WorkflowId` executor registry and installed-capability query.
-- Port existing advanced Workflows as normal registrations.
-- Give the Workflow planner only installed Workflow descriptors.
-- Implement explicit-error and automatic-direct-fallback rules.
-- Replace `WorkflowContext`'s dependency on `AiChatExecutor.Context` with `WorkflowInvocation`.
+- Represent Workflow as an immutable graph of Agent vertices and dependency edges, not as an
+  executable Agent subtype or executor registry.
+- Let the planner produce nested graph definitions while `WorkflowRunner` alone schedules ready vertices,
+  joins parallel branches, and invokes every vertex through the one shared `AgentRunner`.
+- Keep orchestration policy (handoff, fan-out, join, synthesis, and retry) in the graph runtime and
+  keep model/tool/guardrail handlers in the selected Agent definition.
+- Reject unknown or non-assignable Agent vertices before graph execution begins.
+- Keep the transport-neutral `AgentExecutionContext` as the only context visible to Agent and
+  Workflow definitions; provider adapters may remain behind the execution ports.
 
-**Exit:** the support set is discovered from registrations; removing one executor removes only that
-Workflow.
+**Exit:** Workflow is only graph structure plus traversal state; no Workflow object executes a model,
+and every Agent vertex is run by the same `AgentRunner`.
 
 ### Phase 6 — Separate conversation state and commit
 
@@ -1425,7 +1405,7 @@ state.
 - Reduce `ChatService` to orchestration and transport mapping.
 - Enforce the `ai_management` package dependencies with ArchUnit and move classes only when needed to
   make a responsibility boundary explicit.
-- Publish installed Models and Workflows to API/UI from the same catalogs used by execution.
+- Publish installed Models and assignable Agents to API/UI from the same catalogs used by execution.
 - Delete compatibility adapters only after old behavior has no callers.
 
 **Exit:** optional feature-registration removal tests pass from clean application contexts, and
@@ -1454,12 +1434,13 @@ entering domain or application use cases within `score-http`.
 - **Tool:** every Spring AI callback routes through the common gateway; both Tool Guardrail directions,
   middleware ordering, argument rewrites, safe replacement results, and exact confirmation grants are
   deterministic; output refusal never erases truthful mutation-completed state.
-- **Workflow:** the supported set is globally registration-driven; explicit unsupported selection fails;
-  automatic selection can use direct.
+- **Workflow:** recursive Agent/child-Workflow DAGs reject cycles, duplicate or unknown vertices,
+  non-assignable Agents, excessive depth, and excessive Agent counts; ready vertices execute concurrently
+  and joins preserve declaration order.
 - **Conversation:** canonical history survives Model switching and restart; stale/cancelled commits are
   rejected.
-- **Compaction:** output is validated and replacement is fenced; it requires no Tool or advanced
-  Workflow.
+- **Compaction:** output is validated exactly once by its Agent definition and replacement is fenced; it
+  requires no Tool or Workflow traversal.
 - **Observer:** zero observers and failing optional observers do not alter the Agent result.
 
 Run the Agent execution suite against fake Spring AI `ChatModel` implementations representing normal,
@@ -1476,7 +1457,8 @@ At minimum, boot and run a direct chat turn for these application contexts:
 4. Spring AI plus trajectory but no confirmation.
 5. Spring AI plus MCP and all features.
 6. Multiple Spring AI-backed Models/providers, then the same build with one Model/provider removed.
-7. Spring AI with each advanced Workflow removed independently.
+7. Spring AI with one assignable Agent definition removed, proving plans that name it are rejected while
+   remaining Agent definitions still execute through the shared Runner.
 8. A fake Spring AI `ChatModel` with no usage metadata or Tool calling.
 9. Agent Input Guardrail ALLOW, REWRITE, and REFUSE decisions with downstream invocation spies.
 10. Agent Output Guardrail ALLOW, REDACT/REWRITE, RETRY, and REFUSE decisions with stream/persistence spies.
@@ -1513,14 +1495,14 @@ Use ArchUnit and build dependencies to enforce:
 - transport input cannot select the Gateway Model, lower its confidence threshold, expand the direct
   intent set, or force a `DIRECT` result;
 - all model inference enters through `AgentExecutionService`;
-- Workflow implementations declare only their `WorkflowId` and do not construct model clients;
+- Workflow plans contain only Agent vertices and dependency edges and do not construct model clients;
 - optional feature packages depend inward and domain/application packages never depend outward on
   them; and
 - only the composition root constructs catalogs, registries, and ordered extension collections.
 
 ### 8.4 Regression focus
 
-Preserve and extend the existing `ChatService`, `AiChatExecutor`, model catalog, Agent catalog, Workflow,
+Preserve and extend the existing `ChatService`, `AiChatExecutor`, model catalog, Agent catalog, `WorkflowRunner`,
 trajectory, request registry, memory repository, and jOOQ conversation tests while moving assertions to
 the new contracts. Pay special attention to concurrent cancellation, provider retry, approval replay,
 Tool output limits, Guardrail fail-closed behavior, output disclosure during streaming, refusal
@@ -1530,8 +1512,8 @@ retention/redaction, post-mutation read-back, and partial persistence failures.
 
 ### 9.1 Decisions
 
-1. `Agent` is the common identity contract for every AI Agent; `ResolvedAgent` is exactly Model +
-   Instruction + ToolSet and is the immutable subject of one inference invocation.
+1. `Agent` is the definition-only identity contract for every AI Agent; `AgentSession` binds Model +
+   Instruction + ToolSet for one request-scoped run.
 2. Every model invocation, including Gateway/planner/evaluator/compactor calls, executes an Agent.
 3. Guardrails are the umbrella policy concept and include Agent Input/Output and Tool Input/Output
    Guardrail chains.
@@ -1552,7 +1534,7 @@ retention/redaction, post-mutation read-back, and partial persistence failures.
    or compatibility matrix.
 12. Model/provider variation is expressed through configured Spring AI `ChatModel` beans and model
    metadata.
-13. Advanced Workflow support is globally registration-driven by `WorkflowId`; direct is always present.
+13. Workflow is an Agent graph traversed by `WorkflowRunner`; it is never an executable Agent subtype.
 14. Conversation history is canonical application data, never provider-owned state.
 15. Tool is protocol-neutral; MCP is one provider implementation.
 16. All Spring AI Tool callbacks return through one core Tool execution gateway.
@@ -1583,12 +1565,13 @@ The redesign is complete when:
 - every Tool invocation passes Tool Input and Output Guardrails through the common gateway;
 - rejected output is never streamed or persisted, and redaction occurs before disclosure;
 - Guardrail failures cannot silently allow input or disclose unvalidated output;
-- Model and Workflow capability responses exactly match configured or installed implementations;
+- Model capability responses match configured implementations, and Workflow plans may reference only
+  installed or catalog-backed assignable Agents;
 - no execution-selection concept remains in Java APIs, configuration, persistence, HTTP payloads, or UI
   state;
 - conversation history works unchanged when a conversation changes Model;
-- removing compaction, confirmation, trajectory, MCP, one configured Model/provider, or an advanced
-  Workflow satisfies the removal matrix in Section 5;
+- removing compaction, confirmation, trajectory, MCP, one configured Model/provider, or one assignable
+  Agent definition satisfies the removal matrix in Section 5;
 - the minimal Spring AI composition with one configured Model remains a valid production configuration;
 - all AI chat implementation remains inside `score-http`, with ArchUnit enforcing the
   `ai_management` package boundaries in Section 5.2;
@@ -1610,8 +1593,8 @@ Do not create new physical modules. The smallest high-leverage slice is:
 5. Add the per-turn Gateway structured result, closed `DIRECT` intent set, and immediate `HANDOFF` to
    the existing root path.
 6. Keep existing Tool, history, Workflow, confirmation, and trajectory internals temporarily behind it.
-7. Change `ChatService` to apply Guardrails, select the Gateway/direct or root/handoff path, and return
-   the actual Agent id, safe rewrite, or structured refusal.
+7. Keep definition-owned Guardrails in `AgentRunner`; let `ChatService` commit only the already-safe
+   Agent result, actual Agent id, or structured refusal.
 8. Add characterization tests proving greeting latency/load behavior, unchanged allowed behavior,
    refusal side-effect isolation, and that rejected output cannot reach the stream or stores.
 
