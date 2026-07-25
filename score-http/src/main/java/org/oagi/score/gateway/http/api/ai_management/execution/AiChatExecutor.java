@@ -24,10 +24,13 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
 import org.oagi.score.gateway.http.api.ai_management.agent.Agent;
-import org.oagi.score.gateway.http.api.ai_management.agent.AgentDefinition;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentChatSession;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentChatResult;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrailRefusedException;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentInvocation;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentRunResult;
-import org.oagi.score.gateway.http.api.ai_management.agent.AssistantAgent;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentToolBinding;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolExecutionGateway;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
@@ -76,13 +79,9 @@ public final class AiChatExecutor {
     private static final Pattern TEXTUAL_TOOL_CALL_PLACEHOLDER = Pattern.compile(
             "(?is)\\*{0,2}\\[\\s*tool(?:[ -]call)?\\s*:\\s*[^\\]\\r\\n]+]\\*{0,2}"
                     + "(?:\\s*(?:→|->).*?)?\\s*$");
-    private static final String PAGE_CONTEXT_REFERENCE =
-            "Supplied separately in the request-scoped user-context block.";
-
     private final ScoreAiModelRegistry models;
     private final ConnectCenterMcpClientFactory mcpClients;
     private final ToolSearchToolCallingAdvisor toolSearchAdvisor;
-    private final Agent rootAgent;
     private final AiMutationToolGuard mutationGuard;
     private final AiElicitationService elicitations;
     private final AiProviderRetryExecutor providerRetry;
@@ -100,7 +99,6 @@ public final class AiChatExecutor {
     @Autowired
     public AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                           ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                          AssistantAgent rootAgent,
                           AiMutationToolGuard mutationGuard,
                           AiElicitationService elicitations,
                           AiProviderRetryExecutor providerRetry,
@@ -114,54 +112,9 @@ public final class AiChatExecutor {
                           AiExecutionInstructions instructions,
                           ScoreAiObservability observability,
                           ObjectProvider<ExecutionObserver> executionObservers) {
-        this(models, mcpClients, toolSearchAdvisor, (Agent) rootAgent, mutationGuard,
-                elicitations, providerRetry, optionsFactory, approvalCoordinator,
-                toolGuardrails, callbackToolAdapter, springAiToolAdapter,
-                modelInputGuardrails, requests, instructions, observability, executionObservers);
-    }
-
-    AiChatExecutor(ScoreAiModelRegistry models,
-                   ConnectCenterMcpClientFactory mcpClients,
-                   ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                   Agent rootAgent,
-                   AiMutationToolGuard mutationGuard,
-                   AiElicitationService elicitations,
-                   AiProviderRetryExecutor providerRetry,
-                   ScoreAiChatOptionsFactory optionsFactory,
-                   AiMutationApprovalCoordinator approvalCoordinator,
-                   ToolGuardrailRegistry toolGuardrails,
-                   SpringAiCallbackToolSetAdapter callbackToolAdapter,
-                   SpringAiToolAdapter springAiToolAdapter,
-                   AgentInputGuardrailChain modelInputGuardrails,
-                   AiRequestRegistry requests,
-                   ObjectProvider<ExecutionObserver> executionObservers) {
-        this(models, mcpClients, toolSearchAdvisor, rootAgent, mutationGuard, elicitations,
-                providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
-                callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
-                AiExecutionInstructions.bundled(), ScoreAiObservability.noop(), executionObservers);
-    }
-
-    private AiChatExecutor(ScoreAiModelRegistry models,
-                           ConnectCenterMcpClientFactory mcpClients,
-                           ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                           Agent rootAgent,
-                           AiMutationToolGuard mutationGuard,
-                           AiElicitationService elicitations,
-                           AiProviderRetryExecutor providerRetry,
-                           ScoreAiChatOptionsFactory optionsFactory,
-                           AiMutationApprovalCoordinator approvalCoordinator,
-                           ToolGuardrailRegistry toolGuardrails,
-                           SpringAiCallbackToolSetAdapter callbackToolAdapter,
-                           SpringAiToolAdapter springAiToolAdapter,
-                           AgentInputGuardrailChain modelInputGuardrails,
-                           AiRequestRegistry requests,
-                           AiExecutionInstructions instructions,
-                           ScoreAiObservability observability,
-                           ObjectProvider<ExecutionObserver> executionObservers) {
         this.models = models;
         this.mcpClients = mcpClients;
         this.toolSearchAdvisor = toolSearchAdvisor;
-        this.rootAgent = Objects.requireNonNull(rootAgent, "rootAgent");
         this.mutationGuard = mutationGuard;
         this.elicitations = elicitations;
         this.providerRetry = providerRetry;
@@ -178,15 +131,34 @@ public final class AiChatExecutor {
                 ? executionObservers.orderedStream().toList() : List.of());
     }
 
+    AiChatExecutor(ScoreAiModelRegistry models,
+                   ConnectCenterMcpClientFactory mcpClients,
+                   ToolSearchToolCallingAdvisor toolSearchAdvisor,
+                   AiMutationToolGuard mutationGuard,
+                   AiElicitationService elicitations,
+                   AiProviderRetryExecutor providerRetry,
+                   ScoreAiChatOptionsFactory optionsFactory,
+                   AiMutationApprovalCoordinator approvalCoordinator,
+                   ToolGuardrailRegistry toolGuardrails,
+                   SpringAiCallbackToolSetAdapter callbackToolAdapter,
+                   SpringAiToolAdapter springAiToolAdapter,
+                   AgentInputGuardrailChain modelInputGuardrails,
+                   AiRequestRegistry requests,
+                   ObjectProvider<ExecutionObserver> executionObservers) {
+        this(models, mcpClients, toolSearchAdvisor, mutationGuard, elicitations,
+                providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
+                callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
+                AiExecutionInstructions.bundled(), ScoreAiObservability.noop(), executionObservers);
+    }
+
     /** Compatibility constructor for focused executor tests. */
     AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                    ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                   Agent rootAgent,
                    AiMutationToolGuard mutationGuard,
                    AiElicitationService elicitations,
                    AiProviderRetryExecutor providerRetry,
                    ScoreAiChatOptionsFactory optionsFactory) {
-        this(models, mcpClients, toolSearchAdvisor, rootAgent, mutationGuard,
+        this(models, mcpClients, toolSearchAdvisor, mutationGuard,
                 elicitations, providerRetry, optionsFactory, null, null, null, null, null,
                 null, null);
     }
@@ -194,27 +166,59 @@ public final class AiChatExecutor {
     /** Compatibility constructor for approval-coordination tests. */
     AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                    ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                   Agent rootAgent,
                    AiMutationToolGuard mutationGuard,
                    AiElicitationService elicitations,
                    AiProviderRetryExecutor providerRetry,
                    ScoreAiChatOptionsFactory optionsFactory,
                    AiMutationApprovalCoordinator approvalCoordinator) {
-        this(models, mcpClients, toolSearchAdvisor, rootAgent, mutationGuard,
+        this(models, mcpClients, toolSearchAdvisor, mutationGuard,
                 elicitations, providerRetry, optionsFactory, approvalCoordinator,
                 null, null, null, null, null, null);
     }
 
-    public Result execute(Context context) {
-        boolean rootPersona = rootPersona(context);
-        AgentDefinition rootDefinition = rootPersona ? rootAgent.definition() : null;
-        Context identifiedContext = rootPersona
-                ? context.withAgentIdentity(rootDefinition.id().value(), context.executionPurpose())
-                : context;
-        return execute(identifiedContext, rootDefinition);
+    /** Executes a Runner-bound session without selecting or replacing its Agent. */
+    public AgentChatResult executeAgentChat(AgentChatSession session) {
+        Objects.requireNonNull(session, "session");
+        ChatExecutionContext chatContext = ChatExecutionContext.require(session.context());
+        chatContext.recorder().verifyActive();
+        var before = chatContext.recorder().usageSnapshot();
+        Result result = execute(SpringAiExecutionContextMapper.toProvider(chatContext),
+                session.instruction());
+        // Do not reject the transport result here: AgentRunner records billable usage
+        // first and performs the terminal checkpoint before any response-side action.
+        // This preserves accounting for a provider that completes during cancellation.
+        var usage = usageDelta(before, chatContext.recorder().usageSnapshot());
+        return new AgentChatResult(result.answer(), result.traceMetadata(),
+                usage != null && usage.modelCalls() > 0
+                        ? java.util.Optional.of(new AgentRunResult.Usage(
+                        usage.promptTokens(), usage.completionTokens(), usage.modelCalls()))
+                        : java.util.Optional.empty());
     }
 
-    private Result execute(Context context, AgentDefinition rootDefinition) {
+    static org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot usageDelta(
+            org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot before,
+            org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot after) {
+        if (after == null) return null;
+        long prompt = before != null ? after.promptTokens() - before.promptTokens()
+                : after.promptTokens();
+        long completion = before != null ? after.completionTokens() - before.completionTokens()
+                : after.completionTokens();
+        long calls = before != null ? after.modelCalls() - before.modelCalls()
+                : after.modelCalls();
+        if (prompt < 0 || completion < 0 || calls < 0) {
+            throw new IllegalStateException("Agent Chat usage counters moved backwards.");
+        }
+        return new org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot(
+                after.nodeId(), after.agentName(), prompt, completion, calls);
+    }
+
+    /** Package-private provider implementation; the shared Runner supplies the instruction. */
+    Result execute(Context context, Agent.Instruction instruction) {
+        context.recorder().verifyActive();
+        return executeChat(context, Objects.requireNonNull(instruction, "instruction"));
+    }
+
+    private Result executeChat(Context context, Agent.Instruction instruction) {
         ExecutionState state = new ExecutionState();
         ExecutionScope scope = executionScope(context);
         String runId = UUID.randomUUID().toString();
@@ -227,16 +231,17 @@ public final class AiChatExecutor {
                 try (var planning = planningOperation(context, scope)) {
                     try {
                         Result result;
-                        if (context.toolPolicy() == ToolPolicy.NONE) {
+                        if (context.toolPolicy() == ToolPolicy.NONE
+                                || context.agentToolBinding() != null) {
                             // Tool-less calls (planner, evaluator, no-tool leaves) never consult the
                             // MCP registry, so they must not pay the per-call MCP handshake.
-                            result = execute(context, null, state, rootDefinition);
+                            result = execute(context, null, state, instruction);
                         } else {
                             try (ConnectCenterMcpClientFactory.McpSession mcp = elicitations != null
                                     ? mcpClients.open(context.requester(), elicitation -> handleElicitation(
                                     context, context.request(), context.recorder(), elicitation))
                                     : mcpClients.open(context.requester())) {
-                                result = execute(context, mcp, state, rootDefinition);
+                                result = execute(context, mcp, state, instruction);
                             }
                         }
                         identified = result.withExecutionIdentity(context.agentId(),
@@ -254,7 +259,7 @@ public final class AiChatExecutor {
                 observe(agentFailureEvent(requests, context.request().requestId(), failure),
                         scope, runId, context.agentId(), telemetryModel,
                         observationContext(context), failure);
-                if (failure instanceof AgentInputRefusedException refused) {
+                if (failure instanceof AgentGuardrailRefusedException refused) {
                     throw refused.identifiedBy(new Agent.AgentId(context.agentId()));
                 }
                 throw failure;
@@ -269,29 +274,26 @@ public final class AiChatExecutor {
                 : ExecutionObservationContext.Operation.noop();
     }
 
-    public String rootAgentId() {
-        return rootAgent.id().value();
-    }
-
     /** Provider-neutral Agent port used by Gateway, Guardrail, and other no-transport runs. */
-    public AgentRunResult executeAgent(AgentInvocation invocation) {
+    AgentRunResult executeAgent(AgentInvocation invocation) {
         String runId = UUID.randomUUID().toString();
-        String telemetryModel = telemetryModel(invocation.agent().model().id().value());
-        observe("agent.run.started", invocation.scope(), runId, invocation.agent().id().value(),
+        String telemetryModel = telemetryModel(invocation.session().model().id().value());
+        observe("agent.run.started", invocation.scope(), runId,
+                invocation.session().agent().id().value(),
                 telemetryModel, invocation.observationContext(), null);
         try (var ignored = observability.makeAgentCurrent(invocation.scope().requestId(), runId)) {
             try {
                 AgentRunResult result = executeAgentInternal(invocation);
                 observe("agent.run.completed", invocation.scope(), runId,
-                        invocation.agent().id().value(),
+                        invocation.session().agent().id().value(),
                         telemetryModel, invocation.observationContext(), null);
                 return result;
             } catch (RuntimeException failure) {
                 observe(agentFailureEvent(requests, invocation.scope().requestId(), failure),
-                        invocation.scope(), runId, invocation.agent().id().value(),
+                        invocation.scope(), runId, invocation.session().agent().id().value(),
                         telemetryModel, invocation.observationContext(), failure);
-                if (failure instanceof AgentInputRefusedException refused) {
-                    throw refused.identifiedBy(invocation.agent().id());
+                if (failure instanceof AgentGuardrailRefusedException refused) {
+                    throw refused.identifiedBy(invocation.session().agent().id());
                 }
                 throw failure;
             }
@@ -299,31 +301,31 @@ public final class AiChatExecutor {
     }
 
     private AgentRunResult executeAgentInternal(AgentInvocation invocation) {
-        String modelId = invocation.agent().model().id().value();
+        String modelId = invocation.session().model().id().value();
         List<AiMessage> assembled = new ArrayList<>();
-        assembled.add(new AiMessage.System(invocation.agent().instruction().value()));
+        assembled.add(new AiMessage.System(invocation.session().instruction().value()));
         assembled.addAll(invocation.history());
         assembled.add(invocation.request());
         AgentInputGuardrailChain.Outcome checked = modelInputGuardrails != null
                 ? modelInputGuardrails.evaluate(new AgentInputGuardrail.Request(
                 AgentInputGuardrail.Scope.MODEL, invocation.request(), assembled,
-                invocation.scope(), Map.of("agent_id", invocation.agent().id().value())))
+                invocation.scope(), Map.of("agent_id", invocation.session().agent().id().value())))
                 : AgentInputGuardrailChain.Outcome.allowed(invocation.request(), List.of());
         observability.recordGuardrails(invocation.scope().requestId(), "model_input",
                 checked.decisions(), checked.refusal());
         if (!checked.allowed()) throw new AgentInputRefusedException(checked.refusal());
 
         List<Message> messages = new ArrayList<>();
-        messages.add(new SystemMessage(invocation.agent().instruction().value()));
-        invocation.history().stream().map(this::toSpringMessage).forEach(messages::add);
-        messages.add(toSpringMessage(checked.input()));
+        messages.add(new SystemMessage(invocation.session().instruction().value()));
+        invocation.history().stream().map(SpringAiMessageAdapter::toProvider).forEach(messages::add);
+        messages.add(SpringAiMessageAdapter.toProvider(checked.input()));
         ChatClient.Builder builder = models.clientBuilder(modelId);
-        if (!invocation.agent().tools().isEmpty()) {
+        if (!invocation.session().tools().isEmpty()) {
             if (springAiToolAdapter == null) {
                 throw new IllegalStateException("The Spring AI Tool adapter is unavailable.");
             }
             builder.defaultTools(springAiToolAdapter.adapt(
-                    invocation.agent().tools(), invocation.tools(), invocation.scope()));
+                    invocation.session().tools(), invocation.tools(), invocation.scope()));
         }
         String reasoningEffort = models.resolveReasoningEffort(modelId, null);
         ScoreAiModelRegistry.ModelConfiguration model = models.modelConfiguration(modelId);
@@ -353,8 +355,8 @@ public final class AiChatExecutor {
                 nonNegative(providerUsage.getCompletionTokens())))
                 : Optional.empty();
         return new AgentRunResult(assistant, List.of(assistant), usage,
-                new AgentRunResult.RunMetadata(invocation.agent().id(),
-                        invocation.agent().model().id(), null,
+                new AgentRunResult.RunMetadata(invocation.session().agent().id(),
+                        invocation.session().model().id(), null,
                         Map.of("guardrail_decisions", checked.decisions().stream()
                                 .map(GuardrailDecision::decisionId).toList())));
     }
@@ -415,26 +417,27 @@ public final class AiChatExecutor {
         return "agent.run.failed";
     }
 
-    private Message toSpringMessage(AiMessage message) {
-        if (message instanceof AiMessage.System system) return new SystemMessage(system.content());
-        if (message instanceof AiMessage.User user) {
-            return SpringAiUserMessageAdapter.toSpring(user);
+    /**
+     * Installs the concrete Tool binding selected by the Agent definition.
+     * A non-null binding explicitly overrides the transport/MCP registry; an
+     * empty binding therefore intentionally exposes no callbacks.
+     */
+    private void configureBoundTools(Context context, ChatClient.Builder assistantBuilder,
+                                     AiTrajectoryRecorder recorder, long toolOutputTokenLimit) {
+        AgentToolBinding binding = Objects.requireNonNull(context.agentToolBinding(),
+                "Agent Tool binding");
+        if (binding.tools().isEmpty()) return;
+        if (!binding.gateway().enabled()) {
+            throw new IllegalStateException("An Agent Tool binding requires an enabled gateway.");
         }
-        if (message instanceof AiMessage.Assistant assistant) {
-            return new AssistantMessage(assistant.content());
-        }
-        if (message instanceof AiMessage.ToolCall call) {
-            return AssistantMessage.builder().content("").toolCalls(List.of(
-                    new AssistantMessage.ToolCall(call.callId(), "function", call.toolName(),
-                            call.arguments()))).build();
-        }
-        AiMessage.ToolResult result = (AiMessage.ToolResult) message;
-        return ToolResponseMessage.builder().responses(List.of(new ToolResponseMessage.ToolResponse(
-                result.callId(), result.toolName(), result.result()))).build();
+        ExecutionScope scope = executionScope(context);
+        assistantBuilder.defaultTools(recorder.recordingTools(
+                springAiToolAdapter.adapt(binding.tools(), binding.gateway(), scope),
+                toolOutputTokenLimit));
     }
 
     private Result execute(Context context, ConnectCenterMcpClientFactory.McpSession mcp,
-                           ExecutionState executionState, AgentDefinition rootDefinition) {
+                           ExecutionState executionState, Agent.Instruction instruction) {
         var request = context.request();
         AiTrajectoryRecorder recorder = context.recorder();
         ChatOptions options = optionsFactory.create(
@@ -459,10 +462,19 @@ public final class AiChatExecutor {
                     .defaultAdvisors(new TrajectoryRecordingAdvisor(recorder, observability));
             AiMutationToolGuard.GuardedToolSession guardedSession = null;
             org.springframework.ai.tool.ToolCallbackProvider executableTools = null;
-            if (mcp != null && mcp.client() != null && context.toolPolicy() != ToolPolicy.NONE) {
+            if (context.agentToolBinding() != null) {
+                configureBoundTools(context, assistantBuilder, recorder, toolOutputTokenLimit);
+            } else if (mcp != null && mcp.client() != null
+                    && context.toolPolicy() != ToolPolicy.NONE) {
                 recorder.readOnlyToolNames(mcp.readOnlyToolNames());
                 boolean commonToolGateway = toolGuardrails != null
                         && callbackToolAdapter != null && springAiToolAdapter != null;
+                boolean hasTools = mcp.tools() != null
+                        && mcp.tools().getToolCallbacks().length > 0;
+                if (hasTools && !commonToolGateway) {
+                    throw new IllegalStateException(
+                            "The mandatory Tool execution gateway is not configured.");
+                }
                 if (context.toolPolicy() == ToolPolicy.FULL) {
                     guardedSession = mutationGuard != null
                             ? commonToolGateway
@@ -475,8 +487,7 @@ public final class AiChatExecutor {
                                     approvalCoordinator != null
                                             ? ignored -> { }
                                             : recorder::mutationConfirmationRequired,
-                                    mcp.tools(),
-                                    mcp.readOnlyToolNames())
+                                    mcp.tools(), mcp.readOnlyToolNames())
                             : null;
                 }
                 var guardedTools = context.toolPolicy() == ToolPolicy.READ_ONLY
@@ -484,25 +495,45 @@ public final class AiChatExecutor {
                                 ? mutationGuard.readOnly(mcp.tools(), mcp.readOnlyToolNames())
                                 : (org.springframework.ai.tool.ToolCallbackProvider) () ->
                                         new org.springframework.ai.tool.ToolCallback[0]
-                        : commonToolGateway ? mcp.tools()
                         : guardedSession != null ? guardedSession : mcp.tools();
-                if (commonToolGateway) {
+                if (hasTools) {
                     var coreTools = callbackToolAdapter.adapt(guardedTools, mcp.readOnlyToolNames());
                     ExecutionScope scope = executionScope(context);
                     long rawByteLimit = toolOutputTokenLimit == Long.MAX_VALUE
                             ? 16L * 1024L * 1024L
                             : Math.max(4096L, Math.min(16L * 1024L * 1024L,
                             toolOutputTokenLimit * 4L));
-                    ToolExecutionGateway gateway = new ToolExecutionGateway(coreTools, toolGuardrails,
-                            guardedSession != null ? List.of(guardedSession) : List.of(),
-                            scopeToCheck -> {
+                    ToolExecutionGateway.RequestFence requestFence =
+                            new ToolExecutionGateway.RequestFence() {
+                            @Override
+                            public void verifyActive(ExecutionScope scopeToCheck) {
+                                recorder.verifyActive();
                                 if (Thread.currentThread().isInterrupted()
                                         || requests != null
                                         && requests.shouldDiscardResult(scopeToCheck.requestId())) {
                                     throw new CancellationException(
                                             "The assistant request stopped before Tool execution.");
                                 }
-                            },
+                            }
+
+                            @Override
+                            public <T> T callIfActive(ExecutionScope scopeToCheck,
+                                                      java.util.function.Supplier<T> action) {
+                                if (Thread.currentThread().isInterrupted()) {
+                                    throw new CancellationException(
+                                            "The assistant request stopped before Tool execution.");
+                                }
+                                if (requests != null) {
+                                    requests.admitToolExecution(scopeToCheck.requestId());
+                                } else {
+                                    recorder.verifyActive();
+                                }
+                                return Objects.requireNonNull(action, "action").get();
+                            }
+                    };
+                    ToolExecutionGateway gateway = new ToolExecutionGateway(coreTools, toolGuardrails,
+                            guardedSession != null ? List.of(guardedSession) : List.of(),
+                            requestFence,
                             observer,
                             executionState, rawByteLimit);
                     // Recording is deliberately outside the gateway: trajectory and UI
@@ -545,7 +576,7 @@ public final class AiChatExecutor {
             long completedToolCallsBeforeAnswer = recorder.completedToolCallCount();
             String answer = invoke(assistant, options, request, messages, recorder,
                     context.streamVisibleContent(), internalPersona, executionScope(context),
-                    executionState, rootDefinition);
+                    executionState, instruction);
             int textualToolCallRecovery = 0;
             while (isTextualToolCallPlaceholder(answer)
                     && recorder.completedToolCallCount() == completedToolCallsBeforeAnswer
@@ -556,7 +587,7 @@ public final class AiChatExecutor {
                         AiExecutionInstructions.Template.TEXTUAL_TOOL_CALL_RECOVERY).value()));
                 answer = invoke(assistant, options, request, recoveryMessages, recorder,
                         context.streamVisibleContent(), internalPersona, executionScope(context),
-                        executionState, rootDefinition);
+                        executionState, instruction);
             }
             if (isTextualToolCallPlaceholder(answer)) {
                 throw new IllegalStateException(
@@ -602,7 +633,7 @@ public final class AiChatExecutor {
                         AiExecutionInstructions.Template.APPROVAL_CONTINUATION).value()));
                 answer = invoke(assistant, options, request, approvalMessages, recorder,
                         false, internalPersona, executionScope(context), executionState,
-                        rootDefinition);
+                        instruction);
             }
             int continuation = 0;
             while (guardedSession != null && guardedSession.mutationCompleted()
@@ -619,7 +650,7 @@ public final class AiChatExecutor {
                         AiExecutionInstructions.Template.READ_BACK_CONTINUATION).value()));
                 answer = invoke(assistant, options, request, continuationMessages, recorder,
                         false, internalPersona, executionScope(context), executionState,
-                        rootDefinition);
+                        instruction);
             }
             if (guardedSession != null && guardedSession.mutationCompleted()
                     && !guardedSession.confirmationRequired()
@@ -640,12 +671,7 @@ public final class AiChatExecutor {
 
     /** Internal execution purposes own their instructions and never inherit ROOT. */
     private boolean internalPersona(Context context) {
-        return !rootPersona(context);
-    }
-
-    private boolean rootPersona(Context context) {
-        return context.executionPurpose()
-                == org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.USER_RESPONSE;
+        return context.executionPurpose() != ExecutionScope.Purpose.USER_RESPONSE;
     }
 
     private ExecutionScope executionScope(Context context) {
@@ -654,7 +680,8 @@ public final class AiChatExecutor {
                 : context.requester() != null && StringUtils.hasText(context.requester().username())
                 ? context.requester().username() : "unknown";
         return new ExecutionScope(context.request().requestId(), context.request().conversationId(),
-                requesterId, 0L, context.executionPurpose(), context.guardrailDecisionIds());
+                requesterId, context.agentDepth(), context.executionPurpose(),
+                context.guardrailDecisionIds());
     }
 
     private McpSchema.ElicitResult handleElicitation(
@@ -682,23 +709,12 @@ public final class AiChatExecutor {
     private String invoke(ChatClient assistant, ChatOptions options,
                           ChatRequest request,
                           List<Message> messages, AiTrajectoryRecorder recorder,
-                          boolean streamVisibleContent) {
-        return invoke(assistant, options, request, messages, recorder,
-                streamVisibleContent, false, new ExecutionScope(
-                        request.requestId(), request.conversationId(), "request-owner", 0L,
-                        ExecutionScope.Purpose.USER_RESPONSE, List.of()), new ExecutionState(),
-                rootAgent.definition());
-    }
-
-    private String invoke(ChatClient assistant, ChatOptions options,
-                          ChatRequest request,
-                          List<Message> messages, AiTrajectoryRecorder recorder,
                           boolean streamVisibleContent, boolean internalPersona,
                           ExecutionScope scope, ExecutionState executionState,
-                          AgentDefinition rootDefinition) {
+                          Agent.Instruction instruction) {
         if (providerRetry == null) {
             return attemptInvoke(assistant, options, request, messages, recorder,
-                    streamVisibleContent, internalPersona, scope, rootDefinition);
+                    streamVisibleContent, internalPersona, scope, instruction);
         }
         // Transient provider failures are retried with visible backoff. An attempt
         // that executed a data-changing tool is terminal: the recorder's mutation
@@ -707,14 +723,20 @@ public final class AiChatExecutor {
                 () -> Math.max(executionState.completedMutations(),
                         recorder.executedMutationToolCallCount()), executionState,
                 () -> attemptInvoke(assistant, options, request, messages, recorder,
-                        streamVisibleContent, internalPersona, scope, rootDefinition));
+                        streamVisibleContent, internalPersona, scope, instruction));
     }
 
     private String attemptInvoke(ChatClient assistant, ChatOptions options,
                                  ChatRequest request,
                                  List<Message> messages, AiTrajectoryRecorder recorder,
                                  boolean streamVisibleContent, boolean internalPersona,
-                                 ExecutionScope scope, AgentDefinition rootDefinition) {
+                                 ExecutionScope scope, Agent.Instruction instruction) {
+        recorder.verifyActive();
+        if (Thread.currentThread().isInterrupted()
+                || requests != null && requests.shouldDiscardResult(scope.requestId())) {
+            throw new CancellationException(
+                    "The assistant request stopped before model execution.");
+        }
         // Visible text emitted before a tool call is interim narration, not the
         // answer. Tool completions mark segment boundaries; the answer restarts
         // at the first substantive chunk after a boundary so it reflects the
@@ -726,10 +748,7 @@ public final class AiChatExecutor {
         // Planner, evaluator, and worker calls supply their own leading system
         // prompt; sending the assistant persona and page context to them wastes
         // input tokens on every request.
-        String stableSystemPrompt = internalPersona
-                ? null : withRouteManifest(
-                        Objects.requireNonNull(rootDefinition, "rootDefinition").instruction()
-                                .render(systemPromptParameters(request)).value(), request, instructions);
+        String stableSystemPrompt = instruction.value();
         List<Message> requestMessages = new ArrayList<>(messages.size() + 1);
         requestMessages.addAll(messages);
         int guardedUserIndex = lastUserMessageIndex(requestMessages);
@@ -743,9 +762,7 @@ public final class AiChatExecutor {
         requestMessages = guardModelInput(request, requestMessages, guardedUserIndex, scope);
         ChatClient.ChatClientRequestSpec prompt = assistant.prompt()
                     .options(options.mutate());
-        if (stableSystemPrompt != null) {
-            prompt = prompt.system(system -> system.text(stableSystemPrompt));
-        }
+        prompt = prompt.system(system -> system.text(stableSystemPrompt));
         prompt
                     .messages(requestMessages)
                     .advisors(advisor -> advisor
@@ -777,7 +794,7 @@ public final class AiChatExecutor {
     private List<Message> guardModelInput(ChatRequest request, List<Message> messages,
                                           int guardedUserIndex, ExecutionScope scope) {
         if (modelInputGuardrails == null) return messages;
-        List<AiMessage> assembled = messages.stream().map(this::coreMessage).toList();
+        List<AiMessage> assembled = messages.stream().map(SpringAiMessageAdapter::toCore).toList();
         AiMessage.User input = guardedUserIndex >= 0
                 ? (AiMessage.User) assembled.get(guardedUserIndex) : new AiMessage.User("");
         AgentInputGuardrailChain.Outcome outcome = modelInputGuardrails.evaluate(
@@ -801,28 +818,9 @@ public final class AiChatExecutor {
         return -1;
     }
 
-    private AiMessage coreMessage(Message message) {
-        if (message instanceof SystemMessage system) return new AiMessage.System(system.getText());
-        if (message instanceof UserMessage user) return SpringAiUserMessageAdapter.toCore(user);
-        if (message instanceof AssistantMessage assistant) return new AiMessage.Assistant(assistant.getText());
-        return new AiMessage.ToolResult("tool-result", "tool", Objects.requireNonNullElse(message.getText(), ""));
-    }
-
     private boolean isTextualToolCallPlaceholder(String answer) {
         return StringUtils.hasText(answer)
                 && TEXTUAL_TOOL_CALL_PLACEHOLDER.matcher(answer).find();
-    }
-
-    static Map<String, Object> systemPromptParameters(ChatRequest request) {
-        return Map.of(
-                "mutationConfirmationRequired", AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED,
-                "mutationApprovalPolicy", AiMutationPermissionMode.resolve(
-                        request != null ? request.permissionMode() : null).assistantPolicy(),
-                "requestStopping", AiMutationToolGuard.REQUEST_STOPPING,
-                // Preserve compatibility with externally mounted prompts that
-                // still contain ${pageContext}, without putting volatile page
-                // data in the cacheable system prompt.
-                "pageContext", PAGE_CONTEXT_REFERENCE);
     }
 
     static String requestScopedInput(ChatRequest request) {
@@ -835,20 +833,6 @@ public final class AiChatExecutor {
                 ? request.pageContext() : "Not provided";
         return instructions.render(AiExecutionInstructions.Template.REQUEST_SCOPED_INPUT,
                 Map.of("pageContext", pageContext)).value();
-    }
-
-    static String withRouteManifest(String stableSystemPrompt, ChatRequest request) {
-        return withRouteManifest(stableSystemPrompt, request, AiExecutionInstructions.bundled());
-    }
-
-    private static String withRouteManifest(String stableSystemPrompt, ChatRequest request,
-                                            AiExecutionInstructions instructions) {
-        if (request == null || request.routeManifest() == null) {
-            return stableSystemPrompt;
-        }
-        return stableSystemPrompt + "\n\n" + instructions.render(
-                AiExecutionInstructions.Template.UI_ROUTE_MANIFEST_CONTEXT,
-                Map.of("routeManifest", request.routeManifest().promptText())).value();
     }
 
     private void addApprovedExecution(List<Message> messages,
@@ -896,23 +880,41 @@ public final class AiChatExecutor {
                 || Boolean.TRUE.equals(output.getMetadata().get("thinking"));
     }
 
-    public record Context(ChatRequest request, List<Message> history, UserMessage userMessage,
+    record Context(ChatRequest request, List<Message> history, UserMessage userMessage,
                           ScoreUser requester, AiTrajectoryRecorder recorder,
                           boolean toolsEnabled, boolean streamVisibleContent,
                           ToolPolicy toolPolicy, int agentDepth,
                           AiMutationApprovalScope approvalScope,
-                          ApprovalWaitLifecycle approvalWaitLifecycle,
+                          AgentApprovalWaitLifecycle approvalWaitLifecycle,
                           String agentId,
                           org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
                           List<String> guardrailDecisionIds,
-                          Map<String, Object> workflowObservationContext) {
+                          Map<String, Object> workflowObservationContext,
+                          AgentToolBinding agentToolBinding) {
+
+        /** Existing transport callers do not provide an Agent-owned binding. */
+        public Context(ChatRequest request, List<Message> history, UserMessage userMessage,
+                       ScoreUser requester, AiTrajectoryRecorder recorder,
+                       boolean toolsEnabled, boolean streamVisibleContent,
+                       ToolPolicy toolPolicy, int agentDepth,
+                       AiMutationApprovalScope approvalScope,
+                       AgentApprovalWaitLifecycle approvalWaitLifecycle,
+                       String agentId,
+                       org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
+                       List<String> guardrailDecisionIds,
+                       Map<String, Object> workflowObservationContext) {
+            this(request, history, userMessage, requester, recorder, toolsEnabled,
+                    streamVisibleContent, toolPolicy, agentDepth, approvalScope,
+                    approvalWaitLifecycle, agentId, executionPurpose, guardrailDecisionIds,
+                    workflowObservationContext, null);
+        }
 
         public Context(ChatRequest request, List<Message> history, UserMessage userMessage,
                        ScoreUser requester, AiTrajectoryRecorder recorder,
                        boolean toolsEnabled, boolean streamVisibleContent,
                        ToolPolicy toolPolicy, int agentDepth,
                        AiMutationApprovalScope approvalScope,
-                       ApprovalWaitLifecycle approvalWaitLifecycle,
+                       AgentApprovalWaitLifecycle approvalWaitLifecycle,
                        String agentId,
                        org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
                        List<String> guardrailDecisionIds) {
@@ -927,7 +929,7 @@ public final class AiChatExecutor {
                        boolean toolsEnabled, boolean streamVisibleContent,
                        ToolPolicy toolPolicy, int agentDepth,
                        AiMutationApprovalScope approvalScope,
-                       ApprovalWaitLifecycle approvalWaitLifecycle,
+                       AgentApprovalWaitLifecycle approvalWaitLifecycle,
                        String agentId,
                        org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose) {
             this(request, history, userMessage, requester, recorder, toolsEnabled,
@@ -940,7 +942,7 @@ public final class AiChatExecutor {
                        boolean toolsEnabled, boolean streamVisibleContent,
                        ToolPolicy toolPolicy, int agentDepth,
                        AiMutationApprovalScope approvalScope,
-                       ApprovalWaitLifecycle approvalWaitLifecycle) {
+                       AgentApprovalWaitLifecycle approvalWaitLifecycle) {
             this(request, history, userMessage, requester, recorder, toolsEnabled,
                     streamVisibleContent, toolPolicy, agentDepth, approvalScope,
                     approvalWaitLifecycle, defaultAgentId(toolPolicy, agentDepth),
@@ -953,7 +955,7 @@ public final class AiChatExecutor {
                     true, true, ToolPolicy.FULL, 0,
                     request != null && request.conversationId() != null
                             ? AiMutationApprovalScope.root(request.conversationId()) : null,
-                    ApprovalWaitLifecycle.NOOP, "unresolved-root-agent",
+                    AgentApprovalWaitLifecycle.NOOP, "unresolved-root-agent",
                     org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.USER_RESPONSE);
         }
 
@@ -964,7 +966,7 @@ public final class AiChatExecutor {
                     streamVisibleContent, toolsEnabled ? ToolPolicy.FULL : ToolPolicy.NONE, 0,
                     request != null && request.conversationId() != null
                             ? AiMutationApprovalScope.root(request.conversationId()) : null,
-                    ApprovalWaitLifecycle.NOOP, defaultAgentId(
+                    AgentApprovalWaitLifecycle.NOOP, defaultAgentId(
                             toolsEnabled ? ToolPolicy.FULL : ToolPolicy.NONE, 0),
                     defaultPurpose(toolsEnabled ? ToolPolicy.FULL : ToolPolicy.NONE, 0));
         }
@@ -977,9 +979,10 @@ public final class AiChatExecutor {
                     streamVisibleContent, toolPolicy, agentDepth,
                     request != null && request.conversationId() != null
                             ? AiMutationApprovalScope.root(request.conversationId()) : null,
-                    ApprovalWaitLifecycle.NOOP, defaultAgentId(toolPolicy, agentDepth),
+                    AgentApprovalWaitLifecycle.NOOP, defaultAgentId(toolPolicy, agentDepth),
                     defaultPurpose(toolPolicy, agentDepth));
         }
+
 
         public Context(ChatRequest request, List<Message> history, UserMessage userMessage,
                        ScoreUser requester, AiTrajectoryRecorder recorder,
@@ -988,7 +991,7 @@ public final class AiChatExecutor {
                        AiMutationApprovalScope approvalScope) {
             this(request, history, userMessage, requester, recorder, toolsEnabled,
                     streamVisibleContent, toolPolicy, agentDepth, approvalScope,
-                    ApprovalWaitLifecycle.NOOP, defaultAgentId(toolPolicy, agentDepth),
+                    AgentApprovalWaitLifecycle.NOOP, defaultAgentId(toolPolicy, agentDepth),
                     defaultPurpose(toolPolicy, agentDepth));
         }
 
@@ -996,14 +999,14 @@ public final class AiChatExecutor {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth, scope,
                     approvalWaitLifecycle, agentId, executionPurpose, guardrailDecisionIds,
-                    workflowObservationContext);
+                    workflowObservationContext, agentToolBinding);
         }
 
-        public Context withApprovalWaitLifecycle(ApprovalWaitLifecycle lifecycle) {
+        public Context withApprovalWaitLifecycle(AgentApprovalWaitLifecycle lifecycle) {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, lifecycle, agentId, executionPurpose, guardrailDecisionIds,
-                    workflowObservationContext);
+                    workflowObservationContext, agentToolBinding);
         }
 
         public Context withAgentIdentity(String identity,
@@ -1011,21 +1014,40 @@ public final class AiChatExecutor {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, approvalWaitLifecycle, identity, purpose,
-                    guardrailDecisionIds, workflowObservationContext);
+                    guardrailDecisionIds, workflowObservationContext, agentToolBinding);
+        }
+
+        public Context withUserMessage(UserMessage message) {
+            return new Context(request, history, Objects.requireNonNull(message, "user message"),
+                    requester, recorder, toolsEnabled, streamVisibleContent, toolPolicy,
+                    agentDepth, approvalScope, approvalWaitLifecycle, agentId,
+                    executionPurpose, guardrailDecisionIds, workflowObservationContext,
+                    agentToolBinding);
+        }
+
+        /** Adds bounded, server-authored output-policy feedback to the next retry turn. */
+        public Context withRetryFeedback(String feedback) {
+            if (!StringUtils.hasText(feedback)) return this;
+            String current = Objects.requireNonNullElse(userMessage.getText(), "");
+            UserMessage revised = UserMessage.builder()
+                    .text(current + "\n\nOUTPUT_POLICY_FEEDBACK\n" + feedback.strip())
+                    .media(userMessage.getMedia())
+                    .build();
+            return withUserMessage(revised);
         }
 
         public Context withGuardrailDecisions(List<String> decisionIds) {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, approvalWaitLifecycle, agentId, executionPurpose,
-                    decisionIds, workflowObservationContext);
+                    decisionIds, workflowObservationContext, agentToolBinding);
         }
 
         public Context withWorkflowObservationContext(Map<String, Object> value) {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, approvalWaitLifecycle, agentId, executionPurpose,
-                    guardrailDecisionIds, value);
+                    guardrailDecisionIds, value, agentToolBinding);
         }
 
         /** Applies the non-root execution scope required for every model-authored assignment. */
@@ -1035,7 +1057,16 @@ public final class AiChatExecutor {
                     reduced != ToolPolicy.NONE, false, reduced, 1,
                     approvalScope, approvalWaitLifecycle, assignedAgentId,
                     org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.WORKER,
-                    guardrailDecisionIds, workflowObservationContext);
+                    guardrailDecisionIds, workflowObservationContext, agentToolBinding);
+        }
+
+        /** Returns a context whose tools are explicitly owned by the Agent definition. */
+        public Context withToolBinding(AgentToolBinding binding) {
+            return new Context(request, history, userMessage, requester, recorder,
+                    toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
+                    approvalScope, approvalWaitLifecycle, agentId, executionPurpose,
+                    guardrailDecisionIds, workflowObservationContext,
+                    Objects.requireNonNull(binding, "tool binding"));
         }
 
         public Context {
@@ -1044,7 +1075,7 @@ public final class AiChatExecutor {
                     ? toolPolicy != null ? toolPolicy : ToolPolicy.FULL
                     : ToolPolicy.NONE;
             approvalWaitLifecycle = approvalWaitLifecycle != null
-                    ? approvalWaitLifecycle : ApprovalWaitLifecycle.NOOP;
+                    ? approvalWaitLifecycle : AgentApprovalWaitLifecycle.NOOP;
             agentId = org.springframework.util.StringUtils.hasText(agentId)
                     ? agentId.strip().toLowerCase(java.util.Locale.ROOT) : defaultAgentId(toolPolicy, agentDepth);
             executionPurpose = executionPurpose != null
@@ -1073,24 +1104,6 @@ public final class AiChatExecutor {
                     ? org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.SYNTHESIS
                     : org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.USER_RESPONSE;
         }
-    }
-
-    /** Releases scarce worker admission while a retained agent waits for user approval. */
-    public interface ApprovalWaitLifecycle {
-
-        ApprovalWaitLifecycle NOOP = new ApprovalWaitLifecycle() {
-            @Override
-            public void suspendForApproval() {
-            }
-
-            @Override
-            public void resumeAfterApproval() {
-            }
-        };
-
-        void suspendForApproval();
-
-        void resumeAfterApproval();
     }
 
     public enum ToolPolicy {

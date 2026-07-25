@@ -57,8 +57,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Records ATIF-compatible execution history and publishes content-free lifecycle facts
@@ -116,6 +118,7 @@ public final class AiTrajectoryRecorder {
     private final AtomicLong executedMutationToolCalls = new AtomicLong();
     private volatile Set<String> readOnlyToolNames = Set.of();
     private volatile boolean sealed;
+    private volatile boolean usageAccountingSealed;
     private volatile String lastGuideContent;
     private volatile AiToolRetryMessage.Language retryMessageLanguage =
             AiToolRetryMessage.Language.ENGLISH;
@@ -362,9 +365,13 @@ public final class AiTrajectoryRecorder {
 
     public synchronized void recordFanOutUsage(String fanoutId, String executionKind,
                                                 List<AiUsageSnapshot> agents) {
-        if (sealed) {
-            return;
-        }
+        if (sealed) return;
+        recordSettledFanOutUsage(fanoutId, executionKind, agents);
+    }
+
+    /** Accounting-only terminal write; it cannot disclose model or Tool content. */
+    public synchronized void recordSettledFanOutUsage(
+            String fanoutId, String executionKind, List<AiUsageSnapshot> agents) {
         List<AiUsageSnapshot> settled = agents != null
                 ? agents.stream().filter(Objects::nonNull).toList() : List.of();
         Map<String, Object> metrics = new LinkedHashMap<>();
@@ -409,6 +416,19 @@ public final class AiTrajectoryRecorder {
         appendLifecycle(subtype, content, metadata);
     }
 
+    /** Rejects provider callbacks that race with terminal request cleanup. */
+    public synchronized void verifyActive() {
+        if (sealed) {
+            throw new CancellationException("The Agent execution has already terminated.");
+        }
+    }
+
+    /** Runs a side-effecting callback under the same lock used by terminal sealing. */
+    public synchronized <T> T callWhileActive(Supplier<T> action) {
+        verifyActive();
+        return Objects.requireNonNull(action, "action").get();
+    }
+
     /** Atomically records the terminal node transition and rejects every later provider callback. */
     public synchronized void terminalLifecycle(String subtype, String content,
                                                Map<String, Object> metadata) {
@@ -425,6 +445,11 @@ public final class AiTrajectoryRecorder {
     public synchronized void sealAgainstLateCallbacks() {
         sealed = true;
         pendingTools.clear();
+    }
+
+    /** Stops accounting-only updates after the bounded provider settlement window. */
+    public synchronized void sealUsageAccounting() {
+        usageAccountingSealed = true;
     }
 
     private void appendLifecycle(String subtype, String content, Map<String, Object> metadata) {
@@ -598,7 +623,12 @@ public final class AiTrajectoryRecorder {
     }
 
     private void recordModelResponse(ChatResponse response, String phase, boolean streaming) {
-        if (sealed || response == null || response.getResults().isEmpty()) {
+        if (response == null || response.getResults().isEmpty()) {
+            return;
+        }
+        AiMetricsSnapshot metricsSnapshot = metrics(response, streaming);
+        if (sealed) {
+            if (!usageAccountingSealed) recordOwnUsage(metricsSnapshot);
             return;
         }
         String normalizedPhase = StringUtils.hasText(phase) ? phase : "model";
@@ -606,7 +636,6 @@ public final class AiTrajectoryRecorder {
         String message = visibleMessage(response.getResults());
         List<Map<String, Object>> toolCalls = toolCalls(response.getResults());
         List<Map<String, Object>> auditedToolCalls = auditToolCalls(toolCalls);
-        AiMetricsSnapshot metricsSnapshot = metrics(response, streaming);
         Map<String, Object> metrics = metricsSnapshot != null ? metricsSnapshot.metrics() : null;
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("phase", normalizedPhase);
@@ -641,17 +670,21 @@ public final class AiTrajectoryRecorder {
                     .add(new AiPendingTool(callId, name, call.get("arguments"), observations,
                             toolSequence.getAndIncrement()));
         }
-        if (metricsSnapshot != null) {
-            ownModelCalls.incrementAndGet();
-            ownPromptTokens.addAndGet(longMetric(metricsSnapshot.metrics().get("prompt_tokens")));
-            ownCompletionTokens.addAndGet(longMetric(metricsSnapshot.metrics().get("completion_tokens")));
-        }
+        recordOwnUsage(metricsSnapshot);
         // Subagent-scoped calls include transient fan-out prompts; only the container's
         // settled aggregate may drive the conversation's visible context usage.
         if (metricsSnapshot != null && contextBudget != null && !subagentScope) {
             emitContextUsage(contextBudget.usage(metricsSnapshot.contextInputTokens(),
                     metricsSnapshot.estimated(), metricsSnapshot.estimated() ? "estimate_floor" : "provider"));
         }
+    }
+
+    private void recordOwnUsage(AiMetricsSnapshot metricsSnapshot) {
+        if (metricsSnapshot == null) return;
+        ownModelCalls.incrementAndGet();
+        ownPromptTokens.addAndGet(longMetric(metricsSnapshot.metrics().get("prompt_tokens")));
+        ownCompletionTokens.addAndGet(longMetric(
+                metricsSnapshot.metrics().get("completion_tokens")));
     }
 
     private long longMetric(Object value) {
@@ -1252,21 +1285,24 @@ public final class AiTrajectoryRecorder {
 
         @Override
         public String call(String input, ToolContext context) {
-            AiPendingTool pending = pending(getToolDefinition().name(), input);
-            toolStarted(pending);
-            Instant started = Instant.now();
-            try (var ignored = observationContext.makeToolCurrent(requestId, pending.id())) {
-                String output = delegate.call(input, context);
-                AiBoundedToolOutput bounded = reserveToolOutput(output, toolOutputTokenLimit);
-                emitToolOutputTruncated(bounded, toolOutputTokenLimit, pending.name());
-                emitToolOutputUsage(bounded);
-                toolCompleted(pending, output, null, Duration.between(started, Instant.now()),
-                        bounded.truncated());
-                return bounded.value();
-            } catch (RuntimeException exception) {
-                LOGGER.warn("AI tool {} failed for request {}", pending.name(), requestId, exception);
-                toolCompleted(pending, null, exception, Duration.between(started, Instant.now()));
-                throw exception;
+            synchronized (AiTrajectoryRecorder.this) {
+                verifyActive();
+                AiPendingTool pending = pending(getToolDefinition().name(), input);
+                toolStarted(pending);
+                Instant started = Instant.now();
+                try (var ignored = observationContext.makeToolCurrent(requestId, pending.id())) {
+                    String output = delegate.call(input, context);
+                    AiBoundedToolOutput bounded = reserveToolOutput(output, toolOutputTokenLimit);
+                    emitToolOutputTruncated(bounded, toolOutputTokenLimit, pending.name());
+                    emitToolOutputUsage(bounded);
+                    toolCompleted(pending, output, null, Duration.between(started, Instant.now()),
+                            bounded.truncated());
+                    return bounded.value();
+                } catch (RuntimeException exception) {
+                    LOGGER.warn("AI tool {} failed for request {}", pending.name(), requestId, exception);
+                    toolCompleted(pending, null, exception, Duration.between(started, Instant.now()));
+                    throw exception;
+                }
             }
         }
     }
