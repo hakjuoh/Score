@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
 from fastapi import HTTPException
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_access_token as get_fastmcp_access_token
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_sessionmaker
@@ -30,6 +32,63 @@ def tool_error_detail(detail: Any) -> str:
     return str(detail)
 
 
+# Table labels for the records a database integrity error names. A table with no
+# entry here keeps its own name, which is still more actionable than silence.
+_INTEGRITY_TABLE_LABELS = {
+    "abie": "ABIE",
+    "asbie": "ASBIE",
+    "asbiep": "ASBIEP",
+    "bbie": "BBIE",
+    "bbie_sc": "BBIE SC",
+    "bbiep": "BBIEP",
+    "biz_ctx": "business context",
+    "biz_ctx_value": "business context value",
+    "code_list": "code list",
+    "code_list_manifest": "code list",
+    "code_list_value": "code list value",
+    "code_list_value_manifest": "code list value",
+    "ctx_category": "context category",
+    "ctx_scheme": "context scheme",
+    "ctx_scheme_value": "context scheme value",
+    "dt_sc": "DT SC",
+    "dt_sc_manifest": "DT SC",
+    "top_level_asbiep": "top-level ASBIEP",
+}
+
+_FK_REFERENCING_TABLE = re.compile(r"constraint fails \((?:`[^`]+`\.)?`([^`]+)`")
+_FK_REFERENCED_TABLE = re.compile(r"REFERENCES `([^`]+)`")
+
+
+def _integrity_table_label(table: str) -> str:
+    """Describe a database table for a tool caller."""
+    return _INTEGRITY_TABLE_LABELS.get(table, table)
+
+
+def integrity_error_cause(exc: BaseException) -> str | None:
+    """Explain a database integrity error, or return ``None`` when it is opaque.
+
+    A referential-integrity conflict is the expected outcome of deleting a
+    record other records still point at. Reporting it as an unexplained failure
+    leaves the caller with no way to act, so the constraint the database names
+    is turned into a sentence that says which records are in the way.
+    """
+    text = str(getattr(exc, "orig", None) or exc)
+    if "Cannot delete or update a parent row" in text:
+        match = _FK_REFERENCING_TABLE.search(text)
+        referencing = _integrity_table_label(match.group(1)) if match else "other"
+        return (
+            f"It is still referenced by {referencing} records. "
+            "Delete or reassign those records first."
+        )
+    if "Cannot add or update a child row" in text:
+        match = _FK_REFERENCED_TABLE.search(text)
+        referenced = _integrity_table_label(match.group(1)) if match else "referenced"
+        return f"It refers to a {referenced} record that does not exist."
+    if "Duplicate entry" in text:
+        return "Another record with the same unique value already exists."
+    return None
+
+
 def _to_tool_error(exc: Exception, *, fallback: str) -> ToolError:
     """Translate application exceptions into a ToolError."""
     if isinstance(exc, ToolError):
@@ -38,6 +97,10 @@ def _to_tool_error(exc: Exception, *, fallback: str) -> ToolError:
         return ToolError(tool_error_detail(exc.detail))
     if isinstance(exc, (LookupError, PermissionError, ValueError)):
         return ToolError(str(exc))
+    if isinstance(exc, IntegrityError):
+        cause = integrity_error_cause(exc)
+        if cause:
+            return ToolError(f"{fallback} {cause}")
     return ToolError(fallback)
 
 
