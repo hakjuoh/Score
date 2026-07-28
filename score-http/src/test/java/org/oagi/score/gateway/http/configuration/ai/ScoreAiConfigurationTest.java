@@ -193,10 +193,10 @@ class ScoreAiConfigurationTest {
                 .orElseThrow(() -> new IllegalStateException("score.ai configuration was not bound"));
 
         assertEquals(Set.of(
-                        "claude-fable-5", "claude-opus-4_8", "claude-sonnet-5", "claude-haiku-4_5",
+                        "claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-4_5",
                         "gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna"),
                 properties.getModels().keySet());
-        assertEquals("claude-opus-4-8", properties.getModels().get("claude-opus-4_8").getModel());
+        assertEquals("claude-opus-5", properties.getModels().get("claude-opus-5").getModel());
         assertEquals("claude-haiku-4-5", properties.getModels().get("claude-haiku-4_5").getModel());
         assertEquals("default", properties.getModels().get("claude-haiku-4_5").getReasoningEffort());
         assertEquals("gpt-5.6-terra", properties.getModels().get("gpt-5_6-terra").getModel());
@@ -209,7 +209,7 @@ class ScoreAiConfigurationTest {
         assertNull(environment.getProperty("score.ai.gateway.model-name"));
         Map.of(
                 "claude-fable-5", "max",
-                "claude-opus-4_8", "max",
+                "claude-opus-5", "max",
                 "claude-sonnet-5", "max",
                 "gpt-5_6-sol", "xhigh",
                 "gpt-5_6-terra", "xhigh",

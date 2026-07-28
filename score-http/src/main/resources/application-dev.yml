@@ -114,11 +114,11 @@ score:
           temperature: false
           thinking-modes: [adaptive]
           default-thinking: adaptive
-      claude-opus-4_8:
-        display-name: Claude Opus 4.8
+      claude-opus-5:
+        display-name: Claude Opus 5
         description: Most capable Claude model for advanced reasoning and complex agentic work.
         provider: azure-foundry
-        model: claude-opus-4-8
+        model: claude-opus-5
         reasoning-effort: high
         reasoning-efforts:
           - name: low
@@ -134,10 +134,10 @@ score:
             display-name: Extra High
             description: Maximum reasoning depth for the most complex problems.
         max-tokens: 16000
-        context-window: ${CLAUDE_OPUS_4_8_CONTEXT_WINDOW:200000}
+        context-window: ${CLAUDE_OPUS_5_CONTEXT_WINDOW:200000}
         context-budget:
           output-reserve-tokens: 16000
-          auto-compact-threshold-tokens: ${CLAUDE_OPUS_4_8_AUTO_COMPACT_THRESHOLD:150000}
+          auto-compact-threshold-tokens: ${CLAUDE_OPUS_5_AUTO_COMPACT_THRESHOLD:150000}
           emergency-headroom-tokens: 8192
           tool-output-token-limit: 32000
           provider-compaction-enabled: false
@@ -309,7 +309,7 @@ score:
           reasoning-model: true
           verbosity: true
           temperature: false
-    model-name: claude-fable-5
+    model-name: claude-opus-5
     request-timeout: ${SCORE_AI_REQUEST_TIMEOUT:10m}
     assistant:
       # For Docker, mount a file and set this to e.g. file:/config/system-prompt-connect-center-assistant.md.
