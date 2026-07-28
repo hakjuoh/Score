@@ -21,11 +21,13 @@ import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMaintenanc
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMemoryStorageRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationConfirmationCommandRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationConfirmationQueryRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationOwnershipQueryRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChatMaintenanceRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChatMemoryStorageRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiMutationConfirmationCommandRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiMutationConfirmationQueryRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiMutationOwnershipQueryRepository;
 import org.oagi.score.gateway.http.api.bie_management.repository.*;
 import org.oagi.score.gateway.http.api.bie_management.repository.jooq.*;
 import org.oagi.score.gateway.http.api.business_term_management.repository.BusinessTermCommandRepository;
@@ -130,6 +132,11 @@ public class RepositoryFactory {
     public AiMutationConfirmationCommandRepository aiMutationConfirmationCommandRepository(
             ScoreUser requester) {
         return new JooqAiMutationConfirmationCommandRepository(dslContext, requester, this);
+    }
+
+    public AiMutationOwnershipQueryRepository aiMutationOwnershipQueryRepository(
+            ScoreUser requester) {
+        return new JooqAiMutationOwnershipQueryRepository(dslContext, requester, this);
     }
 
     public ScoreUserQueryRepository scoreUserQueryRepository() {

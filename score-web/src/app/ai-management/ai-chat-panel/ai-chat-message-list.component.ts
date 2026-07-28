@@ -119,7 +119,9 @@ export class AiChatMessageListComponent implements OnChanges {
     {
       value: 'auto',
       name: 'Ask only for risky actions',
-      description: 'Automatically allow additive changes; ask before potentially unsafe actions.'
+      description:
+        'Automatically allow new data and changes to data you own; ask before changing' +
+        " somebody else's data, and before any deletion, state change, or ownership transfer."
     },
     {
       value: 'full_access',
