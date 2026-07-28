@@ -44,6 +44,7 @@ public class AiMutationToolGuard {
 
     public static final String MUTATION_CONFIRMATION_REQUIRED = "MUTATION_CONFIRMATION_REQUIRED";
     public static final String MUTATION_CONFIRMATION_DENIED = "MUTATION_CONFIRMATION_DENIED";
+    public static final String MUTATION_FAILED = "MUTATION_FAILED";
     public static final String REQUEST_STOPPING = "REQUEST_STOPPING";
 
     /*
@@ -346,7 +347,13 @@ public class AiMutationToolGuard {
                     .orElseThrow(() -> new IllegalArgumentException(
                             "The approved mutation tool is not available: " + supplied.toolName()));
             long mutationsBefore = lastMutationSequence;
-            String result = callback.call(supplied.arguments(), new ToolContext(Map.of()));
+            String result;
+            try {
+                result = callback.call(supplied.arguments(), new ToolContext(Map.of()));
+            } catch (RuntimeException failure) {
+                return Optional.of(new AiApprovedExecution(supplied.toolName(),
+                        supplied.arguments(), mutationFailedResult(failure)));
+            }
             if (lastMutationSequence == mutationsBefore) {
                 return Optional.empty();
             }
@@ -391,7 +398,23 @@ public class AiMutationToolGuard {
                         .orElseThrow(() -> new IllegalArgumentException(
                                 "The approved mutation tool is not available: " + approval.toolName()));
                 long mutationsBefore = lastMutationSequence;
-                String result = callback.call(approval.arguments(), new ToolContext(Map.of()));
+                String result;
+                try {
+                    result = callback.call(approval.arguments(), new ToolContext(Map.of()));
+                } catch (RuntimeException failure) {
+                    /*
+                     * An approved tool that fails is an outcome the assistant has to
+                     * account for, not a reason to end the turn: a tool that runs
+                     * without approval hands its failure back as the tool result, so
+                     * an approved one does the same and the user is told what stopped
+                     * the change. The result is deliberately not cached, so the
+                     * assistant can retry once the obstacle is gone -- under a fresh
+                     * approval, because the redemption is already spent.
+                     */
+                    resolved.add(new AiResolvedMutation(approval.toolName(),
+                            approval.arguments(), mutationFailedResult(failure), false));
+                    continue;
+                }
                 if (lastMutationSequence == mutationsBefore) {
                     throw new IllegalStateException(
                             "An approved mutation could not be executed: " + approval.toolName());
@@ -434,6 +457,24 @@ public class AiMutationToolGuard {
                 return Optional.empty();
             }
             return Optional.ofNullable(redemptions.remove(key(toolName, arguments)));
+        }
+
+        private String mutationFailedResult(RuntimeException failure) {
+            String detail = failureDetail(failure);
+            return objectMapper.createObjectNode()
+                    .put("error", MUTATION_FAILED)
+                    .put("message", StringUtils.hasText(detail)
+                            ? detail : "The data-changing tool call did not complete.")
+                    .toString();
+        }
+
+        private String failureDetail(Throwable failure) {
+            for (Throwable candidate = failure; candidate != null; candidate = candidate.getCause()) {
+                if (StringUtils.hasText(candidate.getMessage())) {
+                    return candidate.getMessage();
+                }
+            }
+            return null;
         }
 
         private String key(String toolName, String arguments) {

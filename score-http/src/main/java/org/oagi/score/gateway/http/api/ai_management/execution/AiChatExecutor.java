@@ -597,6 +597,7 @@ public final class AiChatExecutor {
             int approvalBarrierCount = 0;
             int approvedMutationCount = 0;
             int deniedMutationCount = 0;
+            int failedMutationCount = 0;
             while (guardedSession != null && approvalCoordinator != null
                     && !guardedSession.pendingApprovals().isEmpty()) {
                 List<AiPendingMutationApproval> pendingApprovals =
@@ -624,8 +625,16 @@ public final class AiChatExecutor {
                 approvalBarrierCount++;
                 int executed = (int) resolutions.stream()
                         .filter(AiResolvedMutation::executed).count();
+                // An approved call that then failed is not a denial: the user did approve it.
+                int denied = (int) resolutions.stream()
+                        .filter(resolution -> !resolution.executed())
+                        .filter(resolution -> resolution.result() != null
+                                && resolution.result().contains(
+                                        AiMutationToolGuard.MUTATION_CONFIRMATION_DENIED))
+                        .count();
                 approvedMutationCount += executed;
-                deniedMutationCount += resolutions.size() - executed;
+                deniedMutationCount += denied;
+                failedMutationCount += resolutions.size() - executed - denied;
                 approvalMessages.add(new AssistantMessage(answer));
                 resolutions.forEach(resolution -> addResolvedMutation(
                         approvalMessages, resolution, recorder, toolOutputTokenLimit));
@@ -663,7 +672,8 @@ public final class AiChatExecutor {
                         "approvalBarrierResolved", true,
                         "approvalBarrierCount", approvalBarrierCount,
                         "approvedMutationCount", approvedMutationCount,
-                        "deniedMutationCount", deniedMutationCount));
+                        "deniedMutationCount", deniedMutationCount,
+                        "failedMutationCount", failedMutationCount));
             }
             return new Result(answer);
         }
