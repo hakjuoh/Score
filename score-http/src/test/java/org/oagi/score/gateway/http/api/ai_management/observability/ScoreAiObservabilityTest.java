@@ -136,7 +136,11 @@ class ScoreAiObservabilityTest {
         assertThat(toolSpan.getKind()).isEqualTo(SpanKind.INTERNAL);
         assertThat(toolSpan.getAttributes().get(
                 AttributeKey.stringKey("mcp.server.name"))).isNull();
-        assertThat(root.getName()).isEqualTo("invoke_agent assistant");
+        assertThat(root.getName()).isEqualTo("invoke_workflow assistant");
+        assertThat(root.getAttributes().get(
+                AttributeKey.stringKey("gen_ai.workflow.name"))).isEqualTo("assistant");
+        assertThat(root.getAttributes().get(
+                AttributeKey.booleanKey("gen_ai.workflow.nested"))).isNull();
         assertThat(modelSpan.getName()).isEqualTo("chat claude-fable-5");
         assertThat(toolSpan.getName()).isEqualTo("execute_tool get_business_contexts");
         assertThat(root.getAttributes().get(
@@ -180,8 +184,7 @@ class ScoreAiObservabilityTest {
                         "gen_ai.client.operation.duration",
                         "gen_ai.client.operation.time_to_first_chunk",
                         "gen_ai.client.token.usage", "gen_ai.execute_tool.duration",
-                        "gen_ai.invoke_agent.duration", "gen_ai.invoke_agent.inference_calls",
-                        "gen_ai.invoke_agent.tool_calls");
+                        "gen_ai.workflow.duration");
         assertThat(exportedMetrics).filteredOn(metric -> metric.getName().startsWith("gen_ai."))
                 .allSatisfy(metric -> assertThat(metric.getUnit()).isIn(
                         "s", "{token}", "{inference_call}", "{tool_call}"));
@@ -293,9 +296,8 @@ class ScoreAiObservabilityTest {
         assertThat(spans.getFinishedSpanItems()).extracting(SpanData::getName)
                 .containsExactlyInAnyOrder("execute_tool search",
                         "invoke_workflow parallel",
-                        "invoke_agent assistant");
-        assertThat(spans.getFinishedSpanItems()).filteredOn(span ->
-                        !operation(span).equals("invoke_agent"))
+                        "invoke_workflow assistant");
+        assertThat(spans.getFinishedSpanItems()).filteredOn(span -> !turnEntrypoint(span))
                 .allSatisfy(span -> assertThat(span.getAttributes().get(
                         AttributeKey.booleanKey("score.ai.observation.incomplete"))).isTrue());
     }
@@ -373,32 +375,51 @@ class ScoreAiObservabilityTest {
         ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
         observe(request.requestId(), AiExecutionEvent.detail(
                 "workflow_started", "", Map.of(
-                        "node_id", "main", "workflow", "main", "member_count", 1)));
+                        "node_id", "main", "workflow", "main",
+                        "depth", 0, "member_count", 1)));
         observe(request.requestId(), AiExecutionEvent.detail(
                 "workflow_started", "", Map.of(
                         "node_id", "child-1", "parent_node_id", "main",
-                        "workflow", "research-group", "member_count", 2)));
+                        "workflow", "research-group", "depth", 1, "member_count", 2)));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_started", "", Map.of(
+                        "node_id", "grandchild-1", "parent_node_id", "child-1",
+                        "workflow", "review-group", "depth", 2, "member_count", 2)));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_completed", "", Map.of(
+                        "node_id", "grandchild-1", "parent_node_id", "child-1",
+                        "workflow", "review-group", "depth", 2,
+                        "completed", 2, "failed", 0)));
         observe(request.requestId(), AiExecutionEvent.detail(
                 "workflow_completed", "", Map.of(
                         "node_id", "child-1", "parent_node_id", "main",
-                        "workflow", "research-group", "completed", 2, "failed", 0)));
+                        "workflow", "research-group", "depth", 1,
+                        "completed", 2, "failed", 0)));
         observe(request.requestId(), AiExecutionEvent.detail(
                 "workflow_completed", "", Map.of(
-                        "node_id", "main", "workflow", "main",
+                        "node_id", "main", "workflow", "main", "depth", 0,
                         "completed", 1, "failed", 0)));
         turn.complete("COMPLETED", null);
 
-        SpanData main = spans.getFinishedSpanItems().stream()
-                .filter(span -> span.getName().equals("invoke_workflow main"))
-                .findFirst().orElseThrow();
+        SpanData root = span(spans.getFinishedSpanItems(), "score.ai.turn");
         SpanData child = spans.getFinishedSpanItems().stream()
                 .filter(span -> span.getName().equals("invoke_workflow research-group"))
                 .findFirst().orElseThrow();
-        assertThat(child.getParentSpanId()).isEqualTo(main.getSpanId());
+        SpanData grandchild = spans.getFinishedSpanItems().stream()
+                .filter(span -> span.getName().equals("invoke_workflow review-group"))
+                .findFirst().orElseThrow();
+        // The implicit depth-zero queue is not a Workflow, so the planned Workflow hangs off the
+        // turn itself instead of an invented "invoke_workflow main" wrapper.
+        assertThat(spans.getFinishedSpanItems()).extracting(SpanData::getName)
+                .doesNotContain("invoke_workflow main");
+        assertThat(child.getParentSpanId()).isEqualTo(root.getSpanId());
+        assertThat(grandchild.getParentSpanId()).isEqualTo(child.getSpanId());
         assertThat(child.getAttributes().get(
                 AttributeKey.stringKey("score.ai.workflow.run_id"))).isEqualTo("child-1");
         assertThat(child.getAttributes().get(
                 AttributeKey.stringKey("gen_ai.workflow.name"))).isEqualTo("research-group");
+        assertThat(child.getAttributes().get(
+                AttributeKey.booleanKey("gen_ai.workflow.nested"))).isTrue();
         assertThat(child.getAttributes().get(
                 AttributeKey.longKey("score.ai.workflow.completed"))).isEqualTo(2L);
         assertThat(child.getAttributes().get(
@@ -417,16 +438,27 @@ class ScoreAiObservabilityTest {
                 "workflow_evaluation_fallback", "", Map.of("status", "fallback")));
         observe(request.requestId(), AiExecutionEvent.detail(
                 "workflow_started", "", Map.of(
-                        "node_id", "main", "workflow", "main", "member_count", 1)));
+                        "node_id", "main", "workflow", "main",
+                        "depth", 0, "member_count", 1)));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_started", "", Map.of(
+                        "node_id", "child-1", "parent_node_id", "main",
+                        "workflow", "research-group", "depth", 1, "member_count", 2)));
         observe(request.requestId(), AiExecutionEvent.detail(
                 "workflow_refused", "", Map.of(
-                        "node_id", "main", "workflow", "main")));
+                        "node_id", "child-1", "parent_node_id", "main",
+                        "workflow", "research-group", "depth", 1)));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_refused", "", Map.of(
+                        "node_id", "main", "workflow", "main", "depth", 0)));
         turn.complete("COMPLETED", null);
 
         List<SpanData> workflows = spans.getFinishedSpanItems().stream()
                 .filter(span -> span.getName().startsWith("invoke_workflow"))
+                .filter(span -> !turnEntrypoint(span))
                 .toList();
         assertThat(workflows).hasSize(1);
+        assertThat(workflows.getFirst().getName()).isEqualTo("invoke_workflow research-group");
         assertThat(workflows.getFirst().getAttributes().get(
                 AttributeKey.stringKey("score.ai.outcome"))).isEqualTo("refused");
     }
@@ -448,6 +480,7 @@ class ScoreAiObservabilityTest {
 
         SpanData workflow = spans.getFinishedSpanItems().stream()
                 .filter(span -> span.getName().startsWith("invoke_workflow"))
+                .filter(span -> !turnEntrypoint(span))
                 .findFirst().orElseThrow();
         assertThat(workflow.getAttributes().get(
                 AttributeKey.stringKey("gen_ai.workflow.name"))).isEqualTo(workflowId);
@@ -523,8 +556,66 @@ class ScoreAiObservabilityTest {
                 AttributeKey.longKey("gen_ai.usage.input_tokens"))).isNull();
         assertThat(inferenceCallSum("workflow-planner")).isEqualTo(1.0);
         assertThat(inferenceCallSum("assistant")).isZero();
-        assertThat(exported).noneMatch(span -> "invoke_workflow".equals(operation(span)));
+        assertThat(exported).noneMatch(span -> "invoke_workflow".equals(operation(span))
+                && !turnEntrypoint(span));
         assertThat(exported).noneMatch(span -> "create_agent".equals(operation(span)));
+    }
+
+    @Test
+    void linesUpAgentInvocationsOfTheImplicitQueueInsteadOfWrappingThemInAWorkflow() {
+        ChatRequest request = new ChatRequest("prompt", "request-implicit-queue", null,
+                "conversation-implicit-queue", null, List.of(), null,
+                "gpt-5", "medium", "ask");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        AiExecutionObservationExporter exporter = new AiExecutionObservationExporter(observability);
+        ExecutionScope scope = new ExecutionScope(
+                request.requestId(), request.conversationId(), "user-1", 1,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        Map<String, Object> gateway = Map.of(
+                "agent_run_id", "gateway-run", "agent_id", "gateway-agent",
+                "model_id", "gpt-5", "workflow_node_id", "main");
+        Map<String, Object> assistant = Map.of(
+                "agent_run_id", "assistant-run", "agent_id", "connectcenter-assistant",
+                "model_id", "gpt-5", "workflow_node_id", "main");
+
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_started", "", Map.of(
+                        "node_id", "main", "workflow", "main",
+                        "depth", 0, "member_count", 1)));
+        exporter.observe(ExecutionObservation.of("agent.run.started", scope, gateway));
+        exporter.observe(ExecutionObservation.of("agent.run.completed", scope, gateway));
+        exporter.observe(ExecutionObservation.of("agent.run.started", scope, assistant));
+        try (var current = observability.makeAgentCurrent(request.requestId(), "assistant-run")) {
+            observability.startModelCall(request.requestId(), "gpt-5", "openai", "assistant")
+                    .complete(responseWithUsage("end_turn"));
+        }
+        exporter.observe(ExecutionObservation.of("agent.run.completed", scope, assistant));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_completed", "", Map.of(
+                        "node_id", "main", "workflow", "main", "depth", 0,
+                        "completed", 1, "failed", 0)));
+        turn.complete("COMPLETED", null);
+
+        List<SpanData> exported = spans.getFinishedSpanItems();
+        SpanData root = span(exported, "score.ai.turn");
+        SpanData gatewayAgent = exported.stream()
+                .filter(span -> span.getName().equals("invoke_agent gateway-agent"))
+                .findFirst().orElseThrow();
+        SpanData assistantAgent = exported.stream()
+                .filter(span -> span.getName().equals("invoke_agent connectcenter-assistant"))
+                .findFirst().orElseThrow();
+        SpanData model = exported.stream()
+                .filter(span -> span.getName().equals("chat gpt-5"))
+                .findFirst().orElseThrow();
+
+        // The turn entrypoint is the only invoke_workflow span; the implicit queue adds none.
+        assertThat(exported).filteredOn(span -> "invoke_workflow".equals(operation(span)))
+                .singleElement().matches(ScoreAiObservabilityTest::turnEntrypoint);
+        assertThat(gatewayAgent.getParentSpanId()).isEqualTo(root.getSpanId());
+        assertThat(assistantAgent.getParentSpanId()).isEqualTo(root.getSpanId());
+        assertThat(model.getParentSpanId()).isEqualTo(assistantAgent.getSpanId());
+        assertThat(metrics.collectAllMetrics()).noneMatch(metric ->
+                metric.getName().equals("score.ai.workflows"));
     }
 
     @Test
@@ -568,12 +659,10 @@ class ScoreAiObservabilityTest {
 
         List<SpanData> exported = spans.getFinishedSpanItems();
         assertThat(exported).filteredOn(span ->
-                "invoke_agent".equals(operation(span))).hasSize(3);
+                "invoke_agent".equals(operation(span))).hasSize(2);
         assertThat(exported).filteredOn(span ->
-                "invoke_workflow".equals(operation(span))).hasSize(1);
-        SpanData workflow = exported.stream()
-                .filter(span -> "invoke_workflow".equals(operation(span)))
-                .findFirst().orElseThrow();
+                "invoke_workflow".equals(operation(span)) && !turnEntrypoint(span)).hasSize(1);
+        SpanData workflow = span(exported, "score.ai.workflow");
         assertThat(workflow.getName()).isEqualTo("invoke_workflow orchestrator_workers");
         assertThat(exported).filteredOn(span ->
                 "invoke_agent".equals(operation(span))
@@ -802,7 +891,7 @@ class ScoreAiObservabilityTest {
         model.complete(responseWithUsage());
 
         assertThat(spans.getFinishedSpanItems()).extracting(SpanData::getName)
-                .containsExactly("chat gpt-5", "invoke_agent assistant");
+                .containsExactly("chat gpt-5", "invoke_workflow assistant");
         SpanData modelSpan = span(spans.getFinishedSpanItems(), "score.ai.model");
         assertThat(modelSpan.getAttributes().get(
                 AttributeKey.booleanKey("score.ai.observation.incomplete"))).isTrue();
@@ -904,7 +993,7 @@ class ScoreAiObservabilityTest {
         assertThat(spans.getFinishedSpanItems()).filteredOn(span ->
                 operation(span).equals("execute_tool")).hasSize(1);
         assertThat(spans.getFinishedSpanItems()).filteredOn(span ->
-                operation(span).equals("invoke_workflow")).hasSize(1);
+                operation(span).equals("invoke_workflow") && !turnEntrypoint(span)).hasSize(1);
         assertThat(spans.getFinishedSpanItems()).filteredOn(span ->
                 operation(span).equals("invoke_agent")
                         && span.getAttributes().get(AttributeKey.stringKey("score.ai.agent.id")) != null)
@@ -1047,20 +1136,25 @@ class ScoreAiObservabilityTest {
 
     private SpanData span(List<SpanData> exported, String name) {
         String expectedOperation = switch (name) {
-            case "score.ai.turn", "score.ai.agent" -> "invoke_agent";
+            case "score.ai.agent" -> "invoke_agent";
             case "score.ai.model" -> "chat";
             case "score.ai.tool" -> "execute_tool";
-            case "score.ai.workflow" -> "invoke_workflow";
+            case "score.ai.turn", "score.ai.workflow" -> "invoke_workflow";
             default -> null;
         };
         return exported.stream().filter(item -> expectedOperation != null
                         ? expectedOperation.equals(operation(item))
                         && (!("score.ai.agent".equals(name)) || item.getAttributes().get(
                                 AttributeKey.stringKey("score.ai.agent.id")) != null)
-                        && (!("score.ai.turn".equals(name)) || item.getAttributes().get(
-                                AttributeKey.stringKey("score.ai.agent.id")) == null)
+                        && (!("score.ai.turn".equals(name)) || turnEntrypoint(item))
+                        && (!("score.ai.workflow".equals(name)) || !turnEntrypoint(item))
                         : item.getName().equals(name))
                 .findFirst().orElseThrow();
+    }
+
+    /** The turn entrypoint is the only {@code invoke_workflow} span carrying the execution kind. */
+    private static boolean turnEntrypoint(SpanData span) {
+        return span.getAttributes().get(AttributeKey.stringKey("score.ai.execution.kind")) != null;
     }
 
     private static String operation(SpanData span) {
