@@ -53,12 +53,15 @@ public record AgentToolBinding(ToolSet tools, ToolExecutionGateway gateway,
                     public <T> T callIfActive(
                             org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope scope,
                             java.util.function.Supplier<T> action) {
-                        return runRecorder.callWhileActive(() -> {
-                            // Admission is the final checkpoint. Once admitted, the
-                            // Tool side effect may finish even if cancellation follows.
+                        // Admission is the final checkpoint. Once admitted, the
+                        // Tool side effect may finish even if cancellation follows,
+                        // and it runs outside the recorder lock so that a
+                        // server-to-client callback can still reach the recorder.
+                        runRecorder.callWhileActive(() -> {
                             runCheckpoint.run();
-                            return action.get();
+                            return null;
                         });
+                        return action.get();
                     }
                 }), false);
     }
