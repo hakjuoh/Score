@@ -1285,24 +1285,33 @@ public final class AiTrajectoryRecorder {
 
         @Override
         public String call(String input, ToolContext context) {
+            AiPendingTool pending;
+            // Bookkeeping runs under the terminal-sealing lock; the Tool call itself must not.
+            // A server-to-client callback (an MCP elicitation, for one) arrives on another
+            // thread while the call is in flight and has to reach this recorder to publish
+            // itself, so holding the monitor across the call would deadlock both threads.
             synchronized (AiTrajectoryRecorder.this) {
                 verifyActive();
-                AiPendingTool pending = pending(getToolDefinition().name(), input);
+                pending = pending(getToolDefinition().name(), input);
                 toolStarted(pending);
-                Instant started = Instant.now();
-                try (var ignored = observationContext.makeToolCurrent(requestId, pending.id())) {
-                    String output = delegate.call(input, context);
+            }
+            Instant started = Instant.now();
+            try (var ignored = observationContext.makeToolCurrent(requestId, pending.id())) {
+                String output = delegate.call(input, context);
+                synchronized (AiTrajectoryRecorder.this) {
                     AiBoundedToolOutput bounded = reserveToolOutput(output, toolOutputTokenLimit);
                     emitToolOutputTruncated(bounded, toolOutputTokenLimit, pending.name());
                     emitToolOutputUsage(bounded);
                     toolCompleted(pending, output, null, Duration.between(started, Instant.now()),
                             bounded.truncated());
                     return bounded.value();
-                } catch (RuntimeException exception) {
-                    LOGGER.warn("AI tool {} failed for request {}", pending.name(), requestId, exception);
-                    toolCompleted(pending, null, exception, Duration.between(started, Instant.now()));
-                    throw exception;
                 }
+            } catch (RuntimeException exception) {
+                LOGGER.warn("AI tool {} failed for request {}", pending.name(), requestId, exception);
+                synchronized (AiTrajectoryRecorder.this) {
+                    toolCompleted(pending, null, exception, Duration.between(started, Instant.now()));
+                }
+                throw exception;
             }
         }
     }

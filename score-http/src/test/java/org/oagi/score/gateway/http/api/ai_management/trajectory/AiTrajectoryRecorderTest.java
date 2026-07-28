@@ -11,6 +11,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
+import org.oagi.score.gateway.http.api.ai_management.model.AiElicitationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingMutationApproval;
@@ -96,6 +97,61 @@ class AiTrajectoryRecorderTest {
             releaseAction.countDown();
             pool.shutdownNow();
         }
+    }
+
+    @Test
+    void publishesAnElicitationWhileTheToolCallThatAsksForItIsStillRunning() throws Exception {
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                mock(AiChatConversationRepository.class), new ObjectMapper(), mock(ScoreUser.class),
+                "conversation-1", "request-1", events::add);
+        CountDownLatch published = new CountDownLatch(1);
+        // An MCP server elicits from inside the call it was invoked with: the notice must
+        // reach the requester on another thread before the tool call can answer.
+        ToolCallback elicitingTool = new ToolCallback() {
+
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder()
+                        .name("delete_context_category")
+                        .description("Deletes one context category")
+                        .inputSchema("{\"type\":\"object\"}")
+                        .build();
+            }
+
+            @Override
+            public String call(String input) {
+                return call(input, new ToolContext(Map.of()));
+            }
+
+            @Override
+            public String call(String input, ToolContext context) {
+                Thread transport = new Thread(() -> {
+                    recorder.elicitationRequired(new AiElicitationNotice("elicitation-1",
+                            "request-1", "conversation-1", "Are you sure?", Map.of(),
+                            Instant.now().plusSeconds(120)));
+                    published.countDown();
+                });
+                transport.start();
+                try {
+                    if (!published.await(2, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("the elicitation was never published");
+                    }
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new CancellationException("interrupted while eliciting");
+                }
+                return "{\"deleted\":true}";
+            }
+        };
+
+        String output = recorder.recordingTools(() -> new ToolCallback[]{elicitingTool})
+                .getToolCallbacks()[0].call("{\"ctx_category_id\":98}", new ToolContext(Map.of()));
+
+        assertThat(output).contains("\"deleted\":true");
+        assertThat(events).extracting(AiExecutionEvent::subtype)
+                .containsExactly("started", "elicitation_required", "completed");
+        assertThat(events.get(1).metadata()).containsEntry("elicitationId", "elicitation-1");
     }
 
     @Test
