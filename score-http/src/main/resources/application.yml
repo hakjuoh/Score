@@ -109,6 +109,11 @@ springdoc:
 
 score:
   ai:
+    middleware:
+      # Profiles contain registered middleware bean IDs only. Required middleware
+      # is added to every profile by the engine and cannot be disabled or shadowed.
+      profiles:
+        default: []
     observability:
       # AI-only SDK/exporters. Environment profiles opt in explicitly.
       enabled: false

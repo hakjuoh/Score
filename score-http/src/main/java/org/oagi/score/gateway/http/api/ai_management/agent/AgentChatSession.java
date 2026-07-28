@@ -1,5 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.agent;
 
+import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
+
 import java.util.Objects;
 
 /**
@@ -11,7 +13,13 @@ import java.util.Objects;
  */
 public record AgentChatSession(Agent agent, String modelName, Agent.Instruction instruction,
                                AgentExecutionContext context,
-                               AgentToolBinding tools) {
+                               AgentToolBinding tools,
+                               MiddlewareState middlewareState) {
+
+    public AgentChatSession(Agent agent, String modelName, Agent.Instruction instruction,
+                            AgentExecutionContext context, AgentToolBinding tools) {
+        this(agent, modelName, instruction, context, tools, new MiddlewareState());
+    }
 
     public AgentChatSession {
         Objects.requireNonNull(agent, "agent");
@@ -20,5 +28,6 @@ public record AgentChatSession(Agent agent, String modelName, Agent.Instruction 
         Objects.requireNonNull(instruction, "instruction");
         Objects.requireNonNull(context, "context");
         Objects.requireNonNull(tools, "tools");
+        Objects.requireNonNull(middlewareState, "middlewareState");
     }
 }
