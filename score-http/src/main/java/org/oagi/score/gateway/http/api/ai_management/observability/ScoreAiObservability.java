@@ -103,7 +103,16 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         return new ScoreAiObservability(OpenTelemetry.noop(), "unknown");
     }
 
-    /** Starts the root span. A valid inbound W3C trace context is continued when supplied. */
+    /**
+     * Starts the turn's entrypoint span. A valid inbound W3C trace context is continued when
+     * supplied.
+     *
+     * <p>The entrypoint is an {@code invoke_workflow}, not an {@code invoke_agent}: it groups the
+     * agent invocations a turn makes rather than being one of them, which is exactly the case the
+     * GenAI conventions reserve {@code invoke_workflow} for. Its {@code gen_ai.workflow.name} is
+     * the execution kind ({@code assistant}, {@code context_compaction}, ...), a low-cardinality
+     * label that names how the turn was entered.</p>
+     */
     public Turn startTurn(ChatRequest request, ScoreUser requester, long generation,
                           String traceparent, String tracestate) {
         Objects.requireNonNull(request, "request");
@@ -118,12 +127,12 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                                String traceparent, String tracestate) {
         Objects.requireNonNull(execution, "execution");
         Context parent = extractedParent(traceparent, tracestate);
-        String agentName = value(execution.kind());
+        String workflowName = value(execution.kind());
         String requestModel = requestModel(execution.model());
         SpanBuilder builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
-                        GenAiSemanticConventions.INVOKE_AGENT, agentName)).setParent(parent)
-                .setAttribute("gen_ai.operation.name", GenAiSemanticConventions.INVOKE_AGENT)
-                .setAttribute("gen_ai.agent.name", agentName)
+                        GenAiSemanticConventions.INVOKE_WORKFLOW, workflowName)).setParent(parent)
+                .setAttribute("gen_ai.operation.name", GenAiSemanticConventions.INVOKE_WORKFLOW)
+                .setAttribute("gen_ai.workflow.name", workflowName)
                 .setAttribute("gen_ai.request.model", requestModel)
                 .setAttribute("score.ai.request.id", value(execution.requestId()))
                 .setAttribute("score.ai.conversation.id", value(execution.conversationId()))
@@ -142,7 +151,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         Span span = builder.startSpan();
         AtomicBoolean ended = new AtomicBoolean();
         TurnState state = new TurnState(execution.requestId(), execution.conversationId(),
-                requestModel, execution.reasoningLevel(), agentName, span,
+                requestModel, execution.reasoningLevel(), workflowName, span,
                 privateContext(parent, span, ended), System.nanoTime(), ended);
         TurnState active = turns.putIfAbsent(execution.requestId(), state);
         if (active != null) {
@@ -182,10 +191,10 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         String normalizedReason = admissionReasonCategory(reason);
         String requestModel = requestModel(request.modelName());
         SpanBuilder builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
-                        GenAiSemanticConventions.INVOKE_AGENT, "assistant"))
+                        GenAiSemanticConventions.INVOKE_WORKFLOW, "assistant"))
                 .setParent(extractedParent(traceparent, tracestate))
-                .setAttribute("gen_ai.operation.name", GenAiSemanticConventions.INVOKE_AGENT)
-                .setAttribute("gen_ai.agent.name", "assistant")
+                .setAttribute("gen_ai.operation.name", GenAiSemanticConventions.INVOKE_WORKFLOW)
+                .setAttribute("gen_ai.workflow.name", "assistant")
                 .setAttribute("gen_ai.request.model", requestModel)
                 .setAttribute("score.ai.request.id", value(request.requestId()))
                 .setAttribute("score.ai.conversation.id", value(request.conversationId()))
@@ -209,14 +218,11 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                 .build();
         instruments.turns.add(1, labels);
         instruments.admissionRejections.add(1, labels);
-        Attributes standard = GenAiSemanticConventions.agentDurationAttributes(
-                "assistant", requestModel,
-                failure != null ? failure.getClass().getName() : "admission_rejected");
-        instruments.genAiInvokeAgentDuration.record(
+        Attributes standard = GenAiSemanticConventions.workflowDurationAttributes(
+                "assistant",
+                failure != null ? failure.getClass().getName() : "admission_rejected", false);
+        instruments.genAiWorkflowDuration.record(
                 GenAiSemanticConventions.elapsedSeconds(startedNanos), standard);
-        Attributes calls = GenAiSemanticConventions.agentCallAttributes("assistant");
-        instruments.genAiInvokeAgentInferenceCalls.record(0, calls);
-        instruments.genAiInvokeAgentToolCalls.record(0, calls);
         span.end();
     }
 
@@ -486,11 +492,6 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         private static final AgentUsage EMPTY = new AgentUsage(0, 0, 0, false, 0, false);
     }
 
-    boolean isActive(String requestId) {
-        TurnState state = requestId != null ? turns.get(requestId) : null;
-        return state != null && !state.ended.get();
-    }
-
     boolean whileActive(String requestId, Runnable action) {
         TurnState state = requestId != null ? turns.get(requestId) : null;
         if (state == null) return false;
@@ -502,12 +503,15 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
     }
 
     Context agentParent(String requestId, String workflowNodeId, String workflowParentNodeId) {
-        if (!isActive(requestId)) return Context.root();
+        TurnState state = requestId != null ? turns.get(requestId) : null;
+        if (state == null || state.ended.get()) return Context.root();
         Context workflow = lifecycleEvents.workflowContext(requestId, workflowNodeId);
         if (workflow != null) return workflow;
         workflow = lifecycleEvents.workflowContext(requestId, workflowParentNodeId);
         if (workflow != null) return workflow;
-        return parentContext(requestId);
+        // Without a Workflow node the Agent invocations of a turn are peers. Anchoring them on the
+        // turn keeps them side by side instead of chaining each run under the one still running.
+        return state.context;
     }
 
     void onTurnClosed(BiConsumer<String, String> listener) {
@@ -560,14 +564,12 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         private volatile String model;
         private final String reasoningLevel;
         private volatile String conversationId;
-        private final String agentName;
+        private final String workflowName;
         private final Span span;
         private final Context context;
         private final long startedNanos;
         private final Attributes activeRequestAttributes;
         private final AtomicLong modelCalls = new AtomicLong();
-        private final AtomicLong rootInferenceCalls = new AtomicLong();
-        private final AtomicLong rootToolCalls = new AtomicLong();
         private final AtomicLong rootInputTokens = new AtomicLong();
         private final AtomicLong rootOutputTokens = new AtomicLong();
         private final AtomicLong rootCacheReadTokens = new AtomicLong();
@@ -588,7 +590,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         private final AtomicBoolean ended;
 
         private TurnState(String requestId, String conversationId, String model,
-                          String reasoningLevel, String agentName,
+                          String reasoningLevel, String workflowName,
                           Span span, Context context,
                           long startedNanos, AtomicBoolean ended) {
             this.requestId = requestId;
@@ -596,7 +598,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                     ? conversationId.strip() : null;
             this.model = model;
             this.reasoningLevel = reasoningLevel;
-            this.agentName = agentName;
+            this.workflowName = workflowName;
             this.span = span;
             this.context = context;
             this.startedNanos = startedNanos;
@@ -607,9 +609,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         private ModelIdentity nextModelIdentity(Context parent) {
             long sequence = modelCalls.incrementAndGet();
             java.util.Optional<AgentInvocation> invocation = agentInvocation(parent);
-            invocation.ifPresentOrElse(
-                    activeAgent -> activeAgent.inferenceCalls.incrementAndGet(),
-                    rootInferenceCalls::incrementAndGet);
+            invocation.ifPresent(activeAgent -> activeAgent.inferenceCalls.incrementAndGet());
             String parentSpanId = Span.fromContext(parent).getSpanContext().isValid()
                     ? Span.fromContext(parent).getSpanContext().getSpanId() : "root";
             return modelSequences.computeIfAbsent(parentSpanId, ignored -> new ModelSequence())
@@ -623,9 +623,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         }
 
         private void recordToolCall(Context parent) {
-            agentInvocation(parent).ifPresentOrElse(
-                    invocation -> invocation.toolCalls.incrementAndGet(),
-                    rootToolCalls::incrementAndGet);
+            agentInvocation(parent).ifPresent(invocation -> invocation.toolCalls.incrementAndGet());
         }
 
         private java.util.Optional<AgentInvocation> agentInvocation(Context parent) {
@@ -789,17 +787,14 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                 }
                 double duration = elapsedMillis(state.startedNanos);
                 instruments.turnDuration.record(duration, modelAttributes(state.model, normalized));
-                Attributes standard = GenAiSemanticConventions.agentDurationAttributes(
-                        state.agentName, state.model,
+                Attributes standard = GenAiSemanticConventions.workflowDurationAttributes(
+                        state.workflowName,
                         failure != null ? failure.getClass().getName()
                                 : !"success".equals(normalized) && !"cancelled".equals(normalized)
-                                ? normalized : null);
-                instruments.genAiInvokeAgentDuration.record(
+                                ? normalized : null,
+                        false);
+                instruments.genAiWorkflowDuration.record(
                         GenAiSemanticConventions.elapsedSeconds(state.startedNanos), standard);
-                Attributes calls = GenAiSemanticConventions.agentCallAttributes(state.agentName);
-                instruments.genAiInvokeAgentInferenceCalls.record(
-                        state.rootInferenceCalls.get(), calls);
-                instruments.genAiInvokeAgentToolCalls.record(state.rootToolCalls.get(), calls);
                 instruments.activeRequests.add(-1, state.activeRequestAttributes);
                 instruments.turns.add(1, modelAttributes(state.model, normalized));
                 lifecycleEvents.closeRequest(state.requestId, normalized);
