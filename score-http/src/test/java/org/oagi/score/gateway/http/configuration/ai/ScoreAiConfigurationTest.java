@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.oagi.score.gateway.http.api.ai_management.agent.AssistantAgent;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
+import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiTool;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.chat.model.ChatModel;
@@ -15,6 +17,7 @@ import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.core.env.StandardEnvironment;
+import org.springframework.core.env.MapPropertySource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -33,6 +36,34 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 class ScoreAiConfigurationTest {
+
+    @Test
+    void bindsMiddlewareProfilesPoliciesAndTypedConditions() {
+        StandardEnvironment environment = new StandardEnvironment();
+        environment.getPropertySources().addFirst(new MapPropertySource("middleware-test", Map.of(
+                "score.ai.middleware.profiles.default[0]", "secret-redactor",
+                "score.ai.middleware.profile-by-purpose.compaction", "compactor",
+                "score.ai.middleware.profiles.compactor[0]", "secret-redactor",
+                "score.ai.middleware.policies.secret-redactor.mode", "shadow",
+                "score.ai.middleware.policies.secret-redactor.purposes[0]", "user-response",
+                "score.ai.middleware.policies.secret-redactor.tool-effects[0]", "mutation",
+                "score.ai.middleware.policies.secret-redactor.settings.strategy", "redact")));
+
+        ScoreAiProperties properties = Binder.get(environment)
+                .bind("score.ai", ScoreAiProperties.class)
+                .orElseThrow(() -> new IllegalStateException("middleware settings not bound"));
+
+        assertThat(properties.getMiddleware().getProfiles().get("default"))
+                .containsExactly("secret-redactor");
+        assertThat(properties.getMiddleware().getProfileByPurpose())
+                .containsEntry(ExecutionScope.Purpose.COMPACTION, "compactor");
+        ScoreAiProperties.MiddlewarePolicy policy = properties.getMiddleware()
+                .getPolicies().get("secret-redactor");
+        assertThat(policy.getMode()).isEqualTo(ScoreAiProperties.MiddlewareMode.SHADOW);
+        assertThat(policy.getPurposes()).containsExactly(ExecutionScope.Purpose.USER_RESPONSE);
+        assertThat(policy.getToolEffects()).containsExactly(AiTool.ToolEffect.MUTATION);
+        assertThat(policy.getSettings()).containsEntry("strategy", "redact");
+    }
 
     @Test
     void usesTheConnectCenterEntityAwareToolIndex() {
