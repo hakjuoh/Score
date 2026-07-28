@@ -27,6 +27,7 @@ import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.ai.tool.execution.ToolExecutionException;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -265,6 +266,47 @@ class AiMutationToolGuardTest {
         verify(confirmations, times(1)).authorize(
                 any(), anyString(), anyString(), any(), anyString(), anyString());
         verify(delete, never()).call(anyString(), any(ToolContext.class));
+    }
+
+    @Test
+    void reportsWhyAnApprovedMutationFailedInsteadOfEndingTheTurn() {
+        AiMutationConfirmationNotice notice = new AiMutationConfirmationNotice(
+                "confirmation-1", "REQUESTED", Instant.now().plusSeconds(60),
+                "delete_business_context", "{\"id\":1}");
+        when(confirmations.authorize(any(), anyString(), anyString(), any(), anyString(), anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(3) != null
+                        ? AiMutationAuthorization.permitted()
+                        : AiMutationAuthorization.required(notice));
+        when(confirmations.argumentsDigest(anyString(), anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(0) + "\n" + invocation.getArgument(1));
+        when(requests.mutationStarted("request-1")).thenReturn(true);
+        ToolCallback delete = failingTool("delete_business_context",
+                "Unable to delete business context 1. It is still referenced by"
+                        + " business context value records.");
+        AiMutationToolGuard.GuardedToolSession session = guard.session(
+                request, requester, ignored -> {}, () -> new ToolCallback[]{delete},
+                SERVER_READ_ONLY_TOOLS);
+
+        assertThat(session.getToolCallbacks()[0].call("{\"id\":1}", new ToolContext(Map.of())))
+                .contains("MUTATION_CONFIRMATION_REQUIRED");
+        var resolved = session.resolveApprovals(session, Map.of(
+                "confirmation-1", new AiMutationApprovalResolution(
+                        "confirmation-1", AiMutationApprovalResolution.Decision.APPROVE, "grant-1")));
+
+        assertThat(resolved).singleElement().satisfies(result -> {
+            assertThat(result.toolName()).isEqualTo("delete_business_context");
+            assertThat(result.executed()).isFalse();
+            assertThat(result.result())
+                    .contains("MUTATION_FAILED")
+                    .contains("It is still referenced by business context value records.");
+        });
+        assertThat(session.completedMutations()).isEmpty();
+        assertThat(session.mutationCompleted()).isFalse();
+        assertThat(session.pendingApprovals()).isEmpty();
+        assertThat(session.confirmationRequired()).isFalse();
+        // The failure is not cached as a decision, so a retry asks the user again.
+        assertThat(session.getToolCallbacks()[0].call("{\"id\":1}", new ToolContext(Map.of())))
+                .contains("MUTATION_CONFIRMATION_REQUIRED");
     }
 
     @Test
@@ -532,6 +574,16 @@ class AiMutationToolGuardTest {
 
     private ToolCallback tool(String name, String result) {
         return tool(name, result, "{\"type\":\"object\"}");
+    }
+
+    private ToolCallback failingTool(String name, String failure) {
+        ToolDefinition definition = ToolDefinition.builder()
+                .name(name).description(name).inputSchema("{\"type\":\"object\"}").build();
+        ToolCallback callback = mock(ToolCallback.class);
+        when(callback.getToolDefinition()).thenReturn(definition);
+        when(callback.call(anyString(), any(ToolContext.class))).thenThrow(
+                new ToolExecutionException(definition, new IllegalStateException(failure)));
+        return callback;
     }
 
     private ToolCallback tool(String name, String result, String inputSchema) {

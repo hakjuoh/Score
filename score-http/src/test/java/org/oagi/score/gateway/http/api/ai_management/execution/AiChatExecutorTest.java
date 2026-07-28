@@ -270,6 +270,58 @@ class AiChatExecutorTest {
     }
 
     @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void countsAnApprovedButFailedMutationAsFailedRatherThanDenied() {
+        Fixture fixture = new Fixture();
+        AiMutationToolGuard mutationGuard = mock(AiMutationToolGuard.class);
+        AiMutationToolGuard.GuardedToolSession guardedSession =
+                mock(AiMutationToolGuard.GuardedToolSession.class);
+        AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
+        org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle waitLifecycle =
+                mock(org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle.class);
+        AiPendingMutationApproval pending = pending("approval-1", "delete_a");
+        String failure = "{\"error\":\"" + AiMutationToolGuard.MUTATION_FAILED
+                + "\",\"message\":\"It is still referenced by context scheme records.\"}";
+        when(guardedSession.getToolCallbacks()).thenReturn(new ToolCallback[0]);
+        when(guardedSession.executeApproved(any())).thenReturn(Optional.empty());
+        when(guardedSession.pendingApprovals()).thenReturn(
+                List.of(pending), List.of(pending), List.of());
+        when(guardedSession.resolveApprovals(any(), any())).thenReturn(List.of(
+                new AiResolvedMutation("delete_a", "{\"id\":1}", failure, false)));
+        when(mutationGuard.session(any(), any(), any(), any(), any()))
+                .thenReturn(guardedSession);
+        when(approvals.awaitDecisions(
+                any(), anyString(), anyString(), any(), any(), any(), any()))
+                .thenReturn(Map.of("approval-1", new AiMutationApprovalResolution(
+                        "approval-1", AiMutationApprovalResolution.Decision.APPROVE, "grant-1")));
+        fixture.responses(Flux.just(response("Waiting for approval.")),
+                Flux.just(response("The deletion did not go through.")));
+        fixture.mcp(new ToolCallback[0], Set.of());
+        AiTrajectoryRecorder recorder = fixture.recorder("request-1");
+        ChatRequest request = request("Delete it");
+
+        AiChatExecutor.Result result = execute(fixture.executor(mutationGuard, approvals),
+                new AiChatExecutor.Context(request, List.of(),
+                        new UserMessage(request.prompt()), fixture.requester, recorder,
+                        true, false, AiChatExecutor.ToolPolicy.FULL, 1,
+                        null, waitLifecycle));
+
+        assertThat(result.answer()).isEqualTo("The deletion did not go through.");
+        assertThat(result.traceMetadata())
+                .containsEntry("approvedMutationCount", 0)
+                .containsEntry("deniedMutationCount", 0)
+                .containsEntry("failedMutationCount", 1);
+        ArgumentCaptor<List<Message>> messageCalls = ArgumentCaptor.forClass(List.class);
+        verify(fixture.requestSpec, times(2)).messages(messageCalls.capture());
+        assertThat(messageCalls.getAllValues().getLast().stream()
+                .filter(ToolResponseMessage.class::isInstance)
+                .map(ToolResponseMessage.class::cast)
+                .flatMap(message -> message.getResponses().stream())
+                .map(ToolResponseMessage.ToolResponse::responseData))
+                .containsExactly(failure);
+    }
+
+    @Test
     void clearsSharedPendingApprovalEvidenceWhenWorkerResumeFails() {
         Fixture fixture = new Fixture();
         AiMutationToolGuard mutationGuard = mock(AiMutationToolGuard.class);
