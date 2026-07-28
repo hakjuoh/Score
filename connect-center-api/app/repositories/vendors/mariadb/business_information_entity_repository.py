@@ -1834,6 +1834,10 @@ class MariaDbBusinessInformationEntityRepository(BusinessInformationEntityReposi
             await self._session.execute(sa_delete(Asbiep).where(Asbiep.owner_top_level_asbiep_id == top_level_asbiep_id))
             await self._session.execute(sa_delete(Abie).where(Abie.owner_top_level_asbiep_id == top_level_asbiep_id))
             await self._session.delete(top_level)
+            # Flush inside the window so the row is removed while the checks are
+            # off, and so a constraint violation surfaces here rather than at
+            # the request-scoped commit.
+            await self._session.flush()
         finally:
             await self._session.execute(text("SET foreign_key_checks = 1"))
 

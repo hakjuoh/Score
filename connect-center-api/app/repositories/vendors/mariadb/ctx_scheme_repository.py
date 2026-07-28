@@ -275,6 +275,9 @@ class MariaDbCtxSchemeRepository(CtxSchemeRepositoryContract):
             return False
         await self._session.execute(sa_delete(CtxSchemeValue).where(CtxSchemeValue.owner_ctx_scheme_id == ctx_scheme_id))
         await self._session.delete(obj)
+        # Flush so a constraint violation surfaces here, where the caller can
+        # explain it, instead of at the request-scoped commit.
+        await self._session.flush()
         return True
 
     async def create_value(
@@ -369,6 +372,9 @@ class MariaDbCtxSchemeRepository(CtxSchemeRepositoryContract):
         if obj is None:
             return False
         await self._session.delete(obj)
+        # Flush so a constraint violation surfaces here, where the caller can
+        # explain it, instead of at the request-scoped commit.
+        await self._session.flush()
         return True
 
     async def get_biz_ctx_ids_using_ctx_scheme_value(self, ctx_scheme_value_id: CtxSchemeValueId) -> list[BizCtxId]:
