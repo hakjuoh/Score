@@ -385,6 +385,52 @@ describe('AiChatPanelComponent request completion and recovery', () => {
     )).toBe(false);
   });
 
+  it('stops waiting for a request the backend keeps reporting past its deadline', () => {
+    vi.useFakeTimers();
+    api.getRequestStatus.mockReturnValueOnce(of(publicStatus('RUNNING')));
+    component.state.prompt = 'Compare the two addresses';
+    component.send();
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'accepted', content: 'Request received.',
+      metadata: {generation: 7, deadline: '2026-07-14T13:05:00Z'}
+    });
+
+    vi.advanceTimersByTime(REQUEST_STATUS_WATCHDOG_MS);
+
+    expect(api.getRequestStatus).toHaveBeenCalledTimes(1);
+    expect(component.state.pending).toBe(false);
+    expect(component.state.reconciliationRequired).toBe(true);
+    expect(component.state.currentStatus).toBe('Outcome unknown');
+    expect(component.state.messages.at(-1)).toEqual(expect.objectContaining({
+      role: 'error', content: expect.stringContaining('after its deadline')
+    }));
+    expect(component.state.messages.some(message =>
+      message.role === 'progress' && message.inProgress
+    )).toBe(false);
+  });
+
+  it('keeps polling a request that is still inside its deadline', () => {
+    vi.useFakeTimers();
+    api.getRequestStatus.mockReturnValue(of({
+      ...publicStatus('RUNNING'), deadline: '2099-07-14T13:05:00Z'
+    }));
+    component.state.prompt = 'Compare the two addresses';
+    component.send();
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'accepted', content: 'Request received.',
+      metadata: {generation: 7, deadline: '2099-07-14T13:05:00Z'}
+    });
+
+    vi.advanceTimersByTime(REQUEST_STATUS_WATCHDOG_MS * 2);
+
+    expect(api.getRequestStatus).toHaveBeenCalledTimes(2);
+    expect(component.state.pending).toBe(true);
+  });
+
   it('resumes the accepted request without publishing it again after reconnect', async () => {
     vi.useFakeTimers();
     api.getRequestStatus

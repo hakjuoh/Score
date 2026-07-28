@@ -407,6 +407,18 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
   }
 
   private completeActiveRequestRecoveryFailure(requestId: string, maxAttempts: number): void {
+    this.abandonActiveRequest(requestId,
+      `Could not reconnect to the assistant after ${maxAttempts} attempts. `
+      + 'The request outcome is unknown. Reopen the assistant after the backend is available to reconcile it.',
+      'Connection lost');
+  }
+
+  /**
+   * Ends a turn whose outcome the backend can no longer report. The pending
+   * state is released so the panel is usable again, and the reconciliation
+   * flag keeps the unknown outcome visible until the next reopen resolves it.
+   */
+  protected abandonActiveRequest(requestId: string, content: string, currentStatus: string): void {
     this.recoveredRequestSnapshotId = undefined;
     this.activeRequestRecovery.cancel();
     this.completeProgressMessages();
@@ -422,14 +434,10 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
     this.activeRequestPublished = false;
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
-    this.state.messages.push({
-      role: 'error',
-      content: `Could not reconnect to the assistant after ${maxAttempts} attempts. `
-        + 'The request outcome is unknown. Reopen the assistant after the backend is available to reconcile it.'
-    });
+    this.state.messages.push({role: 'error', content});
     this.state.pending = false;
     this.state.reconciliationRequired = true;
-    this.state.currentStatus = 'Connection lost';
+    this.state.currentStatus = currentStatus;
     this.scrollToBottom();
   }
 

@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.configuration.handler;
 
 import org.oagi.score.gateway.http.api.DataAccessForbiddenException;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiSharedStateUnavailableException;
 import org.oagi.score.gateway.http.common.model.AccessControlException;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
 import org.oagi.score.gateway.http.common.model.base.ScoreDataAccessException;
@@ -102,6 +103,18 @@ public class ScoreResponseEntityExceptionHandler extends ResponseEntityException
             IllegalStateException ex, WebRequest webRequest) {
         logger.debug(ex.getMessage(), ex);
         return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+    }
+
+    /**
+     * The shared AI request state is momentarily unreachable. The web client
+     * retries its recovery poll instead of waiting for a response that a
+     * blocked lock would never produce.
+     */
+    @ExceptionHandler(AiSharedStateUnavailableException.class)
+    public ResponseEntity handleAiSharedStateUnavailableException(
+            AiSharedStateUnavailableException ex, WebRequest webRequest) {
+        logger.warn(ex.getMessage(), ex);
+        return errorResponse(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     @ExceptionHandler(DataAccessForbiddenException.class)
