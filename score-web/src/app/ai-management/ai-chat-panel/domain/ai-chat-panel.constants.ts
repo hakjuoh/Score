@@ -50,3 +50,13 @@ export const COMPLETED_PAYLOAD_WAIT_MS = 1000;
 export const MUTATION_CONFIRMATION_DECISION_TIMEOUT_MS = 10000;
 export const CONFIRMED_MUTATION_RESPONSE_TIMEOUT_MS = 300000;
 export const REQUEST_STATUS_WATCHDOG_MS = 10000;
+/**
+ * A status request that never answers cannot be distinguished from a healthy
+ * long request, so the poll fails over to reconnection recovery instead.
+ */
+export const REQUEST_STATUS_TIMEOUT_MS = 15000;
+/**
+ * How long a non-terminal request may keep reporting progress past the deadline
+ * the backend published before the web client stops waiting for its outcome.
+ */
+export const REQUEST_DEADLINE_GRACE_MS = 60000;
