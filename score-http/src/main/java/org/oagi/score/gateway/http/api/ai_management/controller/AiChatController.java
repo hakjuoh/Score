@@ -431,11 +431,18 @@ public class AiChatController {
         }
         future.whenComplete((response, throwable) -> {
             String status;
+            RuntimeException settlementFailure = null;
             try {
                 status = requests.finish(entry, throwable);
             } catch (RuntimeException finishFailure) {
-                observation.complete("FAILED", finishFailure);
-                throw finishFailure;
+                // The reply queue is the only channel that ends the turn. Without
+                // a terminal event the web client waits on a request that the
+                // backend has already finished, so the outcome is derived from
+                // the execution itself when shared state cannot be settled.
+                settlementFailure = finishFailure;
+                status = throwable == null ? "COMPLETED" : "FAILED";
+                LOGGER.error("Could not settle the shared state of AI request {}",
+                        prepared.requestId(), finishFailure);
             }
             try {
                 clearMutationApprovalState(prepared.requestId());
@@ -443,7 +450,7 @@ public class AiChatController {
                     send(requester, destination, AiChatSocketEvent.finalResponse(prepared.requestId(), response));
                 } else if ("CANCELLED".equals(status)) {
                     send(requester, destination, AiChatSocketEvent.cancelled(prepared.requestId(),
-                            prepared.conversationId(), entry.generation(), requests.cancellationRequestId(entry)));
+                            prepared.conversationId(), entry.generation(), cancellationRequestId(entry)));
                 } else if ("UNKNOWN_RECONCILIATION_REQUIRED".equals(status)) {
                     send(requester, destination, AiChatSocketEvent.reconciliationRequired(prepared.requestId(),
                             prepared.conversationId(), entry.generation()));
@@ -453,8 +460,14 @@ public class AiChatController {
                     send(requester, destination, AiChatSocketEvent.terminalError(prepared.requestId(),
                             prepared.conversationId(), entry.generation(), status, message));
                 }
+            } catch (RuntimeException dispatchFailure) {
+                LOGGER.error("Could not publish the terminal event of AI request {}",
+                        prepared.requestId(), dispatchFailure);
+                send(requester, destination, AiChatSocketEvent.terminalError(prepared.requestId(),
+                        prepared.conversationId(), entry.generation(), "FAILED",
+                        terminalMessage("FAILED", dispatchFailure)));
             } finally {
-                observation.complete(status, throwable);
+                observation.complete(status, throwable != null ? throwable : settlementFailure);
             }
         });
     }
@@ -640,6 +653,17 @@ public class AiChatController {
     private void clearMutationApprovalState(String requestId) {
         if (mutationApprovals != null) {
             mutationApprovals.cancelRequest(requestId);
+        }
+    }
+
+    /** An unreadable cancellation correlation must not suppress the terminal event. */
+    private String cancellationRequestId(AiRequestRegistry.Entry entry) {
+        try {
+            return requests.cancellationRequestId(entry);
+        } catch (RuntimeException failure) {
+            LOGGER.warn("Could not read the cancellation correlation of AI request {}",
+                    entry.requestId(), failure);
+            return null;
         }
     }
 

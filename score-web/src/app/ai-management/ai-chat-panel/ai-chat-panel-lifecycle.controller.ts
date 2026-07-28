@@ -3,6 +3,7 @@ import {AiChatPanelConversationController} from './ai-chat-panel-conversation.co
 import {AiChatCancellationCallbacks} from './domain/ai-chat-cancellation.service';
 import {
   COMPLETED_PAYLOAD_WAIT_MS,
+  REQUEST_DEADLINE_GRACE_MS,
   REQUEST_STATUS_WATCHDOG_MS
 } from './domain/ai-chat-panel.constants';
 import {
@@ -138,6 +139,12 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
           }
           if (this.isTerminalExecutionStatus(status.status)) {
             this.loadTerminalRecoveredConversation(status);
+          } else if (this.isRequestOverdue(status.deadline || expected.deadline)) {
+            // The backend keeps reporting a request it can no longer settle.
+            // Polling it forever would leave the turn pending without end.
+            this.abandonActiveRequest(status.requestId,
+              'The assistant stopped reporting the outcome of this request after its deadline. '
+              + 'Reopen the assistant to reconcile it.', 'Outcome unknown');
           } else {
             this.scheduleRequestStatusWatchdog();
           }
@@ -147,6 +154,14 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
         )
       });
     }, REQUEST_STATUS_WATCHDOG_MS);
+  }
+
+  protected isRequestOverdue(deadline?: string): boolean {
+    if (!deadline) {
+      return false;
+    }
+    const parsed = Date.parse(deadline);
+    return !Number.isNaN(parsed) && Date.now() > parsed + REQUEST_DEADLINE_GRACE_MS;
   }
 
   protected clearRequestStatusWatchdog(): void {

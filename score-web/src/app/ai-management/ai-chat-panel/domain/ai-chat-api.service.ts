@@ -1,7 +1,8 @@
 import {HttpClient, HttpContext, HttpParams} from '@angular/common/http';
 import {Injectable, inject} from '@angular/core';
-import {map, Observable} from 'rxjs';
+import {map, Observable, timeout} from 'rxjs';
 import {HANDLE_HTTP_ERROR_LOCALLY} from '../../../authentication/auth.service';
+import {REQUEST_STATUS_TIMEOUT_MS} from './ai-chat-panel.constants';
 import {
   AiChatConversationSummary,
   AiChatConversationDetails,
@@ -89,7 +90,9 @@ export class AiChatApiService {
         params,
         context: this.localErrorHandling().context
       }
-    );
+      // Every caller treats this poll as a liveness probe. A blocked backend
+      // must surface as an error so recovery runs instead of waiting forever.
+    ).pipe(timeout(REQUEST_STATUS_TIMEOUT_MS));
   }
 
   getActiveRequest(): Observable<AiPublicExecutionRequestStatus | null> {

@@ -15,6 +15,7 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequ
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiSharedStateUnavailableException;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
@@ -57,6 +58,7 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -629,6 +631,34 @@ class AiChatControllerTest {
             assertThat(event.requestId()).isEqualTo("request-1");
             assertThat(event.conversationId()).isEqualTo("conversation-1");
             assertThat(event.content()).isEqualTo("A prompt must not exceed the configured length.");
+        });
+    }
+
+    @Test
+    void stillEndsTheTurnOnTheSocketWhenTheSharedRequestStateCannotBeSettled() {
+        AiRequestRegistry registry = spy(new AiRequestRegistry());
+        doThrow(new AiSharedStateUnavailableException("The AI request state stayed locked."))
+                .when(registry).finish(any(AiRequestRegistry.Entry.class), nullable(Throwable.class));
+        AiChatController controller = controller(registry, new ScoreAiProperties(), Runnable::run);
+        Principal wsPrincipal = mock(Principal.class);
+        SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
+        when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenReturn(
+                new ChatResponse("assistant", "Here is the comparison.", "conversation-stuck",
+                        false, List.of()));
+
+        controller.chat(new AiChatSocketRequest("request-stuck", "Help", null,
+                "conversation-stuck", null, List.of(), null), wsPrincipal, headers);
+
+        ArgumentCaptor<Object> sent = ArgumentCaptor.forClass(Object.class);
+        verify(messagingTemplate, times(2)).convertAndSendToUser(
+                eq("tester"), eq("/queue/ai/chat/request-stuck"), sent.capture());
+        assertThat(sent.getAllValues().get(1)).isInstanceOfSatisfying(AiChatSocketEvent.class, event -> {
+            assertThat(event.type()).isEqualTo("assistant_final");
+            assertThat(event.requestId()).isEqualTo("request-stuck");
+            assertThat(event.content()).isEqualTo("Here is the comparison.");
         });
     }
 

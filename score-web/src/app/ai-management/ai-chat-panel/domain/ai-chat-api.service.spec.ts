@@ -1,7 +1,9 @@
 import {provideHttpClient} from '@angular/common/http';
 import {HttpTestingController, provideHttpClientTesting} from '@angular/common/http/testing';
 import {TestBed} from '@angular/core/testing';
+import {TimeoutError} from 'rxjs';
 import {AiChatApiService} from './ai-chat-api.service';
+import {REQUEST_STATUS_TIMEOUT_MS} from './ai-chat-panel.constants';
 import {AiChatModelInfo, AiConversationModelResponse} from './ai-chat-panel.model';
 import {HANDLE_HTTP_ERROR_LOCALLY} from '../../../authentication/auth.service';
 
@@ -73,6 +75,22 @@ describe('AiChatApiService cancellation contract', () => {
       lastEventSequence: 4,
       version: 2
     });
+  });
+
+  it('fails the status poll when the backend never answers it', () => {
+    vi.useFakeTimers();
+    try {
+      let failure: unknown;
+      service.getRequestStatus('request-1', 'conversation-1', 7)
+        .subscribe({error: error => failure = error});
+      httpTesting.expectOne(candidate => candidate.url === '/api/ai/chat/request-1/status');
+
+      vi.advanceTimersByTime(REQUEST_STATUS_TIMEOUT_MS);
+
+      expect(failure).toBeInstanceOf(TimeoutError);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('rejects partial or non-positive refresh identities before transport', () => {
