@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.tool;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationAuthorization;
 import org.oagi.score.gateway.http.api.ai_management.model.AiApprovedExecution;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationPermissionMode;
+import org.oagi.score.gateway.http.api.ai_management.model.AiMutationRisk;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalResolution;
 
@@ -51,7 +52,8 @@ class AiMutationToolGuardTest {
 
     private final AiMutationConfirmationService confirmations = mock(AiMutationConfirmationService.class);
     private final AiRequestRegistry requests = mock(AiRequestRegistry.class);
-    private final AiMutationToolGuard guard = new AiMutationToolGuard(confirmations, requests);
+    private final RecordingOwnership ownership = new RecordingOwnership();
+    private final AiMutationToolGuard guard = new AiMutationToolGuard(confirmations, requests, ownership);
     private final ScoreUser requester = mock(ScoreUser.class);
     private final ChatRequest request = new ChatRequest("change it", "request-1", null,
             "conversation-1", null, List.of(), null, "model", "high", null);
@@ -427,23 +429,88 @@ class AiMutationToolGuardTest {
     @Test
     void permissionModesFailClosedAndKeepUnsafeChangesOutOfAutomaticMode() {
         assertThat(AiMutationPermissionMode.resolve(null)).isEqualTo(AiMutationPermissionMode.ASK);
-        assertThat(List.of("create_acc", "add_tag", "assign_context", "reuse_bie",
-                "copy_release", "import_library", "upload_file"))
-                .allMatch(AiMutationPermissionMode.resolve("auto")::automaticallyAllows);
-        assertThat(AiMutationPermissionMode.resolve("auto").assistantPolicy())
-                .isEqualTo("auto: tools whose names begin with create_, add_, assign_, reuse_, "
-                        + "copy_, import_, upload_ run without approval; other data-changing tools "
-                        + "require approval.");
-        assertThat(AiMutationPermissionMode.resolve("auto").automaticallyAllows("delete_business_context"))
-                .isFalse();
-        assertThat(AiMutationPermissionMode.resolve("full_access").automaticallyAllows("future_mutation"))
-                .isTrue();
-        assertThat(AiMutationPermissionMode.resolve("full_access").assistantPolicy())
-                .isEqualTo("full_access: data-changing tool calls run without approval.");
-        assertThat(AiMutationPermissionMode.resolve("ask").assistantPolicy())
+        AiMutationPermissionMode automatic = AiMutationPermissionMode.resolve("auto");
+        assertThat(automatic.automaticallyAllows(AiMutationRisk.UNRESTRICTED)).isTrue();
+        assertThat(automatic.automaticallyAllows(AiMutationRisk.OWNER_SCOPED)).isFalse();
+        assertThat(automatic.requiresOwnershipCheck(AiMutationRisk.OWNER_SCOPED)).isTrue();
+        assertThat(automatic.automaticallyAllows(AiMutationRisk.ALWAYS_CONFIRM)).isFalse();
+        assertThat(automatic.requiresOwnershipCheck(AiMutationRisk.ALWAYS_CONFIRM)).isFalse();
+        assertThat(automatic.assistantPolicy())
+                .isEqualTo("auto: creating new data runs without approval, and changing data the"
+                        + " user owns runs without approval; changing data owned by somebody else"
+                        + " requires approval, and so does every deletion, discard, cancellation,"
+                        + " removal, state change, and ownership transfer.");
+        AiMutationPermissionMode ask = AiMutationPermissionMode.resolve("ask");
+        assertThat(ask.automaticallyAllows(AiMutationRisk.UNRESTRICTED)).isFalse();
+        assertThat(ask.requiresOwnershipCheck(AiMutationRisk.OWNER_SCOPED)).isFalse();
+        assertThat(ask.assistantPolicy())
                 .isEqualTo("ask: every data-changing tool call requires explicit user approval.");
+        AiMutationPermissionMode fullAccess = AiMutationPermissionMode.resolve("full_access");
+        assertThat(fullAccess.automaticallyAllows(AiMutationRisk.ALWAYS_CONFIRM)).isTrue();
+        assertThat(fullAccess.assistantPolicy())
+                .isEqualTo("full_access: data-changing tool calls run without approval.");
         assertThatThrownBy(() -> AiMutationPermissionMode.resolve("unsafe-unknown"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void automaticModeRunsACreateAndTheFollowUpChangeToTheDataTheRequesterOwns() {
+        when(requests.mutationStarted("request-1")).thenReturn(true);
+        ownership.owned = true;
+        ChatRequest automatic = request("auto", null);
+        ToolCallback create = tool("create_business_context", "{\"biz_ctx_id\":7}");
+        ToolCallback update = tool("update_business_context", "{\"biz_ctx_id\":7}");
+
+        assertThat(guarded(automatic, create, ignored -> {})
+                .call("{\"name\":\"US Retail\"}", new ToolContext(Map.of())))
+                .isEqualTo("{\"biz_ctx_id\":7}");
+        assertThat(guarded(automatic, update, ignored -> {})
+                .call("{\"biz_ctx_id\":7}", new ToolContext(Map.of())))
+                .isEqualTo("{\"biz_ctx_id\":7}");
+
+        verify(confirmations, never()).authorize(any(), anyString(), anyString(), any(),
+                anyString(), anyString());
+        assertThat(ownership.calls).containsExactly("update_business_context {\"biz_ctx_id\":7}");
+    }
+
+    @Test
+    void automaticModeAsksBeforeChangingDataTheRequesterDoesNotOwn() {
+        var notice = new AiMutationConfirmationNotice(
+                "confirmation-1", "REQUESTED", Instant.now().plusSeconds(60),
+                "update_business_context", "{\"biz_ctx_id\":7}");
+        when(confirmations.authorize(any(), anyString(), anyString(), any(), anyString(), anyString()))
+                .thenReturn(AiMutationAuthorization.required(notice));
+        ownership.owned = false;
+        ToolCallback update = tool("update_business_context", "updated");
+
+        assertThat(guarded(request("auto", null), update, ignored -> {})
+                .call("{\"biz_ctx_id\":7}", new ToolContext(Map.of())))
+                .contains("MUTATION_CONFIRMATION_REQUIRED");
+
+        verify(update, never()).call(anyString(), any(ToolContext.class));
+    }
+
+    @Test
+    void automaticModeAsksBeforeDeletingAndBeforeUnclassifiedChangesEvenForTheOwner() {
+        var notice = new AiMutationConfirmationNotice(
+                "confirmation-1", "REQUESTED", Instant.now().plusSeconds(60),
+                "delete_business_context", "{\"biz_ctx_id\":7}");
+        when(confirmations.authorize(any(), anyString(), anyString(), any(), anyString(), anyString()))
+                .thenReturn(AiMutationAuthorization.required(notice));
+        ownership.owned = true;
+        ToolCallback delete = tool("delete_business_context", "deleted");
+        ToolCallback unclassified = tool("future_mutation", "changed");
+
+        assertThat(guarded(request("auto", null), delete, ignored -> {})
+                .call("{\"biz_ctx_id\":7}", new ToolContext(Map.of())))
+                .contains("MUTATION_CONFIRMATION_REQUIRED");
+        assertThat(guarded(request("auto", null), unclassified, ignored -> {})
+                .call("{}", new ToolContext(Map.of())))
+                .contains("MUTATION_CONFIRMATION_REQUIRED");
+
+        verify(delete, never()).call(anyString(), any(ToolContext.class));
+        verify(unclassified, never()).call(anyString(), any(ToolContext.class));
+        assertThat(ownership.calls).isEmpty();
     }
 
     private ToolCallback guarded(ToolCallback callback,
@@ -473,6 +540,18 @@ class AiMutationToolGuardTest {
                 .name(name).description(name).inputSchema(inputSchema).build());
         when(callback.call(anyString(), any(ToolContext.class))).thenReturn(result);
         return callback;
+    }
+
+    /** Stands in for the database-backed ownership check and records what the guard asked about. */
+    private static final class RecordingOwnership implements AiMutationOwnershipPolicy {
+        private final List<String> calls = new ArrayList<>();
+        private boolean owned;
+
+        @Override
+        public boolean requesterOwnsTarget(ScoreUser requester, String toolName, String arguments) {
+            calls.add(toolName + " " + arguments);
+            return owned;
+        }
     }
 
     private ToolGuardrailRegistry passThroughGuardrails() {

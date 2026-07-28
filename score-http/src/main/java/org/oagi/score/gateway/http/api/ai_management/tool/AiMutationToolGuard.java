@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.tool;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationAuthorization;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationPermissionMode;
+import org.oagi.score.gateway.http.api.ai_management.model.AiMutationRisk;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
@@ -63,18 +64,25 @@ public class AiMutationToolGuard {
 
     private final AiMutationConfirmationService confirmations;
     private final AiRequestRegistry requests;
+    private final AiMutationOwnershipPolicy ownership;
     private final AiToolInputNormalizer inputNormalizer;
     private final ObjectMapper objectMapper;
 
     public AiMutationToolGuard(AiMutationConfirmationService confirmations, AiRequestRegistry requests) {
-        this(confirmations, requests, new ObjectMapper());
+        this(confirmations, requests, AiMutationOwnershipPolicy.UNVERIFIED, new ObjectMapper());
+    }
+
+    public AiMutationToolGuard(AiMutationConfirmationService confirmations, AiRequestRegistry requests,
+                               AiMutationOwnershipPolicy ownership) {
+        this(confirmations, requests, ownership, new ObjectMapper());
     }
 
     @Autowired
     public AiMutationToolGuard(AiMutationConfirmationService confirmations, AiRequestRegistry requests,
-                               ObjectMapper objectMapper) {
+                               AiMutationOwnershipPolicy ownership, ObjectMapper objectMapper) {
         this.confirmations = confirmations;
         this.requests = requests;
+        this.ownership = ownership;
         this.objectMapper = objectMapper;
         this.inputNormalizer = new AiToolInputNormalizer(objectMapper);
     }
@@ -179,10 +187,9 @@ public class AiMutationToolGuard {
             if (cached.isPresent()) {
                 return cached.get();
             }
-            AiMutationPermissionMode permissionMode = AiMutationPermissionMode.resolve(request.permissionMode());
             MutationConfirmation supplied = session.redemption(name, normalizedInput)
                     .orElse(request.mutationConfirmation());
-            if (supplied != null || !permissionMode.automaticallyAllows(name)) {
+            if (supplied != null || requiresApproval(request, requester, name, normalizedInput)) {
                 AiMutationAuthorization authorization = confirmations.authorize(
                         requester, request.conversationId(), request.requestId(), supplied,
                         name, normalizedInput);
@@ -261,11 +268,9 @@ public class AiMutationToolGuard {
                 return new ToolAuthorizationPolicy.Result.Refuse(
                         new AiTool.ToolResult(cached.get()));
             }
-            AiMutationPermissionMode permissionMode =
-                    AiMutationPermissionMode.resolve(request.permissionMode());
             MutationConfirmation supplied = redemption(name, normalizedInput)
                     .orElse(request.mutationConfirmation());
-            if (supplied != null || !permissionMode.automaticallyAllows(name)) {
+            if (supplied != null || requiresApproval(request, requester, name, normalizedInput)) {
                 AiMutationAuthorization result = confirmations.authorize(
                         requester, request.conversationId(), request.requestId(), supplied,
                         name, normalizedInput);
@@ -468,6 +473,25 @@ public class AiMutationToolGuard {
             }
             requests.mutationFinished(request.requestId());
         }
+    }
+
+    /**
+     * Reports whether a data-changing tool call needs explicit approval under the request's
+     * permission mode. Automatic mode skips approval for tools that only create new data, and
+     * for tools that change one existing record while the requester owns that record; every
+     * other data-changing tool, including deletions and state changes on the requester's own
+     * data, is approved explicitly.
+     */
+    private boolean requiresApproval(ChatRequest request, ScoreUser requester,
+                                     String toolName, String arguments) {
+        AiMutationPermissionMode permissionMode =
+                AiMutationPermissionMode.resolve(request.permissionMode());
+        AiMutationRisk risk = AiMutationRiskCatalog.ruleOf(toolName).risk();
+        if (permissionMode.automaticallyAllows(risk)) {
+            return false;
+        }
+        return !permissionMode.requiresOwnershipCheck(risk)
+                || !ownership.requesterOwnsTarget(requester, toolName, arguments);
     }
 
     private String confirmationRequiredResult(String confirmationRequestId) {
