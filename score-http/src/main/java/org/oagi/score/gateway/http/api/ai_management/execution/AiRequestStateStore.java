@@ -9,6 +9,8 @@ import org.redisson.api.RTopic;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.codec.TypedJsonJacksonCodec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -57,12 +59,16 @@ public interface AiRequestStateStore {
 @Component
 final class RedisAiRequestStateStore implements AiRequestStateStore {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(RedisAiRequestStateStore.class);
     private static final String GLOBAL_LOCK = "score:ai:request-state:lock";
     private static final String REQUEST_LOCK_PREFIX = "score:ai:request-state:request-lock:";
     private static final String REQUEST_MAP = "score:ai:request-state:requests";
     private static final String MAINTENANCE_MAP = "score:ai:request-state:maintenance";
     private static final String STOP_TOPIC = "score:ai:request-state:stop";
     private static final Duration TERMINAL_RETENTION = Duration.ofMinutes(30);
+    /** Every critical section is a handful of Redis map commands. */
+    private static final Duration LOCK_WAIT = Duration.ofSeconds(5);
+    private static final Duration LOCK_LEASE = Duration.ofSeconds(30);
 
     private final RedissonClient redisson;
     private final RMapCache<String, AiSharedRequestState> requests;
@@ -110,12 +116,45 @@ final class RedisAiRequestStateStore implements AiRequestStateStore {
         });
     }
 
+    /**
+     * Redisson's synchronous calls fail fast on an interrupted thread. An
+     * interrupt that lands while an acquisition is in flight therefore throws
+     * before the caller reaches its unlock even though the server already
+     * granted the lock, and the lock watchdog then renews that lease forever.
+     * The interrupt is withheld across the critical section and the lease is
+     * bounded so a lost unlock expires instead of wedging the request.
+     */
     private <T> T locked(RLock lock, Function<Storage, T> operation) {
-        lock.lock();
+        boolean interrupted = Thread.interrupted();
         try {
-            return operation.apply(new RedisStorage());
+            if (!lock.tryLock(LOCK_WAIT.toMillis(), LOCK_LEASE.toMillis(), TimeUnit.MILLISECONDS)) {
+                throw new AiSharedStateUnavailableException(
+                        "The AI request state stayed locked for " + LOCK_WAIT.toSeconds()
+                                + " seconds. Try again.");
+            }
+            try {
+                return operation.apply(new RedisStorage());
+            } finally {
+                unlockQuietly(lock);
+            }
+        } catch (InterruptedException interruption) {
+            interrupted = true;
+            throw new AiSharedStateUnavailableException(
+                    "The AI request state access was interrupted.", interruption);
         } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private void unlockQuietly(RLock lock) {
+        try {
             lock.unlock();
+        } catch (RuntimeException failure) {
+            // The bounded lease releases the lock on its own. Failing here
+            // would replace the operation's outcome with a release problem.
+            LOGGER.warn("Could not release the AI request state lock {}.", lock.getName(), failure);
         }
     }
 
