@@ -196,6 +196,7 @@ final class AiLifecycleEventObserver {
     }
 
     private void observeWorkflow(String requestId, String subtype, Map<String, Object> metadata) {
+        if (implicitRootQueue(metadata)) return;
         String lifecycle = terminalSuffix(subtype);
         String selectedWorkflow = ScoreAiObservability.value(Objects.toString(
                 metadata.getOrDefault("workflow", workflowPrefix(subtype)), null));
@@ -214,6 +215,7 @@ final class AiLifecycleEventObserver {
                         .setAttribute("gen_ai.operation.name",
                                 GenAiSemanticConventions.INVOKE_WORKFLOW)
                         .setAttribute("gen_ai.workflow.name", selectedWorkflow)
+                        .setAttribute(GenAiSemanticConventions.WORKFLOW_NESTED, true)
                         .setAttribute("score.ai.workflow.name", selectedWorkflow)
                         .setAttribute("score.ai.workflow.run_id", operationId)
                         .setAttribute("score.ai.workflow.kind", workflowKind);
@@ -233,6 +235,7 @@ final class AiLifecycleEventObserver {
                     .setAttribute("gen_ai.operation.name",
                             GenAiSemanticConventions.INVOKE_WORKFLOW)
                     .setAttribute("gen_ai.workflow.name", selectedWorkflow)
+                    .setAttribute(GenAiSemanticConventions.WORKFLOW_NESTED, true)
                     .setAttribute("score.ai.workflow.name", selectedWorkflow)
                     .setAttribute("score.ai.workflow.run_id", operationId)
                     .setAttribute("score.ai.workflow.kind", workflowKind);
@@ -339,6 +342,17 @@ final class AiLifecycleEventObserver {
         if (candidate != null && !candidate.isBlank() && !"unknown".equals(candidate)) {
             builder.setAttribute(key, candidate);
         }
+    }
+
+    /**
+     * The depth-zero queue every turn runs is the turn itself, and the turn's entrypoint span
+     * already reports it as {@code invoke_workflow}. Emitting a second span here would duplicate
+     * the entrypoint, so the implicit root stays out of the trace and its Agent calls line up as
+     * siblings under the entrypoint until a Workflow is actually planned. Planned Workflows nest
+     * inside that entrypoint and therefore carry {@code gen_ai.workflow.nested}.
+     */
+    private static boolean implicitRootQueue(Map<String, Object> metadata) {
+        return metadata.get("parent_node_id") == null && number(metadata.get("depth")) == 0;
     }
 
     private static boolean workflowEvent(String subtype) {
@@ -471,7 +485,7 @@ final class AiLifecycleEventObserver {
                 instruments.genAiWorkflowDuration.record(
                         GenAiSemanticConventions.elapsedSeconds(startedNanos),
                         GenAiSemanticConventions.workflowDurationAttributes(
-                                semanticTarget, errorType));
+                                semanticTarget, errorType, true));
             } else {
                 instruments.toolCalls.add(1, labels.build());
                 instruments.toolDuration.record(duration, labels.build());

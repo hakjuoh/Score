@@ -147,14 +147,30 @@ tool, mutation-approval, guardrail, trajectory, and requester-scoped MCP mechani
 
 ## Observability
 
+A turn's entrypoint span is `invoke_workflow <execution-kind>` (`assistant`,
+`context_compaction`, `name_generation`). The entrypoint groups the Agent invocations a turn makes
+rather than being one of them, which is the case the GenAI semantic conventions reserve
+`invoke_workflow` for; its `gen_ai.workflow.name` is the low-cardinality execution kind, not an
+Agent name.
+
 Each main or child Workflow emits `workflow_started` and one terminal
 `workflow_completed|failed|cancelled|refused` lifecycle event. OpenTelemetry maps these to
-`invoke_workflow <workflow-id>` spans. A child span uses `parent_node_id` to nest under its parent
-Workflow span; Agent/model/tool spans use the active Workflow node when available.
+`invoke_workflow <workflow-id>` spans, except for the implicit depth-zero queue every turn runs:
+that queue *is* the turn, so the entrypoint span already reports it and emitting a second span
+would duplicate the entrypoint. Until a Workflow is actually planned, Agent invocations therefore
+line up as siblings under the entrypoint instead of nesting inside an `invoke_workflow main`
+wrapper, and no extra Workflow metric series is recorded for them. A planned child span uses
+`parent_node_id` to nest under its parent Workflow span, falling back to the turn when that parent
+is the implicit queue; Agent/model/tool spans use the active Workflow node when available.
+
+Planned Workflows always run inside the entrypoint, so they carry `gen_ai.workflow.nested=true` on
+both the span and the `gen_ai.workflow.duration` measurement, while the entrypoint omits the
+attribute. Dashboards separate turn latency from planned-Workflow latency on that attribute alone.
 
 Span attributes describe actual runtime identity rather than a preselected pattern:
 
 - `gen_ai.workflow.name`: model-authored or main Workflow ID
+- `gen_ai.workflow.nested`: `true` on planned Workflows; absent on the turn entrypoint
 - `score.ai.workflow.run_id`: request/iteration/node execution ID
 - `score.ai.workflow.kind`: `workflow`
 - `score.ai.workflow.partial_failure`: whether some members failed
