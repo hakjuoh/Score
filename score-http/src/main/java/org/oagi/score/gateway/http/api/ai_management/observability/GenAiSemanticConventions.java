@@ -27,9 +27,20 @@ final class GenAiSemanticConventions {
     static final String PLAN = "plan";
     static final String EXECUTE_TOOL = "execute_tool";
 
+    /**
+     * Marks an {@code invoke_workflow} span or measurement that runs inside another Workflow. The
+     * entrypoint Workflow omits it entirely, so dashboards can separate the turn from the
+     * Workflows it plans. The attribute is not in the registry yet; it follows Google ADK, which
+     * introduced it for the same entrypoint-versus-nested distinction.
+     */
+    static final String WORKFLOW_NESTED = "gen_ai.workflow.nested";
+
     static final List<Double> DURATION_BUCKETS_SECONDS = List.of(
             0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28,
             2.56, 5.12, 10.24, 20.48, 40.96, 81.92);
+    /** Workflow durations span whole turns, so the specification advises much wider buckets. */
+    static final List<Double> WORKFLOW_DURATION_BUCKETS_SECONDS = List.of(
+            1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1_800.0, 3_600.0, 7_200.0);
     static final List<Long> TOKEN_BUCKETS = List.of(
             1L, 4L, 16L, 64L, 256L, 1_024L, 4_096L, 16_384L,
             65_536L, 262_144L, 1_048_576L, 4_194_304L, 16_777_216L, 67_108_864L);
@@ -81,10 +92,14 @@ final class GenAiSemanticConventions {
         return attributes.build();
     }
 
-    static Attributes workflowDurationAttributes(String workflowName, String errorType) {
+    static Attributes workflowDurationAttributes(String workflowName, String errorType,
+                                                 boolean nested) {
         AttributesBuilder attributes = Attributes.builder();
         putIfKnown(attributes, "gen_ai.workflow.name", workflowName);
         putIfKnown(attributes, "error.type", errorType);
+        if (nested) {
+            attributes.put(WORKFLOW_NESTED, true);
+        }
         return attributes.build();
     }
 

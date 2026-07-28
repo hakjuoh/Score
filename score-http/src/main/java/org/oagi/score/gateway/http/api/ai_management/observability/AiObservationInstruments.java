@@ -90,8 +90,11 @@ final class AiObservationInstruments {
         genAiClientTimeToFirstChunk = standardDuration(meter,
                 "gen_ai.client.operation.time_to_first_chunk",
                 "Time to receive the first chunk of a streaming GenAI response");
-        genAiWorkflowDuration = standardDuration(meter,
-                "gen_ai.workflow.duration", "GenAI workflow duration");
+        genAiWorkflowDuration = meter.histogramBuilder("gen_ai.workflow.duration")
+                .setDescription("GenAI workflow duration").setUnit("s")
+                .setExplicitBucketBoundariesAdvice(
+                        GenAiSemanticConventions.WORKFLOW_DURATION_BUCKETS_SECONDS)
+                .build();
         genAiInvokeAgentDuration = standardDuration(meter,
                 "gen_ai.invoke_agent.duration", "GenAI agent invocation duration");
         genAiInvokeAgentInferenceCalls = callHistogram(meter,

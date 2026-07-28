@@ -104,7 +104,7 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "description": "Standard agent and tool durations; workflow series appear only for coordinated multi-agent execution.",
+      "description": "Standard agent and tool durations. Workflow series split by gen_ai.workflow.nested: the turn entrypoint omits the attribute, planned multi-agent workflows set it to true.",
       "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": true, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "s"}, "overrides": []},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
       "id": 9,
@@ -112,7 +112,8 @@
       "targets": [
         {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(gen_ai_invoke_agent_duration_seconds_bucket{service_name=\"score-ai\"}[$__rate_interval])))", "legendFormat": "agent p95", "range": true, "refId": "A"},
         {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(gen_ai_execute_tool_duration_seconds_bucket{service_name=\"score-ai\"}[$__rate_interval])))", "legendFormat": "tool p95", "range": true, "refId": "B"},
-        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le, gen_ai_workflow_name) (rate(gen_ai_workflow_duration_seconds_bucket{service_name=\"score-ai\",gen_ai_workflow_name!~\"direct|evaluator_optimizer\"}[$__rate_interval])))", "legendFormat": "workflow {{gen_ai_workflow_name}} p95", "range": true, "refId": "C"}
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le, gen_ai_workflow_name) (rate(gen_ai_workflow_duration_seconds_bucket{service_name=\"score-ai\",gen_ai_workflow_nested=\"\"}[$__rate_interval])))", "legendFormat": "turn {{gen_ai_workflow_name}} p95", "range": true, "refId": "C"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le, gen_ai_workflow_name) (rate(gen_ai_workflow_duration_seconds_bucket{service_name=\"score-ai\",gen_ai_workflow_nested=\"true\"}[$__rate_interval])))", "legendFormat": "nested workflow {{gen_ai_workflow_name}} p95", "range": true, "refId": "D"}
       ],
       "title": "Agent / tool / workflow latency p95",
       "type": "timeseries"
