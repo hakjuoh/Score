@@ -8,6 +8,11 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolGuardrailRegistry;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolInputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolOutputGuardrail;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddleware;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareChain;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareException;
+import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
+import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +20,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ToolExecutionGatewayTest {
 
@@ -159,6 +165,100 @@ class ToolExecutionGatewayTest {
         assertThat(gateway.execute(mutation.specification().id(),
                 new AiTool.ToolArguments("{}"), scope).json()).isEqualTo("completed");
         assertThat(insideFence).isFalse();
+    }
+
+    @Test
+    void middlewareReplacementStillPassesTheMandatoryOutputGuardrail() {
+        AtomicInteger executions = new AtomicInteger();
+        AiTool tool = tool(AiTool.ToolEffect.READ_ONLY, ignored -> {
+            executions.incrementAndGet();
+            return new AiTool.ToolResult("raw");
+        });
+        ToolGuardrailRegistry registry = passThroughRegistry(request ->
+                new ToolOutputGuardrail.Result.Rewrite(
+                        new AiTool.ToolResult("checked:" + request.output().json()),
+                        decision(GuardrailDecision.Action.REWRITE)));
+        AiMiddleware replacement = new NamedMiddleware("replacement") {
+            @Override
+            public AiTool.ToolResult wrapToolCall(ToolContext context, ToolCall next) {
+                return new AiTool.ToolResult("safe replacement");
+            }
+        };
+        ToolExecutionGateway gateway = gateway(tool, registry, replacement);
+
+        AiTool.ToolResult result = gateway.execute(tool.specification().id(),
+                new AiTool.ToolArguments("{}"), scope);
+
+        assertThat(result.json()).isEqualTo("checked:safe replacement");
+        assertThat(executions).hasValue(0);
+    }
+
+    @Test
+    void middlewareCannotReplayAMutationOrChangeAuthorizedArguments() {
+        AtomicInteger executions = new AtomicInteger();
+        ExecutionState state = new ExecutionState();
+        AiTool mutation = tool(AiTool.ToolEffect.MUTATION, ignored -> {
+            executions.incrementAndGet();
+            return new AiTool.ToolResult("changed");
+        });
+        ToolGuardrailRegistry registry = passThroughRegistry(request ->
+                new ToolOutputGuardrail.Result.Allow(request.output(),
+                        decision(GuardrailDecision.Action.ALLOW)));
+        AiMiddleware replay = new NamedMiddleware("replay") {
+            @Override
+            public AiTool.ToolResult wrapToolCall(ToolContext context, ToolCall next) {
+                next.call(context);
+                return next.call(context);
+            }
+        };
+        AiMiddlewareChain replayChain = chain(replay);
+        ToolExecutionGateway replayGateway = new ToolExecutionGateway(
+                new ToolSet(List.of(mutation)), registry, List.of(), null, null, state,
+                1024, replayChain, new MiddlewareState());
+
+        assertThatThrownBy(() -> replayGateway.execute(mutation.specification().id(),
+                new AiTool.ToolArguments("{}"), scope))
+                .isInstanceOf(AiMiddlewareException.class)
+                .rootCause().hasMessageContaining("more than once");
+        assertThat(executions).hasValue(1);
+        assertThat(state.completedMutations()).isEqualTo(1);
+
+        AiMiddleware rewrite = new NamedMiddleware("rewrite") {
+            @Override
+            public AiTool.ToolResult wrapToolCall(ToolContext context, ToolCall next) {
+                return next.call(context.withArguments(new AiTool.ToolArguments("{\"other\":true}")));
+            }
+        };
+        assertThatThrownBy(() -> gateway(mutation, registry, rewrite).execute(
+                mutation.specification().id(), new AiTool.ToolArguments("{}"), scope))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("after authorization");
+    }
+
+    private ToolExecutionGateway gateway(AiTool tool, ToolGuardrailRegistry registry,
+                                         AiMiddleware middleware) {
+        return new ToolExecutionGateway(new ToolSet(List.of(tool)), registry, List.of(),
+                null, null, new ExecutionState(), 1024, chain(middleware),
+                new MiddlewareState());
+    }
+
+    private AiMiddlewareChain chain(AiMiddleware middleware) {
+        ScoreAiProperties.Middleware settings = new ScoreAiProperties.Middleware();
+        settings.setProfiles(Map.of("default", List.of(middleware.id())));
+        return new AiMiddlewareChain(settings, List.of(middleware));
+    }
+
+    private ToolGuardrailRegistry passThroughRegistry(ToolOutputGuardrail output) {
+        ToolInputGuardrail input = request -> new ToolInputGuardrail.Result.Allow(
+                request.arguments(), decision(GuardrailDecision.Action.ALLOW));
+        return new ToolGuardrailRegistry(
+                new ToolGuardrailRegistry.Set(List.of(input), List.of(output)), Map.of());
+    }
+
+    private abstract static class NamedMiddleware implements AiMiddleware {
+        private final String id;
+        private NamedMiddleware(String id) { this.id = id; }
+        @Override public String id() { return id; }
     }
 
     private AiTool tool(AiTool.ToolEffect effect,
