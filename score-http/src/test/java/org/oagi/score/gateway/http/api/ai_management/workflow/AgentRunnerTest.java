@@ -36,6 +36,10 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequ
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddleware;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareChain;
+import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
+import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.springframework.ai.chat.messages.UserMessage;
 
@@ -55,6 +59,106 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 class AgentRunnerTest {
+
+    @Test
+    void sharesOneMiddlewareStateWithTheChatTransport() {
+        MiddlewareState.Key<String> key = new MiddlewareState.Key<>(
+                "state-writer", "correlation", String.class);
+        AiMiddleware writer = new AiMiddleware() {
+            @Override public String id() { return "state-writer"; }
+            @Override public AgentResult beforeAgent(AgentContext context) {
+                context.state().put(key, "shared");
+                return AgentResult.continueWith(context);
+            }
+        };
+        ScoreAiProperties.Middleware settings = new ScoreAiProperties.Middleware();
+        settings.setProfiles(Map.of("default", List.of("state-writer")));
+        AiMiddlewareChain chain = new AiMiddlewareChain(settings, List.of(writer));
+        AtomicReference<AgentChatSession> captured = new AtomicReference<>();
+        AgentExecutionService chat = TestAgentExecutionService.chat(session -> {
+            captured.set(session);
+            return new AgentChatResult("answer");
+        });
+        Agent agent = chatAgent("state-agent", "instruction");
+
+        new AgentRunner(chat, null, null, null, List.of(agent), chain)
+                .run(agent, context("state-agent"));
+
+        assertThat(captured.get().middlewareState().get(key)).contains("shared");
+    }
+
+    @Test
+    void executesAgentAndModelMiddlewareOnTheSharedRunnerPath() {
+        List<String> order = new java.util.ArrayList<>();
+        AiMiddleware middleware = new AiMiddleware() {
+            @Override public String id() { return "runner-trace"; }
+            @Override public AgentResult beforeAgent(AgentContext context) {
+                order.add("before-agent"); return AgentResult.continueWith(context);
+            }
+            @Override public ModelResult beforeModel(ModelContext context) {
+                order.add("before-model"); return ModelResult.continueWith(context);
+            }
+            @Override public AgentRunResult wrapModelCall(ModelContext context, ModelCall next) {
+                order.add("wrap-model-before");
+                AgentRunResult result = next.call(context);
+                order.add("wrap-model-after");
+                return result;
+            }
+            @Override public ModelResult afterModel(ModelContext context, AgentRunResult response) {
+                order.add("after-model"); return ModelResult.completeWith(response);
+            }
+            @Override public AgentResult afterAgent(AgentContext context, AgentDecision response) {
+                order.add("after-agent"); return AgentResult.completeWith(response);
+            }
+        };
+        ScoreAiProperties.Middleware settings = new ScoreAiProperties.Middleware();
+        settings.setProfiles(Map.of("default", List.of("runner-trace")));
+        AiMiddlewareChain chain = new AiMiddlewareChain(settings, List.of(middleware));
+        AgentExecutionService execution = invocation -> result("answer", invocation.session().agent());
+        SpringAiModelCatalog models = mock(SpringAiModelCatalog.class);
+        when(models.require("model")).thenReturn(model());
+        Agent agent = agent(org.oagi.score.gateway.http.api.ai_management.agent.AgentToolHandler.none(),
+                AgentGuardrails.none(), "middleware-agent");
+
+        AgentDecision decision = new AgentRunner(execution, models, null, null,
+                List.of(agent), chain).run(agent, context("middleware-agent"));
+
+        assertThat(decision).isInstanceOf(AgentDecision.Complete.class);
+        assertThat(order).containsExactly("before-agent", "before-model",
+                "wrap-model-before", "wrap-model-after", "after-model", "after-agent");
+    }
+
+    @Test
+    void checksAnAfterAgentReplacementBeforeReturningIt() {
+        AiMiddleware replacing = new AiMiddleware() {
+            @Override public String id() { return "replace-output"; }
+            @Override
+            public AgentResult afterAgent(AgentContext context, AgentDecision response) {
+                return AgentResult.completeWith(new AgentDecision.Complete(
+                        new AgentOutput("secret=replaced")));
+            }
+        };
+        ScoreAiProperties.Middleware settings = new ScoreAiProperties.Middleware();
+        settings.setProfiles(Map.of("default", List.of("replace-output")));
+        AiMiddlewareChain chain = new AiMiddlewareChain(settings, List.of(replacing));
+        AgentOutputGuardrail redact = request -> new AgentOutputGuardrail.Result.Rewrite(
+                new AiMessage.Assistant("[checked]"),
+                GuardrailDecision.of("final-check", "1", GuardrailDecision.Action.REWRITE));
+        Agent agent = agent(org.oagi.score.gateway.http.api.ai_management.agent.AgentToolHandler.none(),
+                new AgentGuardrails(List.of(), List.of(redact)), "replacement-agent");
+        AgentExecutionService execution = invocation -> result("initial", invocation.session().agent());
+        SpringAiModelCatalog models = mock(SpringAiModelCatalog.class);
+        when(models.require("model")).thenReturn(model());
+
+        AgentDecision.Complete decision = (AgentDecision.Complete) new AgentRunner(
+                execution, models, null, null, List.of(agent), chain)
+                .run(agent, context("replacement-agent"));
+
+        assertThat(decision.result().content()).isEqualTo("[checked]");
+        assertThat(decision.result().passedOutputGuardrail(
+                org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail.Scope.INTERNAL))
+                .isTrue();
+    }
 
     @Test
     void modelOnlyExecutionServiceRemainsLambdaCompatible() {

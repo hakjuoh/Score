@@ -1,5 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.agent;
 
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareChain;
+import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolExecutionGateway;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
 
@@ -31,6 +33,13 @@ public record AgentToolBinding(ToolSet tools, ToolExecutionGateway gateway,
     /** Leaves the request transport's already-authorized Tool session unchanged. */
     public static AgentToolBinding inheritTransport() {
         return new AgentToolBinding(ToolSet.empty(), ToolExecutionGateway.disabled(), true);
+    }
+
+    /** Installs the request's selected middleware on definition-owned Tool execution. */
+    public AgentToolBinding withMiddleware(AiMiddlewareChain middleware,
+                                           MiddlewareState state) {
+        if (transportInherited || tools.isEmpty()) return this;
+        return new AgentToolBinding(tools, gateway.withMiddleware(middleware, state), false);
     }
 
     /** Couples owned Tool execution to the run deadline and terminal callback fence. */

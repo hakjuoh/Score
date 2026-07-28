@@ -33,6 +33,9 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardr
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddleware;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareChain;
+import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -63,13 +66,14 @@ public final class AgentRunner implements AgentIdentityProvider {
     private final AgentPolicyEngine policies;
     private final AgentFactory factory = AgentFactory.binding();
     private final String rootAgentId;
+    private final AiMiddlewareChain middleware;
 
     public AgentRunner(AgentExecutionService execution, AiModelCatalog models,
                        AiAgentCatalog catalog,
                        AgentInstructions instructions, ObjectProvider<Agent> agents) {
         this(execution, models, catalog, instructions,
                 agents != null ? agents.orderedStream().toList() : List.of(),
-                null, ScoreAiObservability.noop());
+                null, ScoreAiObservability.noop(), AiMiddlewareChain.none());
     }
 
     @Autowired
@@ -77,10 +81,22 @@ public final class AgentRunner implements AgentIdentityProvider {
                        AiAgentCatalog catalog,
                        AgentInstructions instructions, ObjectProvider<Agent> agents,
                        AgentOutputGuardrailChain outputGuardrails,
+                       ScoreAiObservability observability,
+                       AiMiddlewareChain middleware) {
+        this(execution, models, catalog, instructions,
+                agents != null ? agents.orderedStream().toList() : List.of(),
+                outputGuardrails, observability, middleware);
+    }
+
+    /** Compatibility constructor for callers predating configurable middleware. */
+    public AgentRunner(AgentExecutionService execution, AiModelCatalog models,
+                       AiAgentCatalog catalog,
+                       AgentInstructions instructions, ObjectProvider<Agent> agents,
+                       AgentOutputGuardrailChain outputGuardrails,
                        ScoreAiObservability observability) {
         this(execution, models, catalog, instructions,
                 agents != null ? agents.orderedStream().toList() : List.of(),
-                outputGuardrails, observability);
+                outputGuardrails, observability, AiMiddlewareChain.none());
     }
 
     /** Constructor for focused tests with an explicit shared execution port. */
@@ -88,20 +104,29 @@ public final class AgentRunner implements AgentIdentityProvider {
                        AiAgentCatalog catalog, AgentInstructions instructions,
                        List<? extends Agent> agents) {
         this(execution, models, catalog, instructions, agents,
-                null, ScoreAiObservability.noop());
+                null, ScoreAiObservability.noop(), AiMiddlewareChain.none());
+    }
+
+    AgentRunner(AgentExecutionService execution, AiModelCatalog models,
+                AiAgentCatalog catalog, AgentInstructions instructions,
+                List<? extends Agent> agents, AiMiddlewareChain middleware) {
+        this(execution, models, catalog, instructions, agents,
+                null, ScoreAiObservability.noop(), middleware);
     }
 
     private AgentRunner(AgentExecutionService execution, AiModelCatalog models,
                         AiAgentCatalog catalog,
                         AgentInstructions instructions, List<? extends Agent> agents,
                         AgentOutputGuardrailChain outputGuardrails,
-                        ScoreAiObservability observability) {
+                        ScoreAiObservability observability,
+                        AiMiddlewareChain middleware) {
         this.execution = execution;
         this.models = models;
         this.policies = new AgentPolicyEngine(execution != null);
         this.rootAgentId = rootAgentId(agents);
         this.directory = new AgentDirectory(catalog, instructions, agents, outputGuardrails,
                 observability);
+        this.middleware = middleware != null ? middleware : AiMiddlewareChain.none();
     }
 
     @Override
@@ -132,7 +157,7 @@ public final class AgentRunner implements AgentIdentityProvider {
     /** Constructor for tests whose definitions return Skip decisions. */
     public AgentRunner(AgentExecutionService execution, List<? extends Agent> agents) {
         this(execution, null, null, null, agents,
-                null, ScoreAiObservability.noop());
+                null, ScoreAiObservability.noop(), AiMiddlewareChain.none());
     }
 
     public AgentDecision run(Agent.AgentId id, AgentWorkflowContext context) {
@@ -148,6 +173,29 @@ public final class AgentRunner implements AgentIdentityProvider {
         // identity, handlers, instruction, tools, and guardrails describe one turn.
         agent = new org.oagi.score.gateway.http.api.ai_management.agent.DefinedAgent(
                 Objects.requireNonNull(agent.definition(), "Agent definition"));
+        AiMiddlewareChain.AgentExecution middlewareExecution = middleware.executeAgentWithContext(
+                new AiMiddleware.AgentContext(
+                        agent, context, new MiddlewareState()),
+                middlewareContext -> runCore(middlewareContext.agent(),
+                        middlewareContext.workflow(), middlewareContext.state()));
+        return ensureMiddlewareOutputChecked(middlewareExecution.context().agent(),
+                middlewareExecution.context().workflow(), middlewareExecution.decision());
+    }
+
+    /** Middleware may short-circuit or replace a decision, but never bypass final output policy. */
+    private AgentDecision ensureMiddlewareOutputChecked(Agent agent,
+                                                        AgentWorkflowContext context,
+                                                        AgentDecision decision) {
+        if (decision instanceof AgentDecision.Complete complete
+                && agent.guardrails().hasOutput()
+                && complete.result().passedOutputGuardrail(agent.guardrails().outputScope())) {
+            return decision;
+        }
+        return policies.applyTerminalDecision(agent, context, decision);
+    }
+
+    private AgentDecision runCore(Agent agent, AgentWorkflowContext context,
+                                  MiddlewareState middlewareState) {
         AgentWorkflowContext current = context;
         current.checkpoint();
         AgentAssignmentRun.Lifecycle activeLifecycle = null;
@@ -185,7 +233,8 @@ public final class AgentRunner implements AgentIdentityProvider {
                 ToolActivity toolActivityBefore = toolActivity(current, guarded);
                 current.checkpoint();
                 executionRecorder(current, guarded).verifyActive();
-                AgentRunResult result = executeRequest(agent, current, guarded, attemptBinding);
+                AgentRunResult result = executeRequest(agent, current, guarded, attemptBinding,
+                        middlewareState);
                 if (dedicatedUsageSource == null) {
                     current.recordUsage(agent.definition().name(), result);
                 } else {
@@ -293,14 +342,27 @@ public final class AgentRunner implements AgentIdentityProvider {
 
     private AgentRunResult executeRequest(Agent agent, AgentWorkflowContext context,
                                           AgentRunRequest request,
-                                          AgentToolBinding selectedBinding) {
+                                          AgentToolBinding selectedBinding,
+                                          MiddlewareState middlewareState) {
+        return middleware.executeModel(new AiMiddleware.ModelContext(agent, context,
+                        request, selectedBinding, middlewareState),
+                modelContext -> executeRequestUnwrapped(modelContext.agent(),
+                        modelContext.workflow(), modelContext.request(), modelContext.tools(),
+                        modelContext.state()));
+    }
+
+    private AgentRunResult executeRequestUnwrapped(Agent agent, AgentWorkflowContext context,
+                                                   AgentRunRequest request,
+                                                   AgentToolBinding selectedBinding,
+                                                   MiddlewareState middlewareState) {
         if (request instanceof AgentRunRequest.Model model) {
             if (execution == null || models == null) {
                 throw new IllegalStateException("No model execution service is configured.");
             }
             try {
                 AgentToolBinding binding = selectedBinding.withExecutionFence(
-                        context.execution().recorder(), context::checkpoint);
+                        context.execution().recorder(), context::checkpoint)
+                        .withMiddleware(middleware, middlewareState);
                 AgentSession session = factory.create(agent, models.require(model.modelName()),
                         binding.tools());
                 AgentSession instructed = new AgentSession(session.agent(), session.model(),
@@ -321,7 +383,8 @@ public final class AgentRunner implements AgentIdentityProvider {
             }
             try {
                 AgentToolBinding binding = selectedBinding.withExecutionFence(
-                        chat.context().recorder(), context::checkpoint);
+                        chat.context().recorder(), context::checkpoint)
+                        .withMiddleware(middleware, middlewareState);
                 AgentExecutionContext executionContext = chat.context()
                         .withAgentIdentity(agent.id().value(), chat.context().executionPurpose());
                 if (!binding.transportInherited()) {
@@ -336,7 +399,7 @@ public final class AgentRunner implements AgentIdentityProvider {
                 instruction = executionContext.finalizeInstruction(instruction);
                 AgentChatResult result = execution.executeChat(new AgentChatSession(
                         agent, chat.context().modelName(), instruction,
-                        executionContext, binding));
+                        executionContext, binding, middlewareState));
                 AgentRunResult runResult = new AgentRunResult(
                         new AiMessage.Assistant(result.answer()), List.of(), result.usage(),
                         new AgentRunResult.RunMetadata(agent.id(),

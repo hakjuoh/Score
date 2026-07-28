@@ -8,12 +8,17 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolGuardrailRegistry;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolInputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolOutputGuardrail;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddleware;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareChain;
+import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Single mandatory Tool boundary used by every provider and Spring AI callback. */
 public final class ToolExecutionGateway {
@@ -31,18 +36,32 @@ public final class ToolExecutionGateway {
     private final ExecutionObserver observer;
     private final ExecutionState state;
     private final long rawOutputByteLimit;
+    private final AiMiddlewareChain middleware;
+    private final MiddlewareState middlewareState;
     private final boolean disabled;
 
     private ToolExecutionGateway() {
         this.tools = ToolSet.empty(); this.guardrails = null; this.authorization = List.of();
         this.fence = RequestFence.ALLOW; this.observer = ExecutionObserver.noop();
-        this.state = new ExecutionState(); this.rawOutputByteLimit = 1; this.disabled = true;
+        this.state = new ExecutionState(); this.rawOutputByteLimit = 1;
+        this.middleware = AiMiddlewareChain.none(); this.middlewareState = new MiddlewareState();
+        this.disabled = true;
     }
 
     public ToolExecutionGateway(ToolSet tools, ToolGuardrailRegistry guardrails,
                                 List<ToolAuthorizationPolicy> authorization,
                                 RequestFence fence, ExecutionObserver observer,
                                 ExecutionState state, long rawOutputByteLimit) {
+        this(tools, guardrails, authorization, fence, observer, state, rawOutputByteLimit,
+                AiMiddlewareChain.none(), new MiddlewareState());
+    }
+
+    public ToolExecutionGateway(ToolSet tools, ToolGuardrailRegistry guardrails,
+                                List<ToolAuthorizationPolicy> authorization,
+                                RequestFence fence, ExecutionObserver observer,
+                                ExecutionState state, long rawOutputByteLimit,
+                                AiMiddlewareChain middleware,
+                                MiddlewareState middlewareState) {
         this.tools = tools != null ? tools : ToolSet.empty();
         this.guardrails = Objects.requireNonNull(guardrails, "guardrails");
         this.authorization = authorization != null
@@ -52,7 +71,10 @@ public final class ToolExecutionGateway {
                 ? List.of(observer) : List.of());
         this.state = state != null ? state : new ExecutionState();
         if (rawOutputByteLimit <= 0) throw new IllegalArgumentException("Tool output limit must be positive.");
-        this.rawOutputByteLimit = rawOutputByteLimit; this.disabled = false;
+        this.rawOutputByteLimit = rawOutputByteLimit;
+        this.middleware = middleware != null ? middleware : AiMiddlewareChain.none();
+        this.middlewareState = middlewareState != null ? middlewareState : new MiddlewareState();
+        this.disabled = false;
     }
 
     public static ToolExecutionGateway disabled() { return DISABLED; }
@@ -73,7 +95,15 @@ public final class ToolExecutionGateway {
                         return fence.callIfActive(scope,
                                 () -> additional.callIfActive(scope, action));
                     }
-                }, observer, state, rawOutputByteLimit);
+                }, observer, state, rawOutputByteLimit, middleware, middlewareState);
+    }
+
+    /** Returns an equivalent gateway using the run-local middleware state. */
+    public ToolExecutionGateway withMiddleware(AiMiddlewareChain replacement,
+                                               MiddlewareState replacementState) {
+        if (disabled) return this;
+        return new ToolExecutionGateway(tools, guardrails, authorization, fence, observer,
+                state, rawOutputByteLimit, replacement, replacementState);
     }
 
     /** Whether this binding can execute a Tool. */
@@ -159,13 +189,29 @@ public final class ToolExecutionGateway {
             }
             executionPolicies.add(policy);
         }
-        observer.observe(ExecutionObservation.of("tool.invocation.started", scope,
-                Map.of("tool_id", tool.specification().id().value(),
-                        "effect", tool.specification().effect().name())));
+        AtomicBoolean executed = new AtomicBoolean();
+        AtomicReference<AiTool.ToolArguments> effectiveArguments = new AtomicReference<>(arguments);
         AiTool.ToolResult raw;
         try {
-            raw = Objects.requireNonNull(tool.execute(arguments,
-                    new AiTool.ToolExecutionContext(scope, Map.of())), "Tool result");
+            raw = middleware.executeTool(new AiMiddleware.ToolContext(
+                            tool.specification(), arguments, scope, middlewareState),
+                    middlewareContext -> {
+                        if (!middlewareContext.arguments().json().equals(arguments.json())) {
+                            throw new IllegalStateException("Tool middleware cannot change arguments "
+                                    + "after authorization; use an input Guardrail instead.");
+                        }
+                        executed.set(true);
+                        effectiveArguments.set(middlewareContext.arguments());
+                        observer.observe(ExecutionObservation.of("tool.invocation.started", scope,
+                                Map.of("tool_id", tool.specification().id().value(),
+                                        "effect", tool.specification().effect().name())));
+                        AiTool.ToolResult result = Objects.requireNonNull(tool.execute(
+                                middlewareContext.arguments(),
+                                new AiTool.ToolExecutionContext(scope, Map.of())), "Tool result");
+                        state.toolCompleted(tool.specification().effect()
+                                != AiTool.ToolEffect.READ_ONLY);
+                        return result;
+                    });
         } catch (RuntimeException failure) {
             failed(executionPolicies, authorizationRequest, failure);
             observer.observe(ExecutionObservation.of("tool.invocation.failed", scope,
@@ -173,10 +219,14 @@ public final class ToolExecutionGateway {
                             "failure_type", failure.getClass().getSimpleName())));
             throw failure;
         }
-        state.toolCompleted(tool.specification().effect() != AiTool.ToolEffect.READ_ONLY);
+        if (!executed.get()) {
+            abort(executionPolicies, authorizationRequest);
+            return runOutput(outputPolicies, tool, effectiveArguments.get(), bound(raw), scope);
+        }
         try {
             AiTool.ToolResult bounded = bound(raw);
-            AiTool.ToolResult safe = runOutput(outputPolicies, tool, arguments, bounded, scope);
+            AiTool.ToolResult safe = runOutput(outputPolicies, tool,
+                    effectiveArguments.get(), bounded, scope);
             // Authorization middleware may retain results for exact replay/read-back.
             // It must receive only the same output-guarded value exposed downstream.
             completed(executionPolicies, authorizationRequest, safe);

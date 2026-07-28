@@ -1,5 +1,7 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
+import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiTool;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
@@ -21,6 +23,7 @@ public class ScoreAiProperties {
     private Memory memory = new Memory();
     private Mcp mcp = new Mcp();
     private ProviderRetry providerRetry = new ProviderRetry();
+    private Middleware middleware = new Middleware();
 
     public Map<String, Provider> getProviders() {
         return providers;
@@ -83,6 +86,14 @@ public class ScoreAiProperties {
         this.providerRetry = providerRetry != null ? providerRetry : new ProviderRetry();
     }
 
+    public Middleware getMiddleware() {
+        return middleware;
+    }
+
+    public void setMiddleware(Middleware middleware) {
+        this.middleware = middleware != null ? middleware : new Middleware();
+    }
+
     /**
      * Application-level retry for transient model-provider failures. The provider
      * SDKs' internal retries are disabled so this single loop owns the backoff and
@@ -127,6 +138,53 @@ public class ScoreAiProperties {
             this.maxDelay = maxDelay;
         }
     }
+
+    /** Registered middleware selection. Configuration never names executable Java classes. */
+    public static class Middleware {
+        private Map<String, List<String>> profiles = new LinkedHashMap<>();
+        private Map<ExecutionScope.Purpose, String> profileByPurpose = new LinkedHashMap<>();
+        private Map<String, MiddlewarePolicy> policies = new LinkedHashMap<>();
+
+        public Map<String, List<String>> getProfiles() { return profiles; }
+        public void setProfiles(Map<String, List<String>> profiles) {
+            this.profiles = profiles != null ? new LinkedHashMap<>(profiles) : new LinkedHashMap<>();
+        }
+        public Map<ExecutionScope.Purpose, String> getProfileByPurpose() { return profileByPurpose; }
+        public void setProfileByPurpose(Map<ExecutionScope.Purpose, String> profileByPurpose) {
+            this.profileByPurpose = profileByPurpose != null
+                    ? new LinkedHashMap<>(profileByPurpose) : new LinkedHashMap<>();
+        }
+        public Map<String, MiddlewarePolicy> getPolicies() { return policies; }
+        public void setPolicies(Map<String, MiddlewarePolicy> policies) {
+            this.policies = policies != null ? new LinkedHashMap<>(policies) : new LinkedHashMap<>();
+        }
+    }
+
+    public static class MiddlewarePolicy {
+        private MiddlewareMode mode = MiddlewareMode.ENFORCE;
+        private List<ExecutionScope.Purpose> purposes = List.of();
+        private List<AiTool.ToolEffect> toolEffects = List.of();
+        private Map<String, String> settings = new LinkedHashMap<>();
+
+        public MiddlewareMode getMode() { return mode; }
+        public void setMode(MiddlewareMode mode) {
+            this.mode = mode != null ? mode : MiddlewareMode.ENFORCE;
+        }
+        public List<ExecutionScope.Purpose> getPurposes() { return purposes; }
+        public void setPurposes(List<ExecutionScope.Purpose> purposes) {
+            this.purposes = purposes != null ? List.copyOf(purposes) : List.of();
+        }
+        public List<AiTool.ToolEffect> getToolEffects() { return toolEffects; }
+        public void setToolEffects(List<AiTool.ToolEffect> toolEffects) {
+            this.toolEffects = toolEffects != null ? List.copyOf(toolEffects) : List.of();
+        }
+        public Map<String, String> getSettings() { return settings; }
+        public void setSettings(Map<String, String> settings) {
+            this.settings = settings != null ? new LinkedHashMap<>(settings) : new LinkedHashMap<>();
+        }
+    }
+
+    public enum MiddlewareMode { ENFORCE, SHADOW, DISABLED }
 
     public Memory getMemory() {
         return memory;

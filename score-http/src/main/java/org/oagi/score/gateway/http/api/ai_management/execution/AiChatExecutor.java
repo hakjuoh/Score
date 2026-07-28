@@ -31,6 +31,8 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrailRefused
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentInvocation;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentRunResult;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentToolBinding;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareChain;
+import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolExecutionGateway;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
@@ -95,6 +97,7 @@ public final class AiChatExecutor {
     private final AiExecutionInstructions instructions;
     private final ExecutionObserver observer;
     private final ScoreAiObservability observability;
+    private final AiMiddlewareChain middleware;
 
     @Autowired
     public AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
@@ -111,6 +114,7 @@ public final class AiChatExecutor {
                           AiRequestRegistry requests,
                           AiExecutionInstructions instructions,
                           ScoreAiObservability observability,
+                          AiMiddlewareChain middleware,
                           ObjectProvider<ExecutionObserver> executionObservers) {
         this.models = models;
         this.mcpClients = mcpClients;
@@ -127,8 +131,31 @@ public final class AiChatExecutor {
         this.requests = requests;
         this.instructions = Objects.requireNonNull(instructions, "instructions");
         this.observability = observability != null ? observability : ScoreAiObservability.noop();
+        this.middleware = middleware != null ? middleware : AiMiddlewareChain.none();
         this.observer = ExecutionObserver.composite(executionObservers != null
                 ? executionObservers.orderedStream().toList() : List.of());
+    }
+
+    /** Compatibility constructor for callers predating configurable middleware. */
+    public AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
+                          ToolSearchToolCallingAdvisor toolSearchAdvisor,
+                          AiMutationToolGuard mutationGuard,
+                          AiElicitationService elicitations,
+                          AiProviderRetryExecutor providerRetry,
+                          ScoreAiChatOptionsFactory optionsFactory,
+                          AiMutationApprovalCoordinator approvalCoordinator,
+                          ToolGuardrailRegistry toolGuardrails,
+                          SpringAiCallbackToolSetAdapter callbackToolAdapter,
+                          SpringAiToolAdapter springAiToolAdapter,
+                          AgentInputGuardrailChain modelInputGuardrails,
+                          AiRequestRegistry requests,
+                          AiExecutionInstructions instructions,
+                          ScoreAiObservability observability,
+                          ObjectProvider<ExecutionObserver> executionObservers) {
+        this(models, mcpClients, toolSearchAdvisor, mutationGuard, elicitations,
+                providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
+                callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
+                instructions, observability, AiMiddlewareChain.none(), executionObservers);
     }
 
     AiChatExecutor(ScoreAiModelRegistry models,
@@ -148,7 +175,8 @@ public final class AiChatExecutor {
         this(models, mcpClients, toolSearchAdvisor, mutationGuard, elicitations,
                 providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
                 callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
-                AiExecutionInstructions.bundled(), ScoreAiObservability.noop(), executionObservers);
+                AiExecutionInstructions.bundled(), ScoreAiObservability.noop(),
+                AiMiddlewareChain.none(), executionObservers);
     }
 
     /** Compatibility constructor for focused executor tests. */
@@ -182,7 +210,8 @@ public final class AiChatExecutor {
         ChatExecutionContext chatContext = ChatExecutionContext.require(session.context());
         chatContext.recorder().verifyActive();
         var before = chatContext.recorder().usageSnapshot();
-        Result result = execute(SpringAiExecutionContextMapper.toProvider(chatContext),
+        Result result = execute(SpringAiExecutionContextMapper.toProvider(
+                        chatContext, session.middlewareState()),
                 session.instruction());
         // Do not reject the transport result here: AgentRunner records billable usage
         // first and performs the terminal checkpoint before any response-side action.
@@ -534,8 +563,8 @@ public final class AiChatExecutor {
                     ToolExecutionGateway gateway = new ToolExecutionGateway(coreTools, toolGuardrails,
                             guardedSession != null ? List.of(guardedSession) : List.of(),
                             requestFence,
-                            observer,
-                            executionState, rawByteLimit);
+                            observer, executionState, rawByteLimit,
+                            middleware, context.middlewareState());
                     // Recording is deliberately outside the gateway: trajectory and UI
                     // observers may see only the bounded, output-guarded Tool result.
                     executableTools = recorder.recordingTools(
@@ -900,7 +929,25 @@ public final class AiChatExecutor {
                           org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
                           List<String> guardrailDecisionIds,
                           Map<String, Object> workflowObservationContext,
-                          AgentToolBinding agentToolBinding) {
+                          AgentToolBinding agentToolBinding,
+                          MiddlewareState middlewareState) {
+
+        public Context(ChatRequest request, List<Message> history, UserMessage userMessage,
+                       ScoreUser requester, AiTrajectoryRecorder recorder,
+                       boolean toolsEnabled, boolean streamVisibleContent,
+                       ToolPolicy toolPolicy, int agentDepth,
+                       AiMutationApprovalScope approvalScope,
+                       AgentApprovalWaitLifecycle approvalWaitLifecycle,
+                       String agentId,
+                       org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
+                       List<String> guardrailDecisionIds,
+                       Map<String, Object> workflowObservationContext,
+                       AgentToolBinding agentToolBinding) {
+            this(request, history, userMessage, requester, recorder, toolsEnabled,
+                    streamVisibleContent, toolPolicy, agentDepth, approvalScope,
+                    approvalWaitLifecycle, agentId, executionPurpose, guardrailDecisionIds,
+                    workflowObservationContext, agentToolBinding, new MiddlewareState());
+        }
 
         /** Existing transport callers do not provide an Agent-owned binding. */
         public Context(ChatRequest request, List<Message> history, UserMessage userMessage,
@@ -1009,14 +1056,14 @@ public final class AiChatExecutor {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth, scope,
                     approvalWaitLifecycle, agentId, executionPurpose, guardrailDecisionIds,
-                    workflowObservationContext, agentToolBinding);
+                    workflowObservationContext, agentToolBinding, middlewareState);
         }
 
         public Context withApprovalWaitLifecycle(AgentApprovalWaitLifecycle lifecycle) {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, lifecycle, agentId, executionPurpose, guardrailDecisionIds,
-                    workflowObservationContext, agentToolBinding);
+                    workflowObservationContext, agentToolBinding, middlewareState);
         }
 
         public Context withAgentIdentity(String identity,
@@ -1024,7 +1071,8 @@ public final class AiChatExecutor {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, approvalWaitLifecycle, identity, purpose,
-                    guardrailDecisionIds, workflowObservationContext, agentToolBinding);
+                    guardrailDecisionIds, workflowObservationContext, agentToolBinding,
+                    middlewareState);
         }
 
         public Context withUserMessage(UserMessage message) {
@@ -1032,7 +1080,7 @@ public final class AiChatExecutor {
                     requester, recorder, toolsEnabled, streamVisibleContent, toolPolicy,
                     agentDepth, approvalScope, approvalWaitLifecycle, agentId,
                     executionPurpose, guardrailDecisionIds, workflowObservationContext,
-                    agentToolBinding);
+                    agentToolBinding, middlewareState);
         }
 
         /** Adds bounded, server-authored output-policy feedback to the next retry turn. */
@@ -1050,14 +1098,15 @@ public final class AiChatExecutor {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, approvalWaitLifecycle, agentId, executionPurpose,
-                    decisionIds, workflowObservationContext, agentToolBinding);
+                    decisionIds, workflowObservationContext, agentToolBinding,
+                    middlewareState);
         }
 
         public Context withWorkflowObservationContext(Map<String, Object> value) {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, approvalWaitLifecycle, agentId, executionPurpose,
-                    guardrailDecisionIds, value, agentToolBinding);
+                    guardrailDecisionIds, value, agentToolBinding, middlewareState);
         }
 
         /** Applies the non-root execution scope required for every model-authored assignment. */
@@ -1067,7 +1116,8 @@ public final class AiChatExecutor {
                     reduced != ToolPolicy.NONE, false, reduced, 1,
                     approvalScope, approvalWaitLifecycle, assignedAgentId,
                     org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.WORKER,
-                    guardrailDecisionIds, workflowObservationContext, agentToolBinding);
+                    guardrailDecisionIds, workflowObservationContext, agentToolBinding,
+                    middlewareState);
         }
 
         /** Returns a context whose tools are explicitly owned by the Agent definition. */
@@ -1076,7 +1126,7 @@ public final class AiChatExecutor {
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                     approvalScope, approvalWaitLifecycle, agentId, executionPurpose,
                     guardrailDecisionIds, workflowObservationContext,
-                    Objects.requireNonNull(binding, "tool binding"));
+                    Objects.requireNonNull(binding, "tool binding"), middlewareState);
         }
 
         public Context {
@@ -1095,6 +1145,7 @@ public final class AiChatExecutor {
                     : List.of();
             workflowObservationContext = workflowObservationContext != null
                     ? Map.copyOf(workflowObservationContext) : Map.of();
+            middlewareState = middlewareState != null ? middlewareState : new MiddlewareState();
             if (agentDepth < 0 || agentDepth > 1) {
                 throw new IllegalArgumentException("AI agent depth must be 0 or 1.");
             }

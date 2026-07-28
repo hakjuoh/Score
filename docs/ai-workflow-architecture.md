@@ -145,6 +145,60 @@ tool, mutation-approval, guardrail, trajectory, and requester-scoped MCP mechani
 - Transport-inherited Tool callbacks enter through `AiRequestRegistry.admitToolExecution`; admission
   and cancellation have one linear order, while an already-admitted side effect is allowed to finish.
 
+## Middleware lifecycle
+
+The shared Runner and Tool gateway expose a provider-neutral middleware lifecycle around the existing
+typed Agent, model, and Tool contracts. Middleware is implemented as a Java bean with a stable ID;
+configuration may select only those registered IDs and never a Java class name or expression.
+
+The lifecycle order is:
+
+1. `beforeAgent` in profile order.
+2. `beforeModel` in profile order.
+3. `wrapModelCall` as nested wrappers, followed by `afterModel` in reverse order.
+4. `wrapToolCall` immediately around the authorized Tool invocation. Every returned or replacement
+   value still passes the mandatory Tool output Guardrails.
+5. `afterAgent` in reverse order after the definition response handler and output policy complete.
+
+`score.ai.middleware.profiles` selects ordered middleware IDs. `profile-by-purpose` may select a
+different profile for a trusted `ExecutionScope.Purpose`; policy conditions accept typed purposes and
+Tool effects only. Policy-specific values are a string map delivered to the registered bean at startup.
+Required registrations are automatically inserted into every profile and must use `ENFORCE` mode.
+They cannot declare `purposes` or `tool-effects`; startup rejects either condition because it could
+remove a required policy from part of the execution graph.
+`SHADOW` hooks may observe execution, but the engine ignores their rewrites, replacements, failures,
+and short circuits. Each shadow registration receives one isolated state reused across its lifecycle,
+so it can correlate observations without its state writes influencing an enforced policy or the
+actual execution path.
+
+Each wrapper receives a synchronous, same-thread, single-use continuation that is revoked when the
+wrapper returns. Calling it more than once, from another thread, or after return fails before another
+provider or Tool invocation. Tool wrappers run after authorization and therefore cannot rewrite Tool
+arguments; argument normalization and rewriting remain in the pre-authorization input Guardrails.
+This preserves the mutation replay and authorization invariants while still allowing a wrapper to
+short-circuit with a safe result. Existing Agent and Tool Guardrail chains remain mandatory execution
+boundaries and can be migrated behind registered adapters incrementally.
+
+```yaml
+score:
+  ai:
+    middleware:
+      profiles:
+        default: [secret-redactor, mutation-approval, output-safety]
+        compactor: [secret-redactor]
+      profile-by-purpose:
+        COMPACTION: compactor
+      policies:
+        mutation-approval:
+          mode: ENFORCE
+          purposes: [USER_RESPONSE]
+          tool-effects: [MUTATION]
+        output-safety:
+          mode: SHADOW
+          settings:
+            model-name: claude-haiku-4_5
+```
+
 ## Observability
 
 A turn's entrypoint span is `invoke_workflow <execution-kind>` (`assistant`,
