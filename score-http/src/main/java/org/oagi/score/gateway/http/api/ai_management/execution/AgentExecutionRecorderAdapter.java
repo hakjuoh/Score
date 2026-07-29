@@ -31,6 +31,12 @@ public final class AgentExecutionRecorderAdapter implements AgentExecutionRecord
                 "The Chat execution adapter requires a provider-backed Agent recorder.");
     }
 
+    /** Returns the provider recorder when this is a production-backed adapter. */
+    public static AiTrajectoryRecorder providerRecorderOrNull(AgentExecutionRecorder recorder) {
+        return recorder instanceof AgentExecutionRecorderAdapter adapter
+                ? adapter.delegate : null;
+    }
+
     @Override
     public AgentExecutionRecorder fork(Map<String, Object> namespace) {
         return new AgentExecutionRecorderAdapter(delegate.fork(namespace));

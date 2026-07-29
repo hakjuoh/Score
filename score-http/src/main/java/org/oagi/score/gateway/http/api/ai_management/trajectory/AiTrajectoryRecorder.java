@@ -496,9 +496,9 @@ public final class AiTrajectoryRecorder {
     }
 
     /**
-     * Narrates one transient provider failure and the wait before the next attempt,
-     * so the user watches the recovery instead of a silent stall. The step is
-     * diagnostic; the live event drives the frontend's reconnecting countdown.
+     * Publishes the provider's bounded error first, then the retry narration.
+     * Keeping them as separate ordered events lets the UI render a real error row
+     * followed by a non-terminal recovery status instead of blending both together.
      */
     public synchronized void providerRetry(int attempt, int maxAttempts, long delayMillis,
                                            String reason, String failureClass, int statusCode) {
@@ -517,13 +517,21 @@ public final class AiTrajectoryRecorder {
             metadata.put("status_code", statusCode);
         }
         Map<String, Object> extra = traceMetadata(metadata);
-        String content = "The model provider request failed; retrying (attempt "
-                + attempt + " of " + maxAttempts + ").";
+        String errorContent = StringUtils.hasText(reason)
+                ? reason.strip() : "The model provider could not complete the request.";
         repository.append(conversationId, new AiChatTrajectoryStep(
-                requestId, "system", "provider_retry", "debug", content, null,
+                requestId, "system", "provider_error", "visible", errorContent, null,
                 modelName, reasoningEffort,
                 null, null, null, extra, 0, null, Instant.now()));
-        emit(AiExecutionEvent.detail("provider_retry", content, extra));
+        emit(AiExecutionEvent.detail("provider_error", errorContent, extra));
+
+        String retryContent = "The model provider request failed; retrying (attempt "
+                + attempt + " of " + maxAttempts + ").";
+        repository.append(conversationId, new AiChatTrajectoryStep(
+                requestId, "system", "provider_retry", "debug", retryContent, null,
+                modelName, reasoningEffort,
+                null, null, null, extra, 0, null, Instant.now()));
+        emit(AiExecutionEvent.detail("provider_retry", retryContent, extra));
     }
 
     public synchronized void progress(String content) {

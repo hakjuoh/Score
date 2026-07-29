@@ -78,6 +78,56 @@ describe('AiConversationRestoreService', () => {
     expect(finished).toHaveBeenCalledOnce();
   });
 
+  it('isolates reused workflow node ids by historical turn during WebSocket restore', async () => {
+    const rootMetadata = {
+      node_id: 'main:1:planned-workflow', parent_node_id: 'main',
+      depth: 1, member_count: 1, status: 'started'
+    };
+    const workerMetadata = {
+      node_id: 'main:1:planned-workflow:agent:count-accs',
+      parent_node_id: 'main:1:planned-workflow', depth: 2,
+      agent_name: 'Evidence researcher', status: 'started'
+    };
+    handle({requestId: 'restore-request', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
+    handle({
+      requestId: 'restore-request', type: 'HISTORY_MESSAGE', message: 'agent_event',
+      turnId: 'turn-1', subtype: 'workflow_started', response: 'First workflow.',
+      index: 0, metadata: rootMetadata
+    }, callbacks);
+    handle({
+      requestId: 'restore-request', type: 'HISTORY_MESSAGE', message: 'agent_event',
+      turnId: 'turn-1', subtype: 'subagent_started', response: 'First worker.',
+      index: 1, metadata: workerMetadata
+    }, callbacks);
+    handle({
+      requestId: 'restore-request', type: 'HISTORY_MESSAGE', message: 'agent_event',
+      turnId: 'turn-2', subtype: 'workflow_started', response: 'Second workflow.',
+      index: 2, metadata: rootMetadata
+    }, callbacks);
+    handle({
+      requestId: 'restore-request', type: 'HISTORY_MESSAGE', message: 'agent_event',
+      turnId: 'turn-2', subtype: 'subagent_started', response: 'Second worker.',
+      index: 3, metadata: workerMetadata
+    }, callbacks);
+    handle({
+      requestId: 'restore-request', type: 'HISTORY_MESSAGE', message: 'provider_event',
+      turnId: 'turn-2', subtype: 'provider_error', response: 'Turn two overloaded.',
+      index: 4, metadata: workerMetadata
+    }, callbacks);
+    handle({requestId: 'restore-request', type: 'HISTORY_FINAL', conversationId: 'c1'}, callbacks);
+
+    await vi.runAllTimersAsync();
+
+    const groups = messages.filter(message => message.role === 'agent_group');
+    expect(groups).toHaveLength(2);
+    expect(groups[0].activities?.flatMap(activity => activity.events))
+      .not.toContainEqual(expect.objectContaining({content: 'Turn two overloaded.'}));
+    expect(groups[1].activities?.flatMap(activity => activity.events))
+      .toContainEqual(expect.objectContaining({
+        status: 'provider_error', content: 'Turn two overloaded.'
+      }));
+  });
+
   it('does not expose persisted reasoning that was absent from the completed live transcript', async () => {
     handle({requestId: 'r1', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
     handle({
@@ -671,7 +721,22 @@ describe('AiConversationRestoreService', () => {
         }
       },
       {
-        index: 5, role: 'agent_event', requestId: 'request-1',
+        index: 5, role: 'provider_event', requestId: 'request-1',
+        subtype: 'provider_error', content: 'Overloaded', metadata: {
+          fanout_id: fanout, node_id: worker, parent_node_id: `${fanout}:lead`,
+          execution_scope: 'worker', conversation_kind: 'SUBAGENT'
+        }
+      },
+      {
+        index: 6, role: 'provider_event', requestId: 'request-1',
+        subtype: 'provider_retry',
+        content: 'The model provider request failed; retrying (attempt 1 of 10).', metadata: {
+          fanout_id: fanout, node_id: worker, parent_node_id: `${fanout}:lead`,
+          execution_scope: 'worker', conversation_kind: 'SUBAGENT'
+        }
+      },
+      {
+        index: 7, role: 'agent_event', requestId: 'request-1',
         subtype: 'subagent_completed', content: 'Searched.', metadata: {
           fanout_id: fanout, node_id: worker, parent_node_id: `${fanout}:lead`,
           execution_scope: 'worker', conversation_kind: 'SUBAGENT',
@@ -679,14 +744,14 @@ describe('AiConversationRestoreService', () => {
         }
       },
       {
-        index: 6, role: 'agent_event', requestId: 'request-1',
+        index: 8, role: 'agent_event', requestId: 'request-1',
         subtype: 'multi_agent_completed', content: 'Checked.', metadata: {
           fanout_id: fanout, node_id: `${fanout}:lead`, execution_scope: 'lead',
           agent_name: 'Lead agent', agent_count: 1, workflow: 'chain',
           active_verb: 'Checking', completed_verb: 'Checked'
         }
       },
-      {index: 7, role: 'assistant', content: 'Everything was checked.'}
+      {index: 9, role: 'assistant', content: 'Everything was checked.'}
     ]);
 
     expect(projected.map(message => message.role)).toEqual(['user', 'agent_group', 'assistant']);
@@ -694,8 +759,101 @@ describe('AiConversationRestoreService', () => {
     expect(activities).toHaveLength(2);
     expect(activities.find(activity => activity.isLead))
       .toMatchObject({status: 'completed', completedVerb: 'Checked', plannedAgentCount: 1});
-    expect(activities.find(activity => !activity.isLead)?.events)
-      .toContainEqual(expect.objectContaining({status: 'tool', content: 'get_acc completed.'}));
+    expect(activities.find(activity => !activity.isLead)?.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({status: 'tool', content: 'get_acc completed.'}),
+      expect.objectContaining({status: 'provider_error', content: 'Overloaded'}),
+      expect.objectContaining({
+        status: 'provider_retry',
+        content: 'The model provider request failed; retrying (attempt 1 of 10).'
+      })
+    ]));
+  });
+
+  it('keeps composed workflow iterations and requests in separate restored groups', () => {
+    const projected = service.projectStoredMessages([
+      {
+        index: 0, role: 'agent_event', requestId: 'request-1',
+        subtype: 'workflow_started', content: 'First workflow started.', metadata: {
+          node_id: 'main:1:planned-workflow', parent_node_id: 'main', depth: 1,
+          member_count: 3, status: 'started'
+        }
+      },
+      {
+        index: 1, role: 'agent_event', requestId: 'request-1',
+        subtype: 'subagent_started', content: 'First worker started.', metadata: {
+          node_id: 'main:1:planned-workflow:agent:count-accs',
+          parent_node_id: 'main:1:planned-workflow', depth: 2,
+          agent_name: 'Evidence researcher', status: 'started'
+        }
+      },
+      {
+        index: 2, role: 'agent_event', requestId: 'request-1',
+        subtype: 'workflow_started', content: 'Nested workflow started.', metadata: {
+          node_id: 'workflow:opaque-nested-node',
+          parent_node_id: 'main:1:planned-workflow', depth: 2,
+          member_count: 1, status: 'started'
+        }
+      },
+      {
+        index: 3, role: 'agent_event', requestId: 'request-1',
+        subtype: 'subagent_started', content: 'Nested worker started.', metadata: {
+          node_id: 'workflow:opaque-worker-node',
+          parent_node_id: 'workflow:opaque-nested-node', depth: 3,
+          agent_name: 'Critical reviewer', status: 'started'
+        }
+      },
+      {
+        index: 4, role: 'agent_event', requestId: 'request-1',
+        subtype: 'workflow_started', content: 'Second workflow started.', metadata: {
+          node_id: 'main:2:root-work', parent_node_id: 'main', depth: 1,
+          member_count: 3, status: 'started'
+        }
+      },
+      {
+        index: 5, role: 'agent_event', requestId: 'request-1',
+        subtype: 'subagent_started', content: 'Second worker started.', metadata: {
+          node_id: 'main:2:root-work:agent:count-accs',
+          parent_node_id: 'main:2:root-work', depth: 2,
+          agent_name: 'Evidence researcher', status: 'started'
+        }
+      },
+      {
+        index: 6, role: 'agent_event', requestId: 'request-2',
+        subtype: 'workflow_started', content: 'Next request workflow started.', metadata: {
+          node_id: 'main:1:planned-workflow', parent_node_id: 'main', depth: 1,
+          member_count: 1, status: 'started'
+        }
+      },
+      {
+        index: 7, role: 'agent_event', requestId: 'request-2',
+        subtype: 'subagent_started', content: 'Next request worker started.', metadata: {
+          node_id: 'main:1:planned-workflow:agent:count-accs',
+          parent_node_id: 'main:1:planned-workflow', depth: 2,
+          agent_name: 'Evidence researcher', status: 'started'
+        }
+      },
+      {
+        index: 8, role: 'provider_event', requestId: 'request-2',
+        subtype: 'provider_error', content: 'Request two overloaded.', metadata: {
+          node_id: 'main:1:planned-workflow:agent:count-accs',
+          parent_node_id: 'main:1:planned-workflow', depth: 2
+        }
+      }
+    ]);
+
+    expect(projected).toHaveLength(3);
+    expect(projected.map(message => message.activities?.map(activity => activity.agentId)))
+      .toEqual([
+        ['main:1:planned-workflow:agent:count-accs', 'workflow:opaque-worker-node'],
+        ['main:2:root-work:agent:count-accs'],
+        ['main:1:planned-workflow:agent:count-accs']
+      ]);
+    expect(projected[0].activities?.flatMap(activity => activity.events))
+      .not.toContainEqual(expect.objectContaining({content: 'Request two overloaded.'}));
+    expect(projected[2].activities?.flatMap(activity => activity.events))
+      .toContainEqual(expect.objectContaining({
+        status: 'provider_error', content: 'Request two overloaded.'
+      }));
   });
 
   it('restores durable cancellation as terminal instead of running', () => {

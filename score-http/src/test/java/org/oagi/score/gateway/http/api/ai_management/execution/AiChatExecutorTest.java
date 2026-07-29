@@ -1,5 +1,8 @@
 package org.oagi.score.gateway.http.api.ai_management.execution;
 
+import com.anthropic.core.JsonValue;
+import com.anthropic.core.http.Headers;
+import com.anthropic.errors.InternalServerException;
 import io.modelcontextprotocol.client.McpSyncClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -8,6 +11,11 @@ import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiUiRouteManifest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.agent.Agent;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentInvocation;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentRunResult;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentSession;
+import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
+import org.oagi.score.gateway.http.api.ai_management.agent.AiModel;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalResolution;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
@@ -30,11 +38,15 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolGuardrailRegistry;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolInputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolOutputGuardrail;
+import org.oagi.score.gateway.http.api.ai_management.provider.AiProviderRetryExecutor;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
+import org.oagi.score.gateway.http.api.ai_management.tool.ToolExecutionGateway;
+import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.configuration.ai.ConnectCenterMcpClientFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiChatOptionsFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
+import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
@@ -55,6 +67,7 @@ import reactor.core.publisher.Flux;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -94,6 +107,47 @@ class AiChatExecutorTest {
         assertThat(delta.promptTokens()).isEqualTo(30);
         assertThat(delta.completionTokens()).isEqualTo(12);
         assertThat(delta.modelCalls()).isEqualTo(1);
+    }
+
+    @Test
+    void retriesProviderFailuresForPlannerStyleModelInvocations() {
+        Fixture fixture = new Fixture();
+        InternalServerException overloaded = InternalServerException.builder()
+                .statusCode(529)
+                .headers(Headers.builder().build())
+                .body(JsonValue.from(Map.of(
+                        "type", "error",
+                        "error", Map.of("type", "overloaded_error", "message", "Overloaded"))))
+                .build();
+        when(fixture.callResponseSpec.chatResponse())
+                .thenThrow(overloaded)
+                .thenReturn(response("planned response"));
+        ScoreAiProperties properties = new ScoreAiProperties();
+        properties.getProviderRetry().setMaxAttempts(2);
+        properties.getProviderRetry().setInitialDelay(Duration.ZERO);
+        properties.getProviderRetry().setMaxDelay(Duration.ZERO);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        Agent agent = mock(Agent.class);
+        when(agent.id()).thenReturn(new Agent.AgentId("workflow-planner"));
+        AgentSession session = new AgentSession(agent,
+                new AiModel(new AiModel.ModelId("configured-model"),
+                        new AiModel.ProviderId("anthropic"),
+                        AiModel.ModelCapabilities.TEXT_ONLY, AiModel.ContextWindow.UNKNOWN),
+                TEST_INSTRUCTION, ToolSet.empty());
+        AgentInvocation invocation = new AgentInvocation(null, session,
+                new AiMessage.User("Plan it"), List.of(),
+                new ExecutionScope("request-1", "conversation-1", "user-1", 0,
+                        ExecutionScope.Purpose.WORKFLOW_PLANNING, List.of()),
+                ToolExecutionGateway.disabled(), Map.of(),
+                AgentExecutionRecorderAdapter.of(recorder));
+
+        AgentRunResult result = fixture.executorWithProviderRetry(
+                new AiProviderRetryExecutor(properties, null)).executeAgent(invocation);
+
+        assertThat(result.response().content()).isEqualTo("planned response");
+        verify(fixture.callResponseSpec, times(2)).chatResponse();
+        verify(recorder).providerRetry(eq(1), eq(2), eq(0L),
+                eq("Overloaded"), eq(InternalServerException.class.getName()), eq(529));
     }
 
     @Test
@@ -643,6 +697,8 @@ class AiChatExecutorTest {
                 mock(ChatClient.ChatClientRequestSpec.class);
         private final ChatClient.StreamResponseSpec responseSpec =
                 mock(ChatClient.StreamResponseSpec.class);
+        private final ChatClient.CallResponseSpec callResponseSpec =
+                mock(ChatClient.CallResponseSpec.class);
         private final ChatClient.PromptSystemSpec systemSpec =
                 mock(ChatClient.PromptSystemSpec.class);
         private final ScoreUser requester = mock(ScoreUser.class);
@@ -652,6 +708,7 @@ class AiChatExecutorTest {
                     mock(ScoreAiModelRegistry.ModelConfiguration.class);
             when(models.clientBuilder("configured-model")).thenReturn(builder);
             when(models.modelConfiguration("configured-model")).thenReturn(model);
+            when(models.resolveReasoningEffort("configured-model", null)).thenReturn("high");
             when(optionsFactory.create("configured-model", "high", null))
                     .thenReturn(AnthropicChatOptions.builder().model("configured-model").build());
             when(builder.defaultAdvisors(any(Advisor[].class))).thenReturn(builder);
@@ -667,12 +724,18 @@ class AiChatExecutorTest {
             });
             when(requestSpec.messages(anyList())).thenReturn(requestSpec);
             when(requestSpec.advisors(any(Consumer.class))).thenReturn(requestSpec);
+            when(requestSpec.call()).thenReturn(callResponseSpec);
             when(requestSpec.stream()).thenReturn(responseSpec);
         }
 
         private AiChatExecutor executor(AiMutationToolGuard mutationGuard) {
             return new AiChatExecutor(models, mcpClients, toolSearchAdvisor,
                     mutationGuard, null, null, optionsFactory);
+        }
+
+        private AiChatExecutor executorWithProviderRetry(AiProviderRetryExecutor retry) {
+            return new AiChatExecutor(models, mcpClients, toolSearchAdvisor,
+                    null, null, retry, optionsFactory);
         }
 
         private AiChatExecutor executor(

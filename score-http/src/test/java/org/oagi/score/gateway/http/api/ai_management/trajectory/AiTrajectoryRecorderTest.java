@@ -506,7 +506,7 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
-    void narratesProviderRetriesWithCountdownMetadata() {
+    void publishesTheProviderErrorBeforeTheRetryNarration() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         List<AiExecutionEvent> events = new ArrayList<>();
@@ -518,18 +518,24 @@ class AiTrajectoryRecorderTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> steps =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository).append(eq("conversation-1"), steps.capture());
-        assertThat(steps.getValue().messageKind()).isEqualTo("provider_retry");
-        assertThat(steps.getValue().visibility()).isEqualTo("debug");
-        assertThat(steps.getValue().extra())
+        verify(repository, times(2)).append(eq("conversation-1"), steps.capture());
+        assertThat(steps.getAllValues()).extracting(AiChatTrajectoryStep::messageKind)
+                .containsExactly("provider_error", "provider_retry");
+        assertThat(steps.getAllValues()).extracting(AiChatTrajectoryStep::message)
+                .containsExactly("Rate limited.",
+                        "The model provider request failed; retrying (attempt 2 of 10).");
+        assertThat(steps.getAllValues()).extracting(AiChatTrajectoryStep::visibility)
+                .containsExactly("visible", "debug");
+        assertThat(steps.getAllValues()).allSatisfy(step -> assertThat(step.extra())
                 .containsEntry("attempt", 2)
                 .containsEntry("max_attempts", 10)
                 .containsEntry("delay_millis", 15_000L)
                 .containsEntry("reason", "Rate limited.")
                 .containsEntry("failure_class", "org.springframework.ai.retry.TransientAiException")
-                .containsEntry("status_code", 429);
-        assertThat(events).singleElement().satisfies(event -> {
-            assertThat(event.subtype()).isEqualTo("provider_retry");
+                .containsEntry("status_code", 429));
+        assertThat(events).extracting(AiExecutionEvent::subtype)
+                .containsExactly("provider_error", "provider_retry");
+        assertThat(events).allSatisfy(event -> {
             assertThat(event.metadata())
                     .containsEntry("attempt", 2)
                     .containsEntry("max_attempts", 10)
@@ -554,12 +560,14 @@ class AiTrajectoryRecorderTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> persisted =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository).append(eq("conversation-1"), persisted.capture());
-        assertThat(persisted.getValue().extra()).containsEntry("reason", secret);
-        AiExecutionLifecycle observed = AiExecutionLifecycle.from(observations.getFirst())
-                .orElseThrow();
-        assertThat(observed.metadata()).doesNotContainKey("reason");
-        assertThat(observed.toString()).doesNotContain(secret);
+        verify(repository, times(2)).append(eq("conversation-1"), persisted.capture());
+        assertThat(persisted.getAllValues()).allSatisfy(step ->
+                assertThat(step.extra()).containsEntry("reason", secret));
+        assertThat(observations).allSatisfy(observation -> {
+            AiExecutionLifecycle observed = AiExecutionLifecycle.from(observation).orElseThrow();
+            assertThat(observed.metadata()).doesNotContainKey("reason");
+            assertThat(observed.toString()).doesNotContain(secret);
+        });
     }
 
     @Test

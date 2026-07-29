@@ -221,7 +221,14 @@ export class AiChatMessageListComponent implements OnChanges {
     };
   }
 
-  agentConversationMessage(event: AiAgentActivityEvent): AiChatMessage {
+  agentConversationMessage(event: AiAgentActivityEvent,
+                           agentInProgress: boolean): AiChatMessage {
+    if (event.status === 'provider_error') {
+      return {role: 'error', content: event.content};
+    }
+    if (event.status === 'provider_retry') {
+      return {role: 'progress', content: event.content, inProgress: agentInProgress};
+    }
     return {role: 'guide', content: event.content};
   }
 

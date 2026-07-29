@@ -69,6 +69,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /** Executes assistant requests through the configured Spring AI chat model. */
@@ -373,19 +374,28 @@ public final class AiChatExecutor {
         }
         String reasoningEffort = models.resolveReasoningEffort(modelId, null);
         ScoreAiModelRegistry.ModelConfiguration model = models.modelConfiguration(modelId);
-        ScoreAiObservability.ModelCall modelCall = observability.startModelCall(
-                invocation.scope().requestId(), modelId, model.model(),
-                model.providerType(), "agent");
-        ChatResponse response;
-        try {
-            response = builder.build().prompt()
-                    .options(optionsFactory.create(modelId, reasoningEffort, null).mutate())
-                    .messages(messages).call().chatResponse();
-            modelCall.complete(response);
-        } catch (RuntimeException failure) {
-            modelCall.fail(failure);
-            throw failure;
-        }
+        AiTrajectoryRecorder recorder = AgentExecutionRecorderAdapter.providerRecorderOrNull(
+                invocation.recorder());
+        Supplier<ChatResponse> providerCall = () -> {
+            if (recorder != null) recorder.verifyActive();
+            ScoreAiObservability.ModelCall modelCall = observability.startModelCall(
+                    invocation.scope().requestId(), modelId, model.model(),
+                    model.providerType(), "agent");
+            try {
+                ChatResponse response = builder.build().prompt()
+                        .options(optionsFactory.create(modelId, reasoningEffort, null).mutate())
+                        .messages(messages).call().chatResponse();
+                modelCall.complete(response);
+                return response;
+            } catch (RuntimeException failure) {
+                modelCall.fail(failure);
+                throw failure;
+            }
+        };
+        ChatResponse response = providerRetry != null && recorder != null
+                ? providerRetry.execute(invocation.scope().requestId(), recorder,
+                recorder::executedMutationToolCallCount, providerCall)
+                : providerCall.get();
         String answer = visibleContent(response);
         if (!StringUtils.hasText(answer)) {
             throw new IllegalStateException("The Agent returned an empty response.");

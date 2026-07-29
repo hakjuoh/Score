@@ -11,7 +11,11 @@ import {
   AiChatSocketEvent,
   AiMutationConfirmationAuthorization
 } from './domain/ai-chat-panel.model';
-import {isExecutionActivityEvent, isSpecialistToolEvent} from './domain/ai-agent-activity';
+import {
+  isExecutionActivityEvent,
+  isSpecialistActivityEvent,
+  isSpecialistToolEvent
+} from './domain/ai-agent-activity';
 
 const MUTATION_APPROVAL_EVENT_SUBTYPES = new Set([
   'mutation_approval_batch_required',
@@ -93,6 +97,17 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           this.handleSystemEvent(event);
         } else if (event.type === 'system' && event.subtype === 'guide') {
           this.handleSystemEvent(event);
+        } else if (event.type === 'system' && event.subtype === 'provider_error') {
+          this.handleSystemEvent(event);
+        } else if (event.type === 'system' && event.subtype === 'provider_retry') {
+          if (isSpecialistActivityEvent(event)) {
+            this.handleSystemEvent(event);
+          } else {
+            const content = this.primaryContent(event).trim();
+            if (content) {
+              this.state.messages.push({role: 'progress', content, inProgress: false});
+            }
+          }
         } else if (event.type === 'tool_call' || event.type === 'tool_group') {
           // Replayed specialist activity belongs in its agent timeline;
           // lead activity uses the same structured row path as WebSocket chat.
@@ -121,7 +136,8 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         || isSpecialistToolEvent(event)
         || event.type === 'tool_call' || event.type === 'tool_group'
         || event.type === 'system' && event.subtype === 'guide'
-        || event.type === 'system' && event.subtype === 'provider_retry'
+        || event.type === 'system' && (event.subtype === 'provider_error'
+          || event.subtype === 'provider_retry')
         || isMutationApprovalInteractionEvent(event)
         || event.type === 'system' && (event.subtype === 'elicitation_required'
         || event.subtype === 'elicitation_decision_accepted'

@@ -54,7 +54,7 @@
           } @else {
             <ng-container [ngTemplateOutlet]="messageRow"
                           [ngTemplateOutletContext]="{
-                            message: agentConversationMessage(activityEvent)
+                            message: agentConversationMessage(activityEvent, focus.inProgress)
                           }"></ng-container>
           }
         }
