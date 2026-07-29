@@ -54,6 +54,60 @@ export interface AiAgentActivity {
 
 export type AiAgentActivityUpdate = Omit<AiAgentActivity, 'firstSeenAt' | 'lastUpdateAt' | 'events'>;
 
+/**
+ * Resolves one stable workflow-execution group for both live and restored
+ * events. Planner/evaluator iterations share a request but have distinct root
+ * node prefixes; descendants inherit the root through their parent link.
+ */
+export class AiAgentActivityGroupResolver {
+  private readonly groupByNode = new Map<string, string>();
+
+  resolve(event: AiChatSocketEvent): string {
+    const ownerId = agentActivityOwnerId(event);
+    const metadata = event.metadata || {};
+    const nodeId = text(metadata['nodeId']) || text(metadata['node_id'])
+      || text(metadata['agentId']);
+    const parentNodeId = text(metadata['parentNodeId']) || text(metadata['parent_node_id']);
+    const explicit = text(metadata['fanoutId']) || text(metadata['fanout_id']);
+    const inherited = parentNodeId
+      ? this.groupByNode.get(this.nodeKey(ownerId, parentNodeId)) : undefined;
+    const rootNode = metadata['depth'] === 1 || isLeadLifecycle(event) ? nodeId : undefined;
+    const structural = composedRootPrefix(nodeId) || composedRootPrefix(parentNodeId);
+    const localGroupId = explicit || structural || rootNode || 'request';
+    const groupId = inherited || this.nodeKey(ownerId, localGroupId);
+    if (nodeId) this.groupByNode.set(this.nodeKey(ownerId, nodeId), groupId);
+    return groupId;
+  }
+
+  ownerPrefix(event: AiChatSocketEvent): string {
+    return `${agentActivityOwnerId(event)}\u0000`;
+  }
+
+  clear(): void {
+    this.groupByNode.clear();
+  }
+
+  private nodeKey(ownerId: string, nodeId: string): string {
+    return `${ownerId}\u0000${nodeId}`;
+  }
+}
+
+export function agentActivityOwnerId(event: AiChatSocketEvent): string {
+  return text(event.turnId) || event.requestId;
+}
+
+function isLeadLifecycle(event: AiChatSocketEvent): boolean {
+  return !!event.subtype?.startsWith('multi_agent')
+    || !!event.subtype?.startsWith('parallel_workflow');
+}
+
+function composedRootPrefix(nodeId?: string): string | undefined {
+  return nodeId?.match(/^(main:\d+:[^:]+)(?::|$)/)?.[1]
+    || nodeId?.match(/^(.+?:composed:iteration-[^:]+)(?::|$)/)?.[1]
+    || nodeId?.match(/^(.+?:composed)(?::(?:lead|worker)(?::|$))/)?.[1]
+    || nodeId?.match(/^(.+?)-(?:lead|agent-\d\d)$/)?.[1];
+}
+
 export function isExecutionActivityEvent(event: AiChatSocketEvent): boolean {
   return event.type === 'system' && !!event.subtype
     && EXECUTION_ACTIVITY_SUBTYPES.has(event.subtype);

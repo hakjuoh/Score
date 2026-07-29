@@ -146,6 +146,25 @@ describe('AiChatMessageListComponent', () => {
     expect(fixture.nativeElement.querySelector('.request-pending-indicator')).toBeNull();
   });
 
+  it('keeps retry narration visible while only the long provider reason shrinks', async () => {
+    fixture.componentInstance.messages = [{
+      role: 'progress', inProgress: true, statusTone: 'error',
+      content: 'A very long provider error explaining why the request was overloaded.',
+      statusSuffix: 'The model provider request failed; retrying (attempt 1 of 10).'
+    }];
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('.message-row.status-error') as HTMLElement;
+    const segmented = row.querySelector('.message-text.status-segmented') as HTMLElement;
+    const primary = row.querySelector('.status-primary') as HTMLElement;
+    const suffix = row.querySelector('.status-suffix') as HTMLElement;
+    expect(primary.textContent).toContain('provider error');
+    expect(suffix.textContent).toContain('retrying (attempt 1 of 10)');
+    expect(Array.from(segmented.children)).toEqual([primary, suffix]);
+  });
+
   it('does not repeatedly announce a streamed assistant update as a status', () => {
     fixture.componentInstance.messages = [{
       role: 'progress', eventType: 'assistant_update',

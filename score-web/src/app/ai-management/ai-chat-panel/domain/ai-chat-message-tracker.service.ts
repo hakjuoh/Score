@@ -5,7 +5,7 @@ import {
   toolCallEventSemantics
 } from './ai-chat-event-semantics';
 import {AiChatPanelState} from './ai-chat-panel-state';
-import {AiChatMessage, AiChatSocketEvent} from './ai-chat-panel.model';
+import {AiChatMessage, AiChatSocketEvent, AiChatStatusOptions} from './ai-chat-panel.model';
 
 @Injectable()
 export class AiChatMessageTrackerService {
@@ -98,11 +98,12 @@ export class AiChatMessageTrackerService {
   }
 
   showStatus(state: AiChatPanelState, content: string, inProgress = false,
-             alertSuffix?: string, eventType?: string): void {
+             options: AiChatStatusOptions = {}): void {
     const status: AiChatMessage = {
       role: 'progress', content, inProgress,
-      ...(alertSuffix ? {alertSuffix} : {}),
-      ...(eventType ? {eventType} : {})
+      ...(options.eventType ? {eventType: options.eventType} : {}),
+      ...(options.tone && options.tone !== 'neutral' ? {statusTone: options.tone} : {}),
+      ...(options.suffix ? {statusSuffix: options.suffix} : {})
     };
     if (this.statusMessageIndex !== undefined) {
       const existing = state.messages[this.statusMessageIndex];

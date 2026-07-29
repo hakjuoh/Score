@@ -457,6 +457,114 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     ]);
   });
 
+  it('separates worker-only Planner iterations and keeps each synthesis in chat', () => {
+    startPublishedRequest();
+    const worker = (iteration: number, index: number, subtype: string) => ({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype,
+      content: subtype === 'subagent_completed' ? `Count ${index} completed.` : `Counting ${index}.`,
+      metadata: {
+        nodeId: `main:${iteration}:release-count:worker-${index}`,
+        parentNodeId: `main:${iteration}:release-count`,
+        agentId: `main:${iteration}:release-count:worker-${index}`,
+        agentName: `Counter ${index}`,
+        executionScope: 'worker', conversationKind: 'PARALLEL',
+        executionKind: 'parallel'
+      }
+    });
+    const completeIteration = (iteration: number, result: string) => {
+      for (let index = 1; index <= 3; index++) {
+        (component as any).handleSocketEvent(worker(iteration, index, 'subagent_started'));
+        (component as any).handleSocketEvent(worker(iteration, index, 'subagent_completed'));
+      }
+      (component as any).handleSocketEvent({
+        requestId: 'request-1', conversationId: 'conversation-1',
+        type: 'system', subtype: 'workflow_result', content: result,
+        metadata: {nodeId: `main:${iteration}:release-count`, depth: 1}
+      });
+    };
+
+    completeIteration(1, 'First synthesis.');
+    completeIteration(2, 'Revised synthesis.');
+
+    const groups = component.state.messages.filter(message => message.role === 'workflow_group');
+    expect(groups).toHaveLength(2);
+    expect(groups.map(group => group.activities?.filter(activity => !activity.isLead).length))
+      .toEqual([3, 3]);
+    expect(component.state.agentActivities).toBe(groups[1].activities);
+    expect(component.state.messages.filter(message => message.eventType === 'workflow_result'))
+      .toEqual([
+        expect.objectContaining({role: 'assistant', content: 'First synthesis.'}),
+        expect.objectContaining({role: 'assistant', content: 'Revised synthesis.'})
+      ]);
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'assistant_update', content: 'Revised '
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'assistant_update', content: 'synthesis.'
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'assistant_final', content: 'Revised synthesis.'
+    });
+    expect(component.state.messages.filter(message =>
+      message.role === 'assistant' && message.content === 'Revised synthesis.')).toHaveLength(1);
+  });
+
+  it('coalesces a REST workflow result preview with the canonical response', () => {
+    const response = new Subject<AiChatRestResponse>();
+    transport.watch.mockReturnValueOnce(new Subject<{body: string}>());
+    api.sendChat.mockReturnValueOnce(response);
+    component.state.prompt = 'Synthesize with an attachment';
+    component.state.attachments = [{
+      name: 'sample.txt', mediaType: 'text/plain', size: 4, data: 'test'
+    }];
+    component.send();
+
+    response.next({
+      response: 'Canonical synthesis.', conversationId: 'conversation-1',
+      events: [{
+        requestId: 'request-1', conversationId: 'conversation-1',
+        type: 'system', subtype: 'workflow_result', content: 'Canonical synthesis.',
+        metadata: {depth: 1}
+      }]
+    });
+
+    expect(component.state.messages.filter(message =>
+      message.role === 'assistant' && message.content === 'Canonical synthesis.')).toHaveLength(1);
+  });
+
+  it('reattaches live updates to a restored workflow group', () => {
+    startPublishedRequest();
+    const nodeId = 'main:1:release-count:worker-1';
+    const activities = [{
+      agentId: nodeId, agentName: 'Counter 1', status: 'started',
+      content: 'Counting.', inProgress: true, isLead: false,
+      firstSeenAt: 1, lastUpdateAt: 1, events: [{status: 'started', content: 'Counting.'}]
+    }] as any;
+    component.state.messages.push({
+      role: 'workflow_group', content: 'Parallel workflow',
+      groupId: 'request-1\u0000main:1:release-count', activities
+    });
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'subagent_completed', content: 'Counted.',
+      metadata: {
+        nodeId, parentNodeId: 'main:1:release-count',
+        agentId: nodeId, agentName: 'Counter 1',
+        executionScope: 'worker', conversationKind: 'PARALLEL', executionKind: 'parallel'
+      }
+    });
+
+    expect(component.state.messages.filter(message => message.role === 'workflow_group'))
+      .toHaveLength(1);
+    expect(activities[0]).toMatchObject({status: 'completed', content: 'Counted.', inProgress: false});
+  });
+
   it('shows a specialist guard-blocked tool as awaiting approval in the agent timeline', () => {
     startPublishedRequest();
     (component as any).handleSocketEvent(activity(

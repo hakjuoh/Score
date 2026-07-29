@@ -818,7 +818,7 @@ public class AiChatController {
         }
     }
 
-    private AiChatSocketEvent socketEvent(ChatRequest request, long sequence, AiExecutionEvent event) {
+    static AiChatSocketEvent socketEvent(ChatRequest request, long sequence, AiExecutionEvent event) {
         if ("assistant_update".equals(event.type())) {
             return AiChatSocketEvent.assistantUpdate(request.requestId(), request.conversationId(),
                     sequence, event.content());
@@ -842,7 +842,7 @@ public class AiChatController {
                 return AiChatSocketEvent.elicitationRequired(request.requestId(),
                         request.conversationId(), sequence, event.content(), event.metadata());
             }
-            if ("guide".equals(event.subtype())) {
+            if ("guide".equals(event.subtype()) || "workflow_result".equals(event.subtype())) {
                 return AiChatSocketEvent.system(request.requestId(), request.conversationId(), sequence,
                         event.subtype(), event.content(), event.metadata());
             }
@@ -870,6 +870,7 @@ public class AiChatController {
                 || "context_compacted".equals(event.subtype())
                 || "provider_error".equals(event.subtype())
                 || "provider_retry".equals(event.subtype())
+                || "workflow_result".equals(event.subtype())
                 || "guide".equals(event.subtype())
                 || isWorkflowLifecycleEvent(event.subtype()));
     }
@@ -882,6 +883,7 @@ public class AiChatController {
                 || "elicitation_required".equals(event.subtype())
                 || "provider_error".equals(event.subtype())
                 || "provider_retry".equals(event.subtype())
+                || "workflow_result".equals(event.subtype())
                 || isWorkflowLifecycleEvent(event.subtype());
     }
 

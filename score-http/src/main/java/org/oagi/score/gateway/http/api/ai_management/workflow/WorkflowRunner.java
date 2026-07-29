@@ -10,6 +10,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentToolPolicy;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentWorkflowContext;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrailRefusedException;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutputRetryHandoffException;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.model.WorkflowPlanValidator;
@@ -307,6 +308,19 @@ public final class WorkflowRunner {
                     : output.withMetadata(Map.copyOf(metadata));
             WorkflowResult result = WorkflowResult.success(
                     workflow.id(), completedOutput, results);
+            if (depth == 1 && completedOutput.passedOutputGuardrail(
+                    AgentOutputGuardrail.Scope.PUBLIC)) {
+                recorder.callWhileActive(() -> {
+                    budget.checkpoint();
+                    recorder.workflowResult(completedOutput,
+                            lifecycle(namespace, "result", Map.of(
+                                    "completed", completed.size(),
+                                    "failed", directFailed,
+                                    "failure_count", failed,
+                                    "partial_failure", failed > 0)));
+                    return null;
+                });
+            }
             recorder.terminalLifecycle("workflow_completed", plan.synthesisGuideMessage(),
                     lifecycle(namespace, "completed", Map.of(
                             "completed", completed.size(),
