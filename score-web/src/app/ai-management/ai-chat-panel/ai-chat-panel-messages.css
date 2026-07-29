@@ -137,29 +137,30 @@
   color: #b91c1c;
 }
 
-.message-row.progress.alert .message-bubble {
+.message-row.progress.status-error .message-bubble {
   background: transparent;
   color: #b91c1c;
 }
 
-.message-row.progress.alert .message-text {
+.message-row.progress.status-error .message-text.status-segmented {
   display: flex;
+  gap: 0.3em;
+  min-width: 0;
+}
+
+.message-row.progress.status-error .status-primary {
   min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.message-row.progress.alert .alert-status-reason {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.message-row.progress.alert .alert-status-wait {
+.message-row.progress.status-error .status-suffix {
   flex: none;
-  white-space: pre;
+  white-space: nowrap;
 }
 
-::ng-deep score-ai-chat-panel .message-row.progress.alert .message-progress-spinner circle {
+::ng-deep score-ai-chat-panel .message-row.progress.status-error .message-progress-spinner circle {
   stroke: #b91c1c;
 }
 

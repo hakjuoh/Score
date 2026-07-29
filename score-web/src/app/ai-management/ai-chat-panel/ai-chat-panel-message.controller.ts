@@ -13,6 +13,9 @@ import {
 } from './domain/ai-chat-event-semantics';
 import {FORMATTER_META_RESPONSE_PATTERN} from './domain/ai-chat-panel-display.constants';
 import {
+  AiAgentActivity,
+  AiAgentActivityGroupResolver,
+  agentActivityOwnerId,
   agentActivityUpdate,
   isExecutionActivityEvent,
   isSpecialistActivityEvent,
@@ -26,12 +29,17 @@ import {
 import {AiChatSocketEvent} from './domain/ai-chat-panel.model';
 
 export abstract class AiChatPanelMessageController extends AiChatPanelEventController {
+  private readonly liveAgentGroupResolver = new AiAgentActivityGroupResolver();
+  private readonly liveAgentGroups = new Map<string, AiAgentActivity[]>();
+  private liveAgentGroupOwner?: string;
+  private activeLiveAgentGroupId?: string;
+  private pendingProviderError?: {requestId: string; content: string};
+
   protected handleSystemEvent(event: AiChatSocketEvent): void {
     const content = this.primaryContent(event);
     if (isExecutionActivityEvent(event)) {
       if (this.state.currentStatus === 'Retrying') {
-        this.clearProviderRetryCountdown();
-        this.clearStatusMessage();
+        this.clearProviderRecoveryState();
       }
       this.applyAgentActivity(event);
       return;
@@ -43,7 +51,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         const workflow = event.metadata?.['active_workflow'];
         this.state.activeWorkflow = typeof workflow === 'string' ? workflow.trim() : '';
       }
-      if (upsertAgentGuideEvent(this.state.agentActivities, event)) return;
+      if (upsertAgentGuideEvent(this.agentActivitiesFor(event), event)) return;
       // A rolling-upgrade worker may emit its guide immediately before its
       // lifecycle row creates the activity. The lifecycle carries the same
       // status text, so never leak that worker-owned guide into the main chat.
@@ -123,6 +131,14 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       this.state.currentStatus = 'Using fallback model';
       return;
     }
+    if (event.subtype === 'workflow_result' && content) {
+      this.clearProviderRecoveryState();
+      this.state.messages.push({
+        role: 'assistant', content, eventType: 'workflow_result', requestId: event.requestId
+      });
+      this.state.currentStatus = 'Reviewing workflow result';
+      return;
+    }
     if (event.subtype === 'provider_error' && this.handleProviderErrorEvent(event)) {
       return;
     }
@@ -157,12 +173,12 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     if (!content) return false;
     if (this.state.cancellation.phase !== 'idle') return true;
     if (isSpecialistActivityEvent(event)) {
-      upsertAgentProviderErrorEvent(this.state.agentActivities, event);
+      upsertAgentProviderErrorEvent(this.agentActivitiesFor(event), event);
       return true;
     }
-    this.clearProviderRetryCountdown();
-    this.clearStatusMessage();
-    this.state.messages.push({role: 'error', content});
+    this.clearProviderRecoveryState();
+    this.pendingProviderError = {requestId: event.requestId, content};
+    this.showStatus(content, true, {eventType: 'provider_retry', tone: 'error'});
     this.scrollToBottom();
     return true;
   }
@@ -258,9 +274,8 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   }
 
   /**
-   * Renders one transient alert-styled status line for a retried provider
-   * call and ticks its countdown down each second until the next event
-   * replaces the line. The partial streamed answer is dropped first because
+   * Coalesces one provider failure and its retry narration into a transient,
+   * error-toned status line. The partial streamed answer is dropped first because
    * the retried call re-streams the whole current segment. A retry from a
    * fan-out WORKER shares the lead's request identity and belongs to that
    * agent's timeline; it must never disturb the main status row or bubble.
@@ -276,48 +291,38 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       return true;
     }
     if (isSpecialistActivityEvent(event)) {
-      upsertAgentRetryEvent(this.state.agentActivities, event);
+      upsertAgentRetryEvent(this.agentActivitiesFor(event), event);
       return true;
     }
-    this.clearProviderRetryCountdown();
+    const pendingReason = this.pendingProviderError?.requestId === event.requestId
+      ? this.pendingProviderError.content : undefined;
+    this.clearProviderRecoveryState();
     if (this.messageTracker.removeStreamedSegment(this.state, event.requestId)) {
       this.assistantMessageIndexesByRequestId.delete(event.requestId);
     }
     const retryMessage = this.primaryContent(event).trim()
       || `The model provider request failed; retrying (attempt ${retry.attempt} of ${retry.maxAttempts}).`;
-    let secondsRemaining = Math.ceil(retry.delayMillis / 1000);
-    const renderCountdown = () => {
-      const wait = secondsRemaining > 0
-        ? `Retrying in ${secondsRemaining}s`
-        : 'Reconnecting…';
-      this.showStatus(retryMessage, true, ` · ${wait}`);
-    };
-    renderCountdown();
+    const reason = pendingReason || (typeof event.metadata?.['reason'] === 'string'
+      ? event.metadata['reason'].trim() : '');
+    const reasonWithStop = reason && !/[.!?]$/.test(reason) ? `${reason}.` : reason;
+    this.showStatus(reasonWithStop || retryMessage, true, {
+      eventType: 'provider_retry', tone: 'error',
+      ...(reasonWithStop ? {suffix: retryMessage} : {})
+    });
     this.state.currentStatus = 'Retrying';
-    if (secondsRemaining > 0) {
-      this.providerRetryInterval = window.setInterval(() => {
-        secondsRemaining -= 1;
-        renderCountdown();
-        if (secondsRemaining <= 0) {
-          this.clearProviderRetryCountdown();
-        }
-      }, 1000);
-    }
     return true;
   }
 
-  protected clearProviderRetryCountdown(): void {
-    if (this.providerRetryInterval !== undefined) {
-      window.clearInterval(this.providerRetryInterval);
-      this.providerRetryInterval = undefined;
-    }
+  protected clearProviderRecoveryState(): void {
+    this.pendingProviderError = undefined;
+    this.clearStatusMessage('provider_retry');
   }
 
   protected upsertToolGroup(event: AiChatSocketEvent): void {
     if (this.divertSpecialistToolEvent(event)) {
       return;
     }
-    this.clearProviderRetryCountdown();
+    this.clearProviderRecoveryState();
     this.messageTracker.upsertToolGroup(this.state, event);
   }
 
@@ -325,7 +330,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     if (this.divertSpecialistToolEvent(event)) {
       return;
     }
-    this.clearProviderRetryCountdown();
+    this.clearProviderRecoveryState();
     this.messageTracker.handleToolCall(this.state, event);
   }
 
@@ -338,7 +343,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     if (!isSpecialistToolEvent(event)) {
       return false;
     }
-    upsertAgentToolEvent(this.state.agentActivities, event);
+    upsertAgentToolEvent(this.agentActivitiesFor(event), event);
     return true;
   }
 
@@ -385,6 +390,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         || event.subtype === 'model_fallback'
         || event.subtype === 'provider_error'
         || event.subtype === 'provider_retry'
+        || event.subtype === 'workflow_result'
         || event.subtype === 'context_usage'
         || event.subtype === 'context_compacted'
         || event.subtype === 'guide'
@@ -406,17 +412,17 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   private applyAgentActivity(event: AiChatSocketEvent): void {
     const update = agentActivityUpdate(event);
     if (!update) return;
-    const startsAnotherExecution = update.isLead && update.status === 'started'
-      && this.state.agentActivities.length > 0
-      && this.state.agentActivities.every(activity => !activity.inProgress)
-      && !this.state.agentActivities.some(activity => activity.agentId === update.agentId);
-    if (startsAnotherExecution) {
-      // Evaluator/optimizer iterations are separate executions in one request.
-      // Replacing the array preserves the prior group's settled snapshot.
-      this.state.agentActivities = [];
+    this.prepareLiveAgentOwner(event);
+    const groupId = this.liveAgentGroupResolver.resolve(event);
+    let activities = this.attachedLiveAgentGroup(groupId);
+    const firstActivity = !activities;
+    if (!activities) {
+      activities = [];
+      this.liveAgentGroups.set(groupId, activities);
+      this.activeLiveAgentGroupId = groupId;
+      this.state.agentActivities = activities;
     }
-    const firstActivity = this.state.agentActivities.length === 0;
-    if (!upsertAgentActivity(this.state.agentActivities, update)) {
+    if (!upsertAgentActivity(activities, update)) {
       return;
     }
     if (firstActivity) {
@@ -426,10 +432,48 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       this.state.messages.push({
         role: update.executionKind === 'parallel' ? 'workflow_group' : 'agent_group',
         content: update.executionKind === 'parallel' ? 'Parallel workflow' : 'Delegated workflow',
-        activities: this.state.agentActivities
+        groupId,
+        activities
       });
     }
-    this.state.currentStatus = this.aggregateAgentStatus();
+    if (groupId === this.activeLiveAgentGroupId) {
+      this.state.currentStatus = this.aggregateAgentStatus();
+    }
+  }
+
+  private agentActivitiesFor(event: AiChatSocketEvent): AiAgentActivity[] {
+    this.prepareLiveAgentOwner(event);
+    const groupId = this.liveAgentGroupResolver.resolve(event);
+    return this.attachedLiveAgentGroup(groupId) || this.state.agentActivities;
+  }
+
+  /** Drops stale arrays after recovery/restore replaces the transcript in place. */
+  private attachedLiveAgentGroup(groupId: string): AiAgentActivity[] | undefined {
+    const activities = this.liveAgentGroups.get(groupId);
+    if (activities) {
+      const attached = activities === this.state.agentActivities
+        || this.state.messages.some(message => message.activities === activities);
+      if (attached) return activities;
+      this.liveAgentGroups.delete(groupId);
+      if (this.activeLiveAgentGroupId === groupId) this.activeLiveAgentGroupId = undefined;
+    }
+    const restored = this.state.messages.find(message =>
+      message.groupId === groupId && !!message.activities)?.activities;
+    if (restored) {
+      this.liveAgentGroups.set(groupId, restored);
+      this.activeLiveAgentGroupId = groupId;
+      this.state.agentActivities = restored;
+    }
+    return restored;
+  }
+
+  private prepareLiveAgentOwner(event: AiChatSocketEvent): void {
+    const owner = agentActivityOwnerId(event);
+    if (this.liveAgentGroupOwner === owner) return;
+    this.liveAgentGroupOwner = owner;
+    this.liveAgentGroups.clear();
+    this.activeLiveAgentGroupId = undefined;
+    this.liveAgentGroupResolver.clear();
   }
 
   private aggregateAgentStatus(): string {

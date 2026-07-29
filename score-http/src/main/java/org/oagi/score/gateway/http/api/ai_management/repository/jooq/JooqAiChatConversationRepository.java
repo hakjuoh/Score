@@ -29,11 +29,13 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.jooq.impl.DSL.coalesce;
@@ -299,6 +301,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
                 .orderBy(AI_CHAT_STEP.CREATED_AT.desc(), AI_CHAT_STEP.AI_CHAT_STEP_ID.desc())
                 .fetch(this::historyMessage);
         Collections.reverse(messages);
+        messages = coalesceFinalWorkflowResult(messages);
         List<ChatHistoryMessage> indexedMessages = new ArrayList<>(messages.size());
         for (int index = 0; index < messages.size(); index++) {
             indexedMessages.add(withIndex(messages.get(index), index));
@@ -409,10 +412,11 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
                 || "PARALLEL".equals(string(extra, "conversation_kind"));
         String role = switch (kind) {
             case "assistant", "user", "error", "progress", "tool_call", "guide" -> kind;
+            case "workflow_result" -> "assistant";
             case "mutation_approval_batch_requested", "mutation_approval_decision" -> "guide";
             case "tool_call_update" -> "tool_call";
             case "agent_lifecycle" -> "agent_event";
-            case "provider_error" -> workerOwned ? "provider_event" : "error";
+            case "provider_error" -> workerOwned ? "provider_event" : "debug";
             case "provider_retry" -> workerOwned ? "provider_event" : "debug";
             default -> "debug";
         };
@@ -430,6 +434,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         String subtype = switch (kind) {
             case "mutation_approval_batch_requested", "mutation_approval_decision" -> kind;
             case "agent_lifecycle" -> string(extra, "lifecycle_subtype");
+            case "workflow_result" -> kind;
             case "provider_error", "provider_retry" -> kind;
             default -> toolStatus;
         };
@@ -445,6 +450,28 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         return new ChatHistoryMessage(index, message.role(), message.content(), message.requestId(),
                 message.turnId(), message.groupId(), message.toolCallId(), message.toolCallSequence(),
                 message.subtype(), message.visibility(), message.metadata());
+    }
+
+    /** Keeps interim iteration results while removing the final answer's identical preview. */
+    static List<ChatHistoryMessage> coalesceFinalWorkflowResult(
+            List<ChatHistoryMessage> messages) {
+        List<ChatHistoryMessage> projected = new ArrayList<>(messages.size());
+        Set<WorkflowResultKey> finalAnswers = new HashSet<>();
+        for (int index = messages.size() - 1; index >= 0; index--) {
+            ChatHistoryMessage message = messages.get(index);
+            WorkflowResultKey key = new WorkflowResultKey(
+                    message.requestId(), message.content());
+            if ("workflow_result".equals(message.subtype()) && finalAnswers.contains(key)) {
+                continue;
+            }
+            if ("assistant".equals(message.role())
+                    && !"workflow_result".equals(message.subtype())) {
+                finalAnswers.add(key);
+            }
+            projected.add(message);
+        }
+        Collections.reverse(projected);
+        return List.copyOf(projected);
     }
 
     private TrajectoryRow trajectoryRow(Record record) {
@@ -599,6 +626,8 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
 
     private record ChildTrajectoryHeader(ULong internalId, String guid, String conversationKind,
                                          String agentId, String parentRequestId) {}
+
+    private record WorkflowResultKey(String requestId, String content) {}
 
     private record TrajectoryRow(ULong conversationId, long sequence,
                                  String requestId, String source, String messageKind,

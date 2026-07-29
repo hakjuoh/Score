@@ -115,10 +115,18 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       this.acknowledgementTimeout = undefined;
     }
     if (event.type === 'assistant_update' && this.primaryContent(event)) {
-      this.clearProviderRetryCountdown();
+      this.clearProviderRecoveryState();
       this.completeProgressMessages();
       this.clearStatusMessage();
       const content = this.primaryContent(event);
+      const alreadyShownAsWorkflowResult = this.state.messages.some(message =>
+        message.role === 'assistant' && message.eventType === 'workflow_result'
+        && message.requestId === event.requestId && message.content === content);
+      if (alreadyShownAsWorkflowResult) {
+        this.state.currentStatus = 'Working';
+        this.scrollToBottom();
+        return;
+      }
       const lastIndex = this.state.messages.length - 1;
       const last = lastIndex >= 0 ? this.state.messages[lastIndex] : undefined;
       if (last?.role === 'progress' && last.eventType === 'assistant_update'
@@ -472,32 +480,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     this.activeRequestId = undefined;
     const content = withoutTextualToolCallPlaceholder(this.primaryContent(event));
     if (content) {
-      // Locate the live streamed bubble by identity, not by remembered index:
-      // out-of-order tool rows may have been spliced in before it. Interim
-      // segments of the same request are earlier, so the last match wins.
-      // (Reverse loop instead of findLastIndex: the build targets ES2022.)
-      let streamedIndex = -1;
-      for (let index = this.state.messages.length - 1; index >= 0; index--) {
-        const message = this.state.messages[index];
-        if (message.role === 'progress' && message.eventType === 'assistant_update'
-          && message.requestId === event.requestId) {
-          streamedIndex = index;
-          break;
-        }
-      }
-      if (streamedIndex === this.state.messages.length - 1 && streamedIndex >= 0) {
-        this.state.messages[streamedIndex] = {role: 'assistant', content};
-      } else {
-        if (streamedIndex >= 0) {
-          // The answer always renders as the turn's last row, after every tool
-          // row that produced it. Tool tracking is cleared below, so removing
-          // the stale streamed bubble cannot desynchronize row indexes.
-          this.state.messages.splice(streamedIndex, 1);
-        }
-        this.state.messages.push({role: 'assistant', content});
-      }
-      this.assistantMessageIndexesByRequestId.set(
-        event.requestId, this.state.messages.length - 1);
+      this.commitAssistantMessage(event.requestId, content);
     }
     this.clearToolCallTracking();
     this.state.pending = false;
@@ -513,6 +496,46 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     if (!this.mutationDecisionOpen) {
       this.focusPrompt();
     }
+  }
+
+  /**
+   * Commits one canonical assistant answer across WebSocket and REST. An
+   * identical workflow preview and any streamed copy are replaced by one final
+   * row at the chronological end of the turn.
+   */
+  protected commitAssistantMessage(requestId: string, content: string): number {
+    let workflowResultIndex = -1;
+    let streamedIndex = -1;
+    for (let index = this.state.messages.length - 1; index >= 0; index--) {
+      const message = this.state.messages[index];
+      if (workflowResultIndex < 0 && message.role === 'assistant'
+        && message.eventType === 'workflow_result' && message.requestId === requestId
+        && message.content === content) {
+        workflowResultIndex = index;
+      }
+      if (streamedIndex < 0 && message.role === 'progress'
+        && message.eventType === 'assistant_update' && message.requestId === requestId) {
+        streamedIndex = index;
+      }
+      if (workflowResultIndex >= 0 && streamedIndex >= 0) break;
+    }
+
+    if (workflowResultIndex >= 0) {
+      for (const index of [workflowResultIndex, streamedIndex]
+        .filter(candidate => candidate >= 0)
+        .sort((left, right) => right - left)) {
+        this.state.messages.splice(index, 1);
+      }
+      this.state.messages.push({role: 'assistant', content});
+    } else if (streamedIndex === this.state.messages.length - 1 && streamedIndex >= 0) {
+      this.state.messages[streamedIndex] = {role: 'assistant', content};
+    } else {
+      if (streamedIndex >= 0) this.state.messages.splice(streamedIndex, 1);
+      this.state.messages.push({role: 'assistant', content});
+    }
+    const index = this.state.messages.length - 1;
+    this.assistantMessageIndexesByRequestId.set(requestId, index);
+    return index;
   }
 
   protected beginMutationRepeatDraft(
