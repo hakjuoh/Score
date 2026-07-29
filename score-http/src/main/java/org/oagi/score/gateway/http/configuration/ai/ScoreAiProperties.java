@@ -382,13 +382,14 @@ public class ScoreAiProperties {
         }
     }
 
-    /** Process-wide fan-out admission and one shared deadline for each specialist wave. */
+    /** Process-wide fan-out admission and per-invocation inactivity detection. */
     public static class MultiAgent {
         private int maxConcurrentSpecialists = 16;
         // Both caps are per application instance; cluster-wide bounding comes from
         // the per-user active-request limit in the shared AI request registry.
         private int maxConcurrentSpecialistsPerUser = 8;
-        private Duration specialistTimeout = Duration.ofMinutes(2);
+        private Duration specialistInactivityTimeout;
+        private Duration specialistTimeout;
         private int maximumWorkflowIterations = 3;
 
         public int getMaxConcurrentSpecialists() { return maxConcurrentSpecialists; }
@@ -399,10 +400,20 @@ public class ScoreAiProperties {
         public void setMaxConcurrentSpecialistsPerUser(int maxConcurrentSpecialistsPerUser) {
             this.maxConcurrentSpecialistsPerUser = maxConcurrentSpecialistsPerUser;
         }
-        public Duration getSpecialistTimeout() { return specialistTimeout; }
+        public Duration getSpecialistInactivityTimeout() {
+            return specialistInactivityTimeout != null ? specialistInactivityTimeout
+                    : specialistTimeout != null ? specialistTimeout : Duration.ofMinutes(2);
+        }
+        public void setSpecialistInactivityTimeout(Duration value) {
+            specialistInactivityTimeout = value;
+        }
+        /** @deprecated use {@link #getSpecialistInactivityTimeout()}. */
+        @Deprecated(forRemoval = false)
+        public Duration getSpecialistTimeout() { return getSpecialistInactivityTimeout(); }
+        /** @deprecated use {@link #setSpecialistInactivityTimeout(Duration)}. */
+        @Deprecated(forRemoval = false)
         public void setSpecialistTimeout(Duration specialistTimeout) {
-            this.specialistTimeout = specialistTimeout != null
-                    ? specialistTimeout : Duration.ofMinutes(2);
+            this.specialistTimeout = specialistTimeout;
         }
         public int getMaximumWorkflowIterations() { return maximumWorkflowIterations; }
         public void setMaximumWorkflowIterations(int maximumWorkflowIterations) {

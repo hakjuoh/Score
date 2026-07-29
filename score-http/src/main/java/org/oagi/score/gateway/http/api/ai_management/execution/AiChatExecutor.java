@@ -212,7 +212,7 @@ public final class AiChatExecutor {
         var before = chatContext.recorder().usageSnapshot();
         Result result = execute(SpringAiExecutionContextMapper.toProvider(
                         chatContext, session.middlewareState()),
-                session.instruction());
+                session.instruction(), session.progress());
         // Do not reject the transport result here: AgentRunner records billable usage
         // first and performs the terminal checkpoint before any response-side action.
         // This preserves accounting for a provider that completes during cancellation.
@@ -243,11 +243,18 @@ public final class AiChatExecutor {
 
     /** Package-private provider implementation; the shared Runner supplies the instruction. */
     Result execute(Context context, Agent.Instruction instruction) {
-        context.recorder().verifyActive();
-        return executeChat(context, Objects.requireNonNull(instruction, "instruction"));
+        return execute(context, instruction, () -> { });
     }
 
-    private Result executeChat(Context context, Agent.Instruction instruction) {
+    Result execute(Context context, Agent.Instruction instruction,
+                   Runnable progress) {
+        context.recorder().verifyActive();
+        return executeChat(context, Objects.requireNonNull(instruction, "instruction"),
+                Objects.requireNonNull(progress, "progress"));
+    }
+
+    private Result executeChat(Context context, Agent.Instruction instruction,
+                               Runnable progress) {
         ExecutionState state = new ExecutionState();
         ExecutionScope scope = executionScope(context);
         String runId = UUID.randomUUID().toString();
@@ -264,13 +271,13 @@ public final class AiChatExecutor {
                                 || context.agentToolBinding() != null) {
                             // Tool-less calls (planner, evaluator, no-tool leaves) never consult the
                             // MCP registry, so they must not pay the per-call MCP handshake.
-                            result = execute(context, null, state, instruction);
+                            result = execute(context, null, state, instruction, progress);
                         } else {
                             try (ConnectCenterMcpClientFactory.McpSession mcp = elicitations != null
                                     ? mcpClients.open(context.requester(), elicitation -> handleElicitation(
                                     context, context.request(), context.recorder(), elicitation))
                                     : mcpClients.open(context.requester())) {
-                                result = execute(context, mcp, state, instruction);
+                                result = execute(context, mcp, state, instruction, progress);
                             }
                         }
                         identified = result.withExecutionIdentity(context.agentId(),
@@ -466,7 +473,8 @@ public final class AiChatExecutor {
     }
 
     private Result execute(Context context, ConnectCenterMcpClientFactory.McpSession mcp,
-                           ExecutionState executionState, Agent.Instruction instruction) {
+                           ExecutionState executionState, Agent.Instruction instruction,
+                           Runnable progress) {
         var request = context.request();
         AiTrajectoryRecorder recorder = context.recorder();
         ChatOptions options = optionsFactory.create(
@@ -552,12 +560,17 @@ public final class AiChatExecutor {
                                     throw new CancellationException(
                                             "The assistant request stopped before Tool execution.");
                                 }
+                                progress.run();
                                 if (requests != null) {
                                     requests.admitToolExecution(scopeToCheck.requestId());
                                 } else {
                                     recorder.verifyActive();
                                 }
-                                return Objects.requireNonNull(action, "action").get();
+                                try {
+                                    return Objects.requireNonNull(action, "action").get();
+                                } finally {
+                                    progress.run();
+                                }
                             }
                     };
                     ToolExecutionGateway gateway = new ToolExecutionGateway(coreTools, toolGuardrails,
@@ -605,7 +618,7 @@ public final class AiChatExecutor {
             long completedToolCallsBeforeAnswer = recorder.completedToolCallCount();
             String answer = invoke(assistant, options, request, messages, recorder,
                     context.streamVisibleContent(), internalPersona, executionScope(context),
-                    executionState, instruction);
+                    executionState, instruction, progress);
             int textualToolCallRecovery = 0;
             while (isTextualToolCallPlaceholder(answer)
                     && recorder.completedToolCallCount() == completedToolCallsBeforeAnswer
@@ -616,7 +629,7 @@ public final class AiChatExecutor {
                         AiExecutionInstructions.Template.TEXTUAL_TOOL_CALL_RECOVERY).value()));
                 answer = invoke(assistant, options, request, recoveryMessages, recorder,
                         context.streamVisibleContent(), internalPersona, executionScope(context),
-                        executionState, instruction);
+                        executionState, instruction, progress);
             }
             if (isTextualToolCallPlaceholder(answer)) {
                 throw new IllegalStateException(
@@ -671,7 +684,7 @@ public final class AiChatExecutor {
                         AiExecutionInstructions.Template.APPROVAL_CONTINUATION).value()));
                 answer = invoke(assistant, options, request, approvalMessages, recorder,
                         false, internalPersona, executionScope(context), executionState,
-                        instruction);
+                        instruction, progress);
             }
             int continuation = 0;
             while (guardedSession != null && guardedSession.mutationCompleted()
@@ -688,7 +701,7 @@ public final class AiChatExecutor {
                         AiExecutionInstructions.Template.READ_BACK_CONTINUATION).value()));
                 answer = invoke(assistant, options, request, continuationMessages, recorder,
                         false, internalPersona, executionScope(context), executionState,
-                        instruction);
+                        instruction, progress);
             }
             if (guardedSession != null && guardedSession.mutationCompleted()
                     && !guardedSession.confirmationRequired()
@@ -750,10 +763,10 @@ public final class AiChatExecutor {
                           List<Message> messages, AiTrajectoryRecorder recorder,
                           boolean streamVisibleContent, boolean internalPersona,
                           ExecutionScope scope, ExecutionState executionState,
-                          Agent.Instruction instruction) {
+                          Agent.Instruction instruction, Runnable progress) {
         if (providerRetry == null) {
             return attemptInvoke(assistant, options, request, messages, recorder,
-                    streamVisibleContent, internalPersona, scope, instruction);
+                    streamVisibleContent, internalPersona, scope, instruction, progress);
         }
         // Transient provider failures are retried with visible backoff. An attempt
         // that executed a data-changing tool is terminal: the recorder's mutation
@@ -762,20 +775,22 @@ public final class AiChatExecutor {
                 () -> Math.max(executionState.completedMutations(),
                         recorder.executedMutationToolCallCount()), executionState,
                 () -> attemptInvoke(assistant, options, request, messages, recorder,
-                        streamVisibleContent, internalPersona, scope, instruction));
+                        streamVisibleContent, internalPersona, scope, instruction, progress));
     }
 
     private String attemptInvoke(ChatClient assistant, ChatOptions options,
                                  ChatRequest request,
                                  List<Message> messages, AiTrajectoryRecorder recorder,
                                  boolean streamVisibleContent, boolean internalPersona,
-                                 ExecutionScope scope, Agent.Instruction instruction) {
+                                 ExecutionScope scope, Agent.Instruction instruction,
+                                 Runnable progress) {
         recorder.verifyActive();
         if (Thread.currentThread().isInterrupted()
                 || requests != null && requests.shouldDiscardResult(scope.requestId())) {
             throw new CancellationException(
                     "The assistant request stopped before model execution.");
         }
+        progress.run();
         // Visible text emitted before a tool call is interim narration, not the
         // answer. Tool completions mark segment boundaries; the answer restarts
         // at the first substantive chunk after a boundary so it reflects the
@@ -809,6 +824,9 @@ public final class AiChatExecutor {
                             .param(AiTrajectoryRecorder.PHASE_CONTEXT_KEY, "assistant"))
                     .stream()
                     .chatResponse()
+                    // Raw provider chunks are activity even when they contain only
+                    // hidden reasoning or Tool-call protocol data.
+                    .doOnNext(ignored -> progress.run())
                     .map(this::visibleContent)
                     .filter(content -> !content.isEmpty())
                     .doOnNext(content -> {

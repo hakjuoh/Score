@@ -32,13 +32,22 @@ declarative `AgentDecision` for the definition selected by the Workflow:
 - `Handoff`: select the next independent Agent in the main call chain.
 - `Delegate`: schedule a recursively executable child Workflow graph.
 
-One request-global budget is shared by the main call chain, every child Workflow, handoff, Planner,
-Evaluator, worker, and Synthesizer call. It is bounded to 128 charged operations, child Workflow
+One request-global call budget is shared by the main call chain, every child Workflow, handoff,
+Planner, Evaluator, worker, and Synthesizer call. It is bounded to 128 charged operations, child Workflow
 depth to 8, Workflow members to 32, Agent calls in each plan to the request's configured maximum,
 and plan/evaluate iterations to
 `score.ai.multi-agent.maximum-workflow-iterations` (default 3). The request stop fence is checked
-before each charged operation. `score.ai.multi-agent.specialist-timeout` is one absolute deadline
-for the complete recursive run; blocked Agent calls are interrupted when it expires.
+before each charged operation. Every Agent invocation has an independent inactivity lease configured
+by `score.ai.multi-agent.specialist-inactivity-timeout` (default 2 minutes). Request preparation,
+model completion, Tool admission/completion, response handling, policy checks, and retries renew the
+lease. Polling does not. A child member that makes no observable progress is interrupted and recorded
+as a failed member while active siblings and partial-result synthesis continue. A stalled root or
+control-plane Agent terminates the request. The deprecated
+`SCORE_AI_MULTI_AGENT_SPECIALIST_TIMEOUT` environment variable remains a fallback for deployments
+that have not moved to `SCORE_AI_MULTI_AGENT_SPECIALIST_INACTIVITY_TIMEOUT`.
+This activity lease is separate from the transport-visible
+`score.ai.request-timeout` safety cap (10 minutes by default), which remains an absolute upper bound
+for one HTTP/WebSocket request and its request-registry lifecycle.
 
 ## Recursive plan contract
 

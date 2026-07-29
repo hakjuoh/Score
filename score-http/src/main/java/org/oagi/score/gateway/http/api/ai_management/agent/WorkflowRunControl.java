@@ -4,17 +4,23 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 
 import java.util.function.Supplier;
 
-/** Request-scoped cancellation/deadline and usage settlement port shared by recursive Agents. */
+/** Request-scoped cancellation, activity lease, and usage settlement port shared by Agents. */
 public interface WorkflowRunControl {
 
     WorkflowRunControl NOOP = new WorkflowRunControl() {
         @Override public void checkpoint() { }
+        @Override public void progress() { }
         @Override public void recordUsage(AiUsageSnapshot usage) { }
         @Override public void registerUsage(Supplier<AiUsageSnapshot> usage,
                                             Runnable lateWriteFence) { }
     };
 
     void checkpoint();
+
+    /** Records observable forward progress for the current Agent invocation. */
+    default void progress() {
+        checkpoint();
+    }
 
     void recordUsage(AiUsageSnapshot usage);
 
