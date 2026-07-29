@@ -5,6 +5,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiElicitationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiElicitationPending;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -29,10 +30,17 @@ public class AiElicitationService {
     private static final int MAX_PENDING = 10_000;
 
     private final Map<String, AiElicitationPending> pending = new ConcurrentHashMap<>();
-    private final Duration requestTimeout;
+    private final Duration elicitationTimeout;
+    private final AiRequestRegistry requests;
+
+    @Autowired
+    public AiElicitationService(ScoreAiProperties properties, AiRequestRegistry requests) {
+        this.elicitationTimeout = properties.getElicitationTimeout();
+        this.requests = requests;
+    }
 
     public AiElicitationService(ScoreAiProperties properties) {
-        this.requestTimeout = properties.getRequestTimeout();
+        this(properties, null);
     }
 
     public McpSchema.ElicitResult await(ScoreUser requester, String conversationId, String requestId,
@@ -46,18 +54,24 @@ public class AiElicitationService {
             throw new IllegalStateException("Too many AI user interactions are pending.");
         }
         String elicitationId = UUID.randomUUID().toString();
-        Instant expiresAt = Instant.now().plus(requestTimeout);
+        Instant expiresAt = Instant.now().plus(elicitationTimeout);
         AiElicitationPending interaction = new AiElicitationPending(
                 elicitationId, requester.userId().value().toString(), conversationId, requestId,
                 new CompletableFuture<>(), expiresAt);
         if (pending.putIfAbsent(elicitationId, interaction) != null) {
             throw new IllegalStateException("Could not reserve an AI user interaction.");
         }
+        boolean protectedFromInactivity = requests == null
+                || requests.interactionStarted(requestId);
+        if (!protectedFromInactivity) {
+            pending.remove(elicitationId, interaction);
+            return cancelled();
+        }
         try {
             noticeConsumer.accept(new AiElicitationNotice(elicitationId, requestId, conversationId,
                     request.message(), request.requestedSchema(), expiresAt));
             return interaction.response().get(
-                    Math.max(1L, requestTimeout.toMillis()), TimeUnit.MILLISECONDS);
+                    Math.max(1L, elicitationTimeout.toMillis()), TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return cancelled();
@@ -68,6 +82,9 @@ public class AiElicitationService {
                     exception.getCause());
         } finally {
             pending.remove(elicitationId, interaction);
+            if (requests != null) {
+                requests.interactionFinished(requestId);
+            }
         }
     }
 

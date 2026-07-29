@@ -27,6 +27,29 @@ class AiRequestRegistryTest {
             null, false, List.of());
 
     @Test
+    void requestInactivityLeaseRenewsAcrossMultipleOriginalWindows() {
+        AiRequestInactivityLease lease = new AiRequestInactivityLease(
+                Duration.ofNanos(100), 0L);
+
+        lease.progress(90L);
+        assertThat(lease.review(150L, false))
+                .isEqualTo(new AiRequestInactivityLease.Review(false, 40L));
+        lease.progress(180L);
+        assertThat(lease.review(250L, false))
+                .isEqualTo(new AiRequestInactivityLease.Review(false, 30L));
+        assertThat(lease.review(281L, false).expired()).isTrue();
+    }
+
+    @Test
+    void definiteInFlightWorkRenewsAnOtherwiseExpiredRequestLease() {
+        AiRequestInactivityLease lease = new AiRequestInactivityLease(
+                Duration.ofNanos(100), 0L);
+
+        assertThat(lease.review(101L, true))
+                .isEqualTo(new AiRequestInactivityLease.Review(false, 100L));
+    }
+
+    @Test
     void cancellationBeforeExecutionIsTerminalAndPreventsWorkerStart() {
         AiRequestRegistry registry = new AiRequestRegistry();
         AiRequestRegistry.Entry entry = registry.register("request-1", "conversation-1", user,
@@ -69,7 +92,7 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void rollsBackRegistrationWhenTheLifecycleSchedulerRejectsTheDeadline() {
+    void rollsBackRegistrationWhenTheLifecycleSchedulerRejectsTheInactivityReview() {
         var scheduler = Executors.newSingleThreadScheduledExecutor(
                 Thread.ofPlatform().daemon(true).factory());
         scheduler.shutdownNow();
@@ -280,7 +303,7 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void enforcesDeadlineBeforeQueuedWorkCanStart() throws Exception {
+    void timesOutInactiveQueuedWorkBeforeItCanStart() throws Exception {
         AiRequestRegistry registry = new AiRequestRegistry();
         AiRequestRegistry.Entry entry = registry.register("request-1", "conversation-1", user,
                 Instant.now().plusMillis(25));
@@ -289,11 +312,11 @@ class AiRequestRegistryTest {
 
         assertThat(registry.status("request-1", user).status()).isEqualTo("TIMED_OUT");
         assertThat(registry.start(entry)).isFalse();
-        assertThat(entry.hasDeadlineTask()).isFalse();
+        assertThat(entry.hasLeaseReviewTask()).isFalse();
     }
 
     @Test
-    void runningDeadlineInterruptsWorkButDoesNotClaimTerminalUntilTheWorkerStops() throws Exception {
+    void runningInactivityTimeoutInterruptsWorkButWaitsForTheWorkerToStop() throws Exception {
         AiRequestRegistry registry = new AiRequestRegistry();
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch interrupted = new CountDownLatch(1);
@@ -332,7 +355,296 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void nestedDeadlineFencesTheRequestWithoutSelfInterruptingItsWorker() {
+    void observableProgressRenewsARequestBeyondItsOriginalDeadline() throws Exception {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-active", "conversation-active", user,
+                Instant.now().plusMillis(120));
+        Instant originalDeadline = registry.status(entry.requestId(), user).deadline();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CompletableFuture<Void> work = CompletableFuture.runAsync(() -> {
+                assertThat(registry.start(entry)).isTrue();
+                started.countDown();
+                try {
+                    new CountDownLatch(1).await();
+                } catch (InterruptedException expected) {
+                    interrupted.countDown();
+                } finally {
+                    registry.finish(entry, new CancellationException());
+                }
+            }, executor);
+
+            assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
+            for (int signal = 0; signal < 8; signal++) {
+                Thread.sleep(40);
+                registry.progress(entry.requestId());
+            }
+
+            assertThat(interrupted.getCount()).isEqualTo(1L);
+            assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
+            assertThat(registry.status(entry.requestId(), user).deadline())
+                    .isAfter(originalDeadline);
+
+            assertThat(interrupted.await(1, TimeUnit.SECONDS)).isTrue();
+            work.get(1, TimeUnit.SECONDS);
+            assertThat(registry.status(entry.requestId(), user))
+                    .extracting(status -> status.status(), status -> status.statusReason())
+                    .containsExactly("TIMED_OUT", "INACTIVITY_TIMEOUT");
+        }
+    }
+
+    @Test
+    void inFlightMutationCannotBeInterruptedByTheRequestInactivityLease() throws Exception {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-mutating", "conversation-mutating", user,
+                Instant.now().plusMillis(80));
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CompletableFuture<Void> work = CompletableFuture.runAsync(() -> {
+                assertThat(registry.start(entry)).isTrue();
+                started.countDown();
+                try {
+                    new CountDownLatch(1).await();
+                } catch (InterruptedException expected) {
+                    interrupted.countDown();
+                } finally {
+                    registry.finish(entry, new CancellationException());
+                }
+            }, executor);
+
+            assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(registry.mutationStarted(entry.requestId())).isTrue();
+            Thread.sleep(240);
+
+            assertThat(interrupted.getCount()).isEqualTo(1L);
+            assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
+
+            registry.mutationFinished(entry.requestId());
+            assertThat(interrupted.await(1, TimeUnit.SECONDS)).isTrue();
+            work.get(1, TimeUnit.SECONDS);
+            assertThat(registry.status(entry.requestId(), user).status())
+                    .isEqualTo("UNKNOWN_RECONCILIATION_REQUIRED");
+        }
+    }
+
+    @Test
+    void pendingInteractionUsesItsOwnTimeoutThenStartsAFreshInactivityWindow() throws Exception {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-interaction", "conversation-interaction", user,
+                Instant.now().plusMillis(80));
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CompletableFuture<Void> work = CompletableFuture.runAsync(() -> {
+                assertThat(registry.start(entry)).isTrue();
+                started.countDown();
+                try {
+                    new CountDownLatch(1).await();
+                } catch (InterruptedException expected) {
+                    interrupted.countDown();
+                } finally {
+                    registry.finish(entry, new CancellationException());
+                }
+            }, executor);
+
+            assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(registry.interactionStarted(entry.requestId())).isTrue();
+            Thread.sleep(240);
+
+            assertThat(interrupted.getCount()).isEqualTo(1L);
+            assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
+
+            registry.interactionFinished(entry.requestId());
+            assertThat(interrupted.await(1, TimeUnit.SECONDS)).isTrue();
+            work.get(1, TimeUnit.SECONDS);
+            assertThat(registry.status(entry.requestId(), user).status())
+                    .isEqualTo("TIMED_OUT");
+        }
+    }
+
+    @Test
+    void explicitCancellationInterruptsAProtectedInteractionImmediately() throws Exception {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-interaction-cancel", "conversation-interaction-cancel", user,
+                Instant.now().plusSeconds(60));
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CompletableFuture<Void> work = CompletableFuture.runAsync(() -> {
+                assertThat(registry.start(entry)).isTrue();
+                started.countDown();
+                try {
+                    new CountDownLatch(1).await();
+                } catch (InterruptedException expected) {
+                    interrupted.countDown();
+                } finally {
+                    registry.finish(entry, new CancellationException());
+                }
+            }, executor);
+
+            assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(registry.interactionStarted(entry.requestId())).isTrue();
+            registry.cancel(entry.requestId(), "cancel-interaction",
+                    "conversation-interaction-cancel", entry.generation(), user);
+
+            assertThat(interrupted.await(1, TimeUnit.SECONDS)).isTrue();
+            work.get(1, TimeUnit.SECONDS);
+            assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("CANCELLED");
+        }
+    }
+
+    @Test
+    void mutationAdmissionAtTheTimeoutBoundaryRenewsInsteadOfInterrupting() throws Exception {
+        CountDownLatch timeoutReady = new CountDownLatch(1);
+        CountDownLatch allowTimeoutTransition = new CountDownLatch(1);
+        var scheduler = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().daemon(true).factory());
+        AiRequestRegistry registry = new AiRequestRegistry(
+                scheduler, Duration.ofSeconds(5), AiRequestStateStore.inMemory(), () -> {
+            timeoutReady.countDown();
+            try {
+                allowTimeoutTransition.await();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-racing-mutation", "conversation-racing-mutation", user,
+                Instant.now().plusMillis(80));
+        CountDownLatch workerStarted = new CountDownLatch(1);
+        CountDownLatch workerInterrupted = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CompletableFuture<Void> work = CompletableFuture.runAsync(() -> {
+                assertThat(registry.start(entry)).isTrue();
+                workerStarted.countDown();
+                try {
+                    new CountDownLatch(1).await();
+                } catch (InterruptedException expected) {
+                    workerInterrupted.countDown();
+                } finally {
+                    registry.finish(entry, new CancellationException());
+                }
+            }, executor);
+
+            assertThat(workerStarted.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(timeoutReady.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(registry.mutationStarted(entry.requestId())).isTrue();
+            allowTimeoutTransition.countDown();
+            Thread.sleep(120);
+
+            assertThat(workerInterrupted.getCount()).isEqualTo(1L);
+            assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
+
+            registry.mutationFinished(entry.requestId());
+            assertThat(workerInterrupted.await(1, TimeUnit.SECONDS)).isTrue();
+            work.get(1, TimeUnit.SECONDS);
+        } finally {
+            allowTimeoutTransition.countDown();
+            scheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    void completedMutationAtTheTimeoutBoundaryStillCountsAsActivity() throws Exception {
+        CountDownLatch timeoutReady = new CountDownLatch(1);
+        CountDownLatch allowTimeoutTransition = new CountDownLatch(1);
+        CountDownLatch workerStarted = new CountDownLatch(1);
+        CountDownLatch allowWorkerCompletion = new CountDownLatch(1);
+        CountDownLatch workerInterrupted = new CountDownLatch(1);
+        var scheduler = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().daemon(true).factory());
+        AiRequestRegistry registry = new AiRequestRegistry(
+                scheduler, Duration.ofSeconds(5), AiRequestStateStore.inMemory(), () -> {
+            timeoutReady.countDown();
+            try {
+                allowTimeoutTransition.await();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-fast-mutation", "conversation-fast-mutation", user,
+                Instant.now().plusMillis(120));
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CompletableFuture<Void> work = CompletableFuture.runAsync(() -> {
+                assertThat(registry.start(entry)).isTrue();
+                workerStarted.countDown();
+                try {
+                    allowWorkerCompletion.await();
+                    registry.finish(entry, null);
+                } catch (InterruptedException unexpected) {
+                    workerInterrupted.countDown();
+                    registry.finish(entry, new CancellationException());
+                }
+            }, executor);
+
+            assertThat(workerStarted.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(timeoutReady.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(registry.mutationStarted(entry.requestId())).isTrue();
+            registry.mutationFinished(entry.requestId());
+            allowTimeoutTransition.countDown();
+            Thread.sleep(40);
+
+            assertThat(workerInterrupted.getCount()).isEqualTo(1L);
+            assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
+
+            allowWorkerCompletion.countDown();
+            work.get(1, TimeUnit.SECONDS);
+            assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("COMPLETED");
+        } finally {
+            allowTimeoutTransition.countDown();
+            allowWorkerCompletion.countDown();
+            scheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    void mutationCompletionRenewsBeforeRemovingTheInFlightFence() throws Exception {
+        CountDownLatch mutationDecremented = new CountDownLatch(1);
+        CountDownLatch allowCompletion = new CountDownLatch(1);
+        var scheduler = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().daemon(true).factory());
+        AiRequestRegistry registry = new AiRequestRegistry(
+                scheduler, Duration.ofSeconds(5), AiRequestStateStore.inMemory(),
+                () -> { }, () -> {
+            mutationDecremented.countDown();
+            try {
+                allowCompletion.await();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-finishing-mutation", "conversation-finishing-mutation", user,
+                Instant.now().plusMillis(200));
+        assertThat(registry.start(entry)).isTrue();
+        assertThat(registry.mutationStarted(entry.requestId())).isTrue();
+        Thread.sleep(180);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CompletableFuture<Void> finish = CompletableFuture.runAsync(
+                    () -> registry.mutationFinished(entry.requestId()), executor);
+
+            assertThat(mutationDecremented.await(1, TimeUnit.SECONDS)).isTrue();
+            Thread.sleep(80);
+
+            assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
+            allowCompletion.countDown();
+            finish.get(1, TimeUnit.SECONDS);
+            assertThat(registry.finish(entry, null)).isEqualTo("COMPLETED");
+        } finally {
+            allowCompletion.countDown();
+            scheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    void nestedAgentStallFencesTheRequestWithoutSelfInterruptingItsWorker() {
         Thread.interrupted();
         AiRequestRegistry registry = new AiRequestRegistry();
         AiRequestRegistry.Entry entry = registry.register(
@@ -404,7 +716,7 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void anEarlierUserCancellationIsNotRelabeledAsTimeoutAtTheDeadline() throws Exception {
+    void anEarlierUserCancellationIsNotRelabeledByTheInactivityReview() throws Exception {
         AiRequestRegistry registry = new AiRequestRegistry();
         AiRequestRegistry.Entry entry = registry.register("request-1", "conversation-1", user,
                 Instant.now().plusMillis(30));
@@ -419,7 +731,7 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void slowFinalPersistenceCannotBlockOtherRequestDeadlines() throws Exception {
+    void slowFinalPersistenceCannotBlockOtherRequestInactivityReviews() throws Exception {
         var scheduler = Executors.newSingleThreadScheduledExecutor(
                 Thread.ofPlatform().daemon(true).factory());
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {

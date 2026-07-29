@@ -99,7 +99,7 @@ public class AiChatController {
     private final AiMutationConfirmationService mutationConfirmations;
     private final AiElicitationService elicitations;
     private final AiMutationApprovalCoordinator mutationApprovals;
-    private final Duration requestTimeout;
+    private final Duration requestInactivityTimeout;
     private final ScoreAiObservability observability;
     private final ExecutionObserver observer;
 
@@ -155,7 +155,7 @@ public class AiChatController {
         this.mutationConfirmations = mutationConfirmations;
         this.elicitations = elicitations;
         this.mutationApprovals = mutationApprovals;
-        this.requestTimeout = aiProperties.getRequestTimeout();
+        this.requestInactivityTimeout = aiProperties.getRequestInactivityTimeout();
         this.observability = observability;
         this.observer = observer != null ? observer : ExecutionObserver.noop();
         this.executor = executor;
@@ -169,7 +169,7 @@ public class AiChatController {
                      ScoreAiProperties aiProperties,
                      Executor executor) {
         this(chatService, sessionService, messagingTemplate, webSocketUsers, requests,
-                mutationConfirmations, new AiElicitationService(aiProperties), null,
+                mutationConfirmations, new AiElicitationService(aiProperties, requests), null,
                 aiProperties, ScoreAiObservability.noop(), executor);
     }
 
@@ -208,6 +208,7 @@ public class AiChatController {
                 }
                 observation.executionStarted();
                 ChatResponse response = chatService.chat(prepared, requester, event -> {
+                    requests.progress(prepared.requestId());
                     if (isRestResponseEvent(event)) {
                         AiChatSocketEvent socketEvent = socketEvent(
                                 prepared, sequence.incrementAndGet(), event);
@@ -417,6 +418,7 @@ public class AiChatController {
                 observation.executionStarted();
                 return chatService.chat(prepared, requester,
                         event -> {
+                            requests.progress(prepared.requestId());
                             send(requester, destination, socketEvent(
                                     prepared, sequence.incrementAndGet(), event));
                         });
@@ -626,7 +628,7 @@ public class AiChatController {
                 request.mutationConfirmation(), request.modelName(), request.reasoningEffort(),
                 request.permissionMode(), request.multiAgent(), request.activeWorkflow(),
                 request.routeManifest());
-        Instant deadline = Instant.now().plus(requestTimeout);
+        Instant deadline = Instant.now().plus(requestInactivityTimeout);
         AiRequestRegistry.Entry entry;
         try {
             entry = requests.register(requestId, request.conversationId(), requester, deadline);
@@ -731,7 +733,7 @@ public class AiChatController {
             }
         }
         if (current instanceof java.util.concurrent.TimeoutException) {
-            return "The assistant request deadline was exceeded.";
+            return "The assistant operation timed out before it reported further progress.";
         }
         String failureClass = current.getClass().getName();
         if (failureClass.startsWith("io.modelcontextprotocol.")) {
@@ -761,9 +763,9 @@ public class AiChatController {
     private String terminalMessage(String status, Throwable throwable) {
         if ("TIMED_OUT".equals(status)) {
             if (throwable != null) {
-                LOGGER.warn("AI chat request exceeded its deadline", throwable);
+                LOGGER.warn("AI chat request stopped after its inactivity lease expired", throwable);
             }
-            return "The assistant request deadline was exceeded.";
+            return "The assistant request stopped after no observable activity.";
         }
         return safeMessage(throwable);
     }

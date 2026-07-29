@@ -112,7 +112,8 @@ public final class WorkflowRunner {
         AgentExecutionRecorder workflowRecorder = context.recorder().fork(namespace);
         WorkflowRunBudget budget = new WorkflowRunBudget(context.requestId(),
                 context.recorder(), inactivityTimeout,
-                () -> cancellationFence(context.requestId()));
+                () -> cancellationFence(context.requestId()),
+                () -> requestProgress(context.requestId()));
         AgentWorkflowContext rootContext = root.withRunControl(budget)
                 .inWorkflow(null,
                 new AgentWorkflowContext.Location("main", "main", null, 0));
@@ -515,6 +516,10 @@ public final class WorkflowRunner {
 
     private void timeoutRequest(String requestId) {
         if (requests != null) requests.timeoutExecution(requestId);
+    }
+
+    private void requestProgress(String requestId) {
+        if (requests != null) requests.progress(requestId);
     }
 
     private sealed interface Call permits AgentCall, ChildWorkflowCall { }

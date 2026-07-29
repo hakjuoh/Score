@@ -1,7 +1,7 @@
 package org.oagi.score.gateway.http.configuration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -20,13 +20,19 @@ import java.util.List;
 @EnableWebMvc
 public class WebConfiguration implements WebMvcConfigurer {
 
-    private final ObjectMapper objectMapper;
-    private final Duration asyncRequestTimeout;
+    private static final long NO_ASYNC_TIMEOUT_MILLIS = -1L;
 
-    public WebConfiguration(ObjectMapper objectMapper,
-                            @Value("${spring.mvc.async.request-timeout:10m}") Duration asyncRequestTimeout) {
+    private final ObjectMapper objectMapper;
+
+    @Autowired
+    public WebConfiguration(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-        this.asyncRequestTimeout = asyncRequestTimeout;
+    }
+
+    /** Compatibility bridge; servlet wall-clock timeouts are intentionally disabled. */
+    @Deprecated
+    public WebConfiguration(ObjectMapper objectMapper, Duration ignoredAsyncRequestTimeout) {
+        this(objectMapper);
     }
 
     // @Primary so any unqualified RestTemplate injection resolves here; the GitHub integration uses a
@@ -60,7 +66,10 @@ public class WebConfiguration implements WebMvcConfigurer {
 
     @Override
     public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
-        configurer.setDefaultTimeout(asyncRequestTimeout.toMillis());
+        // Async AI requests own their lifecycle through AiRequestRegistry's rolling inactivity lease.
+        // A servlet-level wall-clock timeout would terminate an actively progressing response without
+        // giving that registry a chance to distinguish useful work from inactivity.
+        configurer.setDefaultTimeout(NO_ASYNC_TIMEOUT_MILLIS);
     }
 
 }
