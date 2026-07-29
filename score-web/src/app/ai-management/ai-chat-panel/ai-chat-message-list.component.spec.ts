@@ -785,6 +785,27 @@ describe('AiChatMessageListComponent', () => {
     expect(closed).toHaveBeenCalledOnce();
   });
 
+  it('settles a focused provider retry when its specialist is terminal', () => {
+    fixture.componentInstance.agentFocus = {
+      agentId: 'request-1:agent:1', agentName: 'Verifier', status: 'completed',
+      content: 'Verifier finished.', inProgress: false, isLead: false,
+      firstSeenAt: 0, lastUpdateAt: 5000,
+      events: [
+        {status: 'provider_error', content: 'Overloaded'},
+        {status: 'provider_retry', content: 'Retrying provider request.'}
+      ]
+    };
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll(
+      '.agent-focus-events .message-row'
+    ) as NodeListOf<HTMLElement>;
+    expect(rows).toHaveLength(2);
+    expect(rows[0].classList.contains('error')).toBe(true);
+    expect(rows[1].classList.contains('progress')).toBe(true);
+    expect(rows[1].querySelector('.message-progress-spinner')).toBeNull();
+  });
+
   it('renders a focused tool event with detail as an expandable disclosure', () => {
     fixture.componentInstance.agentFocus = {
       agentId: 'request-1:agent:1', agentName: 'Verifier',

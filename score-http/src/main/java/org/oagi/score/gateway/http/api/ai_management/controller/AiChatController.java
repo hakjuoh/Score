@@ -868,6 +868,7 @@ public class AiChatController {
                 || "elicitation_required".equals(event.subtype())
                 || "context_usage".equals(event.subtype())
                 || "context_compacted".equals(event.subtype())
+                || "provider_error".equals(event.subtype())
                 || "provider_retry".equals(event.subtype())
                 || "guide".equals(event.subtype())
                 || isWorkflowLifecycleEvent(event.subtype()));
@@ -879,6 +880,7 @@ public class AiChatController {
                 || "mutation_approval_batch_required".equals(event.subtype())
                 || "mutation_approval_decision_accepted".equals(event.subtype())
                 || "elicitation_required".equals(event.subtype())
+                || "provider_error".equals(event.subtype())
                 || "provider_retry".equals(event.subtype())
                 || isWorkflowLifecycleEvent(event.subtype());
     }

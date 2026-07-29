@@ -45,10 +45,24 @@ public final class AiProviderRetryExecutor {
 
     public <T> T execute(ChatRequest request, AiTrajectoryRecorder recorder,
                          LongSupplier executedMutations, Supplier<T> attempt) {
-        return execute(request, recorder, executedMutations, null, attempt);
+        return execute(request != null ? request.requestId() : null,
+                recorder, executedMutations, null, attempt);
     }
 
     public <T> T execute(ChatRequest request, AiTrajectoryRecorder recorder,
+                         LongSupplier executedMutations, ExecutionState state,
+                         Supplier<T> attempt) {
+        return execute(request != null ? request.requestId() : null,
+                recorder, executedMutations, state, attempt);
+    }
+
+    /** Executes a provider call that has no transport-level {@link ChatRequest}. */
+    public <T> T execute(String requestId, AiTrajectoryRecorder recorder,
+                         LongSupplier executedMutations, Supplier<T> attempt) {
+        return execute(requestId, recorder, executedMutations, null, attempt);
+    }
+
+    public <T> T execute(String requestId, AiTrajectoryRecorder recorder,
                          LongSupplier executedMutations, ExecutionState state,
                          Supplier<T> attempt) {
         int maxAttempts = settings.getMaxAttempts();
@@ -65,12 +79,12 @@ public final class AiProviderRetryExecutor {
                 }
                 boolean mutated = executedMutations.getAsLong() != mutationsBefore;
                 if (!classified.retryable() || mutated
-                        || attemptNumber >= maxAttempts || requestStopping(request)) {
+                        || attemptNumber >= maxAttempts || requestStopping(requestId)) {
                     throw new AiProviderException(classified, attemptNumber, mutated, failure);
                 }
                 Duration delay = delay(attemptNumber, classified.retryAfter());
                 LOGGER.warn("AI provider call failed for request {} (attempt {}/{}); retrying in {}: {}",
-                        request.requestId(), attemptNumber, maxAttempts, delay,
+                        requestId, attemptNumber, maxAttempts, delay,
                         classified.failureClass());
                 recorder.providerRetry(attemptNumber, maxAttempts, delay.toMillis(),
                         classified.message(), classified.failureClass(), classified.statusCode());
@@ -78,7 +92,7 @@ public final class AiProviderRetryExecutor {
                     state.retryStarted();
                 }
                 sleep(delay);
-                if (requestStopping(request)) {
+                if (requestStopping(requestId)) {
                     throw new CancellationException(
                             "The request was stopped during a provider retry wait.");
                 }
@@ -106,8 +120,8 @@ public final class AiProviderRetryExecutor {
         }
     }
 
-    private boolean requestStopping(ChatRequest request) {
-        return requests != null && request != null
-                && requests.shouldDiscardResult(request.requestId());
+    private boolean requestStopping(String requestId) {
+        return requests != null && requestId != null
+                && requests.shouldDiscardResult(requestId);
     }
 }

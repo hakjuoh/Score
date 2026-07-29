@@ -385,7 +385,7 @@ public final class AgentRunner implements AgentIdentityProvider {
                 context.execution().recorder().verifyActive();
                 AgentRunResult result = executeModel(new AgentInvocation(null, instructed,
                         model.input(), model.history(), model.scope(), binding.gateway(),
-                        model.observationContext()));
+                        model.observationContext(), context.execution().recorder()));
                 return result;
             } catch (RuntimeException failure) {
                 throw failure;
