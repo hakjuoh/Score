@@ -33,6 +33,7 @@ final class WorkflowRunBudget implements WorkflowRunControl {
     private final String requestId;
     private final AgentExecutionRecorder rootRecorder;
     private final Runnable cancellationFence;
+    private final Runnable activitySignal;
     private final long inactivityTimeoutNanos;
     private final LongSupplier nanoTime;
     private final InvocationStarter invocationStarter;
@@ -47,23 +48,40 @@ final class WorkflowRunBudget implements WorkflowRunControl {
     WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
                       Duration inactivityTimeout, Runnable cancellationFence) {
         this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
-                System::nanoTime, Thread::startVirtualThread);
+                () -> { }, System::nanoTime, Thread::startVirtualThread);
+    }
+
+    WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
+                      Duration inactivityTimeout, Runnable cancellationFence,
+                      Runnable activitySignal) {
+        this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
+                activitySignal, System::nanoTime, Thread::startVirtualThread);
     }
 
     WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
                       Duration inactivityTimeout, Runnable cancellationFence,
                       LongSupplier nanoTime) {
         this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
-                nanoTime, Thread::startVirtualThread);
+                () -> { }, nanoTime, Thread::startVirtualThread);
     }
 
     WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
                       Duration inactivityTimeout, Runnable cancellationFence,
                       LongSupplier nanoTime,
                       InvocationStarter invocationStarter) {
+        this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
+                () -> { }, nanoTime, invocationStarter);
+    }
+
+    WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
+                      Duration inactivityTimeout, Runnable cancellationFence,
+                      Runnable activitySignal, LongSupplier nanoTime,
+                      InvocationStarter invocationStarter) {
         this.requestId = requestId;
         this.rootRecorder = rootRecorder;
         this.cancellationFence = cancellationFence;
+        this.activitySignal = java.util.Objects.requireNonNull(
+                activitySignal, "activitySignal");
         this.nanoTime = java.util.Objects.requireNonNull(nanoTime, "nanoTime");
         this.invocationStarter = java.util.Objects.requireNonNull(
                 invocationStarter, "invocationStarter");
@@ -110,14 +128,21 @@ final class WorkflowRunBudget implements WorkflowRunControl {
             while (true) {
                 checkpoint();
                 long remaining = lease.remainingNanos();
-                if (remaining <= 0) throw lease.stalled();
+                if (remaining <= 0) {
+                    AgentInvocationStalledException stalled = lease.stallIfInactive();
+                    if (stalled != null) throw stalled;
+                    continue;
+                }
                 try {
                     AgentDecision decision = call.get(
                             Math.min(remaining, CANCELLATION_POLL_NANOS),
                             TimeUnit.NANOSECONDS);
                     return decision;
                 } catch (TimeoutException pollOrInactivity) {
-                    if (lease.remainingNanos() <= 0) throw lease.stalled();
+                    if (lease.remainingNanos() <= 0) {
+                        AgentInvocationStalledException stalled = lease.stallIfInactive();
+                        if (stalled != null) throw stalled;
+                    }
                 }
             }
         } catch (InterruptedException interrupted) {
@@ -155,6 +180,7 @@ final class WorkflowRunBudget implements WorkflowRunControl {
     @Override
     public void progress() {
         checkpoint();
+        activitySignal.run();
     }
 
     @Override

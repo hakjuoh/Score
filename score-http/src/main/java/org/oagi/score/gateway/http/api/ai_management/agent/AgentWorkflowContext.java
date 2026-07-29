@@ -128,6 +128,10 @@ public record AgentWorkflowContext(
         runControl.progress();
     }
 
+    public WorkflowRunControl runControl() {
+        return runControl;
+    }
+
     public void recordUsage(AiUsageSnapshot usage) {
         if (usage != null) runControl.recordUsage(usage);
     }

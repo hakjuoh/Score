@@ -32,6 +32,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 /**
@@ -61,6 +62,8 @@ public class AiRequestRegistry implements ConversationCommitFence {
     private final Duration stopGracePeriod;
     private final AiRequestStateStore stateStore;
     private final String instanceId;
+    private final Runnable beforeInactivityTimeoutTransition;
+    private final Runnable afterMutationCountDecrement;
 
     @Autowired
     public AiRequestRegistry(@Qualifier("scoreAiLifecycleScheduler") ScheduledExecutorService scheduler,
@@ -74,9 +77,25 @@ public class AiRequestRegistry implements ConversationCommitFence {
 
     AiRequestRegistry(ScheduledExecutorService scheduler, Duration stopGracePeriod,
                       AiRequestStateStore stateStore) {
+        this(scheduler, stopGracePeriod, stateStore, () -> { });
+    }
+
+    AiRequestRegistry(ScheduledExecutorService scheduler, Duration stopGracePeriod,
+                      AiRequestStateStore stateStore,
+                      Runnable beforeInactivityTimeoutTransition) {
+        this(scheduler, stopGracePeriod, stateStore,
+                beforeInactivityTimeoutTransition, () -> { });
+    }
+
+    AiRequestRegistry(ScheduledExecutorService scheduler, Duration stopGracePeriod,
+                      AiRequestStateStore stateStore,
+                      Runnable beforeInactivityTimeoutTransition,
+                      Runnable afterMutationCountDecrement) {
         this.scheduler = scheduler;
         this.stopGracePeriod = stopGracePeriod;
         this.stateStore = stateStore;
+        this.beforeInactivityTimeoutTransition = beforeInactivityTimeoutTransition;
+        this.afterMutationCountDecrement = afterMutationCountDecrement;
         this.instanceId = UUID.randomUUID().toString();
         this.stateStore.addStopListener(this::stopRequested);
     }
@@ -149,23 +168,15 @@ public class AiRequestRegistry implements ConversationCommitFence {
             return null;
         });
 
-        Entry entry = new Entry(requestId, generation);
+        Entry entry = new Entry(requestId, generation,
+                new AiRequestInactivityLease(Duration.between(now, deadline),
+                        System.nanoTime()));
         if (localRequests.putIfAbsent(requestId, entry) != null) {
             rollbackRegistration(state);
             throw new IllegalArgumentException("An AI request with this requestId already exists.");
         }
-        long delay = Math.max(0L, Duration.between(Instant.now(), deadline).toMillis());
         try {
-            ScheduledFuture<?> deadlineTask = scheduler.schedule(
-                    () -> dispatch(entry, "deadline", () -> requestTimeout(entry)),
-                    delay, TimeUnit.MILLISECONDS);
-            synchronized (entry) {
-                if (sharedState(entry).map(AiSharedRequestState::terminal).orElse(true)) {
-                    deadlineTask.cancel(false);
-                } else {
-                    entry.deadlineTask = deadlineTask;
-                }
-            }
+            scheduleLeaseReview(entry, entry.inactivityLease.firstReviewNanos());
         } catch (RejectedExecutionException exception) {
             localRequests.remove(requestId, entry);
             rollbackRegistration(state);
@@ -197,6 +208,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
             }
             return null;
         });
+        progress(entry.requestId);
     }
 
     /** Prevents model changes or deletion from racing request admission on any instance. */
@@ -284,6 +296,9 @@ public class AiRequestRegistry implements ConversationCommitFence {
             });
             if (!started) {
                 entry.workerThread = null;
+            } else {
+                entry.activityEpoch.incrementAndGet();
+                entry.inactivityLease.progress(System.nanoTime());
             }
             return started;
         }
@@ -328,26 +343,144 @@ public class AiRequestRegistry implements ConversationCommitFence {
         return terminal.status();
     }
 
-    private void requestTimeout(Entry entry) {
-        requestTimeout(entry, true);
+    /** Records observable work without extending the lease merely because it is being polled. */
+    public void progress(String requestId) {
+        Entry entry = localRequests.get(requestId);
+        if (entry == null) return;
+        synchronized (entry) {
+            if (!entry.locallyTerminal) {
+                entry.activityEpoch.incrementAndGet();
+                entry.inactivityLease.progress(System.nanoTime());
+            }
+        }
+    }
+
+    private void reviewInactivity(Entry entry) {
+        long nowNanos = System.nanoTime();
+        long remainingNanos;
+        synchronized (entry) {
+            if (entry.locallyTerminal || entry.inactivityLease.expired()) return;
+            entry.leaseReviewTask = null;
+            remainingNanos = entry.inactivityLease.remainingNanos(nowNanos);
+        }
+        boolean definiteWorkInFlight = remainingNanos <= 0
+                && (interactionInFlight(entry) || mutationInFlight(entry));
+        long reviewedActivityEpoch;
+        AiRequestInactivityLease.Review review;
+        synchronized (entry) {
+            reviewedActivityEpoch = entry.activityEpoch.get();
+            review = entry.inactivityLease.review(
+                    System.nanoTime(), definiteWorkInFlight);
+        }
+        if (review.expired()) {
+            beforeInactivityTimeoutTransition.run();
+            requestTimeout(entry, true, reviewedActivityEpoch);
+            return;
+        }
+        if (!publishLease(entry, review.remainingNanos())) return;
+        try {
+            scheduleLeaseReview(entry,
+                    entry.inactivityLease.nextReviewNanos(review.remainingNanos()));
+        } catch (RejectedExecutionException exception) {
+            LOGGER.error("Could not schedule the inactivity review for AI request {}",
+                    entry.requestId, exception);
+            lifecycleTaskFailed(entry, "inactivity review scheduling");
+        }
+    }
+
+    private boolean mutationInFlight(Entry entry) {
+        return stateStore.withRequestLock(entry.requestId, storage -> {
+            AiSharedRequestState state = storage.get(entry.requestId);
+            return matchesOwner(state, entry) && !state.terminal()
+                    && !"CANCELLING".equals(state.status())
+                    && state.mutationInFlight() > 0;
+        });
+    }
+
+    private boolean interactionInFlight(Entry entry) {
+        synchronized (entry) {
+            return !entry.locallyTerminal && entry.interactionsInFlight > 0;
+        }
+    }
+
+    private boolean publishLease(Entry entry, long remainingNanos) {
+        Instant now = Instant.now();
+        long remainingMillis = Math.max(1L,
+                TimeUnit.NANOSECONDS.toMillis(remainingNanos));
+        Instant deadline = now.plusMillis(remainingMillis);
+        Instant expiresAt = deadline.plus(stopGracePeriod).plus(TERMINAL_RETENTION);
+        return stateStore.withRequestLock(entry.requestId, storage -> {
+            AiSharedRequestState state = storage.get(entry.requestId);
+            if (!matchesOwner(state, entry) || state.terminal()
+                    || "CANCELLING".equals(state.status())) {
+                return false;
+            }
+            storage.put(state.leaseRenewed(deadline, expiresAt, now));
+            return true;
+        });
+    }
+
+    private void scheduleLeaseReview(Entry entry, long delayNanos) {
+        ScheduledFuture<?> review = scheduler.schedule(
+                () -> dispatch(entry, "inactivity review", () -> reviewInactivity(entry)),
+                Math.max(1L, delayNanos), TimeUnit.NANOSECONDS);
+        synchronized (entry) {
+            if (entry.locallyTerminal || entry.inactivityLease.expired()) {
+                review.cancel(false);
+            } else {
+                entry.leaseReviewTask = review;
+            }
+        }
     }
 
     private void requestTimeout(Entry entry, boolean interruptCurrentWorker) {
-        boolean workerPresent;
+        requestTimeout(entry, interruptCurrentWorker, null);
+    }
+
+    private void requestTimeout(Entry entry, boolean interruptCurrentWorker,
+                                Long reviewedActivityEpoch) {
+        TimeoutTransition transition;
         synchronized (entry) {
-            workerPresent = entry.workerThread != null;
+            boolean workerPresent = entry.workerThread != null;
+            transition = stateStore.withRequestLock(entry.requestId, storage -> {
+                AiSharedRequestState current = storage.get(entry.requestId);
+                if (!matchesOwner(current, entry) || current.terminal()
+                        || "CANCELLING".equals(current.status())) {
+                    return new TimeoutTransition(null, false);
+                }
+                boolean activitySinceReview = reviewedActivityEpoch != null
+                        && entry.activityEpoch.get() != reviewedActivityEpoch;
+                if (activitySinceReview || current.mutationInFlight() > 0) {
+                    return new TimeoutTransition(current, true);
+                }
+                AiSharedRequestState timed = current.timingOut(Instant.now(), workerPresent);
+                storage.put(timed);
+                return new TimeoutTransition(timed, false);
+            });
         }
-        AiSharedRequestState state = stateStore.withRequestLock(entry.requestId, storage -> {
-            AiSharedRequestState current = storage.get(entry.requestId);
-            if (!matchesOwner(current, entry) || current.terminal()
-                    || "CANCELLING".equals(current.status())) {
-                return null;
-            }
-            AiSharedRequestState timed = current.timingOut(Instant.now(), workerPresent);
-            storage.put(timed);
-            return timed;
-        });
-        applyStopState(entry, state, interruptCurrentWorker);
+        if (transition.definiteWorkInFlight()) {
+            renewAfterDefiniteWork(entry);
+            return;
+        }
+        applyStopState(entry, transition.state(), interruptCurrentWorker);
+    }
+
+    private void renewAfterDefiniteWork(Entry entry) {
+        long nowNanos = System.nanoTime();
+        synchronized (entry) {
+            if (entry.locallyTerminal) return;
+            entry.inactivityLease.renew(nowNanos);
+        }
+        long remainingNanos = entry.inactivityLease.remainingNanos(nowNanos);
+        if (!publishLease(entry, remainingNanos)) return;
+        try {
+            scheduleLeaseReview(entry,
+                    entry.inactivityLease.nextReviewNanos(remainingNanos));
+        } catch (RejectedExecutionException exception) {
+            LOGGER.error("Could not reschedule the inactivity review for AI request {}",
+                    entry.requestId, exception);
+            lifecycleTaskFailed(entry, "inactivity review rescheduling");
+        }
     }
 
     private void scheduleStopWatchdog(Entry entry) {
@@ -436,15 +569,54 @@ public class AiRequestRegistry implements ConversationCommitFence {
     }
 
     public boolean mutationStarted(String requestId) {
-        return stateStore.withRequestLock(requestId, storage -> {
+        Entry entry = localRequests.get(requestId);
+        if (entry == null) return false;
+        boolean started = stateStore.withRequestLock(requestId, storage -> {
             AiSharedRequestState state = storage.get(requestId);
-            if (state == null || !instanceId.equals(state.workerInstanceId())
+            if (!matchesOwner(state, entry)
                     || !"RUNNING".equals(state.status())) {
                 return false;
             }
             storage.put(state.mutationStarted(Instant.now()));
+            // This atomic epoch is updated while holding the same distributed state
+            // lock used by timeout transition, so even a fast mutation cannot occur
+            // invisibly between inactivity review and terminalization.
+            entry.activityEpoch.incrementAndGet();
             return true;
         });
+        if (started) progress(requestId);
+        return started;
+    }
+
+    /**
+     * Protects a separately bounded user interaction from the request inactivity lease.
+     * The interaction's own timeout remains authoritative until the wait finishes.
+     */
+    public boolean interactionStarted(String requestId) {
+        Entry entry = localRequests.get(requestId);
+        if (entry == null) return false;
+        synchronized (entry) {
+            if (entry.locallyTerminal || entry.inactivityLease.expired()) return false;
+            entry.interactionsInFlight++;
+            entry.activityEpoch.incrementAndGet();
+            entry.inactivityLease.progress(System.nanoTime());
+            return true;
+        }
+    }
+
+    /** Starts a fresh inactivity window after a protected user interaction finishes. */
+    public void interactionFinished(String requestId) {
+        Entry entry = localRequests.get(requestId);
+        if (entry == null) return;
+        synchronized (entry) {
+            if (entry.interactionsInFlight > 0) {
+                entry.interactionsInFlight--;
+            }
+            if (!entry.locallyTerminal) {
+                entry.activityEpoch.incrementAndGet();
+                entry.inactivityLease.progress(System.nanoTime());
+            }
+        }
     }
 
     public boolean isTimingOut(String requestId) {
@@ -465,13 +637,21 @@ public class AiRequestRegistry implements ConversationCommitFence {
     }
 
     public void mutationFinished(String requestId) {
-        stateStore.withRequestLock(requestId, storage -> {
+        // Publish completion activity before removing the definite-work fence. Otherwise an
+        // inactivity review could observe mutationInFlight=0 while the old lease is expired.
+        progress(requestId);
+        Entry entry = localRequests.get(requestId);
+        boolean decremented = stateStore.withRequestLock(requestId, storage -> {
             AiSharedRequestState state = storage.get(requestId);
-            if (state != null && instanceId.equals(state.workerInstanceId())) {
+            if (entry != null && matchesOwner(state, entry)) {
                 storage.put(state.mutationFinished(Instant.now()));
+                entry.activityEpoch.incrementAndGet();
+                return true;
             }
-            return null;
+            return false;
         });
+        if (decremented) afterMutationCountDecrement.run();
+        progress(requestId);
     }
 
     public boolean hasActiveConversation(String conversationId) {
@@ -506,6 +686,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
             throw new java.util.concurrent.CancellationException(
                     "The assistant request stopped before Tool execution.");
         }
+        progress(requestId);
     }
 
     /** Applies the registry's normal timeout fence when a nested execution budget expires. */
@@ -514,7 +695,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
         if (entry != null) requestTimeout(entry, false);
     }
 
-    /** Atomically fences cluster-wide cancellation/deadline against final persistence. */
+    /** Atomically fences cluster-wide cancellation/inactivity against final persistence. */
     public boolean commitResult(String requestId, Runnable persistence) {
         Entry entry = localRequests.get(requestId);
         if (entry == null) {
@@ -666,9 +847,9 @@ public class AiRequestRegistry implements ConversationCommitFence {
     private boolean clearLocalExecution(Entry entry) {
         synchronized (entry) {
             entry.workerThread = null;
-            if (entry.deadlineTask != null) {
-                entry.deadlineTask.cancel(false);
-                entry.deadlineTask = null;
+            if (entry.leaseReviewTask != null) {
+                entry.leaseReviewTask.cancel(false);
+                entry.leaseReviewTask = null;
             }
             if (entry.stopWatchdogTask != null) {
                 entry.stopWatchdogTask.cancel(false);
@@ -777,22 +958,30 @@ public class AiRequestRegistry implements ConversationCommitFence {
                 state.deadline(), state.terminalAt());
     }
 
+    private record TimeoutTransition(AiSharedRequestState state,
+                                     boolean definiteWorkInFlight) { }
+
     public static final class Entry {
         private final String requestId;
         private final long generation;
+        private final AiRequestInactivityLease inactivityLease;
+        private final AtomicLong activityEpoch = new AtomicLong();
         private Thread workerThread;
-        private ScheduledFuture<?> deadlineTask;
+        private ScheduledFuture<?> leaseReviewTask;
         private ScheduledFuture<?> stopWatchdogTask;
+        private int interactionsInFlight;
         private boolean locallyTerminal;
 
-        private Entry(String requestId, long generation) {
+        private Entry(String requestId, long generation,
+                      AiRequestInactivityLease inactivityLease) {
             this.requestId = requestId;
             this.generation = generation;
+            this.inactivityLease = inactivityLease;
         }
 
         public String requestId() { return requestId; }
         public long generation() { return generation; }
         synchronized boolean hasWorkerThread() { return workerThread != null; }
-        synchronized boolean hasDeadlineTask() { return deadlineTask != null; }
+        synchronized boolean hasLeaseReviewTask() { return leaseReviewTask != null; }
     }
 }

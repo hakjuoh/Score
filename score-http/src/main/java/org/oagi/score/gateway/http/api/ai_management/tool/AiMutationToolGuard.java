@@ -12,6 +12,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalRes
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingMutationApproval;
 import org.oagi.score.gateway.http.api.ai_management.model.AiResolvedMutation;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.MutationConfirmation;
+import org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl;
 import org.oagi.score.gateway.http.api.ai_management.service.AiMutationConfirmationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiTool;
@@ -97,6 +98,14 @@ public class AiMutationToolGuard {
     public GuardedToolSession session(ChatRequest request, ScoreUser requester,
                                       Consumer<AiMutationConfirmationNotice> noticeConsumer,
                                       ToolCallbackProvider delegate, Set<String> readOnlyToolNames) {
+        return session(request, requester, noticeConsumer, delegate, readOnlyToolNames,
+                WorkflowRunControl.NOOP);
+    }
+
+    public GuardedToolSession session(ChatRequest request, ScoreUser requester,
+                                      Consumer<AiMutationConfirmationNotice> noticeConsumer,
+                                      ToolCallbackProvider delegate, Set<String> readOnlyToolNames,
+                                      WorkflowRunControl runControl) {
         ToolCallback[] callbacks = delegate != null ? delegate.getToolCallbacks() : new ToolCallback[0];
         ToolCallback[] guarded = new ToolCallback[callbacks.length];
         Set<String> emitted = ConcurrentHashMap.newKeySet();
@@ -106,7 +115,7 @@ public class AiMutationToolGuard {
             }
         };
         GuardedToolSession session = new GuardedToolSession(
-                request, requester, notices, guarded, readOnlyToolNames);
+                request, requester, notices, guarded, readOnlyToolNames, runControl);
         for (int index = 0; index < callbacks.length; index++) {
             guarded[index] = new GuardedToolCallback(callbacks[index], request, requester,
                     notices, session);
@@ -123,6 +132,15 @@ public class AiMutationToolGuard {
             ChatRequest request, ScoreUser requester,
             Consumer<AiMutationConfirmationNotice> noticeConsumer,
             ToolCallbackProvider delegate, Set<String> readOnlyToolNames) {
+        return authorizationSession(request, requester, noticeConsumer, delegate,
+                readOnlyToolNames, WorkflowRunControl.NOOP);
+    }
+
+    public GuardedToolSession authorizationSession(
+            ChatRequest request, ScoreUser requester,
+            Consumer<AiMutationConfirmationNotice> noticeConsumer,
+            ToolCallbackProvider delegate, Set<String> readOnlyToolNames,
+            WorkflowRunControl runControl) {
         ToolCallback[] callbacks = delegate != null ? delegate.getToolCallbacks() : new ToolCallback[0];
         Set<String> emitted = ConcurrentHashMap.newKeySet();
         Consumer<AiMutationConfirmationNotice> notices = notice -> {
@@ -131,7 +149,7 @@ public class AiMutationToolGuard {
             }
         };
         return new GuardedToolSession(request, requester, notices,
-                callbacks, readOnlyToolNames);
+                callbacks, readOnlyToolNames, runControl);
     }
 
     /** Returns only the tools the server declared read-only, fail-closed, for specialist agents. */
@@ -201,7 +219,7 @@ public class AiMutationToolGuard {
                             authorization.notice().confirmationRequestId());
                 }
             }
-            if (!requests.mutationStarted(request.requestId())) {
+            if (!session.startMutation(name, normalizedInput)) {
                 return REQUEST_STOPPING_RESULT;
             }
             try {
@@ -209,7 +227,7 @@ public class AiMutationToolGuard {
                 session.mutationCompleted(name, normalizedInput, result);
                 return result;
             } finally {
-                requests.mutationFinished(request.requestId());
+                session.releaseMutationLease(name, normalizedInput);
             }
         }
     }
@@ -221,6 +239,7 @@ public class AiMutationToolGuard {
         private final Consumer<AiMutationConfirmationNotice> notices;
         private final ToolCallback[] callbacks;
         private final Set<String> readOnlyToolNames;
+        private final WorkflowRunControl runControl;
         private final AtomicLong sequence = new AtomicLong();
         private final CopyOnWriteArrayList<AiApprovedExecution> completedMutations =
                 new CopyOnWriteArrayList<>();
@@ -239,12 +258,14 @@ public class AiMutationToolGuard {
         private GuardedToolSession(ChatRequest request, ScoreUser requester,
                                    Consumer<AiMutationConfirmationNotice> notices,
                                    ToolCallback[] callbacks,
-                                   Set<String> readOnlyToolNames) {
+                                   Set<String> readOnlyToolNames,
+                                   WorkflowRunControl runControl) {
             this.request = request;
             this.requester = requester;
             this.notices = notices;
             this.callbacks = callbacks;
             this.readOnlyToolNames = readOnlyToolNames != null ? Set.copyOf(readOnlyToolNames) : Set.of();
+            this.runControl = Objects.requireNonNullElse(runControl, WorkflowRunControl.NOOP);
         }
 
         boolean isMutation(String toolName) {
@@ -292,12 +313,10 @@ public class AiMutationToolGuard {
             if (!isMutation(authorization.tool().name())) {
                 return new ToolAuthorizationPolicy.Result.Allow("read-only");
             }
-            if (!requests.mutationStarted(request.requestId())) {
+            if (!startMutation(executionKey(authorization))) {
                 return new ToolAuthorizationPolicy.Result.Refuse(
                         new AiTool.ToolResult(REQUEST_STOPPING_RESULT));
             }
-            activeMutationLeases.computeIfAbsent(executionKey(authorization),
-                    ignored -> new AtomicInteger()).incrementAndGet();
             return new ToolAuthorizationPolicy.Result.Allow("mutation-fenced");
         }
 
@@ -502,17 +521,60 @@ public class AiMutationToolGuard {
             return key(authorization.tool().name(), authorization.arguments().json());
         }
 
+        private boolean startMutation(String toolName, String arguments) {
+            return startMutation(key(toolName, arguments));
+        }
+
+        private boolean startMutation(String executionKey) {
+            runControl.definiteActivityStarted();
+            boolean registered = false;
+            boolean tracked = false;
+            try {
+                registered = requests.mutationStarted(request.requestId());
+                if (!registered) {
+                    return false;
+                }
+                activeMutationLeases.compute(executionKey, (ignored, leases) -> {
+                    AtomicInteger current = leases != null ? leases : new AtomicInteger();
+                    current.incrementAndGet();
+                    return current;
+                });
+                tracked = true;
+                return true;
+            } finally {
+                if (!tracked) {
+                    try {
+                        if (registered) {
+                            requests.mutationFinished(request.requestId());
+                        }
+                    } finally {
+                        runControl.definiteActivityFinished();
+                    }
+                }
+            }
+        }
+
+        private void releaseMutationLease(String toolName, String arguments) {
+            releaseMutationLease(key(toolName, arguments));
+        }
+
         private void releaseMutationLease(ToolAuthorizationPolicy.Request authorization) {
-            String key = executionKey(authorization);
-            AtomicInteger leases = activeMutationLeases.get(key);
-            if (leases == null) {
-                return;
+            releaseMutationLease(executionKey(authorization));
+        }
+
+        private void releaseMutationLease(String executionKey) {
+            java.util.concurrent.atomic.AtomicBoolean released =
+                    new java.util.concurrent.atomic.AtomicBoolean();
+            activeMutationLeases.computeIfPresent(executionKey, (ignored, leases) -> {
+                released.set(true);
+                return leases.decrementAndGet() <= 0 ? null : leases;
+            });
+            if (!released.get()) return;
+            try {
+                requests.mutationFinished(request.requestId());
+            } finally {
+                runControl.definiteActivityFinished();
             }
-            int remaining = leases.decrementAndGet();
-            if (remaining <= 0) {
-                activeMutationLeases.remove(key, leases);
-            }
-            requests.mutationFinished(request.requestId());
         }
     }
 

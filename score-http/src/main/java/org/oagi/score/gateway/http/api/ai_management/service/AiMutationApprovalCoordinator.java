@@ -61,7 +61,7 @@ public class AiMutationApprovalCoordinator {
     private final AiMutationConfirmationService confirmations;
     private final RepositoryFactory repositoryFactory;
     private final AiRequestRegistry requests;
-    private final Duration requestTimeout;
+    private final Duration approvalTimeout;
     private final Consumer<String> batchRegisteredHook;
     private final Map<String, ParallelGroup> groups = new ConcurrentHashMap<>();
     private final Map<String, PendingBatch> batches = new ConcurrentHashMap<>();
@@ -102,14 +102,14 @@ public class AiMutationApprovalCoordinator {
         this.confirmations = Objects.requireNonNull(confirmations, "confirmations");
         this.repositoryFactory = Objects.requireNonNull(repositoryFactory, "repositoryFactory");
         this.requests = requests;
-        this.requestTimeout = properties != null
-                ? properties.getRequestTimeout() : Duration.ofMinutes(10);
+        this.approvalTimeout = properties != null
+                ? properties.getMutationApprovalTimeout() : Duration.ofMinutes(10);
         this.batchRegisteredHook = Objects.requireNonNull(
                 batchRegisteredHook, "batchRegisteredHook");
     }
 
     public Duration decisionTimeout() {
-        return requestTimeout;
+        return approvalTimeout;
     }
 
     /**
@@ -209,9 +209,14 @@ public class AiMutationApprovalCoordinator {
         Waiter waiter = new Waiter(requester, requestId, sourceConversationId,
                 scope, List.copyOf(approvals), noticeConsumer,
                 acknowledgementConsumer,
-                decisionDeadline(requester, requestId), new CompletableFuture<>());
-        reserveConfirmations(waiter);
+                decisionDeadline(), new CompletableFuture<>());
+        boolean protectedFromInactivity = requests == null
+                || requests.interactionStarted(requestId);
+        if (!protectedFromInactivity) {
+            return denied(approvals);
+        }
         try {
+            reserveConfirmations(waiter);
             PendingBatch ready;
             if (scope.parallel()) {
                 ParallelGroup group = groups.get(scope.parallelGroupId());
@@ -257,6 +262,9 @@ public class AiMutationApprovalCoordinator {
         } finally {
             removeWaiting(waiter);
             releaseConfirmations(waiter);
+            if (requests != null) {
+                requests.interactionFinished(requestId);
+            }
         }
     }
 
@@ -320,7 +328,7 @@ public class AiMutationApprovalCoordinator {
                             .toList());
             if (!Instant.now().isBefore(batch.decisionDeadline)) {
                 throw new IllegalStateException(
-                        "The mutation approval decision exceeded the active request deadline.");
+                        "The mutation approval decision exceeded its approval deadline.");
             }
             Map<Waiter, Map<String, AiMutationApprovalResolution>> byWaiter =
                     new LinkedHashMap<>();
@@ -453,7 +461,7 @@ public class AiMutationApprovalCoordinator {
                     public void beforeCommit(boolean readOnly) {
                         if (!Instant.now().isBefore(batch.decisionDeadline)) {
                             throw new IllegalStateException(
-                                    "The mutation approval decision exceeded the active request deadline.");
+                                    "The mutation approval decision exceeded its approval deadline.");
                         }
                     }
                 });
@@ -666,7 +674,7 @@ public class AiMutationApprovalCoordinator {
     private Map<String, AiMutationApprovalResolution> awaitCommittingDecision(Waiter waiter) {
         try {
             return waiter.resolution.get(
-                    Math.max(1L, requestTimeout.toMillis()), TimeUnit.MILLISECONDS);
+                    Math.max(1L, approvalTimeout.toMillis()), TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(
@@ -694,14 +702,8 @@ public class AiMutationApprovalCoordinator {
         return Math.max(1L, remaining.toMillis() + 1L);
     }
 
-    private Instant decisionDeadline(ScoreUser requester, String requestId) {
-        Instant fallback = Instant.now().plus(requestTimeout);
-        if (requests == null) {
-            return fallback;
-        }
-        Instant requestDeadline = requests.status(requestId, requester).deadline();
-        return requestDeadline != null && requestDeadline.isBefore(fallback)
-                ? requestDeadline : fallback;
+    private Instant decisionDeadline() {
+        return Instant.now().plus(approvalTimeout);
     }
 
     private void removeWaiting(Waiter waiter) {

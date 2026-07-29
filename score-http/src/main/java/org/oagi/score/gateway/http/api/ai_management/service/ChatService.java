@@ -56,6 +56,7 @@ import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerial
 import org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowIntent;
 import org.oagi.score.gateway.http.api.ai_management.workflow.WorkflowRunner;
 import org.oagi.score.gateway.http.api.ai_management.workflow.AgentRunner;
+import org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AtifTrajectoryService;
 import org.oagi.score.gateway.http.api.info_management.model.AiAssistantInfoRecord;
@@ -919,7 +920,8 @@ public class ChatService {
     private AgentOutput runStandalone(Agent agent,
                                       ChatExecutionContext execution) {
         AgentWorkflowContext workflowContext = AgentWorkflowContext.root(execution,
-                WorkflowRequestAdapter.from(execution), 1);
+                WorkflowRequestAdapter.from(execution), 1,
+                requestActivityControl(execution.requestId()));
         AgentRunner runner = Objects.requireNonNull(agentRunner,
                 "The shared AgentRunner is required for standalone Agent execution.");
         AgentDecision decision = runner.run(agent, workflowContext);
@@ -927,6 +929,15 @@ public class ChatService {
             throw new IllegalStateException("Standalone Agent did not return a completed result.");
         }
         return complete.result();
+    }
+
+    private WorkflowRunControl requestActivityControl(String requestId) {
+        if (requests == null) return WorkflowRunControl.NOOP;
+        return WorkflowRunControl.activityOnly(() -> {
+            if (requests.shouldDiscardResult(requestId)) {
+                throw new CancellationException("The assistant request was interrupted.");
+            }
+        }, () -> requests.progress(requestId));
     }
 
     private AiMessage coreMessage(Message message) {

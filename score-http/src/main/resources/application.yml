@@ -8,10 +8,6 @@ spring:
   aop:
     proxy-target-class: true
 
-  mvc:
-    async:
-      request-timeout: 10m
-
   # Spring Boot 4 defaults to Jackson 3. Align the auto-configured mapper with Jackson 2
   # defaults during the migration (#1750); paired with the spring-boot-jackson2 bridge.
   jackson:

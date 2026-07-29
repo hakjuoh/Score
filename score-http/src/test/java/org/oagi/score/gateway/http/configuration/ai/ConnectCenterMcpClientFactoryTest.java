@@ -17,6 +17,7 @@ import java.net.http.HttpRequest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 class ConnectCenterMcpClientFactoryTest {
@@ -56,7 +57,7 @@ class ConnectCenterMcpClientFactoryTest {
         ScoreAiProperties properties = new ScoreAiProperties();
         properties.getMcp().getAuth().setIssuerUrl("https://issuer.example");
         properties.getMcp().getAuth().setTokenTtlSeconds(300);
-        properties.setRequestTimeout(Duration.ofMinutes(10));
+        properties.setElicitationTimeout(Duration.ofMinutes(10));
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("spring.ai.mcp.client.streamable-http.connections.connect-center-mcp.url",
                         "https://mcp.example");
@@ -71,5 +72,29 @@ class ConnectCenterMcpClientFactoryTest {
         assertThat(connection).isNotNull();
         assertThat(connection.bearerToken()).isEqualTo("token");
         verify(broker).issueToken(requester, "https://issuer.example", "connect-center-mcp", "ES256", 660);
+    }
+
+    @Test
+    void refreshesRequesterTokenForEveryMcpHttpRequest() {
+        ScoreAiProperties properties = new ScoreAiProperties();
+        properties.getMcp().getAuth().setIssuerUrl("https://issuer.example");
+        BrokerJwtService broker = mock(BrokerJwtService.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        when(broker.issueToken(requester, "https://issuer.example", "connect-center-mcp", "ES256", 660))
+                .thenReturn("token-one", "token-two");
+        ConnectCenterMcpClientFactory factory = new ConnectCenterMcpClientFactory(
+                properties, new MockEnvironment(), broker);
+        HttpRequest.Builder first = HttpRequest.newBuilder(URI.create("https://mcp.example/mcp"));
+        HttpRequest.Builder second = HttpRequest.newBuilder(URI.create("https://mcp.example/mcp"));
+
+        factory.authorizeRequest(requester, first);
+        factory.authorizeRequest(requester, second);
+
+        assertThat(first.build().headers().firstValue("Authorization"))
+                .contains("Bearer token-one");
+        assertThat(second.build().headers().firstValue("Authorization"))
+                .contains("Bearer token-two");
+        verify(broker, times(2)).issueToken(requester, "https://issuer.example",
+                "connect-center-mcp", "ES256", 660);
     }
 }

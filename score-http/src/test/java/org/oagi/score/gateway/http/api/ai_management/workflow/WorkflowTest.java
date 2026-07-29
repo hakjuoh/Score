@@ -50,11 +50,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class WorkflowTest {
+
+    @Test
+    void agentProgressRenewsTheRequestRegistryLease() {
+        org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry requests =
+                mock(org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry.class);
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), context -> {
+            context.progress();
+            return complete("done");
+        });
+        WorkflowRunner workflow = new WorkflowRunner(
+                new AgentRunner(null, List.of(gateway)), requests, 3,
+                Duration.ofSeconds(1));
+
+        assertThat(workflow.execute(workflowContext(context())).content()).isEqualTo("done");
+
+        verify(requests, atLeastOnce()).progress("request-1");
+    }
 
     @Test
     void gatewayCanCompleteTheMainQueueWithoutCallingAnotherAgent() {
@@ -460,6 +478,55 @@ class WorkflowTest {
         assertThat(decision).isInstanceOfSatisfying(AgentDecision.Complete.class,
                 complete -> assertThat(complete.result().content())
                         .isEqualTo("finished after 36ns"));
+    }
+
+    @Test
+    void knownInFlightOperationSurvivesMultipleSpecialistInactivityWindows() {
+        java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong();
+        AgentInvocationLease lease = new AgentInvocationLease("mutation-worker", 10L,
+                clock::get,
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP);
+
+        lease.definiteActivityStarted();
+        clock.set(100L);
+
+        assertThat(lease.remainingNanos()).isEqualTo(10L);
+        assertThat(lease.stallIfInactive()).isNull();
+
+        clock.set(200L);
+        assertThat(lease.remainingNanos()).isEqualTo(10L);
+        lease.definiteActivityFinished();
+        clock.set(211L);
+        assertThat(lease.stallIfInactive())
+                .isInstanceOf(AgentInvocationStalledException.class);
+    }
+
+    @Test
+    void progressArrivingBetweenExpirySnapshotAndStopWinsTheRace() {
+        java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong();
+        AgentInvocationLease lease = new AgentInvocationLease("progress-worker", 10L,
+                clock::get,
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP);
+        clock.set(11L);
+        assertThat(lease.remainingNanos()).isNegative();
+
+        clock.set(12L);
+        lease.progress();
+
+        assertThat(lease.stallIfInactive()).isNull();
+        assertThat(lease.remainingNanos()).isEqualTo(10L);
+    }
+
+    @Test
+    void explicitStopStillFencesAnAdmittedMutation() {
+        AgentInvocationLease lease = new AgentInvocationLease("cancelled-worker", 10L,
+                System::nanoTime,
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP);
+        lease.definiteActivityStarted();
+
+        lease.stop();
+
+        assertThat(lease.remainingNanos()).isZero();
     }
 
     @Test

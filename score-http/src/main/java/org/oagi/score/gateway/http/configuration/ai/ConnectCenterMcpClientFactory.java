@@ -32,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -58,24 +59,32 @@ public class ConnectCenterMcpClientFactory {
     }
 
     public McpSession open(ScoreUser requester) {
-        return open(requester, null);
+        return open(requester, null, () -> { });
     }
 
     public McpSession open(
             ScoreUser requester,
             Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler) {
+        return open(requester, elicitationHandler, () -> { });
+    }
+
+    public McpSession open(
+            ScoreUser requester,
+            Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler,
+            Runnable progress) {
+        Objects.requireNonNull(progress, "progress");
         McpConnection connection = connection(requester);
         if (connection == null) {
             return new McpSession(null, NO_TOOLS, Set.of(), McpTelemetry.EMPTY);
         }
         String baseUrl = connection.baseUrl();
         String endpoint = connection.endpoint();
-        String token = connection.bearerToken();
 
         HttpClientStreamableHttpTransport.Builder transport = HttpClientStreamableHttpTransport
                 .builder(baseUrl)
                 .endpoint(endpoint)
                 .httpRequestCustomizer((builder, method, uri, body, transportContext) -> {
+                    authorizeRequest(requester, builder);
                     injectCurrentTrace(builder);
                     String enrichedBody = injectTraceIntoMcpBody(body);
                     if (enrichedBody != null && !enrichedBody.equals(body)) {
@@ -83,14 +92,12 @@ public class ConnectCenterMcpClientFactory {
                     }
                 })
                 .openConnectionOnStartup(false);
-        if (StringUtils.hasText(token)) {
-            transport.requestBuilder(HttpRequest.newBuilder()
-                    .header("Authorization", "Bearer " + token));
-        }
 
         var clientBuilder = McpClient.sync(transport.build())
-                .requestTimeout(longer(properties.getMcp().getRequestTimeout(), properties.getRequestTimeout()))
-                .initializationTimeout(properties.getMcp().getInitializationTimeout());
+                .requestTimeout(longer(properties.getMcp().getRequestTimeout(),
+                        properties.getElicitationTimeout()))
+                .initializationTimeout(properties.getMcp().getInitializationTimeout())
+                .progressConsumer(notification -> progress.run());
         if (elicitationHandler != null) {
             clientBuilder.elicitation(elicitationHandler).applyElicitationDefaults(true);
         }
@@ -202,9 +209,17 @@ public class ConnectCenterMcpClientFactory {
         if (!StringUtils.hasText(auth.getIssuerUrl())) {
             return null;
         }
-        long minimumTtl = Math.max(60L, properties.getRequestTimeout().plusSeconds(60).toSeconds());
+        long minimumTtl = Math.max(60L,
+                properties.getElicitationTimeout().plusSeconds(60).toSeconds());
         return brokerJwtService.issueToken(requester, auth.getIssuerUrl(), auth.getAudience(),
                 auth.getAlgorithm(), Math.max(auth.getTokenTtlSeconds(), minimumTtl));
+    }
+
+    void authorizeRequest(ScoreUser requester, HttpRequest.Builder request) {
+        String token = bearerToken(requester);
+        if (StringUtils.hasText(token)) {
+            request.setHeader("Authorization", "Bearer " + token);
+        }
     }
 
     public record McpSession(McpSyncClient client, ToolCallbackProvider tools,

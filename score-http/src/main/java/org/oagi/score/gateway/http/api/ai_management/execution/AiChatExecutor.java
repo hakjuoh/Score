@@ -31,6 +31,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrailRefused
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentInvocation;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentRunResult;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentToolBinding;
+import org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl;
 import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareChain;
 import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolExecutionGateway;
@@ -212,7 +213,7 @@ public final class AiChatExecutor {
         var before = chatContext.recorder().usageSnapshot();
         Result result = execute(SpringAiExecutionContextMapper.toProvider(
                         chatContext, session.middlewareState()),
-                session.instruction(), session.progress());
+                session.instruction(), session.progress(), session.runControl());
         // Do not reject the transport result here: AgentRunner records billable usage
         // first and performs the terminal checkpoint before any response-side action.
         // This preserves accounting for a provider that completes during cancellation.
@@ -248,13 +249,19 @@ public final class AiChatExecutor {
 
     Result execute(Context context, Agent.Instruction instruction,
                    Runnable progress) {
+        return execute(context, instruction, progress, WorkflowRunControl.NOOP);
+    }
+
+    Result execute(Context context, Agent.Instruction instruction,
+                   Runnable progress, WorkflowRunControl runControl) {
         context.recorder().verifyActive();
         return executeChat(context, Objects.requireNonNull(instruction, "instruction"),
-                Objects.requireNonNull(progress, "progress"));
+                Objects.requireNonNull(progress, "progress"),
+                Objects.requireNonNull(runControl, "runControl"));
     }
 
     private Result executeChat(Context context, Agent.Instruction instruction,
-                               Runnable progress) {
+                               Runnable progress, WorkflowRunControl runControl) {
         ExecutionState state = new ExecutionState();
         ExecutionScope scope = executionScope(context);
         String runId = UUID.randomUUID().toString();
@@ -271,13 +278,14 @@ public final class AiChatExecutor {
                                 || context.agentToolBinding() != null) {
                             // Tool-less calls (planner, evaluator, no-tool leaves) never consult the
                             // MCP registry, so they must not pay the per-call MCP handshake.
-                            result = execute(context, null, state, instruction, progress);
+                            result = execute(context, null, state, instruction, progress, runControl);
                         } else {
                             try (ConnectCenterMcpClientFactory.McpSession mcp = elicitations != null
                                     ? mcpClients.open(context.requester(), elicitation -> handleElicitation(
-                                    context, context.request(), context.recorder(), elicitation))
-                                    : mcpClients.open(context.requester())) {
-                                result = execute(context, mcp, state, instruction, progress);
+                                    context, context.request(), context.recorder(), elicitation,
+                                    runControl), progress)
+                                    : mcpClients.open(context.requester(), null, progress)) {
+                                result = execute(context, mcp, state, instruction, progress, runControl);
                             }
                         }
                         identified = result.withExecutionIdentity(context.agentId(),
@@ -474,7 +482,7 @@ public final class AiChatExecutor {
 
     private Result execute(Context context, ConnectCenterMcpClientFactory.McpSession mcp,
                            ExecutionState executionState, Agent.Instruction instruction,
-                           Runnable progress) {
+                           Runnable progress, WorkflowRunControl runControl) {
         var request = context.request();
         AiTrajectoryRecorder recorder = context.recorder();
         ChatOptions options = optionsFactory.create(
@@ -519,12 +527,12 @@ public final class AiChatExecutor {
                                     approvalCoordinator != null
                                             ? ignored -> { }
                                             : recorder::mutationConfirmationRequired,
-                                    mcp.tools(), mcp.readOnlyToolNames())
+                                    mcp.tools(), mcp.readOnlyToolNames(), runControl)
                             : mutationGuard.session(request, context.requester(),
                                     approvalCoordinator != null
                                             ? ignored -> { }
                                             : recorder::mutationConfirmationRequired,
-                                    mcp.tools(), mcp.readOnlyToolNames())
+                                    mcp.tools(), mcp.readOnlyToolNames(), runControl)
                             : null;
                 }
                 var guardedTools = context.toolPolicy() == ToolPolicy.READ_ONLY
@@ -652,11 +660,16 @@ public final class AiChatExecutor {
                 try {
                     context.approvalWaitLifecycle().suspendForApproval();
                     try {
-                        decisions = approvalCoordinator.awaitDecisions(
-                                context.requester(), request.requestId(), request.conversationId(),
-                                approvalScope, pendingApprovals,
-                                recorder::mutationApprovalBatchRequired,
-                                recorder::mutationApprovalDecisionAccepted);
+                        runControl.definiteActivityStarted();
+                        try {
+                            decisions = approvalCoordinator.awaitDecisions(
+                                    context.requester(), request.requestId(), request.conversationId(),
+                                    approvalScope, pendingApprovals,
+                                    recorder::mutationApprovalBatchRequired,
+                                    recorder::mutationApprovalDecisionAccepted);
+                        } finally {
+                            runControl.definiteActivityFinished();
+                        }
                     } finally {
                         context.approvalWaitLifecycle().resumeAfterApproval();
                     }
@@ -738,15 +751,20 @@ public final class AiChatExecutor {
 
     private McpSchema.ElicitResult handleElicitation(
             Context context, ChatRequest request, AiTrajectoryRecorder recorder,
-            McpSchema.ElicitFormRequest elicitation) {
+            McpSchema.ElicitFormRequest elicitation, WorkflowRunControl runControl) {
         if (AiMutationPermissionMode.resolve(request.permissionMode())
                 == AiMutationPermissionMode.FULL_ACCESS
                 && isConfirmationOnly(elicitation.requestedSchema())) {
             return new McpSchema.ElicitResult(
                     McpSchema.ElicitResult.Action.ACCEPT, java.util.Map.of());
         }
-        return elicitations.await(context.requester(), request.conversationId(), request.requestId(),
-                elicitation, recorder::elicitationRequired);
+        runControl.definiteActivityStarted();
+        try {
+            return elicitations.await(context.requester(), request.conversationId(),
+                    request.requestId(), elicitation, recorder::elicitationRequired);
+        } finally {
+            runControl.definiteActivityFinished();
+        }
     }
 
     private boolean isConfirmationOnly(java.util.Map<String, Object> schema) {

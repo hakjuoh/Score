@@ -223,18 +223,24 @@ public final class ToolExecutionGateway {
             abort(executionPolicies, authorizationRequest);
             return runOutput(outputPolicies, tool, effectiveArguments.get(), bound(raw), scope);
         }
+        boolean completingPolicies = false;
         try {
             AiTool.ToolResult bounded = bound(raw);
             AiTool.ToolResult safe = runOutput(outputPolicies, tool,
                     effectiveArguments.get(), bounded, scope);
             // Authorization middleware may retain results for exact replay/read-back.
             // It must receive only the same output-guarded value exposed downstream.
+            // From this point completed() visits every policy even if one callback fails.
+            completingPolicies = true;
             completed(executionPolicies, authorizationRequest, safe);
             observer.observe(ExecutionObservation.of("tool.invocation.completed", scope,
                     Map.of("tool_id", tool.specification().id().value(),
                             "effect", tool.specification().effect().name())));
             return safe;
         } catch (RuntimeException failure) {
+            if (!completingPolicies) {
+                failed(executionPolicies, authorizationRequest, failure);
+            }
             observer.observe(ExecutionObservation.of("tool.invocation.failed", scope,
                     Map.of("tool_id", tool.specification().id().value(),
                             "failure_type", failure.getClass().getSimpleName())));

@@ -209,6 +209,7 @@ class ScoreAiConfigurationTest {
                 AnthropicChatModel.class, models.get("claude-haiku-4_5"));
         assertEquals("https://example.services.ai.azure.com/anthropic", model.getOptions().getBaseUrl());
         assertEquals("claude-haiku-4-5", model.getOptions().getModel());
+        assertEquals(Duration.ZERO, model.getOptions().getTimeout());
 
         assertNull(model.getOptions().getOutputConfig());
     }
@@ -266,6 +267,35 @@ class ScoreAiConfigurationTest {
         assertEquals(Duration.ofSeconds(31), bindSpecialistInactivity(Map.of(
                 "SCORE_AI_MULTI_AGENT_SPECIALIST_INACTIVITY_TIMEOUT", "31s",
                 "SCORE_AI_MULTI_AGENT_SPECIALIST_TIMEOUT", "17s")));
+    }
+
+    @Test
+    void separatesRequestLifecycleAndInteractionTimeoutsWithLegacyFallback() throws Exception {
+        ScoreAiProperties defaults = bindAi(Map.of());
+        assertThat(defaults.getRequestInactivityTimeout()).isEqualTo(Duration.ofMinutes(10));
+        assertThat(defaults.getElicitationTimeout()).isEqualTo(Duration.ofMinutes(10));
+        assertThat(defaults.getMutationApprovalTimeout()).isEqualTo(Duration.ofMinutes(10));
+
+        ScoreAiProperties legacy = bindAi(Map.of("SCORE_AI_REQUEST_TIMEOUT", "17s"));
+        assertThat(legacy.getRequestInactivityTimeout()).isEqualTo(Duration.ofSeconds(17));
+        assertThat(legacy.getElicitationTimeout()).isEqualTo(Duration.ofSeconds(17));
+        assertThat(legacy.getMutationApprovalTimeout()).isEqualTo(Duration.ofSeconds(17));
+
+        ScoreAiProperties canonicalLegacy = bindAi(Map.of(
+                "score.ai.request-timeout", "23s"));
+        assertThat(canonicalLegacy.getRequestTimeout()).isEqualTo(Duration.ofSeconds(23));
+        assertThat(canonicalLegacy.getRequestInactivityTimeout()).isEqualTo(Duration.ofSeconds(23));
+        assertThat(canonicalLegacy.getElicitationTimeout()).isEqualTo(Duration.ofSeconds(23));
+        assertThat(canonicalLegacy.getMutationApprovalTimeout()).isEqualTo(Duration.ofSeconds(23));
+
+        ScoreAiProperties separated = bindAi(Map.of(
+                "SCORE_AI_REQUEST_TIMEOUT", "17s",
+                "SCORE_AI_REQUEST_INACTIVITY_TIMEOUT", "31s",
+                "SCORE_AI_ELICITATION_TIMEOUT", "51s",
+                "SCORE_AI_MUTATION_APPROVAL_TIMEOUT", "61s"));
+        assertThat(separated.getRequestInactivityTimeout()).isEqualTo(Duration.ofSeconds(31));
+        assertThat(separated.getElicitationTimeout()).isEqualTo(Duration.ofSeconds(51));
+        assertThat(separated.getMutationApprovalTimeout()).isEqualTo(Duration.ofSeconds(61));
     }
 
     @Test
@@ -359,6 +389,10 @@ class ScoreAiConfigurationTest {
 
     private Duration bindSpecialistInactivity(Map<String, Object> environmentValues)
             throws Exception {
+        return bindAi(environmentValues).getMultiAgent().getSpecialistInactivityTimeout();
+    }
+
+    private ScoreAiProperties bindAi(Map<String, Object> environmentValues) throws Exception {
         StandardEnvironment environment = new StandardEnvironment();
         environment.getPropertySources().addFirst(
                 new MapPropertySource("specialist-timeout-test", environmentValues));
@@ -366,8 +400,7 @@ class ScoreAiConfigurationTest {
                         "application-dev", new ClassPathResource("application-dev.yml"))
                 .forEach(environment.getPropertySources()::addLast);
         return Binder.get(environment).bind("score.ai", ScoreAiProperties.class)
-                .orElseThrow(() -> new IllegalStateException("score.ai configuration was not bound"))
-                .getMultiAgent().getSpecialistInactivityTimeout();
+                .orElseThrow(() -> new IllegalStateException("score.ai configuration was not bound"));
     }
 
     private Map<String, ChatModel> chatModels(ScoreAiProperties properties) {

@@ -551,13 +551,50 @@ class AiMutationApprovalCoordinatorTest {
     }
 
     @Test
-    void decisionCrossingTheAuthoritativeRequestDeadlineRollsBackWithoutAcknowledging()
+    void approvalWaitOutlivesRequestInactivityAndUsesItsOwnTimeout() throws Exception {
+        AiRequestRegistry requestRegistry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = requestRegistry.register(
+                "request-long-approval", "root-conversation", user,
+                Instant.now().plusMillis(80));
+        when(repositories.aiChatConversationRepository(any(), any())).thenReturn(conversations);
+        when(confirmations.decideBatch(any(), any())).thenAnswer(invocation ->
+                decisions(invocation.getArgument(1)));
+        ScoreAiProperties properties = new ScoreAiProperties();
+        properties.setMutationApprovalTimeout(Duration.ofSeconds(2));
+        AiMutationApprovalCoordinator coordinator = new AiMutationApprovalCoordinator(
+                confirmations, repositories, properties, requestRegistry, ignored -> { });
+        ArrayBlockingQueue<AiMutationApprovalBatchNotice> notices = new ArrayBlockingQueue<>(1);
+        CompletableFuture<Map<String, AiMutationApprovalResolution>> waiter =
+                CompletableFuture.supplyAsync(() -> {
+                    assertThat(requestRegistry.start(entry)).isTrue();
+                    Map<String, AiMutationApprovalResolution> result = coordinator.awaitDecisions(
+                            user, entry.requestId(), "root-conversation",
+                            AiMutationApprovalScope.root("root-conversation"),
+                            List.of(pending("approval-a", "update_a")), notices::add);
+                    requestRegistry.finish(entry, null);
+                    return result;
+                });
+
+        AiMutationApprovalBatchNotice batch = notices.poll(1, TimeUnit.SECONDS);
+        Thread.sleep(240);
+
+        assertThat(waiter).isNotDone();
+        assertThat(requestRegistry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
+
+        coordinator.decide(user, command(batch, Map.of("approval-a", "APPROVE")));
+        assertThat(waiter.get(1, TimeUnit.SECONDS).get("approval-a").approved()).isTrue();
+        assertThat(requestRegistry.status(entry.requestId(), user).status())
+                .isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void decisionCrossingTheApprovalDeadlineRollsBackWithoutAcknowledging()
             throws Exception {
         CountDownLatch decisionStarted = new CountDownLatch(1);
         CountDownLatch finishDecision = new CountDownLatch(1);
         AiRequestRegistry requestRegistry = new AiRequestRegistry();
         requestRegistry.register("request-1", "root-conversation", user,
-                Instant.now().plusMillis(350));
+                Instant.now().plusSeconds(60));
         when(repositories.aiChatConversationRepository(any(), any())).thenReturn(conversations);
         doAnswer(invocation -> {
             decisionStarted.countDown();
@@ -565,7 +602,7 @@ class AiMutationApprovalCoordinatorTest {
             return decisions(invocation.getArgument(1));
         }).when(confirmations).decideBatch(any(), any());
         ScoreAiProperties properties = new ScoreAiProperties();
-        properties.setRequestTimeout(Duration.ofSeconds(2));
+        properties.setMutationApprovalTimeout(Duration.ofMillis(350));
         AiMutationApprovalCoordinator coordinator = new AiMutationApprovalCoordinator(
                 confirmations, repositories, properties, requestRegistry, ignored -> { });
         ArrayBlockingQueue<AiMutationApprovalBatchNotice> notices = new ArrayBlockingQueue<>(1);
@@ -596,7 +633,8 @@ class AiMutationApprovalCoordinatorTest {
     void decisionCrossingTheDeadlineWhileRecordingIsRejectedBeforeCommit() throws Exception {
         AiRequestRegistry requestRegistry = new AiRequestRegistry();
         Instant deadline = Instant.now().plusMillis(750);
-        requestRegistry.register("request-1", "root-conversation", user, deadline);
+        requestRegistry.register("request-1", "root-conversation", user,
+                Instant.now().plusSeconds(60));
         when(repositories.aiChatConversationRepository(any(), any())).thenReturn(conversations);
         when(confirmations.decideBatch(any(), any())).thenAnswer(invocation ->
                 decisions(invocation.getArgument(1)));
@@ -609,7 +647,7 @@ class AiMutationApprovalCoordinatorTest {
             return null;
         }).when(conversations).append(any(), any());
         ScoreAiProperties properties = new ScoreAiProperties();
-        properties.setRequestTimeout(Duration.ofSeconds(3));
+        properties.setMutationApprovalTimeout(Duration.ofMillis(750));
         AiMutationApprovalCoordinator coordinator = new AiMutationApprovalCoordinator(
                 confirmations, repositories, properties, requestRegistry, ignored -> { });
         ArrayBlockingQueue<AiMutationApprovalBatchNotice> notices = new ArrayBlockingQueue<>(1);
@@ -631,7 +669,7 @@ class AiMutationApprovalCoordinatorTest {
             assertThatThrownBy(() -> synchronizations.forEach(
                     synchronization -> synchronization.beforeCommit(false)))
                     .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("active request deadline");
+                    .hasMessageContaining("approval deadline");
             synchronizations.forEach(synchronization -> synchronization.afterCompletion(
                     TransactionSynchronization.STATUS_ROLLED_BACK));
         } finally {
@@ -713,7 +751,7 @@ class AiMutationApprovalCoordinatorTest {
         when(confirmations.decideBatch(any(), any())).thenAnswer(invocation ->
                 decisions(invocation.getArgument(1)));
         ScoreAiProperties properties = new ScoreAiProperties();
-        properties.setRequestTimeout(timeout);
+        properties.setMutationApprovalTimeout(timeout);
         return new AiMutationApprovalCoordinator(
                 confirmations, repositories, properties, batchRegisteredHook);
     }
