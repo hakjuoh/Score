@@ -93,8 +93,26 @@ class PlannerAgentTest {
         assertThat(plan.root().members()).hasSize(2)
                 .allSatisfy(member -> assertThat(member.agent().agentId())
                         .isEqualTo("evidence-researcher"));
+        assertThat(plan.root().edges()).isEmpty();
+        assertThat(plan.root().members()).allSatisfy(member ->
+                assertThat(plan.root().predecessors(member.id())).isEmpty());
         verify(fixture.recorder).lifecycle(
                 org.mockito.ArgumentMatchers.eq("workflow_plan_fallback"), any(), any());
+    }
+
+    @Test
+    void plannerProviderFailureFallsBackToAllRequestedAgentsInParallel() {
+        Fixture fixture = fixture("unused", 3);
+        when(fixture.execution.execute(any()))
+                .thenThrow(new IllegalStateException("provider unavailable"));
+
+        AiWorkflowPlan plan = ((AgentDecision.Delegate)
+                fixture.runner.run(fixture.planner.callId(), fixture.context)).workflow();
+
+        assertThat(plan.root().members()).hasSize(3);
+        assertThat(plan.root().edges()).isEmpty();
+        assertThat(plan.root().members()).allSatisfy(member ->
+                assertThat(plan.root().predecessors(member.id())).isEmpty());
     }
 
     @Test
@@ -108,6 +126,10 @@ class PlannerAgentTest {
     }
 
     private Fixture fixture(String modelOutput) {
+        return fixture(modelOutput, 2);
+    }
+
+    private Fixture fixture(String modelOutput, int maximumAgents) {
         AgentExecutionService execution = mock(AgentExecutionService.class);
         SpringAiModelCatalog models = mock(SpringAiModelCatalog.class);
         AiAgentCatalog catalog = mock(AiAgentCatalog.class);
@@ -136,7 +158,7 @@ class PlannerAgentTest {
         AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
         AgentWorkflowContext.Request request = new AgentWorkflowContext.Request(
                 "request-1", "conversation-1", "user-1", "model", "Investigate it",
-                false, false, 2, "verification", "agents", true, false);
+                false, false, maximumAgents, "verification", "agents", true, false);
         ChatRequest chatRequest = new ChatRequest("Investigate it", "request-1", null,
                 "conversation-1", null, List.of(), null, "model", "verification", "agents");
         AgentWorkflowContext context = AgentWorkflowContext.root(

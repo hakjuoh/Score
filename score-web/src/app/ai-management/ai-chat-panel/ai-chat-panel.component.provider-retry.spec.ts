@@ -18,6 +18,15 @@ const RATE_LIMIT_REASON = 'This request would exceed your rate limit tier of '
   + 'Reduce the prompt length or the maximum tokens requested, or try again later.';
 
 function providerRetryEvent(metadata: Record<string, unknown> = {}): any {
+  const retryMetadata = {
+    attempt: 7,
+    max_attempts: 10,
+    delay_millis: 15000,
+    reason: RATE_LIMIT_REASON,
+    failure_class: 'RateLimitException',
+    status_code: 429,
+    ...metadata
+  };
   return {
     requestId: 'request-1',
     conversationId: 'conversation-1',
@@ -25,16 +34,19 @@ function providerRetryEvent(metadata: Record<string, unknown> = {}): any {
     subtype: 'provider_retry',
     visibility: 'debug',
     sequence: 5,
-    content: 'The model provider request failed; retrying (attempt 7 of 10).',
-    metadata: {
-      attempt: 7,
-      max_attempts: 10,
-      delay_millis: 15000,
-      reason: RATE_LIMIT_REASON,
-      failure_class: 'RateLimitException',
-      status_code: 429,
-      ...metadata
-    }
+    content: `The model provider request failed; retrying (attempt ${retryMetadata.attempt} of ${retryMetadata.max_attempts}).`,
+    metadata: retryMetadata
+  };
+}
+
+function providerErrorEvent(metadata: Record<string, unknown> = {}): any {
+  const retry = providerRetryEvent(metadata);
+  return {
+    ...retry,
+    subtype: 'provider_error',
+    visibility: 'visible',
+    sequence: retry.sequence - 1,
+    content: RATE_LIMIT_REASON
   };
 }
 
@@ -52,27 +64,33 @@ describe('AiChatPanelComponent provider retry countdown', () => {
   beforeEach(setupAiChatPanelSpec);
   afterEach(teardownAiChatPanelSpec);
 
-  it('renders the retry alert with status code, reason, and a ticking countdown', () => {
+  it('renders the provider error before a separate retry countdown', () => {
     vi.useFakeTimers();
     component.state.prompt = 'Ride out a rate limit';
     component.send();
     transport.publishWhenConnected.mock.calls[0][0].publish();
 
+    (component as any).handleSocketEvent(providerErrorEvent());
     (component as any).handleSocketEvent(providerRetryEvent());
 
     expect(alertStatusRow()).toMatchObject({
       role: 'progress',
       inProgress: true,
-      content: `429 ${RATE_LIMIT_REASON}`,
-      alertSuffix: ' · Retrying in 15s · attempt 7/10'
+      content: 'The model provider request failed; retrying (attempt 7 of 10).',
+      alertSuffix: ' · Retrying in 15s'
     });
+    const providerErrorIndex = component.state.messages.findIndex(message =>
+      message.role === 'error' && message.content === RATE_LIMIT_REASON);
+    const retryIndex = component.state.messages.indexOf(alertStatusRow()!);
+    expect(providerErrorIndex).toBeGreaterThanOrEqual(0);
+    expect(retryIndex).toBeGreaterThan(providerErrorIndex);
     expect(component.state.currentStatus).toBe('Retrying');
     expect(component.state.pending).toBe(true);
 
     vi.advanceTimersByTime(1000);
-    expect(alertStatusRow()?.alertSuffix).toBe(' · Retrying in 14s · attempt 7/10');
+    expect(alertStatusRow()?.alertSuffix).toBe(' · Retrying in 14s');
     vi.advanceTimersByTime(2000);
-    expect(alertStatusRow()?.alertSuffix).toBe(' · Retrying in 12s · attempt 7/10');
+    expect(alertStatusRow()?.alertSuffix).toBe(' · Retrying in 12s');
     expect(component.state.messages.filter(message =>
       message.role === 'progress' && !!message.alertSuffix)).toHaveLength(1);
   });
@@ -85,7 +103,7 @@ describe('AiChatPanelComponent provider retry countdown', () => {
 
     (component as any).handleSocketEvent(providerRetryEvent({delay_millis: 2000}));
 
-    expect(alertStatusRow()?.alertSuffix).toBe(' · Retrying in 2s · attempt 7/10');
+    expect(alertStatusRow()?.alertSuffix).toBe(' · Retrying in 2s');
     vi.advanceTimersByTime(2000);
     expect(alertStatusRow()?.alertSuffix).toBe(' · Reconnecting…');
     expect((component as any).providerRetryInterval).toBeUndefined();
@@ -109,11 +127,11 @@ describe('AiChatPanelComponent provider retry countdown', () => {
     }));
 
     expect(alertStatusRow()).toMatchObject({
-      content: RATE_LIMIT_REASON,
-      alertSuffix: ' · Retrying in 5s · attempt 8/10'
+      content: 'The model provider request failed; retrying (attempt 8 of 10).',
+      alertSuffix: ' · Retrying in 5s'
     });
     vi.advanceTimersByTime(1000);
-    expect(alertStatusRow()?.alertSuffix).toBe(' · Retrying in 4s · attempt 8/10');
+    expect(alertStatusRow()?.alertSuffix).toBe(' · Retrying in 4s');
     expect(component.state.messages.filter(message =>
       message.role === 'progress' && !!message.alertSuffix)).toHaveLength(1);
   });
@@ -140,6 +158,30 @@ describe('AiChatPanelComponent provider retry countdown', () => {
     expect(component.state.messages).toContainEqual(expect.objectContaining({
       role: 'assistant', content: 'Recovered after the retry.'
     }));
+  });
+
+  it('clears a recovered Planner retry when the workflow starts', () => {
+    vi.useFakeTimers();
+    component.state.prompt = 'Plan a parallel workflow';
+    component.send();
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+    (component as any).handleSocketEvent(providerErrorEvent());
+    (component as any).handleSocketEvent(providerRetryEvent());
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'parallel_workflow_started',
+      content: 'Three specialists started.',
+      metadata: {
+        fanoutId: 'fanout-1', nodeId: 'fanout-1-lead',
+        agentId: 'fanout-1-lead', agentName: 'Lead agent',
+        agentCount: 3, executionKind: 'parallel', status: 'started'
+      }
+    });
+
+    expect(alertStatusRow()).toBeUndefined();
+    expect((component as any).providerRetryInterval).toBeUndefined();
+    expect(component.state.currentStatus).toBe('Parallel tasks working');
   });
 
   it('renders the provider message in the red error row after the final failure', () => {
@@ -219,12 +261,14 @@ describe('AiChatPanelComponent provider retry countdown', () => {
     });
     expect(component.state.currentStatus).toBe('Agents working');
 
-    (component as any).handleSocketEvent(providerRetryEvent({
+    const workerMetadata = {
       fanoutId: 'fanout-1',
       nodeId: 'fanout-1-agent-01',
       parentNodeId: 'fanout-1-lead',
       agentId: 'fanout-1-agent-01'
-    }));
+    };
+    (component as any).handleSocketEvent(providerErrorEvent(workerMetadata));
+    (component as any).handleSocketEvent(providerRetryEvent(workerMetadata));
 
     expect(alertStatusRow()).toBeUndefined();
     expect((component as any).providerRetryInterval).toBeUndefined();
@@ -235,15 +279,19 @@ describe('AiChatPanelComponent provider retry countdown', () => {
     }));
     const worker = component.state.agentActivities
       .find(activity => activity.agentId === 'fanout-1-agent-01');
-    expect(worker?.events).toContainEqual(expect.objectContaining({
-      content: 'The model provider request failed; retrying (attempt 7 of 10).'
-    }));
+    expect(worker?.events.slice(-2)).toEqual([
+      expect.objectContaining({status: 'provider_error', content: RATE_LIMIT_REASON}),
+      expect.objectContaining({
+        status: 'provider_retry',
+        content: 'The model provider request failed; retrying (attempt 7 of 10).'
+      })
+    ]);
     vi.advanceTimersByTime(3000);
     expect(alertStatusRow()).toBeUndefined();
 
     (component as any).handleSocketEvent(providerRetryEvent());
     expect(alertStatusRow()).toMatchObject({
-      alertSuffix: ' · Retrying in 15s · attempt 7/10'
+      alertSuffix: ' · Retrying in 15s'
     });
   });
 
@@ -346,7 +394,7 @@ describe('AiChatPanelComponent provider retry countdown', () => {
     expect(component.state.messages).toEqual(snapshot);
   });
 
-  it('streams a live retry countdown on the REST transport but ignores its replay', () => {
+  it('streams REST provider error before retry and ignores their replay duplicates', () => {
     vi.useFakeTimers();
     const live = new Subject<{body: string}>();
     const response = new Subject<AiChatRestResponse>();
@@ -358,17 +406,23 @@ describe('AiChatPanelComponent provider retry countdown', () => {
     }];
     component.send();
 
+    live.next({body: JSON.stringify(providerErrorEvent())});
     live.next({body: JSON.stringify(providerRetryEvent())});
     expect(alertStatusRow()).toMatchObject({
-      alertSuffix: ' · Retrying in 15s · attempt 7/10'
+      alertSuffix: ' · Retrying in 15s'
     });
+    const liveErrorIndex = component.state.messages.findIndex(message =>
+      message.role === 'error' && message.content === RATE_LIMIT_REASON);
+    const liveRetryIndex = component.state.messages.indexOf(alertStatusRow()!);
+    expect(liveErrorIndex).toBeGreaterThanOrEqual(0);
+    expect(liveRetryIndex).toBeGreaterThan(liveErrorIndex);
     vi.advanceTimersByTime(1000);
-    expect(alertStatusRow()?.alertSuffix).toBe(' · Retrying in 14s · attempt 7/10');
+    expect(alertStatusRow()?.alertSuffix).toBe(' · Retrying in 14s');
 
     response.next({
       response: 'Recovered answer.',
       conversationId: 'conversation-1',
-      events: [providerRetryEvent()]
+      events: [providerErrorEvent(), providerRetryEvent()]
     });
 
     expect(component.state.pending).toBe(false);
@@ -379,6 +433,36 @@ describe('AiChatPanelComponent provider retry countdown', () => {
     expect(component.state.messages).toContainEqual({
       role: 'assistant', content: 'Recovered answer.'
     });
+    expect(component.state.messages.filter(message =>
+      message.role === 'error' && message.content === RATE_LIMIT_REASON)).toHaveLength(1);
+  });
+
+  it('replays missed REST provider error and retry in order as settled history', () => {
+    const response = new Subject<AiChatRestResponse>();
+    transport.watch.mockReturnValueOnce(new Subject<{body: string}>());
+    api.sendChat.mockReturnValueOnce(response);
+    component.state.prompt = 'Recover a missed attachment event';
+    component.state.attachments = [{
+      name: 'sample.txt', mediaType: 'text/plain', size: 4, data: 'test'
+    }];
+    component.send();
+
+    response.next({
+      response: 'Recovered answer.', conversationId: 'conversation-1',
+      events: [providerErrorEvent(), providerRetryEvent()]
+    });
+
+    const errorIndex = component.state.messages.findIndex(message =>
+      message.role === 'error' && message.content === RATE_LIMIT_REASON);
+    const retryIndex = component.state.messages.findIndex(message =>
+      message.role === 'progress'
+      && message.content === 'The model provider request failed; retrying (attempt 7 of 10).');
+    const answerIndex = component.state.messages.findIndex(message =>
+      message.role === 'assistant' && message.content === 'Recovered answer.');
+    expect(errorIndex).toBeGreaterThanOrEqual(0);
+    expect(retryIndex).toBeGreaterThan(errorIndex);
+    expect(answerIndex).toBeGreaterThan(retryIndex);
+    expect(component.state.messages[retryIndex].inProgress).toBe(false);
   });
 
 });

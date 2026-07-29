@@ -163,7 +163,8 @@ public final class PlannerAgent implements Agent {
                             instruction, null, "Working", "Completed",
                             AiWorkflowPlan.ToolAccess.READ_ONLY), null));
         }
-        return new AiWorkflowPlan(new AiWorkflowPlan.WorkflowDefinition("planned-workflow", members),
+        return new AiWorkflowPlan(new AiWorkflowPlan.WorkflowDefinition(
+                "planned-workflow", members, List.of()),
                 "Delegating the request to the selected Agents.",
                 "Combining the Agent results.");
     }
