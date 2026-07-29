@@ -532,7 +532,7 @@ class AiChatControllerTest {
     @Test
     void recordsTimedOutRestRequestsInTheTrajectory() throws Exception {
         ScoreAiProperties properties = new ScoreAiProperties();
-        properties.setRequestTimeout(Duration.ofMillis(25));
+        properties.setRequestInactivityTimeout(Duration.ofMillis(25));
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             AiChatController controller = controller(new AiRequestRegistry(), properties, executor);
             ChatRequest request = request("request-timeout", "conversation-timeout");
@@ -562,7 +562,7 @@ class AiChatControllerTest {
                     .extracting(event -> event.metadata().get("confirmationRequestId"))
                     .isEqualTo("confirmation-1");
             verify(chatService, timeout(1_000)).recordFailure(any(ChatRequest.class), eq(user),
-                    eq("The assistant request deadline was exceeded."),
+                    eq("The assistant request stopped after no observable activity."),
                     eq(CancellationException.class.getName()));
         }
     }

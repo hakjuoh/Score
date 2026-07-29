@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -25,6 +26,8 @@ final class AgentInvocationLease implements WorkflowRunControl {
     private final AtomicLong lastProgressNanos;
     private final AtomicBoolean stopped = new AtomicBoolean();
     private final AtomicBoolean finished = new AtomicBoolean();
+    private final AtomicInteger definiteActivities = new AtomicInteger();
+    private final Object activityMonitor = new Object();
     private final List<InvocationFence> fences = new ArrayList<>();
 
     AgentInvocationLease(String agentId, long inactivityTimeoutNanos,
@@ -37,9 +40,15 @@ final class AgentInvocationLease implements WorkflowRunControl {
     }
 
     long remainingNanos() {
-        if (stopped.get()) return 0L;
-        long inactiveNanos = nanoTime.getAsLong() - lastProgressNanos.get();
-        return inactivityTimeoutNanos - inactiveNanos;
+        synchronized (activityMonitor) {
+            if (stopped.get()) return 0L;
+            long now = nanoTime.getAsLong();
+            if (definiteActivities.get() > 0) {
+                lastProgressNanos.set(now);
+                return inactivityTimeoutNanos;
+            }
+            return inactivityTimeoutNanos - (now - lastProgressNanos.get());
+        }
     }
 
     @Override
@@ -50,9 +59,36 @@ final class AgentInvocationLease implements WorkflowRunControl {
 
     @Override
     public void progress() {
-        requestControl.checkpoint();
-        verifyActive();
-        lastProgressNanos.set(nanoTime.getAsLong());
+        requestControl.progress();
+        synchronized (activityMonitor) {
+            if (stopped.get()) throw new AgentInvocationStalledException(agentId);
+            lastProgressNanos.set(nanoTime.getAsLong());
+        }
+    }
+
+    @Override
+    public void definiteActivityStarted() {
+        requestControl.definiteActivityStarted();
+        synchronized (activityMonitor) {
+            if (stopped.get()) {
+                requestControl.definiteActivityFinished();
+                throw new AgentInvocationStalledException(agentId);
+            }
+            long now = nanoTime.getAsLong();
+            definiteActivities.incrementAndGet();
+            lastProgressNanos.set(now);
+        }
+    }
+
+    @Override
+    public void definiteActivityFinished() {
+        synchronized (activityMonitor) {
+            definiteActivities.updateAndGet(current -> Math.max(0, current - 1));
+            if (!stopped.get()) {
+                lastProgressNanos.set(nanoTime.getAsLong());
+            }
+        }
+        requestControl.definiteActivityFinished();
     }
 
     @Override
@@ -79,15 +115,34 @@ final class AgentInvocationLease implements WorkflowRunControl {
     }
 
     void verifyActive() {
-        if (remainingNanos() <= 0) throw stalled();
+        if (remainingNanos() <= 0) {
+            AgentInvocationStalledException stalled = stallIfInactive();
+            if (stalled != null) throw stalled;
+        }
     }
 
-    AgentInvocationStalledException stalled() {
-        stop();
-        return new AgentInvocationStalledException(agentId);
+    AgentInvocationStalledException stallIfInactive() {
+        synchronized (activityMonitor) {
+            if (definiteActivities.get() > 0) {
+                lastProgressNanos.set(nanoTime.getAsLong());
+                return null;
+            }
+            long now = nanoTime.getAsLong();
+            if (inactivityTimeoutNanos - (now - lastProgressNanos.get()) > 0) {
+                return null;
+            }
+            stopWhileHoldingActivityMonitor();
+            return new AgentInvocationStalledException(agentId);
+        }
     }
 
     void stop() {
+        synchronized (activityMonitor) {
+            stopWhileHoldingActivityMonitor();
+        }
+    }
+
+    private void stopWhileHoldingActivityMonitor() {
         boolean includeAdmittedAttempts;
         synchronized (fences) {
             if (!stopped.compareAndSet(false, true)) return;

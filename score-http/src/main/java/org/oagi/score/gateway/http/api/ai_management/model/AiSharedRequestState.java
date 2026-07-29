@@ -55,11 +55,23 @@ public record AiSharedRequestState(
 
     public AiSharedRequestState timingOut(Instant now, boolean workerPresent) {
         if (!workerPresent) {
-            return terminal("TIMED_OUT", "DEADLINE_EXCEEDED", now);
+            return terminal("TIMED_OUT", "INACTIVITY_TIMEOUT", now);
         }
-        return copy(conversationId, now, "CANCELLING", "DEADLINE_EXCEEDED", "TIMED_OUT",
+        return copy(conversationId, now, "CANCELLING", "INACTIVITY_TIMEOUT", "TIMED_OUT",
                 cancellationRequestId, cancellationRequestedAt, cancellationAcknowledgedAt,
                 lastEventSequence + 1, mutationObserved, mutationInFlight, mutationObserved);
+    }
+
+    /** Publishes the owning worker's next inactivity boundary without changing lifecycle state. */
+    public AiSharedRequestState leaseRenewed(Instant renewedDeadline,
+                                             Instant renewedExpiresAt,
+                                             Instant now) {
+        return new AiSharedRequestState(requestId, conversationId, appUserId,
+                workerInstanceId, generation, renewedDeadline, renewedExpiresAt,
+                createdAt, now, startedAt, terminalAt, status, statusReason,
+                terminalTarget, cancellationRequestId, cancellationRequestedAt,
+                cancellationAcknowledgedAt, lastEventSequence, mutationObserved,
+                mutationInFlight, mutationOutcomeUncertain);
     }
 
     public AiSharedRequestState mutationStarted(Instant now) {

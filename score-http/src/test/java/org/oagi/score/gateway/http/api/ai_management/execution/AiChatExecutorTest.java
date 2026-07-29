@@ -70,6 +70,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
@@ -230,6 +231,8 @@ class AiChatExecutorTest {
         AiMutationToolGuard.GuardedToolSession guardedSession =
                 mock(AiMutationToolGuard.GuardedToolSession.class);
         AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
+        org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl runControl =
+                mock(org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.class);
         org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle waitLifecycle =
                 mock(org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle.class);
         AiPendingMutationApproval first = pending("approval-1", "update_a");
@@ -243,7 +246,7 @@ class AiChatExecutorTest {
                                 "update_a", "{\"id\":1}", "result-one", true)),
                         List.of(new AiResolvedMutation(
                                 "update_b", "{\"id\":2}", "result-two", true)));
-        when(mutationGuard.session(any(), any(), any(), any(), any()))
+        when(mutationGuard.session(any(), any(), any(), any(), any(), any()))
                 .thenReturn(guardedSession);
         when(approvals.awaitDecisions(
                 any(), anyString(), anyString(), any(), any(), any(), any()))
@@ -258,11 +261,11 @@ class AiChatExecutorTest {
         AiTrajectoryRecorder recorder = fixture.recorder("request-1");
         ChatRequest request = request("Apply both updates");
 
-        AiChatExecutor.Result result = execute(fixture.executor(mutationGuard, approvals),
+        AiChatExecutor.Result result = fixture.executor(mutationGuard, approvals).execute(
                 new AiChatExecutor.Context(request, List.of(),
                         new UserMessage(request.prompt()), fixture.requester, recorder,
                         true, false, AiChatExecutor.ToolPolicy.FULL, 1,
-                        null, waitLifecycle));
+                        null, waitLifecycle), TEST_INSTRUCTION, () -> { }, runControl);
 
         assertThat(result.answer()).isEqualTo("Both updates completed.");
         assertThat(result.traceMetadata())
@@ -284,6 +287,8 @@ class AiChatExecutorTest {
                 assertThat(response.id()).startsWith("approved-"));
         verify(waitLifecycle, times(2)).suspendForApproval();
         verify(waitLifecycle, times(2)).resumeAfterApproval();
+        verify(runControl, times(2)).definiteActivityStarted();
+        verify(runControl, times(2)).definiteActivityFinished();
     }
 
     @Test
@@ -305,7 +310,7 @@ class AiChatExecutorTest {
                 List.of(pending), List.of(pending), List.of());
         when(guardedSession.resolveApprovals(any(), any())).thenReturn(List.of(
                 new AiResolvedMutation("delete_a", "{\"id\":1}", failure, false)));
-        when(mutationGuard.session(any(), any(), any(), any(), any()))
+        when(mutationGuard.session(any(), any(), any(), any(), any(), any()))
                 .thenReturn(guardedSession);
         when(approvals.awaitDecisions(
                 any(), anyString(), anyString(), any(), any(), any(), any()))
@@ -351,7 +356,7 @@ class AiChatExecutorTest {
         when(guardedSession.getToolCallbacks()).thenReturn(new ToolCallback[0]);
         when(guardedSession.executeApproved(any())).thenReturn(Optional.empty());
         when(guardedSession.pendingApprovals()).thenReturn(List.of(pending), List.of(pending));
-        when(mutationGuard.session(any(), any(), any(), any(), any()))
+        when(mutationGuard.session(any(), any(), any(), any(), any(), any()))
                 .thenReturn(guardedSession);
         when(approvals.awaitDecisions(
                 any(), anyString(), anyString(), any(), any(), any(), any()))
@@ -719,7 +724,7 @@ class AiChatExecutorTest {
 
         private McpSyncClient mcp(ToolCallback[] tools, Set<String> readOnlyNames) {
             McpSyncClient client = mock(McpSyncClient.class);
-            when(mcpClients.open(any(ScoreUser.class))).thenReturn(
+            when(mcpClients.open(any(ScoreUser.class), isNull(), any(Runnable.class))).thenReturn(
                     new ConnectCenterMcpClientFactory.McpSession(
                             client, () -> tools, readOnlyNames));
             return client;

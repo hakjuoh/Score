@@ -61,9 +61,60 @@ class AiElicitationServiceTest {
                 .isEqualTo(McpSchema.ElicitResult.Action.CANCEL);
     }
 
+    @Test
+    void elicitationWaitOutlivesRequestInactivityAndUsesItsOwnTimeout() throws Exception {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-long-interaction", "conversation-1", user,
+                java.time.Instant.now().plusMillis(80));
+        ScoreAiProperties properties = new ScoreAiProperties();
+        properties.setElicitationTimeout(Duration.ofSeconds(2));
+        AiElicitationService service = new AiElicitationService(properties, registry);
+        ArrayBlockingQueue<AiElicitationNotice> notices = new ArrayBlockingQueue<>(1);
+        CompletableFuture<McpSchema.ElicitResult> result = CompletableFuture.supplyAsync(() -> {
+            assertThat(registry.start(entry)).isTrue();
+            McpSchema.ElicitResult elicited = service.await(user, "conversation-1",
+                    entry.requestId(), request(), notices::add);
+            registry.finish(entry, null);
+            return elicited;
+        });
+
+        AiElicitationNotice notice = notices.poll(1, TimeUnit.SECONDS);
+        Thread.sleep(240);
+
+        assertThat(result).isNotDone();
+        assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
+
+        service.decide(user, entry.requestId(), "conversation-1", notice.elicitationId(),
+                "ACCEPT", Map.of("definition", "Still active"));
+        assertThat(result.get(1, TimeUnit.SECONDS).action())
+                .isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+        assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void failedNoticePublicationReleasesTheInteractionProtection() throws Exception {
+        AiRequestRegistry registry = new AiRequestRegistry();
+        AiRequestRegistry.Entry entry = registry.register(
+                "request-failed-notice", "conversation-1", user,
+                java.time.Instant.now().plusMillis(80));
+        ScoreAiProperties properties = new ScoreAiProperties();
+        properties.setElicitationTimeout(Duration.ofSeconds(2));
+        AiElicitationService service = new AiElicitationService(properties, registry);
+
+        assertThatThrownBy(() -> service.await(user, "conversation-1", entry.requestId(),
+                request(), ignored -> {
+                    throw new IllegalStateException("socket unavailable");
+                })).isInstanceOf(IllegalStateException.class)
+                .hasMessage("socket unavailable");
+
+        Thread.sleep(200);
+        assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("TIMED_OUT");
+    }
+
     private AiElicitationService service() {
         ScoreAiProperties properties = new ScoreAiProperties();
-        properties.setRequestTimeout(Duration.ofSeconds(2));
+        properties.setElicitationTimeout(Duration.ofSeconds(2));
         return new AiElicitationService(properties);
     }
 

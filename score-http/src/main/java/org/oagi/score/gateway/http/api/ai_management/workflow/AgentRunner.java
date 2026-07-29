@@ -413,7 +413,8 @@ public final class AgentRunner implements AgentIdentityProvider {
                 instruction = executionContext.finalizeInstruction(instruction);
                 AgentChatResult result = execution.executeChat(new AgentChatSession(
                         agent, chat.context().modelName(), instruction,
-                        executionContext, binding, middlewareState, context::progress));
+                        executionContext, binding, middlewareState, context::progress,
+                        context.runControl()));
                 AgentRunResult runResult = new AgentRunResult(
                         new AiMessage.Assistant(result.answer()), List.of(), result.usage(),
                         new AgentRunResult.RunMetadata(agent.id(),

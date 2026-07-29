@@ -15,12 +15,21 @@ public record AgentChatSession(Agent agent, String modelName, Agent.Instruction 
                                AgentExecutionContext context,
                                AgentToolBinding tools,
                                MiddlewareState middlewareState,
-                               Runnable progress) {
+                               Runnable progress,
+                               WorkflowRunControl runControl) {
+
+    public AgentChatSession(Agent agent, String modelName, Agent.Instruction instruction,
+                            AgentExecutionContext context, AgentToolBinding tools,
+                            MiddlewareState middlewareState, Runnable progress) {
+        this(agent, modelName, instruction, context, tools, middlewareState, progress,
+                WorkflowRunControl.NOOP);
+    }
 
     public AgentChatSession(Agent agent, String modelName, Agent.Instruction instruction,
                             AgentExecutionContext context, AgentToolBinding tools,
                             MiddlewareState middlewareState) {
-        this(agent, modelName, instruction, context, tools, middlewareState, () -> { });
+        this(agent, modelName, instruction, context, tools, middlewareState, () -> { },
+                WorkflowRunControl.NOOP);
     }
 
     public AgentChatSession(Agent agent, String modelName, Agent.Instruction instruction,
@@ -37,5 +46,6 @@ public record AgentChatSession(Agent agent, String modelName, Agent.Instruction 
         Objects.requireNonNull(tools, "tools");
         Objects.requireNonNull(middlewareState, "middlewareState");
         progress = progress != null ? progress : () -> { };
+        runControl = runControl != null ? runControl : WorkflowRunControl.NOOP;
     }
 }

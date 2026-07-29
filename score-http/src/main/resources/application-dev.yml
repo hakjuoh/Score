@@ -310,7 +310,9 @@ score:
           verbosity: true
           temperature: false
     model-name: claude-opus-5
-    request-timeout: ${SCORE_AI_REQUEST_TIMEOUT:10m}
+    request-inactivity-timeout: ${SCORE_AI_REQUEST_INACTIVITY_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
+    elicitation-timeout: ${SCORE_AI_ELICITATION_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
+    mutation-approval-timeout: ${SCORE_AI_MUTATION_APPROVAL_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
     assistant:
       # For Docker, mount a file and set this to e.g. file:/config/system-prompt-connect-center-assistant.md.
       system-prompt-resource: ${SCORE_AI_ASSISTANT_SYSTEM_PROMPT_RESOURCE:classpath:ai/system/system-prompt-connect-center-assistant.md}
@@ -327,5 +329,5 @@ score:
         issuer-url: ${CONNECT_CENTER_MCP_ISSUER_URL:http://127.0.0.1:9000/broker}
         audience: ${CONNECT_CENTER_MCP_AUDIENCE:connect-center-mcp}
         algorithm: ${CONNECT_CENTER_MCP_JWT_ALGORITHM:ES256}
-        # The server raises shorter values to at least the model request timeout plus 60 seconds.
+        # The server raises shorter values to at least the elicitation timeout plus 60 seconds.
         token-ttl-seconds: ${CONNECT_CENTER_MCP_TOKEN_TTL_SECONDS:300}
