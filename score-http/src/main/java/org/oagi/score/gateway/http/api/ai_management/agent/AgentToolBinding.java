@@ -42,13 +42,22 @@ public record AgentToolBinding(ToolSet tools, ToolExecutionGateway gateway,
         return new AgentToolBinding(tools, gateway.withMiddleware(middleware, state), false);
     }
 
-    /** Couples owned Tool execution to the run deadline and terminal callback fence. */
+    /** Compatibility overload for callers that only need a cancellation fence. */
+    @Deprecated(forRemoval = false)
     public AgentToolBinding withExecutionFence(AgentExecutionRecorder recorder,
                                                Runnable checkpoint) {
+        return withExecutionFence(recorder, checkpoint, () -> { });
+    }
+
+    /** Couples owned Tool execution to cancellation, activity, and callback fences. */
+    public AgentToolBinding withExecutionFence(AgentExecutionRecorder recorder,
+                                               Runnable checkpoint,
+                                               Runnable progress) {
         if (transportInherited || tools.isEmpty()) return this;
         AgentExecutionRecorder runRecorder = recorder != null
                 ? recorder : AgentExecutionRecorder.noop();
         Runnable runCheckpoint = checkpoint != null ? checkpoint : () -> { };
+        Runnable runProgress = progress != null ? progress : () -> { };
         return new AgentToolBinding(tools,
                 gateway.withAdditionalFence(new ToolExecutionGateway.RequestFence() {
                     @Override
@@ -68,9 +77,14 @@ public record AgentToolBinding(ToolSet tools, ToolExecutionGateway gateway,
                         // server-to-client callback can still reach the recorder.
                         runRecorder.callWhileActive(() -> {
                             runCheckpoint.run();
+                            runProgress.run();
                             return null;
                         });
-                        return action.get();
+                        try {
+                            return action.get();
+                        } finally {
+                            runProgress.run();
+                        }
                     }
                 }), false);
     }

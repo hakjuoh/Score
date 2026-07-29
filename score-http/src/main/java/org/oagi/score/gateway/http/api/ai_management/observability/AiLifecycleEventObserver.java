@@ -366,7 +366,7 @@ final class AiLifecycleEventObserver {
     private static String terminalSuffix(String subtype) {
         for (String suffix : new String[]{
                 "started", "planned", "synthesizing", "completed", "failed", "cancelled",
-                "refused"}) {
+                "refused", "stalled"}) {
             if (subtype.endsWith("_" + suffix)) return suffix;
         }
         return "unknown";
@@ -397,6 +397,7 @@ final class AiLifecycleEventObserver {
         return switch (normalized) {
             case "completed", "complete", "success" -> "success";
             case "timed_out", "timeout" -> "timeout";
+            case "stalled" -> "stalled";
             case "cancelled", "canceled" -> "cancelled";
             case "denied", "blocked", "refused" -> "refused";
             case "failed", "error", "partial_failure" -> normalized;

@@ -464,6 +464,29 @@ class ScoreAiObservabilityTest {
     }
 
     @Test
+    void closesAStalledNestedWorkflowWithAStalledOutcome() {
+        ChatRequest request = new ChatRequest("prompt", "request-stalled-workflow", null,
+                "conversation-stalled-workflow", null, List.of(), null,
+                "gpt-5", "medium", "ask");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_started", "", Map.of(
+                        "node_id", "child-1", "parent_node_id", "main",
+                        "workflow", "research-group", "depth", 1, "member_count", 2)));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_stalled", "", Map.of(
+                        "node_id", "child-1", "parent_node_id", "main",
+                        "workflow", "research-group", "depth", 1)));
+        turn.complete("COMPLETED", null);
+
+        SpanData workflow = spans.getFinishedSpanItems().stream()
+                .filter(span -> span.getName().equals("invoke_workflow research-group"))
+                .findFirst().orElseThrow();
+        assertThat(workflow.getAttributes().get(
+                AttributeKey.stringKey("score.ai.outcome"))).isEqualTo("stalled");
+    }
+
+    @Test
     void preservesAValidMaximumLengthWorkflowIdInTelemetry() {
         String workflowId = "w".repeat(100);
         ChatRequest request = new ChatRequest("prompt", "request-long-workflow", null,

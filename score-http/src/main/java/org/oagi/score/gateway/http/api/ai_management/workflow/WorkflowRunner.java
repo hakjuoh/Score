@@ -44,7 +44,7 @@ import java.util.concurrent.CancellationException;
 public final class WorkflowRunner {
 
     private static final int DEFAULT_MAXIMUM_ITERATIONS = 3;
-    private static final Duration DEFAULT_EXECUTION_TIMEOUT = Duration.ofMinutes(2);
+    private static final Duration DEFAULT_INACTIVITY_TIMEOUT = Duration.ofMinutes(2);
     private static final String PARTIAL_FAILURE_NOTICE =
             "Some requested steps could not be completed. Successful actions may already "
                     + "have taken effect; review the result before retrying incomplete steps.";
@@ -56,7 +56,7 @@ public final class WorkflowRunner {
     private final Agent evaluator;
     private final Agent synthesizer;
     private final int maximumIterations;
-    private final Duration executionTimeout;
+    private final Duration inactivityTimeout;
     private final WorkflowPlanValidator validator = new WorkflowPlanValidator();
     private final WorkflowGraphScheduler graphScheduler = new WorkflowGraphScheduler();
 
@@ -68,23 +68,23 @@ public final class WorkflowRunner {
                         ? properties.getMultiAgent().getMaximumWorkflowIterations()
                         : DEFAULT_MAXIMUM_ITERATIONS,
                 properties != null
-                        ? properties.getMultiAgent().getSpecialistTimeout()
-                        : DEFAULT_EXECUTION_TIMEOUT);
+                        ? properties.getMultiAgent().getSpecialistInactivityTimeout()
+                        : DEFAULT_INACTIVITY_TIMEOUT);
     }
 
     public WorkflowRunner(AgentRunner agents,
              AiRequestRegistry requests, int maximumIterations,
-             Duration executionTimeout) {
+             Duration inactivityTimeout) {
         this.requests = requests;
         if (maximumIterations < 1) {
             throw new IllegalArgumentException("Maximum Workflow iterations must be positive.");
         }
         this.maximumIterations = maximumIterations;
-        if (executionTimeout == null || executionTimeout.isZero()
-                || executionTimeout.isNegative()) {
-            throw new IllegalArgumentException("Workflow execution timeout must be positive.");
+        if (inactivityTimeout == null || inactivityTimeout.isZero()
+                || inactivityTimeout.isNegative()) {
+            throw new IllegalArgumentException("Agent inactivity timeout must be positive.");
         }
-        this.executionTimeout = executionTimeout;
+        this.inactivityTimeout = inactivityTimeout;
         this.agents = Objects.requireNonNull(agents, "agents");
         this.gateway = role("gateway-agent");
         this.assistant = role("connectcenter-assistant");
@@ -94,7 +94,7 @@ public final class WorkflowRunner {
 
     public WorkflowRunner(AgentRunner agents, AiRequestRegistry requests,
                            int maximumIterations) {
-        this(agents, requests, maximumIterations, DEFAULT_EXECUTION_TIMEOUT);
+        this(agents, requests, maximumIterations, DEFAULT_INACTIVITY_TIMEOUT);
     }
 
     /** Schedules the already-adapted root Workflow context. */
@@ -111,9 +111,8 @@ public final class WorkflowRunner {
         Map<String, Object> namespace = namespace(context, "main", "main", null, 0, 1);
         AgentExecutionRecorder workflowRecorder = context.recorder().fork(namespace);
         WorkflowRunBudget budget = new WorkflowRunBudget(context.requestId(),
-                context.recorder(), executionTimeout,
-                () -> cancellationFence(context.requestId()),
-                () -> timeoutRequest(context.requestId()));
+                context.recorder(), inactivityTimeout,
+                () -> cancellationFence(context.requestId()));
         AgentWorkflowContext rootContext = root.withRunControl(budget)
                 .inWorkflow(null,
                 new AgentWorkflowContext.Location("main", "main", null, 0));
@@ -142,7 +141,7 @@ public final class WorkflowRunner {
                                 state.iteration + ":" + child.workflow().root().id(), budget);
                     } catch (CancellationException | AgentGuardrailRefusedException
                              | AgentOutputRetryHandoffException
-                             | WorkflowRunBudget.DeadlineExceededException terminal) {
+                             | AgentInvocationStalledException terminal) {
                         throw terminal;
                     } catch (RuntimeException failedIteration) {
                         if (state.candidate == null) throw failedIteration;
@@ -189,13 +188,14 @@ public final class WorkflowRunner {
                     lifecycle(namespace, "retry_handoff", Map.of(
                             "agent_id", handoff.agentId().value())));
             throw handoff;
-        } catch (WorkflowRunBudget.DeadlineExceededException timeout) {
+        } catch (AgentInvocationStalledException stalled) {
+            timeoutRequest(context.requestId());
             budget.settleUsage();
             context.recorder().sealAgainstLateCallbacks();
-            workflowRecorder.terminalLifecycle("workflow_timed_out",
-                    "Agent call flow exceeded its execution deadline.",
-                    lifecycle(namespace, "timed_out", Map.of()));
-            throw timeout;
+            workflowRecorder.terminalLifecycle("workflow_stalled",
+                    "Agent call flow stopped after an Agent made no observable progress.",
+                    lifecycle(namespace, "stalled", Map.of()));
+            throw stalled;
         } catch (CancellationException failure) {
             budget.settleUsage();
             context.recorder().sealAgainstLateCallbacks();
@@ -319,11 +319,11 @@ public final class WorkflowRunner {
                     lifecycle(namespace, "retry_handoff", Map.of(
                             "agent_id", handoff.agentId().value())));
             throw handoff;
-        } catch (WorkflowRunBudget.DeadlineExceededException timeout) {
-            recorder.terminalLifecycle("workflow_timed_out",
-                    "Workflow execution exceeded its deadline.",
-                    lifecycle(namespace, "timed_out", Map.of()));
-            throw timeout;
+        } catch (AgentInvocationStalledException stalled) {
+            recorder.terminalLifecycle("workflow_stalled",
+                    "Workflow execution stopped after an Agent made no observable progress.",
+                    lifecycle(namespace, "stalled", Map.of()));
+            throw stalled;
         } catch (CancellationException failure) {
             recorder.terminalLifecycle("workflow_cancelled", "Workflow execution stopped.",
                     lifecycle(namespace, "cancelled", Map.of()));
@@ -356,8 +356,7 @@ public final class WorkflowRunner {
             return executeChild(local.withInputs(upstream), member.workflow(),
                     nodeId, depth + 1, nestedPlan, member.id(), budget);
         } catch (CancellationException | AgentGuardrailRefusedException
-                 | AgentOutputRetryHandoffException
-                 | WorkflowRunBudget.DeadlineExceededException failure) {
+                 | AgentOutputRetryHandoffException failure) {
             throw failure;
         } catch (RuntimeException failure) {
             return WorkflowResult.failure(member.id(), failure);
@@ -381,8 +380,7 @@ public final class WorkflowRunner {
             AgentDecision decision = budget.invoke(agents, agent.callId(), context);
             return decisionResult(decision, context, member.id(), budget);
         } catch (CancellationException | AgentGuardrailRefusedException
-                 | AgentOutputRetryHandoffException
-                 | WorkflowRunBudget.DeadlineExceededException failure) {
+                 | AgentOutputRetryHandoffException failure) {
             throw failure;
         } catch (RuntimeException failure) {
             return WorkflowResult.failure(member.id(), failure);
