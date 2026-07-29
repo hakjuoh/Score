@@ -530,6 +530,20 @@ class AiChatControllerTest {
     }
 
     @Test
+    void routesWorkflowResultsAsMainChatSystemEvents() {
+        ChatRequest request = request("request-1", "conversation-1");
+        AiExecutionEvent result = AiExecutionEvent.detail(
+                "workflow_result", "Reconciled answer.", Map.of("depth", 1));
+
+        AiChatSocketEvent event = AiChatController.socketEvent(request, 7L, result);
+
+        assertThat(event.type()).isEqualTo("system");
+        assertThat(event.subtype()).isEqualTo("workflow_result");
+        assertThat(event.content()).isEqualTo("Reconciled answer.");
+        assertThat(event.sequence()).isEqualTo(7L);
+    }
+
+    @Test
     void recordsTimedOutRestRequestsInTheTrajectory() throws Exception {
         ScoreAiProperties properties = new ScoreAiProperties();
         properties.setRequestInactivityTimeout(Duration.ofMillis(25));

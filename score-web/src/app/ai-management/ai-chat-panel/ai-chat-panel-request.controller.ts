@@ -97,17 +97,12 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           this.handleSystemEvent(event);
         } else if (event.type === 'system' && event.subtype === 'guide') {
           this.handleSystemEvent(event);
+        } else if (event.type === 'system' && event.subtype === 'workflow_result') {
+          this.handleSystemEvent(event);
         } else if (event.type === 'system' && event.subtype === 'provider_error') {
           this.handleSystemEvent(event);
         } else if (event.type === 'system' && event.subtype === 'provider_retry') {
-          if (isSpecialistActivityEvent(event)) {
-            this.handleSystemEvent(event);
-          } else {
-            const content = this.primaryContent(event).trim();
-            if (content) {
-              this.state.messages.push({role: 'progress', content, inProgress: false});
-            }
-          }
+          this.handleSystemEvent(event);
         } else if (event.type === 'tool_call' || event.type === 'tool_group') {
           // Replayed specialist activity belongs in its agent timeline;
           // lead activity uses the same structured row path as WebSocket chat.
@@ -136,6 +131,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         || isSpecialistToolEvent(event)
         || event.type === 'tool_call' || event.type === 'tool_group'
         || event.type === 'system' && event.subtype === 'guide'
+        || event.type === 'system' && event.subtype === 'workflow_result'
         || event.type === 'system' && (event.subtype === 'provider_error'
           || event.subtype === 'provider_retry')
         || isMutationApprovalInteractionEvent(event)
@@ -200,6 +196,9 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         this.state.conversationId = response.conversationId || this.state.conversationId;
         this.sessionPersistence.rememberLastConversation(this.state.conversationId);
         replayRestEvents(response.events || []);
+        // Provider error/retry frames are transient recovery state. A successful
+        // canonical response settles them even when they were replayed from REST.
+        this.clearProviderRecoveryState();
         this.settleAgentActivity('completed');
         this.state.elicitation = undefined;
         this.state.elicitationBusy = false;
@@ -210,7 +209,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           response.progress.forEach(progress => this.state.messages.push({role: 'progress', content: progress}));
         }
         if (response.response) {
-          this.state.messages.push({role: 'assistant', content: response.response});
+          this.commitAssistantMessage(requestId, response.response);
         }
         this.state.pending = false;
         this.state.reconciliationRequired = false;

@@ -179,7 +179,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
   }
 
   protected loadTerminalRecoveredConversation(status: AiPublicExecutionRequestStatus): void {
-    this.clearProviderRetryCountdown();
+    this.clearProviderRecoveryState();
     this.activeRecoverySubscription?.unsubscribe();
     this.activeRecoverySubscription = this.api.getConversation(status.conversationId).pipe(take(1)).subscribe({
       next: details => {
@@ -218,7 +218,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
       // event can remove it instead of leaving a completed recovery notice in history.
       this.showStatus(
         'The request is still running. Progress is restored automatically.',
-        true, undefined, RECOVERED_REQUEST_STATUS_EVENT
+        true, {eventType: RECOVERED_REQUEST_STATUS_EVENT}
       );
     } else if (this.recoveredRequestSnapshotId === status.requestId) {
       this.recoveredRequestSnapshotId = undefined;

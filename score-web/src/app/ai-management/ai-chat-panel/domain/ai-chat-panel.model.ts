@@ -3,6 +3,13 @@ import type {AiAgentActivity} from './ai-agent-activity';
 export type AiChatDock = 'right' | 'bottom' | 'left' | 'top';
 export type AiChatMessageRole = 'user' | 'assistant' | 'guide' | 'progress'
   | 'agent_group' | 'workflow_group' | 'tool_group' | 'tool_call' | 'error' | 'debug';
+export type AiChatStatusTone = 'neutral' | 'error';
+export interface AiChatStatusOptions {
+  eventType?: string;
+  tone?: AiChatStatusTone;
+  /** Non-shrinking tail that must remain visible when the primary status is long. */
+  suffix?: string;
+}
 export type AiChatToolStatus = 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled';
 export type AiChatPanelTab = 'chat' | 'history';
 export type AiMutationPermissionMode = 'ask' | 'auto' | 'full_access';
@@ -19,9 +26,10 @@ export interface AiChatMessage {
   /** Owning request of a streamed assistant segment; identifies the live bubble
    *  without relying on array indexes that tool-row splices can shift. */
   requestId?: string;
-  /** Fixed tail of an alert status row (retry countdown and attempt); the
-   *  leading content ellipsizes so this segment stays visible on one line. */
-  alertSuffix?: string;
+  /** Visual and accessibility severity for a transient status row. */
+  statusTone?: AiChatStatusTone;
+  /** Stable tail of a status line; the leading content may ellipsize independently. */
+  statusSuffix?: string;
   turnId?: string;
   groupId?: string;
   toolCallId?: string;

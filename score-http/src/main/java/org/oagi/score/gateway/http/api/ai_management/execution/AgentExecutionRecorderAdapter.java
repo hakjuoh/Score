@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.execution;
 
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentExecutionRecorder;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutput;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 
@@ -99,6 +100,11 @@ public final class AgentExecutionRecorderAdapter implements AgentExecutionRecord
     @Override
     public void lifecycle(String subtype, String content, Map<String, Object> metadata) {
         delegate.lifecycle(subtype, content, metadata);
+    }
+
+    @Override
+    public void workflowResult(AgentOutput output, Map<String, Object> metadata) {
+        delegate.workflowResult(output, metadata);
     }
 
     @Override

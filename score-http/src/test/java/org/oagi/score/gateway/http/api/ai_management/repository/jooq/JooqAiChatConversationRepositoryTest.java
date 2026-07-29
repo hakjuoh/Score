@@ -18,6 +18,7 @@ import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryData;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatHistoryMessage;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 
@@ -35,6 +36,23 @@ import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.A
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_STEP;
 
 class JooqAiChatConversationRepositoryTest {
+
+    @Test
+    void removesOnlyTheFinalAnswersIdenticalWorkflowPreview() {
+        ChatHistoryMessage firstIteration = history(0, "workflow_result", "First answer.");
+        ChatHistoryMessage finalPreview = history(1, "workflow_result", "Final answer.");
+        ChatHistoryMessage finalAnswer = history(2, null, "Final answer.");
+
+        assertThat(JooqAiChatConversationRepository.coalesceFinalWorkflowResult(List.of(
+                firstIteration, finalPreview, finalAnswer)))
+                .containsExactly(firstIteration, finalAnswer);
+    }
+
+    private static ChatHistoryMessage history(int index, String subtype, String content) {
+        return new ChatHistoryMessage(index, "assistant", content,
+                "request-1", "request-1", null, null, null,
+                subtype, "visible", Map.of());
+    }
 
     @Test
     void generatedStepSchemaContainsNoRuntimeColumns() {

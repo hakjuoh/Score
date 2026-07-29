@@ -11,13 +11,14 @@ import {
   AiCancellationResponse,
   AiChatContextUpdate,
   AiChatSocketEvent,
+  AiChatStatusOptions,
   AiExecutionStatus
 } from './domain/ai-chat-panel.model';
 
 export abstract class AiChatPanelLifecycleController extends AiChatPanelConversationController {
-  protected showStatus(content: string, inProgress = false, alertSuffix?: string,
-                       eventType?: string): void {
-    this.messageTracker.showStatus(this.state, content, inProgress, alertSuffix, eventType);
+  protected showStatus(content: string, inProgress = false,
+                       options: AiChatStatusOptions = {}): void {
+    this.messageTracker.showStatus(this.state, content, inProgress, options);
   }
 
   protected completeProgressMessages(): void {
@@ -47,7 +48,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.activeRequestRecovery.cancel();
     this.clearRequestStatusWatchdog();
     this.clearResponseTimeout();
-    this.clearProviderRetryCountdown();
+    this.clearProviderRecoveryState();
     if (this.mutationApprovalExpiryTimeout !== undefined) {
       window.clearTimeout(this.mutationApprovalExpiryTimeout);
       this.mutationApprovalExpiryTimeout = undefined;
@@ -66,7 +67,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     return {
       onStateChange: state => {
         this.state.cancellation = state;
-        this.clearProviderRetryCountdown();
+        this.clearProviderRecoveryState();
         if (state.phase === 'requesting') {
           this.showStatus('Cancelling request.', true);
           this.state.currentStatus = 'Cancelling';
