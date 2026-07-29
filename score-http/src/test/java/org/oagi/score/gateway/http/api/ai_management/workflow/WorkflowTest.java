@@ -343,7 +343,7 @@ class WorkflowTest {
     }
 
     @Test
-    void absoluteDeadlineInterruptsABlockedAgent() {
+    void inactivityLeaseInterruptsABlockedRootAgent() {
         Agent blocked = agent("gateway-agent", new ArrayList<>(), ignored -> {
             try {
                 Thread.sleep(10_000);
@@ -358,13 +358,16 @@ class WorkflowTest {
 
         assertThatThrownBy(() -> workflow.execute(workflowContext(context())))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("deadline");
+                .hasMessageContaining("inactivity lease");
     }
 
     @Test
-    void deadlineRemainsTerminalWhenAChildWorkflowMemberIsBlocked() {
+    void stalledChildMemberDoesNotStopAnActiveSiblingOrPartialSynthesis() {
         Agent gateway = agent("gateway-agent", new ArrayList<>(),
-                ignored -> new AgentDecision.Delegate(plan("blocked-work", "blocked-worker")));
+                ignored -> new AgentDecision.Delegate(new AiWorkflowPlan(
+                        new AiWorkflowPlan.WorkflowDefinition("partial-work", List.of(
+                                member("blocked", "blocked-worker"),
+                                member("active", "active-worker")), List.of()), null, null)));
         Agent blocked = agent("blocked-worker", new ArrayList<>(), ignored -> {
             try {
                 Thread.sleep(10_000);
@@ -374,17 +377,33 @@ class WorkflowTest {
             }
             return complete("late");
         });
+        Agent active = agent("active-worker", new ArrayList<>(), context -> {
+            for (int heartbeat = 0; heartbeat < 6; heartbeat++) {
+                try {
+                    Thread.sleep(30);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new CancellationException("active worker interrupted");
+                }
+                context.progress();
+            }
+            return complete("active");
+        });
         WorkflowRunner workflow = new WorkflowRunner(
-                new AgentRunner(null, List.of(gateway, blocked)), null, 3,
-                Duration.ofMillis(30));
+                new AgentRunner(null, List.of(gateway, blocked, active)), null, 3,
+                Duration.ofMillis(100));
 
-        assertThatThrownBy(() -> workflow.execute(workflowContext(context())))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("deadline");
+        AgentOutput result = workflow.execute(workflowContext(context()));
+
+        assertThat(result.content()).contains("active")
+                .contains("Some requested steps could not be completed.");
+        assertThat(result.metadata())
+                .containsEntry("partial_failure", true)
+                .containsEntry("partial_failure_count", 1);
     }
 
     @Test
-    void deadlineRemainsTerminalWhenAnAgentRequestHandlerRunsPastIt() {
+    void inactivityLeaseRemainsTerminalWhenAnAgentRequestHandlerStalls() {
         AgentResponseHandler recovery = new AgentResponseHandler() {
             @Override
             public AgentDecision handle(
@@ -413,16 +432,81 @@ class WorkflowTest {
                 recovery, AgentGuardrails.none(), false);
         Agent agent = new DefinedAgent(definition);
         WorkflowRunBudget budget = new WorkflowRunBudget("request", mock(AgentExecutionRecorder.class),
-                Duration.ofMillis(20), () -> { }, () -> { });
+                Duration.ofMillis(20), () -> { });
         AgentWorkflowContext context = workflowContext(context()).withRunControl(budget);
 
-        assertThatThrownBy(() -> new AgentRunner(null, List.of(agent)).run(agent, context))
+        assertThatThrownBy(() -> budget.invoke(
+                new AgentRunner(null, List.of(agent)), agent.callId(), context))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("deadline");
+                .hasMessageContaining("inactivity lease");
     }
 
     @Test
-    void deadlineFencesLateCallbacksAndSettlesUsageExactlyOnce() {
+    void observableProgressRenewsTheLeaseBeyondItsOriginalWallClockDuration() {
+        java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong();
+        WorkflowRunBudget budget = new WorkflowRunBudget("request",
+                AgentExecutionRecorder.noop(), Duration.ofNanos(10), () -> { }, clock::get);
+        Agent active = agent("active", new ArrayList<>(), context -> {
+            for (int step = 0; step < 4; step++) {
+                clock.addAndGet(9L);
+                context.progress();
+            }
+            return complete("finished after 36ns");
+        });
+
+        AgentDecision decision = budget.invoke(new AgentRunner(null, List.of(active)),
+                active.callId(), workflowContext(context()).withRunControl(budget));
+
+        assertThat(decision).isInstanceOfSatisfying(AgentDecision.Complete.class,
+                complete -> assertThat(complete.result().content())
+                        .isEqualTo("finished after 36ns"));
+    }
+
+    @Test
+    void oneFailingLateWriteFenceDoesNotPreventTheRemainingFences() {
+        AtomicInteger applied = new AtomicInteger();
+        AgentInvocationLease lease = new AgentInvocationLease("worker", 10L,
+                System::nanoTime,
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP);
+        lease.registerUsage(() -> null, () -> {
+            throw new IllegalStateException("broken fence");
+        });
+        lease.registerUsage(() -> null, applied::incrementAndGet);
+
+        lease.stop();
+
+        assertThat(applied).hasValue(1);
+    }
+
+    @Test
+    void stalledRootSignalsTheRequestRegistryAndTerminalRecorder() {
+        org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry requests =
+                mock(org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry.class);
+        Agent blocked = agent("gateway-agent", new ArrayList<>(), ignored -> {
+            try {
+                Thread.sleep(10_000);
+            } catch (InterruptedException stopped) {
+                Thread.currentThread().interrupt();
+                throw new CancellationException("stopped");
+            }
+            return complete("late");
+        });
+        AgentExecutionContext execution = context();
+        WorkflowRunner workflow = new WorkflowRunner(
+                new AgentRunner(null, List.of(blocked)), requests, 3,
+                Duration.ofMillis(30));
+
+        assertThatThrownBy(() -> workflow.execute(workflowContext(execution)))
+                .isInstanceOf(AgentInvocationStalledException.class);
+
+        verify(requests).timeoutExecution("request-1");
+        verify(execution.recorder()).sealAgainstLateCallbacks();
+        verify(execution.recorder()).terminalLifecycle(
+                org.mockito.ArgumentMatchers.eq("workflow_stalled"), any(), any());
+    }
+
+    @Test
+    void stalledRunFencesLateCallbacksAndSettlesUsageExactlyOnce() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         CountDownLatch usageSettled = new CountDownLatch(1);
         org.mockito.Mockito.doAnswer(invocation -> {
@@ -458,7 +542,7 @@ class WorkflowTest {
 
         assertThatThrownBy(() -> workflow.execute(workflowContext(execution)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("deadline");
+                .hasMessageContaining("Every member");
         await(usageSettled);
 
         assertThat(events).extracting(AiExecutionEvent::content)
@@ -484,7 +568,7 @@ class WorkflowTest {
         java.util.concurrent.atomic.AtomicReference<Thread> worker =
                 new java.util.concurrent.atomic.AtomicReference<>();
         WorkflowRunBudget budget = new WorkflowRunBudget("request", root,
-                Duration.ofSeconds(1), () -> { }, () -> { }, clock::get,
+                Duration.ofSeconds(1), () -> { }, clock::get,
                 invocation -> {
                     Thread delayed = Thread.startVirtualThread(() -> {
                         while (releaseWorker.getCount() > 0) {
@@ -508,7 +592,7 @@ class WorkflowTest {
                 new AgentRunner(null, List.of(neverStarted)),
                 neverStarted.callId(), workflowContext(context()).withRunControl(budget)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("deadline");
+                .hasMessageContaining("inactivity lease");
         budget.settleUsage();
 
         @SuppressWarnings("unchecked")
@@ -525,28 +609,31 @@ class WorkflowTest {
     }
 
     @Test
-    void deadlineArithmeticSupportsNegativeNanoTimeReadings() {
+    void inactivityArithmeticSupportsNegativeNanoTimeReadings() {
         java.util.concurrent.atomic.AtomicLong clock =
                 new java.util.concurrent.atomic.AtomicLong(-100L);
         WorkflowRunBudget budget = new WorkflowRunBudget("request",
                 AgentExecutionRecorder.noop(), Duration.ofNanos(10),
-                () -> { }, () -> { }, clock::get);
+                () -> { }, clock::get);
+        Agent stalled = agent("stalled", new ArrayList<>(), context -> {
+            clock.set(-89L);
+            context.checkpoint();
+            return complete("late");
+        });
 
-        budget.checkpoint();
-        clock.set(-89L);
-
-        assertThatThrownBy(budget::checkpoint)
+        assertThatThrownBy(() -> budget.invoke(new AgentRunner(null, List.of(stalled)),
+                stalled.callId(), workflowContext(context()).withRunControl(budget)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("deadline");
+                .hasMessageContaining("inactivity lease");
     }
 
     @Test
-    void deadlineSettlementIncludesAnAdmittedModelAttemptThatFinishesOnTheBoundary() {
+    void stalledRunSettlementIncludesAnAdmittedModelAttempt() {
         AgentExecutionRecorder root = mock(AgentExecutionRecorder.class);
         java.util.concurrent.atomic.AtomicLong clock =
                 new java.util.concurrent.atomic.AtomicLong();
         WorkflowRunBudget budget = new WorkflowRunBudget("request", root,
-                Duration.ofSeconds(1), () -> { }, () -> { }, clock::get);
+                Duration.ofSeconds(1), () -> { }, clock::get);
         SpringAiModelCatalog models = mock(SpringAiModelCatalog.class);
         AiModel model = new AiModel(new AiModel.ModelId("model"),
                 new AiModel.ProviderId("provider"),
@@ -578,7 +665,7 @@ class WorkflowTest {
 
         assertThatThrownBy(() -> budget.invoke(runner, agent.callId(), context))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("deadline");
+                .hasMessageContaining("inactivity lease");
         budget.settleUsage();
 
         @SuppressWarnings("unchecked")
@@ -593,7 +680,7 @@ class WorkflowTest {
     }
 
     @Test
-    void deadlineKeepsAnAdmittedAssignedChatRecorderOpenUntilUsageIsPublished() {
+    void stalledRunKeepsAnAdmittedAssignedChatRecorderOpenUntilUsageIsPublished() {
         AgentExecutionRecorder root = mock(AgentExecutionRecorder.class);
         AgentExecutionRecorder child = mock(AgentExecutionRecorder.class);
         CountDownLatch releaseProvider = new CountDownLatch(1);
@@ -619,7 +706,7 @@ class WorkflowTest {
         java.util.concurrent.atomic.AtomicLong clock =
                 new java.util.concurrent.atomic.AtomicLong();
         WorkflowRunBudget budget = new WorkflowRunBudget("request", root,
-                Duration.ofSeconds(1), () -> { }, () -> { }, clock::get);
+                Duration.ofSeconds(1), () -> { }, clock::get);
         var execution = TestAgentExecutionService.chat(session -> {
             session.context().recorder().verifyActive();
             clock.set(TimeUnit.SECONDS.toNanos(2));
@@ -658,7 +745,7 @@ class WorkflowTest {
         assertThatThrownBy(() -> budget.invoke(
                 new AgentRunner(execution, List.of(agent)), agent.callId(), context))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("deadline");
+                .hasMessageContaining("inactivity lease");
         budget.settleUsage();
 
         verify(root, org.mockito.Mockito.never())
@@ -679,7 +766,7 @@ class WorkflowTest {
     }
 
     @Test
-    void deadlineSettlesLateUsageFromTheRootChatAttempt() {
+    void stalledRunSettlesLateUsageFromTheRootChatAttempt() {
         AgentExecutionRecorder root = mock(AgentExecutionRecorder.class);
         CountDownLatch releaseProvider = new CountDownLatch(1);
         CountDownLatch usageSettled = new CountDownLatch(1);
@@ -697,7 +784,7 @@ class WorkflowTest {
         java.util.concurrent.atomic.AtomicLong clock =
                 new java.util.concurrent.atomic.AtomicLong();
         WorkflowRunBudget budget = new WorkflowRunBudget("request", root,
-                Duration.ofSeconds(1), () -> { }, () -> { }, clock::get);
+                Duration.ofSeconds(1), () -> { }, clock::get);
         var execution = TestAgentExecutionService.chat(session -> {
             clock.set(TimeUnit.SECONDS.toNanos(2));
             boolean released = false;
@@ -725,7 +812,7 @@ class WorkflowTest {
         assertThatThrownBy(() -> budget.invoke(
                 new AgentRunner(execution, List.of(agent)), agent.callId(), context))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("deadline");
+                .hasMessageContaining("inactivity lease");
         budget.settleUsage();
 
         verify(root, org.mockito.Mockito.never())
@@ -773,7 +860,7 @@ class WorkflowTest {
                 org.oagi.score.gateway.http.api.ai_management.agent.AgentToolHandler.none(),
                 AgentResponseHandler.complete(), AgentGuardrails.none(), false));
         WorkflowRunBudget budget = new WorkflowRunBudget("request", root,
-                Duration.ofSeconds(2), () -> { }, () -> { });
+                Duration.ofSeconds(2), () -> { });
         AgentWorkflowContext context = workflowContext(rootExecution).withRunControl(budget);
         AgentRunner runner = new AgentRunner(execution, List.of(agent));
 
@@ -805,7 +892,7 @@ class WorkflowTest {
             return null;
         }).when(root).recordSettledFanOutUsage(any(), any(), any());
         WorkflowRunBudget budget = new WorkflowRunBudget("request", root,
-                Duration.ofMillis(20), () -> { }, () -> { });
+                Duration.ofMillis(20), () -> { });
         budget.registerAttemptUsage(
                 () -> new AiUsageSnapshot("blocked", "Blocked", 2, 1, 1),
                 accountingClosed::countDown);
@@ -825,7 +912,7 @@ class WorkflowTest {
                 new AgentRunner(null, List.of(blocked)), blocked.callId(),
                 workflowContext(context()).withRunControl(budget)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("deadline");
+                .hasMessageContaining("inactivity lease");
         budget.settleUsage();
 
         assertThat(accountingClosed.await(2, TimeUnit.SECONDS)).isTrue();

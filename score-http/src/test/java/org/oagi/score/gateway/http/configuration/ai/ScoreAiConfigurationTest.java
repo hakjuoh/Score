@@ -22,6 +22,7 @@ import org.springframework.core.env.MapPropertySource;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -237,6 +238,8 @@ class ScoreAiConfigurationTest {
         assertEquals(200000L, properties.getModels().get("gpt-5_6-sol").getContextWindow());
         assertEquals("classpath:ai/system/system-prompt-connect-center-assistant.md",
                 properties.getAssistant().getSystemPromptResource());
+        assertEquals(Duration.ofMinutes(2),
+                properties.getMultiAgent().getSpecialistInactivityTimeout());
         assertNull(environment.getProperty("score.ai.gateway.model-name"));
         Map.of(
                 "claude-fable-5", "max",
@@ -252,6 +255,17 @@ class ScoreAiConfigurationTest {
         assertTrue(properties.getModels().values().stream()
                 .flatMap(model -> model.getReasoningEfforts().stream())
                 .noneMatch(effort -> "Ultra Code".equals(effort.getDisplayName())));
+    }
+
+    @Test
+    void prefersTheNewSpecialistInactivityEnvironmentVariable() throws Exception {
+        assertEquals(Duration.ofSeconds(31), bindSpecialistInactivity(Map.of(
+                "SCORE_AI_MULTI_AGENT_SPECIALIST_INACTIVITY_TIMEOUT", "31s")));
+        assertEquals(Duration.ofSeconds(17), bindSpecialistInactivity(Map.of(
+                "SCORE_AI_MULTI_AGENT_SPECIALIST_TIMEOUT", "17s")));
+        assertEquals(Duration.ofSeconds(31), bindSpecialistInactivity(Map.of(
+                "SCORE_AI_MULTI_AGENT_SPECIALIST_INACTIVITY_TIMEOUT", "31s",
+                "SCORE_AI_MULTI_AGENT_SPECIALIST_TIMEOUT", "17s")));
     }
 
     @Test
@@ -341,6 +355,19 @@ class ScoreAiConfigurationTest {
         properties.setModels(new LinkedHashMap<>(Map.of(modelName, model)));
         properties.setModelName(modelName);
         return properties;
+    }
+
+    private Duration bindSpecialistInactivity(Map<String, Object> environmentValues)
+            throws Exception {
+        StandardEnvironment environment = new StandardEnvironment();
+        environment.getPropertySources().addFirst(
+                new MapPropertySource("specialist-timeout-test", environmentValues));
+        new YamlPropertySourceLoader().load(
+                        "application-dev", new ClassPathResource("application-dev.yml"))
+                .forEach(environment.getPropertySources()::addLast);
+        return Binder.get(environment).bind("score.ai", ScoreAiProperties.class)
+                .orElseThrow(() -> new IllegalStateException("score.ai configuration was not bound"))
+                .getMultiAgent().getSpecialistInactivityTimeout();
     }
 
     private Map<String, ChatModel> chatModels(ScoreAiProperties properties) {

@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.function.LongSupplier;
 
-/** One request-global call count, deadline, cancellation fence, and usage settlement. */
+/** One request-global call count, cancellation fence, and usage settlement. */
 final class WorkflowRunBudget implements WorkflowRunControl {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(WorkflowRunBudget.class);
@@ -33,9 +33,7 @@ final class WorkflowRunBudget implements WorkflowRunControl {
     private final String requestId;
     private final AgentExecutionRecorder rootRecorder;
     private final Runnable cancellationFence;
-    private final Runnable deadlineFence;
-    private final long startedNanos;
-    private final long timeoutNanos;
+    private final long inactivityTimeoutNanos;
     private final LongSupplier nanoTime;
     private final InvocationStarter invocationStarter;
     private final AtomicInteger calls = new AtomicInteger();
@@ -43,43 +41,39 @@ final class WorkflowRunBudget implements WorkflowRunControl {
     private final AtomicBoolean settlementStarted = new AtomicBoolean();
     private final AtomicBoolean settlementDeadlineScheduled = new AtomicBoolean();
     private final AtomicBoolean settled = new AtomicBoolean();
-    private final AtomicBoolean deadlineSignalled = new AtomicBoolean();
     private final List<UsageSource> usage = new ArrayList<>();
     private boolean active = true;
 
     WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
-                      Duration timeout, Runnable cancellationFence,
-                      Runnable deadlineFence) {
-        this(requestId, rootRecorder, timeout, cancellationFence,
-                deadlineFence, System::nanoTime, Thread::startVirtualThread);
+                      Duration inactivityTimeout, Runnable cancellationFence) {
+        this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
+                System::nanoTime, Thread::startVirtualThread);
     }
 
     WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
-                      Duration timeout, Runnable cancellationFence,
-                      Runnable deadlineFence, LongSupplier nanoTime) {
-        this(requestId, rootRecorder, timeout, cancellationFence,
-                deadlineFence, nanoTime, Thread::startVirtualThread);
+                      Duration inactivityTimeout, Runnable cancellationFence,
+                      LongSupplier nanoTime) {
+        this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
+                nanoTime, Thread::startVirtualThread);
     }
 
     WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
-                      Duration timeout, Runnable cancellationFence,
-                      Runnable deadlineFence, LongSupplier nanoTime,
+                      Duration inactivityTimeout, Runnable cancellationFence,
+                      LongSupplier nanoTime,
                       InvocationStarter invocationStarter) {
         this.requestId = requestId;
         this.rootRecorder = rootRecorder;
         this.cancellationFence = cancellationFence;
-        this.deadlineFence = deadlineFence;
         this.nanoTime = java.util.Objects.requireNonNull(nanoTime, "nanoTime");
         this.invocationStarter = java.util.Objects.requireNonNull(
                 invocationStarter, "invocationStarter");
-        this.startedNanos = nanoTime.getAsLong();
         long resolvedTimeout;
         try {
-            resolvedTimeout = timeout.toNanos();
+            resolvedTimeout = inactivityTimeout.toNanos();
         } catch (ArithmeticException tooLarge) {
             resolvedTimeout = Long.MAX_VALUE;
         }
-        this.timeoutNanos = resolvedTimeout;
+        this.inactivityTimeoutNanos = resolvedTimeout;
     }
 
     void charge(String operation) {
@@ -94,11 +88,15 @@ final class WorkflowRunBudget implements WorkflowRunControl {
                          org.oagi.score.gateway.http.api.ai_management.agent.Agent.AgentId id,
         AgentWorkflowContext context) {
         charge("Agent " + id.value());
+        AgentInvocationLease lease = new AgentInvocationLease(id.value(),
+                inactivityTimeoutNanos, nanoTime, this);
+        AgentWorkflowContext invocationContext = context.withRunControl(lease);
         FutureTask<AgentDecision> call = new FutureTask<>(() -> {
             inFlightInvocations.incrementAndGet();
             try {
-                return runner.run(id, context);
+                return runner.run(id, invocationContext);
             } finally {
+                lease.invocationFinished();
                 invocationFinished();
             }
         });
@@ -111,19 +109,15 @@ final class WorkflowRunBudget implements WorkflowRunControl {
         try {
             while (true) {
                 checkpoint();
-                long remaining = remainingNanos();
-                if (remaining <= 0) throw deadlineExceeded();
+                long remaining = lease.remainingNanos();
+                if (remaining <= 0) throw lease.stalled();
                 try {
                     AgentDecision decision = call.get(
                             Math.min(remaining, CANCELLATION_POLL_NANOS),
                             TimeUnit.NANOSECONDS);
-                    // AgentRunner publishes the attempt's usage before completing
-                    // this Future. Recheck the absolute deadline only afterward so
-                    // a boundary completion is accounted even when it is rejected.
-                    if (remainingNanos() <= 0) throw deadlineExceeded();
                     return decision;
-                } catch (TimeoutException pollOrDeadline) {
-                    if (remainingNanos() <= 0) throw deadlineExceeded();
+                } catch (TimeoutException pollOrInactivity) {
+                    if (lease.remainingNanos() <= 0) throw lease.stalled();
                 }
             }
         } catch (InterruptedException interrupted) {
@@ -136,6 +130,7 @@ final class WorkflowRunBudget implements WorkflowRunControl {
             throw new IllegalStateException("Agent runner execution failed.", cause);
         } finally {
             if (!call.isDone()) {
+                lease.stop();
                 call.cancel(true);
                 worker.interrupt();
                 try {
@@ -155,7 +150,11 @@ final class WorkflowRunBudget implements WorkflowRunControl {
             terminate();
             throw terminal;
         }
-        if (remainingNanos() <= 0) throw deadlineExceeded();
+    }
+
+    @Override
+    public void progress() {
+        checkpoint();
     }
 
     @Override
@@ -167,7 +166,7 @@ final class WorkflowRunBudget implements WorkflowRunControl {
 
     @Override
     public synchronized void recordAttemptUsage(AiUsageSnapshot snapshot) {
-        // A model call admitted before the deadline can finish on the boundary.
+        // A model call admitted before a terminal fence can finish afterward.
         // Its billable usage belongs to this run even after admission is fenced,
         // provided the request-global settlement has not taken its snapshot yet.
         if (!settled.get() && snapshot != null) {
@@ -252,19 +251,6 @@ final class WorkflowRunBudget implements WorkflowRunControl {
         }
     }
 
-    private long remainingNanos() {
-        // nanoTime readings may be negative or wrap. Their difference remains
-        // valid for every representable execution timeout.
-        long elapsed = nanoTime.getAsLong() - startedNanos;
-        return timeoutNanos - elapsed;
-    }
-
-    private DeadlineExceededException deadlineExceeded() {
-        terminate();
-        if (deadlineSignalled.compareAndSet(false, true)) deadlineFence.run();
-        return new DeadlineExceededException();
-    }
-
     private void terminate() {
         List<Runnable> fences;
         synchronized (this) {
@@ -331,12 +317,6 @@ final class WorkflowRunBudget implements WorkflowRunControl {
 
         private void fence() {
             if (fenced.compareAndSet(false, true)) lateWriteFence.run();
-        }
-    }
-
-    static final class DeadlineExceededException extends IllegalStateException {
-        private DeadlineExceededException() {
-            super("The Workflow execution deadline was exceeded.");
         }
     }
 

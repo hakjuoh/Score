@@ -123,6 +123,11 @@ public record AgentWorkflowContext(
         runControl.checkpoint();
     }
 
+    /** Renews this invocation's inactivity lease after observable forward progress. */
+    public void progress() {
+        runControl.progress();
+    }
+
     public void recordUsage(AiUsageSnapshot usage) {
         if (usage != null) runControl.recordUsage(usage);
     }
