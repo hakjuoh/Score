@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.MutationConfirmation;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionState;
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiCallbackToolSetAdapter;
@@ -34,6 +35,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -236,6 +240,87 @@ class AiMutationToolGuardTest {
                 .isEqualTo("{\"status\":\"safe\"}");
         verify(update, times(1)).call(org.mockito.ArgumentMatchers.eq("{\"id\":18}"),
                 any(ToolContext.class));
+    }
+
+    @Test
+    void outputPolicyFailureReleasesRequestAndInvocationMutationLeases() {
+        ChatRequest fullAccess = request("full_access", null);
+        when(confirmations.argumentsDigest(anyString(), anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(0) + "\n" + invocation.getArgument(1));
+        when(requests.mutationStarted("request-1")).thenReturn(true);
+        WorkflowRunControl runControl = mock(WorkflowRunControl.class);
+        ToolCallback update = tool("update_business_context", "mutation completed");
+        ToolCallbackProvider provider = () -> new ToolCallback[]{update};
+        AiMutationToolGuard.GuardedToolSession session = guard.authorizationSession(
+                fullAccess, requester, ignored -> { }, provider, SERVER_READ_ONLY_TOOLS,
+                runControl);
+        var coreTools = new SpringAiCallbackToolSetAdapter().adapt(provider, SERVER_READ_ONLY_TOOLS);
+        ToolInputGuardrail input = guarded -> new ToolInputGuardrail.Result.Allow(
+                guarded.arguments(), GuardrailDecision.of("test-input", "1",
+                GuardrailDecision.Action.ALLOW));
+        ToolOutputGuardrail failingOutput = ignored -> {
+            throw new IllegalStateException("output policy unavailable");
+        };
+        ToolGuardrailRegistry guardrails = new ToolGuardrailRegistry(
+                new ToolGuardrailRegistry.Set(List.of(input), List.of(failingOutput)), Map.of());
+        ExecutionScope scope = new ExecutionScope("request-1", "conversation-1", "user-1",
+                1, ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        ToolExecutionGateway gateway = new ToolExecutionGateway(coreTools, guardrails,
+                List.of(session), ignored -> { }, ExecutionObserver.noop(),
+                new ExecutionState(), 4096);
+
+        AiTool.ToolResult result = gateway.execute(
+                coreTools.values().iterator().next().specification().id(),
+                new AiTool.ToolArguments("{}"), scope);
+
+        assertThat(result.json()).contains("TOOL_POLICY_UNAVAILABLE");
+        verify(requests).mutationStarted("request-1");
+        verify(requests).mutationFinished("request-1");
+        verify(runControl).definiteActivityStarted();
+        verify(runControl).definiteActivityFinished();
+    }
+
+    @Test
+    void concurrentSameMutationKeyReleasesEveryAcquiredLeaseExactlyOnce() throws Exception {
+        int invocations = 500;
+        when(confirmations.argumentsDigest(anyString(), anyString()))
+                .thenReturn("same-execution-key");
+        when(requests.mutationStarted("request-1")).thenReturn(true);
+        WorkflowRunControl runControl = mock(WorkflowRunControl.class);
+        AiMutationToolGuard.GuardedToolSession session = guard.authorizationSession(
+                request("full_access", null), requester, ignored -> { },
+                () -> new ToolCallback[0], SERVER_READ_ONLY_TOOLS, runControl);
+        AiTool mutation = new AiTool() {
+            private final ToolSpecification specification = new ToolSpecification(
+                    new ToolId("update_business_context"), "update_business_context",
+                    "update", "{}", "{}", ToolEffect.MUTATION);
+            @Override public ToolSpecification specification() { return specification; }
+            @Override public ToolResult execute(ToolArguments arguments,
+                                                ToolExecutionContext context) {
+                return new ToolResult("updated");
+            }
+        };
+        ToolAuthorizationPolicy.Request execution = new ToolAuthorizationPolicy.Request(
+                mutation.specification(), new AiTool.ToolArguments("{}"),
+                new ExecutionScope("request-1", "conversation-1", "user-1", 1,
+                        ExecutionScope.Purpose.USER_RESPONSE, List.of()));
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<Void>> calls = java.util.stream.IntStream.range(0, invocations)
+                    .mapToObj(ignored -> CompletableFuture.runAsync(() -> {
+                        assertThat(session.beforeExecution(execution))
+                                .isInstanceOf(ToolAuthorizationPolicy.Result.Allow.class);
+                        Thread.yield();
+                        session.afterAborted(execution);
+                    }, executor)).toList();
+            CompletableFuture.allOf(calls.toArray(CompletableFuture[]::new))
+                    .get(5, TimeUnit.SECONDS);
+        }
+
+        verify(requests, times(invocations)).mutationStarted("request-1");
+        verify(requests, times(invocations)).mutationFinished("request-1");
+        verify(runControl, times(invocations)).definiteActivityStarted();
+        verify(runControl, times(invocations)).definiteActivityFinished();
     }
 
     @Test

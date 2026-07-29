@@ -13,10 +13,17 @@ import java.util.Map;
 @ConfigurationProperties("score.ai")
 public class ScoreAiProperties {
 
+    private static final Duration DEFAULT_REQUEST_INACTIVITY_TIMEOUT = Duration.ofMinutes(10);
+    private static final Duration DEFAULT_ELICITATION_TIMEOUT = Duration.ofMinutes(10);
+    private static final Duration DEFAULT_MUTATION_APPROVAL_TIMEOUT = Duration.ofMinutes(10);
+
     private Map<String, Provider> providers = new LinkedHashMap<>();
     private Map<String, Model> models = new LinkedHashMap<>();
     private String modelName;
-    private Duration requestTimeout = Duration.ofMinutes(10);
+    private Duration requestTimeout;
+    private Duration requestInactivityTimeout;
+    private Duration elicitationTimeout;
+    private Duration mutationApprovalTimeout;
     private Assistant assistant = new Assistant();
     private Gateway gateway = new Gateway();
     private MultiAgent multiAgent = new MultiAgent();
@@ -49,12 +56,42 @@ public class ScoreAiProperties {
         this.modelName = modelName;
     }
 
+    /** Legacy shared timeout retained as a fallback for existing deployments. */
+    @Deprecated
     public Duration getRequestTimeout() {
-        return requestTimeout;
+        return requestTimeout != null ? requestTimeout : getRequestInactivityTimeout();
     }
 
+    @Deprecated
     public void setRequestTimeout(Duration requestTimeout) {
-        this.requestTimeout = requestTimeout != null ? requestTimeout : Duration.ofMinutes(10);
+        this.requestTimeout = requestTimeout;
+    }
+
+    public Duration getRequestInactivityTimeout() {
+        return requestInactivityTimeout != null ? requestInactivityTimeout
+                : requestTimeout != null ? requestTimeout : DEFAULT_REQUEST_INACTIVITY_TIMEOUT;
+    }
+
+    public void setRequestInactivityTimeout(Duration requestInactivityTimeout) {
+        this.requestInactivityTimeout = requestInactivityTimeout;
+    }
+
+    public Duration getElicitationTimeout() {
+        return elicitationTimeout != null ? elicitationTimeout
+                : requestTimeout != null ? requestTimeout : DEFAULT_ELICITATION_TIMEOUT;
+    }
+
+    public void setElicitationTimeout(Duration elicitationTimeout) {
+        this.elicitationTimeout = elicitationTimeout;
+    }
+
+    public Duration getMutationApprovalTimeout() {
+        return mutationApprovalTimeout != null ? mutationApprovalTimeout
+                : requestTimeout != null ? requestTimeout : DEFAULT_MUTATION_APPROVAL_TIMEOUT;
+    }
+
+    public void setMutationApprovalTimeout(Duration mutationApprovalTimeout) {
+        this.mutationApprovalTimeout = mutationApprovalTimeout;
     }
 
     public Assistant getAssistant() {

@@ -29,6 +29,8 @@ import java.util.concurrent.ScheduledExecutorService;
         OpenAiChatProperties.class})
 public class ScoreAiConfiguration {
 
+    private static final Duration NO_ABSOLUTE_PROVIDER_TIMEOUT = Duration.ZERO;
+
     private static final String DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 
     @Bean("scoreAiChatModels")
@@ -45,22 +47,22 @@ public class ScoreAiConfiguration {
             if (!isConfigured(provider)) {
                 return;
             }
-            models.put(name, chatModel(name, model, provider, properties.getRequestTimeout(),
+            models.put(name, chatModel(name, model, provider,
                     anthropicProperties, openAiProperties));
         });
         return Map.copyOf(models);
     }
 
     private ChatModel chatModel(String configuredName, ScoreAiProperties.Model model,
-                                ScoreAiProperties.Provider provider, Duration requestTimeout,
+                                ScoreAiProperties.Provider provider,
                                 AnthropicChatProperties anthropicProperties,
                                 OpenAiChatProperties openAiProperties) {
         return switch (providerType(provider)) {
-            case "anthropic" -> anthropicModel(configuredName, model, provider, requestTimeout,
+            case "anthropic" -> anthropicModel(configuredName, model, provider,
                     anthropicProperties);
-            case "azure-openai" -> azureOpenAiModel(configuredName, model, provider, requestTimeout,
+            case "azure-openai" -> azureOpenAiModel(configuredName, model, provider,
                     openAiProperties);
-            case "openai" -> openAiModel(configuredName, model, provider, requestTimeout, openAiProperties);
+            case "openai" -> openAiModel(configuredName, model, provider, openAiProperties);
             default -> throw new IllegalArgumentException("Unsupported AI provider type '"
                     + provider.getType() + "' for model '" + configuredName + "'");
         };
@@ -89,7 +91,6 @@ public class ScoreAiConfiguration {
 
     private ChatModel anthropicModel(String configuredName, ScoreAiProperties.Model model,
                                      ScoreAiProperties.Provider provider,
-                                     Duration requestTimeout,
                                      AnthropicChatProperties chatProperties) {
         AnthropicChatOptions.Builder options = AnthropicChatOptions.builder()
                 .baseUrl(baseUrl(provider))
@@ -128,36 +129,35 @@ public class ScoreAiConfiguration {
         // The application-level provider retry loop owns backoff and narrates every
         // attempt to the user; silent SDK-internal retries would multiply it.
         options.maxRetries(0);
+        // Agent inactivity leases observe raw provider chunks. A fixed SDK call timeout
+        // would interrupt a healthy long-running stream despite that forward progress.
+        options.timeout(NO_ABSOLUTE_PROVIDER_TIMEOUT);
         return AnthropicChatModel.builder()
                 .options(options.build())
-                .httpClientBuilderCustomizer(builder -> builder.timeout(requestTimeout))
                 .build();
     }
 
     private ChatModel azureOpenAiModel(String configuredName, ScoreAiProperties.Model model,
                                        ScoreAiProperties.Provider provider,
-                                       Duration requestTimeout,
                                        OpenAiChatProperties chatProperties) {
         OpenAiChatOptions.Builder options = openAiOptions(configuredName, model, provider, chatProperties)
                 .deploymentName(StringUtils.hasText(model.getModel()) ? model.getModel() : configuredName)
                 .azure(true);
-        return openAiResponsesModel(options, provider, requestTimeout, true);
+        return openAiResponsesModel(options, provider, true);
     }
 
     private ChatModel openAiModel(String configuredName, ScoreAiProperties.Model model,
                                   ScoreAiProperties.Provider provider,
-                                  Duration requestTimeout,
                                   OpenAiChatProperties chatProperties) {
         return openAiResponsesModel(openAiOptions(configuredName, model, provider, chatProperties),
-                provider, requestTimeout, false);
+                provider, false);
     }
 
     private ChatModel openAiResponsesModel(OpenAiChatOptions.Builder options,
                                            ScoreAiProperties.Provider provider,
-                                           Duration requestTimeout,
                                            boolean azure) {
         return ScoreOpenAiResponsesChatModel.create(options.build(),
-                responsesBaseUrl(provider, azure), requestTimeout, azure);
+                responsesBaseUrl(provider, azure), NO_ABSOLUTE_PROVIDER_TIMEOUT, azure);
     }
 
     private void validateContextBudget(String name, ScoreAiProperties.Model model) {

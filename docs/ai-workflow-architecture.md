@@ -45,9 +45,25 @@ as a failed member while active siblings and partial-result synthesis continue. 
 control-plane Agent terminates the request. The deprecated
 `SCORE_AI_MULTI_AGENT_SPECIALIST_TIMEOUT` environment variable remains a fallback for deployments
 that have not moved to `SCORE_AI_MULTI_AGENT_SPECIALIST_INACTIVITY_TIMEOUT`.
-This activity lease is separate from the transport-visible
-`score.ai.request-timeout` safety cap (10 minutes by default), which remains an absolute upper bound
-for one HTTP/WebSocket request and its request-registry lifecycle.
+The request registry has its own rolling inactivity lease configured by
+`score.ai.request-inactivity-timeout` (default 10 minutes). It reviews live requests periodically,
+publishes a renewed deadline when work has progressed, and times out only after a complete lease
+window with no observable progress. Agent progress, trajectory events, Tool admission/completion,
+and mutation execution renew the request lease; review polling does not. An in-flight mutation is
+treated as active work and cannot be interrupted by the request lease. Provider SDK call deadlines
+are disabled because a fixed wall-clock limit would terminate a healthy stream; raw provider chunks
+remain subject to the Agent inactivity lease above.
+
+User interaction waits are independent: `score.ai.elicitation-timeout` and
+`score.ai.mutation-approval-timeout` default to 10 minutes, while
+`score.ai.mcp.request-timeout` controls one MCP operation. Because the MCP SDK uses one session-wide
+request timeout for both Tool calls and elicitation round trips, the effective MCP client timeout is
+the greater of `mcp.request-timeout` and `elicitation-timeout`; the elicitation service still enforces
+its own interaction deadline. Requester-scoped broker JWTs are refreshed on every MCP HTTP request,
+so a rolling Agent session does not retain an expired token. The deprecated
+`SCORE_AI_REQUEST_TIMEOUT` value remains a fallback for the three new request/interaction settings
+until deployments migrate to `SCORE_AI_REQUEST_INACTIVITY_TIMEOUT`, `SCORE_AI_ELICITATION_TIMEOUT`,
+and `SCORE_AI_MUTATION_APPROVAL_TIMEOUT`.
 
 ## Recursive plan contract
 
