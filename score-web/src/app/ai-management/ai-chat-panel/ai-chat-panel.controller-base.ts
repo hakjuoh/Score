@@ -110,7 +110,6 @@ export abstract class AiChatPanelControllerBase {
   protected deferredNewChatTab?: AiChatPanelTab;
   protected responseTimeout?: number;
   protected acknowledgementTimeout?: number;
-  protected providerRetryInterval?: number;
   protected mutationApprovalExpiryTimeout?: number;
   protected mutationApprovalAcknowledgementTimeout?: number;
   protected resizeState?: ResizeState;
@@ -376,6 +375,7 @@ export abstract class AiChatPanelControllerBase {
   protected abstract handleElicitationDecisionEvent(event: AiChatSocketEvent): void;
   abstract respondToElicitation(response: AiElicitationResponse): void;
   protected abstract completeFinalEvent(event: AiChatSocketEvent): void;
+  protected abstract commitAssistantMessage(requestId: string, content: string): number;
   protected abstract beginMutationRepeatDraft(requestId: string, prompt: string,
                                               attachments: AiChatAttachment[]): void;
   protected abstract handleMutationConfirmationNotice(event: AiChatSocketEvent): void;
@@ -402,7 +402,7 @@ export abstract class AiChatPanelControllerBase {
   protected abstract clearMutationRepeatDraft(requestId?: string): void;
   protected abstract handleSystemEvent(event: AiChatSocketEvent): void;
   protected abstract handleProviderRetryEvent(event: AiChatSocketEvent): boolean;
-  protected abstract clearProviderRetryCountdown(): void;
+  protected abstract clearProviderRecoveryState(): void;
   protected abstract completeCancelledRequest(content?: string): void;
   protected abstract completeAuthenticationFailure(content?: string): void;
   protected abstract completeFailedRequest(content?: string,
@@ -468,8 +468,8 @@ export abstract class AiChatPanelControllerBase {
   protected abstract isTerminalExecutionStatus(status: AiExecutionStatus): boolean;
   abstract deleteConversation(conversationId: string, event?: Event): void;
   protected abstract deleteConversationNow(conversationId: string): void;
-  protected abstract showStatus(content: string, inProgress?: boolean, alertSuffix?: string,
-                                eventType?: string): void;
+  protected abstract showStatus(content: string, inProgress?: boolean,
+                                options?: import('./domain/ai-chat-panel.model').AiChatStatusOptions): void;
   protected abstract completeProgressMessages(): void;
   protected abstract completeToolGroupMessages(): void;
   protected abstract clearToolCallTracking(): void;

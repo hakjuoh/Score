@@ -12,6 +12,7 @@ import {
 } from './ai-chat-event-semantics';
 import {
   AiAgentActivity,
+  AiAgentActivityGroupResolver,
   agentActivityUpdate,
   isSpecialistActivityEvent,
   isSpecialistToolEvent,
@@ -64,7 +65,7 @@ export class AiConversationRestoreService {
   private restoreStarted = false;
   private expectedRestoreAttempt?: AiConversationRestoreAttempt;
   private restoredAgentGroups = new Map<string, AiAgentActivity[]>();
-  private restoredAgentGroupByNode = new Map<string, string>();
+  private readonly restoredAgentGroupResolver = new AiAgentActivityGroupResolver();
 
   projectStoredMessages(messages: AiChatHistoryMessage[]): AiChatMessage[] {
     this.resetProjectionState();
@@ -288,7 +289,11 @@ export class AiConversationRestoreService {
     if (role !== 'tool_call') {
       if (role === 'assistant') {
         const visibleContent = withoutTextualToolCallPlaceholder(content);
-        return visibleContent ? {role, content: visibleContent} : null;
+        return visibleContent ? {
+          role, content: visibleContent,
+          ...(event.subtype === 'workflow_result'
+            ? {eventType: 'workflow_result', requestId: event.requestId} : {})
+        } : null;
       }
       return {role, content};
     }
@@ -352,7 +357,7 @@ export class AiConversationRestoreService {
   private restoredAgentEvent(event: AiChatSocketEvent, content: string): AiChatMessage | null {
     const lifecycleEvent: AiChatSocketEvent = {...event, type: 'system', content};
     const metadata = event.metadata || {};
-    const groupId = this.restoredAgentGroupId(event, metadata);
+    const groupId = this.restoredAgentGroupResolver.resolve(event);
     const update = agentActivityUpdate(lifecycleEvent);
     if (!update) return null;
     let activities = this.restoredAgentGroups.get(groupId);
@@ -366,49 +371,16 @@ export class AiConversationRestoreService {
     return first ? {
       role: parallel ? 'workflow_group' : 'agent_group',
       content: parallel ? 'Parallel workflow' : 'Delegated workflow',
+      groupId,
       activities
     } : null;
   }
 
-  /** Separates composed iterations and carries their identity through nested nodes. */
-  private restoredAgentGroupId(event: AiChatSocketEvent,
-                               metadata: Record<string, unknown>): string {
-    const ownerId = this.nonBlankText(event.turnId) || event.requestId;
-    const nodeId = this.nonBlankText(metadata['nodeId'])
-      || this.nonBlankText(metadata['node_id']);
-    const parentNodeId = this.nonBlankText(metadata['parentNodeId'])
-      || this.nonBlankText(metadata['parent_node_id']);
-    const explicit = this.nonBlankText(metadata['fanoutId'])
-      || this.nonBlankText(metadata['fanout_id']);
-    const inherited = parentNodeId
-      ? this.restoredAgentGroupByNode.get(this.requestNodeKey(ownerId, parentNodeId))
-      : undefined;
-    const rootNode = metadata['depth'] === 1 ? nodeId : undefined;
-    const structural = this.composedRootPrefix(nodeId)
-      || this.composedRootPrefix(parentNodeId);
-    const localGroupId = explicit || rootNode || structural || 'request';
-    const groupId = inherited || this.requestNodeKey(ownerId, localGroupId);
-    if (nodeId) {
-      this.restoredAgentGroupByNode.set(
-        this.requestNodeKey(ownerId, nodeId), groupId);
-    }
-    return groupId;
-  }
-
-  private requestNodeKey(requestId: string, nodeId: string): string {
-    return `${requestId}\u0000${nodeId}`;
-  }
-
   private restoredGroupsForEvent(event: AiChatSocketEvent): AiAgentActivity[][] {
-    const ownerId = this.nonBlankText(event.turnId) || event.requestId;
-    const prefix = `${ownerId}\u0000`;
+    const prefix = this.restoredAgentGroupResolver.ownerPrefix(event);
     return [...this.restoredAgentGroups.entries()]
       .filter(([groupId]) => groupId.startsWith(prefix))
       .map(([, activities]) => activities);
-  }
-
-  private composedRootPrefix(nodeId?: string): string | undefined {
-    return nodeId?.match(/^(main:\d+:[^:]+)(?::|$)/)?.[1];
   }
 
   private restoredToolDetail(event: AiChatSocketEvent, content: string): string | undefined {
@@ -449,7 +421,7 @@ export class AiConversationRestoreService {
 
   private resetProjectionState(): void {
     this.restoredAgentGroups.clear();
-    this.restoredAgentGroupByNode.clear();
+    this.restoredAgentGroupResolver.clear();
   }
 
   private enqueueRestoredMessage(message: AiChatMessage, callbacks: AiConversationRestoreCallbacks): void {

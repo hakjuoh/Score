@@ -5,10 +5,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiContextUsageInfo;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutput;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.model.AiBoundedToolOutput;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
@@ -468,6 +470,24 @@ public final class AiTrajectoryRecorder {
         return appendGuide(content, metadata, true);
     }
 
+    /** Persists and emits a policy-approved top-level Workflow synthesis. */
+    public synchronized void workflowResult(AgentOutput output, Map<String, Object> metadata) {
+        Objects.requireNonNull(output, "output");
+        if (!output.passedOutputGuardrail(AgentOutputGuardrail.Scope.PUBLIC)) {
+            throw new IllegalArgumentException(
+                    "Workflow results require PUBLIC output-guardrail evidence.");
+        }
+        String content = output.content();
+        if (sealed || !StringUtils.hasText(content)) return;
+        String stripped = content.strip();
+        Map<String, Object> extra = traceMetadata(metadata);
+        repository.append(conversationId, new AiChatTrajectoryStep(
+                requestId, "agent", "workflow_result", "visible", stripped, null,
+                modelName, reasoningEffort,
+                null, null, null, extra, 0, null, Instant.now()));
+        emit(AiExecutionEvent.detail("workflow_result", stripped, extra));
+    }
+
     private boolean appendGuide(String content, Map<String, Object> metadata,
                                 boolean deduplicateAdjacent) {
         if (sealed || !StringUtils.hasText(content)) return false;
@@ -497,8 +517,8 @@ public final class AiTrajectoryRecorder {
 
     /**
      * Publishes the provider's bounded error first, then the retry narration.
-     * Keeping them as separate ordered events lets the UI render a real error row
-     * followed by a non-terminal recovery status instead of blending both together.
+     * The wire keeps error and retry facts separate for audit and observability;
+     * presentation clients may coalesce them into one transient recovery status.
      */
     public synchronized void providerRetry(int attempt, int maxAttempts, long delayMillis,
                                            String reason, String failureClass, int statusCode) {
@@ -520,7 +540,7 @@ public final class AiTrajectoryRecorder {
         String errorContent = StringUtils.hasText(reason)
                 ? reason.strip() : "The model provider could not complete the request.";
         repository.append(conversationId, new AiChatTrajectoryStep(
-                requestId, "system", "provider_error", "visible", errorContent, null,
+                requestId, "system", "provider_error", "debug", errorContent, null,
                 modelName, reasoningEffort,
                 null, null, null, extra, 0, null, Instant.now()));
         emit(AiExecutionEvent.detail("provider_error", errorContent, extra));

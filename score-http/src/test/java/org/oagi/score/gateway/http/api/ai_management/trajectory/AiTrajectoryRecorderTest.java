@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutput;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutputTestFactory;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
@@ -506,6 +508,45 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
+    void persistsAndPublishesAWorkflowResultAsVisibleChatContent() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", events::add);
+
+        recorder.workflowResult(AgentOutputTestFactory.publicOutput(
+                "Three reconciled counts."), Map.of(
+                "node_id", "main:1:release-count", "depth", 1));
+
+        ArgumentCaptor<AiChatTrajectoryStep> step =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq("conversation-1"), step.capture());
+        assertThat(step.getValue().messageKind()).isEqualTo("workflow_result");
+        assertThat(step.getValue().visibility()).isEqualTo("visible");
+        assertThat(step.getValue().message()).isEqualTo("Three reconciled counts.");
+        assertThat(events).singleElement().satisfies(event -> {
+            assertThat(event.subtype()).isEqualTo("workflow_result");
+            assertThat(event.content()).isEqualTo("Three reconciled counts.");
+            assertThat(event.metadata()).containsEntry("node_id", "main:1:release-count");
+        });
+    }
+
+    @Test
+    void rejectsAWorkflowResultWithoutPublicGuardrailEvidence() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", events::add);
+
+        assertThatThrownBy(() -> recorder.workflowResult(
+                new AgentOutput("Unreviewed result."), Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("PUBLIC");
+        verifyNoInteractions(repository);
+        assertThat(events).isEmpty();
+    }
+
+    @Test
     void publishesTheProviderErrorBeforeTheRetryNarration() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
@@ -525,7 +566,7 @@ class AiTrajectoryRecorderTest {
                 .containsExactly("Rate limited.",
                         "The model provider request failed; retrying (attempt 2 of 10).");
         assertThat(steps.getAllValues()).extracting(AiChatTrajectoryStep::visibility)
-                .containsExactly("visible", "debug");
+                .containsExactly("debug", "debug");
         assertThat(steps.getAllValues()).allSatisfy(step -> assertThat(step.extra())
                 .containsEntry("attempt", 2)
                 .containsEntry("max_attempts", 10)

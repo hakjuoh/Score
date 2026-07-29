@@ -28,6 +28,7 @@ import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCata
 import org.oagi.score.gateway.http.api.ai_management.support.TestAgentExecutionService;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
+import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
@@ -45,6 +46,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,6 +58,56 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class WorkflowTest {
+
+    @Test
+    void publishesOnlyTheTopLevelPublicWorkflowResult() {
+        AiWorkflowPlan.WorkflowDefinition inner = new AiWorkflowPlan.WorkflowDefinition(
+                "inner", List.of(member("count", "public-worker")));
+        AiWorkflowPlan plan = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("outer", List.of(
+                        new AiWorkflowPlan.Member("inner-member", null, inner))), null, null);
+        Agent gateway = agent("gateway-agent", new ArrayList<>(),
+                ignored -> new AgentDecision.Delegate(plan));
+        Agent worker = publicAgent("public-worker", ignored -> complete("Safe synthesis."));
+        AgentExecutionRecorder recorder = mock(AgentExecutionRecorder.class);
+        when(recorder.fork(any())).thenReturn(recorder);
+        when(recorder.callWhileActive(any())).thenAnswer(invocation ->
+                ((Supplier<?>) invocation.getArgument(0)).get());
+
+        workflow(gateway, worker).execute(workflowContext(context(recorder, "Count safely")));
+
+        verify(recorder, times(1)).workflowResult(any(AgentOutput.class), any());
+    }
+
+    @Test
+    void doesNotPublishAWorkflowResultWithoutPublicPolicyEvidence() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(),
+                ignored -> new AgentDecision.Delegate(plan("private", "worker")));
+        Agent worker = agent("worker", new ArrayList<>(), ignored -> complete("Internal only."));
+        AgentExecutionContext execution = context();
+
+        workflow(gateway, worker).execute(workflowContext(execution));
+
+        verify(execution.recorder(), org.mockito.Mockito.never())
+                .workflowResult(any(AgentOutput.class), any());
+    }
+
+    @Test
+    void cancellationAtTheDisclosureFenceSuppressesTheWorkflowResult() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(),
+                ignored -> new AgentDecision.Delegate(plan("public", "public-worker")));
+        Agent worker = publicAgent("public-worker", ignored -> complete("Safe synthesis."));
+        AgentExecutionRecorder recorder = mock(AgentExecutionRecorder.class);
+        when(recorder.fork(any())).thenReturn(recorder);
+        when(recorder.callWhileActive(any()))
+                .thenThrow(new CancellationException("cancelled before disclosure"));
+
+        assertThatThrownBy(() -> workflow(gateway, worker).execute(
+                workflowContext(context(recorder, "Count safely"))))
+                .isInstanceOf(CancellationException.class);
+        verify(recorder, org.mockito.Mockito.never())
+                .workflowResult(any(AgentOutput.class), any());
+    }
 
     @Test
     void agentProgressRenewsTheRequestRegistryLease() {
@@ -1168,6 +1220,21 @@ class WorkflowTest {
                 },
                 org.oagi.score.gateway.http.api.ai_management.agent.AgentToolHandler.none(),
                 AgentResponseHandler.complete(), AgentGuardrails.none(), assignable);
+        return new DefinedAgent(definition);
+    }
+
+    private Agent publicAgent(String id,
+                              Function<AgentWorkflowContext, AgentDecision> operation) {
+        AgentOutputGuardrail allow = request -> new AgentOutputGuardrail.Result.Allow(
+                request.candidate(), GuardrailDecision.of(
+                "workflow-public-output", "1", GuardrailDecision.Action.ALLOW));
+        AgentDefinition definition = new AgentDefinition(
+                new Agent.AgentId(id), id, id + " description",
+                new AgentDefinition.InstructionTemplate("instruction"),
+                (ignored, context) -> new AgentRunRequest.Skip(operation.apply(context)),
+                org.oagi.score.gateway.http.api.ai_management.agent.AgentToolHandler.none(),
+                AgentResponseHandler.complete(), new AgentGuardrails(
+                List.of(), List.of(allow), AgentOutputGuardrail.Scope.PUBLIC), true);
         return new DefinedAgent(definition);
     }
 

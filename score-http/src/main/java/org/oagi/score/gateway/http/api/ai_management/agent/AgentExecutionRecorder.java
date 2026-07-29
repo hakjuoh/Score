@@ -53,6 +53,13 @@ public interface AgentExecutionRecorder {
 
     void lifecycle(String subtype, String content, Map<String, Object> metadata);
 
+    /**
+     * Publishes a policy-approved top-level Workflow synthesis to the main chat.
+     * Implementations must independently verify the PUBLIC guardrail evidence on
+     * the output so callers cannot bypass the disclosure boundary with raw text.
+     */
+    void workflowResult(AgentOutput output, Map<String, Object> metadata);
+
     void terminalLifecycle(String subtype, String content, Map<String, Object> metadata);
 
     long completedToolCallCount();
@@ -126,6 +133,10 @@ public interface AgentExecutionRecorder {
 
         @Override
         public void lifecycle(String subtype, String content, Map<String, Object> metadata) {
+        }
+
+        @Override
+        public void workflowResult(AgentOutput output, Map<String, Object> metadata) {
         }
 
         @Override
