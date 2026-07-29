@@ -281,7 +281,8 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
                 .where(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
                 .fetch(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
         var visibleChildKinds = AI_CHAT_STEP.MESSAGE_KIND.in(
-                "agent_lifecycle", "tool_call", "tool_call_update", "guide");
+                "agent_lifecycle", "tool_call", "tool_call_update", "guide",
+                "provider_error", "provider_retry");
         List<ChatHistoryMessage> messages = dslContext().select(
                         AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID, AI_CHAT_STEP.STEP_SEQUENCE,
                         AI_CHAT_STEP.REQUEST_ID,
@@ -404,11 +405,15 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         Map<String, Object> storedExtra = serializer.deserializeMap(
                 record.get(AI_CHAT_STEP.EXTRA_JSON));
         Map<String, Object> extra = storedExtra != null ? storedExtra : Map.of();
+        boolean workerOwned = "SUBAGENT".equals(string(extra, "conversation_kind"))
+                || "PARALLEL".equals(string(extra, "conversation_kind"));
         String role = switch (kind) {
             case "assistant", "user", "error", "progress", "tool_call", "guide" -> kind;
             case "mutation_approval_batch_requested", "mutation_approval_decision" -> "guide";
             case "tool_call_update" -> "tool_call";
             case "agent_lifecycle" -> "agent_event";
+            case "provider_error" -> workerOwned ? "provider_event" : "error";
+            case "provider_retry" -> workerOwned ? "provider_event" : "debug";
             default -> "debug";
         };
         if ("debug".equals(role) && StringUtils.hasText(reasoning)) {
@@ -425,6 +430,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         String subtype = switch (kind) {
             case "mutation_approval_batch_requested", "mutation_approval_decision" -> kind;
             case "agent_lifecycle" -> string(extra, "lifecycle_subtype");
+            case "provider_error", "provider_retry" -> kind;
             default -> toolStatus;
         };
         return new ChatHistoryMessage(record.get(AI_CHAT_STEP.STEP_SEQUENCE).intValue(), role,

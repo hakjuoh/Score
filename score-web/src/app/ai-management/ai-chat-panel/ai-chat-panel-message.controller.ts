@@ -19,6 +19,7 @@ import {
   isSpecialistToolEvent,
   upsertAgentActivity,
   upsertAgentGuideEvent,
+  upsertAgentProviderErrorEvent,
   upsertAgentRetryEvent,
   upsertAgentToolEvent
 } from './domain/ai-agent-activity';
@@ -28,6 +29,10 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   protected handleSystemEvent(event: AiChatSocketEvent): void {
     const content = this.primaryContent(event);
     if (isExecutionActivityEvent(event)) {
+      if (this.state.currentStatus === 'Retrying') {
+        this.clearProviderRetryCountdown();
+        this.clearStatusMessage();
+      }
       this.applyAgentActivity(event);
       return;
     }
@@ -118,6 +123,9 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       this.state.currentStatus = 'Using fallback model';
       return;
     }
+    if (event.subtype === 'provider_error' && this.handleProviderErrorEvent(event)) {
+      return;
+    }
     if (event.subtype === 'provider_retry' && this.handleProviderRetryEvent(event)) {
       return;
     }
@@ -141,6 +149,22 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     if (content) {
       this.showStatus(content, false);
     }
+  }
+
+  /** Renders a recoverable provider failure without terminating the active request. */
+  protected handleProviderErrorEvent(event: AiChatSocketEvent): boolean {
+    const content = this.primaryContent(event).trim();
+    if (!content) return false;
+    if (this.state.cancellation.phase !== 'idle') return true;
+    if (isSpecialistActivityEvent(event)) {
+      upsertAgentProviderErrorEvent(this.state.agentActivities, event);
+      return true;
+    }
+    this.clearProviderRetryCountdown();
+    this.clearStatusMessage();
+    this.state.messages.push({role: 'error', content});
+    this.scrollToBottom();
+    return true;
   }
 
   protected completeCancelledRequest(content?: string): void {
@@ -259,15 +283,14 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     if (this.messageTracker.removeStreamedSegment(this.state, event.requestId)) {
       this.assistantMessageIndexesByRequestId.delete(event.requestId);
     }
-    const head = retry.statusCode !== undefined
-      ? retry.reason ? `${retry.statusCode} ${retry.reason}` : `${retry.statusCode}`
-      : retry.reason || '';
+    const retryMessage = this.primaryContent(event).trim()
+      || `The model provider request failed; retrying (attempt ${retry.attempt} of ${retry.maxAttempts}).`;
     let secondsRemaining = Math.ceil(retry.delayMillis / 1000);
     const renderCountdown = () => {
       const wait = secondsRemaining > 0
-        ? `Retrying in ${secondsRemaining}s · attempt ${retry.attempt}/${retry.maxAttempts}`
+        ? `Retrying in ${secondsRemaining}s`
         : 'Reconnecting…';
-      this.showStatus(head, true, head ? ` · ${wait}` : wait);
+      this.showStatus(retryMessage, true, ` · ${wait}`);
     };
     renderCountdown();
     this.state.currentStatus = 'Retrying';
@@ -360,6 +383,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         || event.subtype === 'authentication_failed'
         || event.subtype === 'error'
         || event.subtype === 'model_fallback'
+        || event.subtype === 'provider_error'
         || event.subtype === 'provider_retry'
         || event.subtype === 'context_usage'
         || event.subtype === 'context_compacted'

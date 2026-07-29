@@ -11,12 +11,22 @@ import java.util.UUID;
 public record AgentInvocation(AgentRunId runId, AgentSession session, AiMessage.User request,
                               List<AiMessage> history, ExecutionScope scope,
                               ToolExecutionGateway tools,
-                              Map<String, Object> observationContext) {
+                              Map<String, Object> observationContext,
+                              AgentExecutionRecorder recorder) {
+
+    public AgentInvocation(AgentRunId runId, AgentSession session, AiMessage.User request,
+                           List<AiMessage> history, ExecutionScope scope,
+                           ToolExecutionGateway tools,
+                           Map<String, Object> observationContext) {
+        this(runId, session, request, history, scope, tools, observationContext,
+                AgentExecutionRecorder.noop());
+    }
 
     public AgentInvocation(AgentRunId runId, AgentSession session, AiMessage.User request,
                            List<AiMessage> history, ExecutionScope scope,
                            ToolExecutionGateway tools) {
-        this(runId, session, request, history, scope, tools, Map.of());
+        this(runId, session, request, history, scope, tools, Map.of(),
+                AgentExecutionRecorder.noop());
     }
 
     public AgentInvocation {
@@ -28,6 +38,7 @@ public record AgentInvocation(AgentRunId runId, AgentSession session, AiMessage.
         tools = tools != null ? tools : ToolExecutionGateway.disabled();
         observationContext = observationContext != null
                 ? Map.copyOf(observationContext) : Map.of();
+        recorder = recorder != null ? recorder : AgentExecutionRecorder.noop();
     }
 
     public record AgentRunId(String value) {

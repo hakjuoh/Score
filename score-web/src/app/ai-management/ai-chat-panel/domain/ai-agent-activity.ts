@@ -24,7 +24,7 @@ const EXECUTION_ACTIVITY_SUBTYPES = new Set([
 ]);
 
 export interface AiAgentActivityEvent {
-  status: AiAgentExecutionStatus | 'tool';
+  status: AiAgentExecutionStatus | 'tool' | 'provider_error' | 'provider_retry';
   content: string;
   key?: string;
   /** Stable identity of one tool invocation, shared by its started/terminal events. */
@@ -207,22 +207,36 @@ export function specialistToolAgentId(event: AiChatSocketEvent): string | undefi
   return specialistActivityAgentId(event);
 }
 
-/** Reflects a worker's provider retry on its own agent timeline. */
-export function upsertAgentRetryEvent(activities: AiAgentActivity[],
-                                      event: AiChatSocketEvent,
-                                      now = Date.now()): boolean {
+function upsertAgentProviderEvent(activities: AiAgentActivity[],
+                                  event: AiChatSocketEvent,
+                                  status: 'provider_error' | 'provider_retry',
+                                  now: number): boolean {
   const agentId = specialistActivityAgentId(event);
   if (!agentId) return false;
   const activity = activities.find(candidate => candidate.agentId === agentId);
   const content = event.content || event.response || event.message || '';
   if (!activity || !content.trim()) return false;
   const last = activity.events[activity.events.length - 1];
-  if (!last || last.content !== content) {
-    activity.events.push({status: activity.status, content});
+  if (!last || last.status !== status || last.content !== content) {
+    activity.events.push({status, content});
   }
   if (activity.inProgress) activity.content = content;
   activity.lastUpdateAt = now;
   return true;
+}
+
+/** Reflects a worker's provider error on its own agent timeline. */
+export function upsertAgentProviderErrorEvent(activities: AiAgentActivity[],
+                                               event: AiChatSocketEvent,
+                                               now = Date.now()): boolean {
+  return upsertAgentProviderEvent(activities, event, 'provider_error', now);
+}
+
+/** Reflects a worker's provider retry after the corresponding error. */
+export function upsertAgentRetryEvent(activities: AiAgentActivity[],
+                                      event: AiChatSocketEvent,
+                                      now = Date.now()): boolean {
+  return upsertAgentProviderEvent(activities, event, 'provider_retry', now);
 }
 
 export function upsertAgentGuideEvent(activities: AiAgentActivity[],
