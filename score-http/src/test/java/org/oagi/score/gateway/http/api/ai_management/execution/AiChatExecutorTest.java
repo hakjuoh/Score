@@ -96,6 +96,23 @@ class AiChatExecutorTest {
     }
 
     @Test
+    void rawStreamingChunksRenewActivityBeforeVisibleContentFiltering() {
+        Fixture fixture = new Fixture();
+        AtomicInteger progressSignals = new AtomicInteger();
+        fixture.responses(Flux.just(response(""), response("visible answer")));
+
+        AiChatExecutor.Result result = fixture.executor(null).execute(
+                new AiChatExecutor.Context(request("Explain it"), List.of(),
+                        new UserMessage("Explain it"), fixture.requester,
+                        fixture.recorder("request-1"), false, false,
+                        AiChatExecutor.ToolPolicy.NONE, 0),
+                TEST_INSTRUCTION, progressSignals::incrementAndGet);
+
+        assertThat(result.answer()).isEqualTo("visible answer");
+        assertThat(progressSignals).hasValue(3);
+    }
+
+    @Test
     void classifiesRegistryTimeoutAndCancellationEvenWhenTheFailureTypeIsGeneric() {
         AiRequestRegistry requests = mock(AiRequestRegistry.class);
         when(requests.isTimingOut("timed-out")).thenReturn(true);
@@ -399,6 +416,7 @@ class AiChatExecutorTest {
     @Test
     void dropsPreToolNarrationAndReturnsThePostToolSegment() {
         Fixture fixture = new Fixture();
+        AtomicInteger progressSignals = new AtomicInteger();
         AtomicReference<ToolCallbackProvider> installedTools = fixture.captureInstalledTools();
         ToolCallback read = tool("get_business_context", "{\"id\":7}");
         fixture.mcp(read, Set.of("get_business_context"));
@@ -412,15 +430,18 @@ class AiChatExecutorTest {
                     return Flux.just(response("Verified: business context 7 exists."));
                 })));
 
-        AiChatExecutor.Result result = execute(fixture.executorWithPolicies(null,
+        AiChatExecutor executor = fixture.executorWithPolicies(null,
                 toolPolicies(request -> new ToolOutputGuardrail.Result.Allow(
                         request.output(), GuardrailDecision.of("tool-output", "1",
-                                GuardrailDecision.Action.ALLOW))), allowModelInput()),
+                                GuardrailDecision.Action.ALLOW))), allowModelInput());
+        AiChatExecutor.Result result = executor.execute(
                 new AiChatExecutor.Context(request("Verify it"), List.of(),
                         new UserMessage("Verify it"), fixture.requester,
-                        fixture.recorder("request-1")));
+                        fixture.recorder("request-1")),
+                TEST_INSTRUCTION, progressSignals::incrementAndGet);
 
         assertThat(result.answer()).isEqualTo("Verified: business context 7 exists.");
+        assertThat(progressSignals).hasValueGreaterThanOrEqualTo(4);
         verify(read).call(eq("{\"id\":7}"),
                 any(org.springframework.ai.chat.model.ToolContext.class));
     }

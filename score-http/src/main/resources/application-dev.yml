@@ -61,7 +61,7 @@ score:
       # per-user active-request limit enforced by the shared AI request registry.
       max-concurrent-specialists: ${SCORE_AI_MULTI_AGENT_MAX_CONCURRENT_SPECIALISTS:16}
       max-concurrent-specialists-per-user: ${SCORE_AI_MULTI_AGENT_MAX_CONCURRENT_SPECIALISTS_PER_USER:8}
-      specialist-timeout: ${SCORE_AI_MULTI_AGENT_SPECIALIST_TIMEOUT:2m}
+      specialist-inactivity-timeout: ${SCORE_AI_MULTI_AGENT_SPECIALIST_INACTIVITY_TIMEOUT:${SCORE_AI_MULTI_AGENT_SPECIALIST_TIMEOUT:2m}}
       maximum-workflow-iterations: ${SCORE_AI_MULTI_AGENT_MAXIMUM_WORKFLOW_ITERATIONS:3}
     providers:
       azure-foundry:

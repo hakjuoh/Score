@@ -169,6 +169,7 @@ public final class AgentRunner implements AgentIdentityProvider {
     public AgentDecision run(Agent agent, AgentWorkflowContext context) {
         Objects.requireNonNull(agent, "agent");
         Objects.requireNonNull(context, "context");
+        context.progress();
         // A catalog-backed definition may reload between calls. Snapshot it once so
         // identity, handlers, instruction, tools, and guardrails describe one turn.
         agent = new org.oagi.score.gateway.http.api.ai_management.agent.DefinedAgent(
@@ -178,8 +179,10 @@ public final class AgentRunner implements AgentIdentityProvider {
                         agent, context, new MiddlewareState()),
                 middlewareContext -> runCore(middlewareContext.agent(),
                         middlewareContext.workflow(), middlewareContext.state()));
-        return ensureMiddlewareOutputChecked(middlewareExecution.context().agent(),
+        AgentDecision checked = ensureMiddlewareOutputChecked(middlewareExecution.context().agent(),
                 middlewareExecution.context().workflow(), middlewareExecution.decision());
+        middlewareExecution.context().workflow().progress();
+        return checked;
     }
 
     /** Middleware may short-circuit or replace a decision, but never bypass final output policy. */
@@ -198,21 +201,25 @@ public final class AgentRunner implements AgentIdentityProvider {
                                   MiddlewareState middlewareState) {
         AgentWorkflowContext current = context;
         current.checkpoint();
+        current.progress();
         AgentAssignmentRun.Lifecycle activeLifecycle = null;
         AgentAssignmentRun.UsageSource dedicatedUsageSource = null;
         AgentAssignmentRun.preflightStarted(agent, current);
         try {
             PreparedRequest initial = prepareRequest(agent, current);
             current = initial.context();
+            current.progress();
             AgentRunRequest prepared = initial.request();
             if (prepared instanceof AgentRunRequest.Skip guardedSkip) {
                 activeLifecycle = AgentAssignmentRun.lifecycle(agent, current, prepared);
                 activeLifecycle.started().run();
+                current.progress();
                 current.checkpoint();
                 AgentDecision decision = policies.applyTerminalDecision(agent, current,
                         guardedSkip.decision());
                 current.checkpoint();
                 activeLifecycle.completed().accept(null);
+                current.progress();
                 return decision;
             }
 
@@ -220,6 +227,7 @@ public final class AgentRunner implements AgentIdentityProvider {
             dedicatedUsageSource = AgentAssignmentRun.registerUsage(agent, current, prepared);
             activeLifecycle = AgentAssignmentRun.lifecycle(agent, current, prepared);
             activeLifecycle.started().run();
+            current.progress();
             AgentToolBinding resolvedBinding = null;
             for (int retry = 0; retry <= MAX_OUTPUT_GUARDRAIL_RETRIES; retry++) {
                 current.checkpoint();
@@ -240,15 +248,18 @@ public final class AgentRunner implements AgentIdentityProvider {
                 } else {
                     dedicatedUsageSource.record(result);
                 }
-                // Usage from an admitted call is recorded before a terminal deadline or
-                // cancellation checkpoint rejects every remaining response-side action.
+                // Usage from an admitted call is recorded before an inactivity or
+                // cancellation check rejects every remaining response-side action.
+                current.progress();
                 current.checkpoint();
                 AgentDecision handled = Objects.requireNonNull(agent.responseHandler().handle(
                                 new AgentResponseContext(agent, current, result)),
                         "Agent response handler result");
+                current.progress();
                 current.checkpoint();
                 AgentPolicyEngine.DecisionCheck checked = policies.applyOutput(
                         agent, current, handled);
+                current.progress();
                 if (checked.retryFeedback() != null) {
                     AgentDecision.Complete candidate = (AgentDecision.Complete) handled;
                     if (toolActivityChanged(toolActivityBefore, toolActivity(current, guarded))
@@ -262,6 +273,7 @@ public final class AgentRunner implements AgentIdentityProvider {
                                 checked.retryFeedback());
                     }
                     activeLifecycle.retried().run();
+                    current.progress();
                     current = current.withFeedback(
                             new AiWorkflowFeedback(
                                     current.iteration(), current.workflow() != null
@@ -273,13 +285,14 @@ public final class AgentRunner implements AgentIdentityProvider {
                 }
                 current.checkpoint();
                 activeLifecycle.completed().accept(result);
+                current.progress();
                 return checked.decision();
             }
             throw new IllegalStateException("Agent execution did not reach a terminal result.");
         } catch (AgentOutputRetryHandoffException | AgentOutputRetryLimitException terminal) {
             AgentAssignmentRun.failPreflight(agent, current, activeLifecycle, terminal);
             throw terminal;
-        } catch (WorkflowRunBudget.DeadlineExceededException terminal) {
+        } catch (AgentInvocationStalledException terminal) {
             AgentAssignmentRun.failPreflight(agent, current, activeLifecycle, terminal);
             throw terminal;
         } catch (CancellationException | AgentGuardrailRefusedException terminal) {
@@ -290,6 +303,7 @@ public final class AgentRunner implements AgentIdentityProvider {
             current.checkpoint();
             AgentDecision recovered = agent.responseHandler().onFailure(
                     new AgentFailure(agent, current, failure));
+            current.progress();
             current.checkpoint();
             AgentDecision guarded = policies.applyTerminalDecision(agent, current,
                     Objects.requireNonNull(recovered, "Agent failure handler result"));
@@ -361,7 +375,7 @@ public final class AgentRunner implements AgentIdentityProvider {
             }
             try {
                 AgentToolBinding binding = selectedBinding.withExecutionFence(
-                        context.execution().recorder(), context::checkpoint)
+                        context.execution().recorder(), context::checkpoint, context::progress)
                         .withMiddleware(middleware, middlewareState);
                 AgentSession session = factory.create(agent, models.require(model.modelName()),
                         binding.tools());
@@ -383,7 +397,7 @@ public final class AgentRunner implements AgentIdentityProvider {
             }
             try {
                 AgentToolBinding binding = selectedBinding.withExecutionFence(
-                        chat.context().recorder(), context::checkpoint)
+                        chat.context().recorder(), context::checkpoint, context::progress)
                         .withMiddleware(middleware, middlewareState);
                 AgentExecutionContext executionContext = chat.context()
                         .withAgentIdentity(agent.id().value(), chat.context().executionPurpose());
@@ -399,7 +413,7 @@ public final class AgentRunner implements AgentIdentityProvider {
                 instruction = executionContext.finalizeInstruction(instruction);
                 AgentChatResult result = execution.executeChat(new AgentChatSession(
                         agent, chat.context().modelName(), instruction,
-                        executionContext, binding, middlewareState));
+                        executionContext, binding, middlewareState, context::progress));
                 AgentRunResult runResult = new AgentRunResult(
                         new AiMessage.Assistant(result.answer()), List.of(), result.usage(),
                         new AgentRunResult.RunMetadata(agent.id(),

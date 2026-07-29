@@ -14,7 +14,14 @@ import java.util.Objects;
 public record AgentChatSession(Agent agent, String modelName, Agent.Instruction instruction,
                                AgentExecutionContext context,
                                AgentToolBinding tools,
-                               MiddlewareState middlewareState) {
+                               MiddlewareState middlewareState,
+                               Runnable progress) {
+
+    public AgentChatSession(Agent agent, String modelName, Agent.Instruction instruction,
+                            AgentExecutionContext context, AgentToolBinding tools,
+                            MiddlewareState middlewareState) {
+        this(agent, modelName, instruction, context, tools, middlewareState, () -> { });
+    }
 
     public AgentChatSession(Agent agent, String modelName, Agent.Instruction instruction,
                             AgentExecutionContext context, AgentToolBinding tools) {
@@ -29,5 +36,6 @@ public record AgentChatSession(Agent agent, String modelName, Agent.Instruction 
         Objects.requireNonNull(context, "context");
         Objects.requireNonNull(tools, "tools");
         Objects.requireNonNull(middlewareState, "middlewareState");
+        progress = progress != null ? progress : () -> { };
     }
 }
