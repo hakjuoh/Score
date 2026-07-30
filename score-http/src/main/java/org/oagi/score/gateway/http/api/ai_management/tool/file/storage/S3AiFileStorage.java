@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.file.storage;
+package org.oagi.score.gateway.http.api.ai_management.tool.file.storage;
 
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.springframework.stereotype.Component;

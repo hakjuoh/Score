@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.file;
+package org.oagi.score.gateway.http.api.ai_management.tool.file;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;

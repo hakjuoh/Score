@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.file.storage;
+package org.oagi.score.gateway.http.api.ai_management.tool.file.storage;
 
 import org.h2.jdbcx.JdbcDataSource;
 import org.jooq.DSLContext;
@@ -6,6 +6,7 @@ import org.jooq.SQLDialect;
 import org.jooq.conf.Settings;
 import org.jooq.impl.DSL;
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.storage.DatabaseAiFileStorage;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.nio.charset.StandardCharsets;
