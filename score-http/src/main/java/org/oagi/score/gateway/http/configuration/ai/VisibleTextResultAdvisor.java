@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
+import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiResponseContent;
 import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
@@ -60,9 +61,7 @@ public final class VisibleTextResultAdvisor implements CallAdvisor, StreamAdviso
     private boolean isVisibleResult(Generation generation) {
         AssistantMessage output = generation.getOutput();
         return output.hasToolCalls() || (StringUtils.hasText(output.getText())
-                && !output.getMetadata().containsKey("signature")
-                && !output.getMetadata().containsKey("data")
-                && !Boolean.TRUE.equals(output.getMetadata().get("thinking")));
+                && !SpringAiResponseContent.isReasoning(output));
     }
 
     @Override

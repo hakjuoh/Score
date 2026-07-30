@@ -48,7 +48,6 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentIdentityProvider
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutputRetryHandoffException;
 import org.oagi.score.gateway.http.api.ai_management.execution.ChatExecutionContext;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
-import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.execution.WorkflowRequestAdapter;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
@@ -63,6 +62,7 @@ import org.oagi.score.gateway.http.api.ai_management.workflow.AgentRunner;
 import org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AtifTrajectoryService;
+import org.oagi.score.gateway.http.api.ai_management.trajectory.TrajectoryStepAppender;
 import org.oagi.score.gateway.http.api.info_management.model.AiAssistantInfoRecord;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
@@ -123,6 +123,7 @@ public class ChatService {
     private final ResponseOnlyAgent responseOnlyAgent;
     private final ScoreAiObservability observability;
     private final ExecutionObserver observer;
+    private final TrajectoryStepAppender trajectorySteps;
     private final PublicOutputDisclosureGate disclosureGate;
     private final AiFileService files;
 
@@ -177,6 +178,7 @@ public class ChatService {
                 ? value.observability() : ScoreAiObservability.noop();
         this.observer = Objects.nonNull(value.observer())
                 ? value.observer() : ExecutionObserver.noop();
+        this.trajectorySteps = new TrajectoryStepAppender(this.observer);
         this.disclosureGate = new PublicOutputDisclosureGate(
                 this.outputGuardrails, this.observability);
     }
@@ -1241,40 +1243,8 @@ public class ChatService {
                                       Map<String, Object> attributes,
                                       Runnable afterAppend,
                                       long generation) {
-        if (!StringUtils.hasText(step.requestId())) {
-            throw new IllegalArgumentException(
-                    "A request ID is required for an AI trajectory event.");
-        }
-        String requesterId = requester != null && requester.userId() != null
-                ? requester.userId().value().toString()
-                : requester != null && StringUtils.hasText(requester.username())
-                ? requester.username() : "unknown";
-        ExecutionScope eventScope = new ExecutionScope(step.requestId(), conversationId,
-                requesterId, Math.max(0L, generation), purpose, List.of());
-        Map<String, Object> eventAttributes = new LinkedHashMap<>(
-                attributes != null ? attributes : Map.of());
-        eventAttributes.put("message_kind", step.messageKind());
-        eventAttributes.put("source", step.source());
-        observer.publish(ExecutionObservation.of(
-                "trajectory." + step.messageKind(), eventScope, eventAttributes), event -> {
-            Map<String, Object> extra = new LinkedHashMap<>(
-                    step.extra() != null ? step.extra() : Map.of());
-            copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_ID);
-            copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_SEQUENCE);
-            copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_OCCURRED_AT);
-            repository.append(conversationId, new AiChatTrajectoryStep(
-                    step.requestId(), step.source(), step.messageKind(), step.visibility(),
-                    step.message(), step.reasoningContent(), step.modelName(), step.reasoningEffort(),
-                    step.toolCalls(), step.observation(), step.metrics(), Map.copyOf(extra),
-                    step.llmCallCount(), step.isCopiedContext(), event.occurredAt()));
-            afterAppend.run();
-        });
-    }
-
-    private void copyEventAttribute(ExecutionObservation event, Map<String, Object> target,
-                                    String name) {
-        Object value = event.attributes().get(name);
-        if (value != null) target.put(name, value);
+        trajectorySteps.append(new TrajectoryStepAppender.Command(repository, requester,
+                conversationId, step, purpose, attributes, afterAppend, generation));
     }
 
     /** Finalizes OTel only after the surrounding DB transaction has a real outcome. */

@@ -10,7 +10,7 @@ import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecy
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
-import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
+import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiResponseContent;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.model.AiBoundedToolOutput;
@@ -91,7 +91,7 @@ public final class AiTrajectoryRecorder {
     private final ExecutionScope executionScope;
     private final ExecutionObserver observer;
     private final ExecutionObservationContext observationContext;
-    private volatile PromptTokenAccounting promptTokenAccounting;
+    private volatile ProviderPromptTokenNormalizer promptTokenNormalizer;
     private final AtomicLong estimatedInputFloor;
     private final AtomicLong eventSequence;
     private final AtomicLong toolSequence;
@@ -177,7 +177,7 @@ public final class AiTrajectoryRecorder {
                                 ExecutionObservationContext observationContext) {
         this(repository, objectMapper, requester, conversationId, requestId, modelName,
                 reasoningEffort, events, contextBudget,
-                estimatedInputFloor, PromptTokenAccounting.UNKNOWN,
+                estimatedInputFloor, ProviderPromptTokenNormalizer.forProvider(null),
                 new AtomicLong(), new AtomicLong(),
                 new AtomicLong(), ConcurrentHashMap.newKeySet(), traceContext, executionScope,
                 observer, observationContext,
@@ -190,7 +190,7 @@ public final class AiTrajectoryRecorder {
                                  Consumer<AiExecutionEvent> events,
                                  AiContextBudget contextBudget,
                                  long estimatedInputFloor,
-                                 PromptTokenAccounting promptTokenAccounting,
+                                 ProviderPromptTokenNormalizer promptTokenNormalizer,
                                  AtomicLong eventSequence, AtomicLong toolSequence,
                                  AtomicLong requestExecutedDomainToolCalls,
                                  Set<String> requestPendingApprovalIds,
@@ -214,7 +214,7 @@ public final class AiTrajectoryRecorder {
         this.observer = observer != null ? observer : ExecutionObserver.noop();
         this.observationContext = observationContext != null
                 ? observationContext : ExecutionObservationContext.noop();
-        this.promptTokenAccounting = promptTokenAccounting;
+        this.promptTokenNormalizer = promptTokenNormalizer;
         this.estimatedInputFloor = new AtomicLong(Math.max(0L, estimatedInputFloor));
         this.eventSequence = eventSequence;
         this.toolSequence = toolSequence;
@@ -236,7 +236,7 @@ public final class AiTrajectoryRecorder {
         AiTrajectoryRecorder child = new AiTrajectoryRecorder(
                 repository, objectMapper, requester, conversationId, requestId,
                 modelName, reasoningEffort, realtimeEvents, contextBudget,
-                estimatedInputFloor.get(), promptTokenAccounting, eventSequence, toolSequence,
+                estimatedInputFloor.get(), promptTokenNormalizer, eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovalIds, childContext,
                 executionScope, observer, observationContext, true, conversationKind);
         return child;
@@ -267,7 +267,7 @@ public final class AiTrajectoryRecorder {
         AiTrajectoryRecorder child = new AiTrajectoryRecorder(
                 repository, objectMapper, requester, childConversationId, requestId,
                 modelName, reasoningEffort, realtimeEvents, contextBudget,
-                estimatedInputFloor.get(), promptTokenAccounting, eventSequence, toolSequence,
+                estimatedInputFloor.get(), promptTokenNormalizer, eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovalIds,
                 traceMetadata(childNamespace), childExecutionScope(childConversationId),
                 observer, observationContext,
@@ -389,7 +389,7 @@ public final class AiTrajectoryRecorder {
     /** Selects the provider-specific mapping from Spring AI usage to ATIF prompt totals. */
     public void useModelProvider(String providerType) {
         this.modelProvider = StringUtils.hasText(providerType) ? providerType.strip() : "unknown";
-        this.promptTokenAccounting = PromptTokenAccounting.fromProviderType(providerType);
+        this.promptTokenNormalizer = ProviderPromptTokenNormalizer.forProvider(providerType);
     }
 
     /** Configures the exact model identifier sent to the provider for GenAI telemetry. */
@@ -827,10 +827,7 @@ public final class AiTrajectoryRecorder {
             Map<String, Object> extra = new LinkedHashMap<>(
                     step.extra() != null ? step.extra() : Map.of());
             if (call.started() != null) {
-                extra.put(ExecutionEventPublisher.EVENT_ID, call.started().eventId());
-                extra.put(ExecutionEventPublisher.EVENT_SEQUENCE, call.started().sequence());
-                extra.put(ExecutionEventPublisher.EVENT_OCCURRED_AT,
-                        call.started().occurredAt().toString());
+                call.started().putAttributes(extra);
             }
             if (terminal != null) {
                 extra.put("score.event.end.id", terminal.eventId());
@@ -1009,29 +1006,11 @@ public final class AiTrajectoryRecorder {
     }
 
     private String reasoning(List<Generation> generations) {
-        return generations.stream()
-                .map(Generation::getOutput)
-                .filter(this::isReasoning)
-                .map(AssistantMessage::getText)
-                .filter(StringUtils::hasText)
-                .reduce((left, right) -> left + "\n\n" + right)
-                .orElse(null);
+        return SpringAiResponseContent.reasoning(generations);
     }
 
     private String visibleMessage(List<Generation> generations) {
-        return generations.stream()
-                .map(Generation::getOutput)
-                .filter(output -> !isReasoning(output))
-                .map(AssistantMessage::getText)
-                .filter(StringUtils::hasText)
-                .reduce((left, right) -> left + right)
-                .orElse("");
-    }
-
-    private boolean isReasoning(AssistantMessage output) {
-        return output.getMetadata().containsKey("signature")
-                || output.getMetadata().containsKey("data")
-                || Boolean.TRUE.equals(output.getMetadata().get("thinking"));
+        return SpringAiResponseContent.visibleStored(generations);
     }
 
     private List<Map<String, Object>> toolCalls(List<Generation> generations) {
@@ -1073,21 +1052,22 @@ public final class AiTrajectoryRecorder {
             return null;
         }
         Map<String, Object> metrics = new LinkedHashMap<>();
-        PromptTokenSnapshot prompt = promptTokenAccounting.resolve(usage, streaming);
-        long contextInputTokens = Math.max(prompt.atifPromptTokens(), estimatedInputFloor.get());
+        ProviderPromptTokenNormalizer.Snapshot prompt =
+                promptTokenNormalizer.normalize(usage, streaming);
+        long contextInputTokens = Math.max(prompt.inclusiveTokens(), estimatedInputFloor.get());
         boolean contextEstimated = !prompt.complete()
-                || contextInputTokens > prompt.atifPromptTokens();
+                || contextInputTokens > prompt.inclusiveTokens();
         if (!prompt.complete()) {
             // Spring AI's Anthropic streaming adapter can lose cache usage reported on
             // message_start. ATIF prompt_tokens must include that cached prefix, so the
             // incomplete provider value is retained only as diagnostic metadata.
             metrics.put("provider_reported_prompt_tokens", prompt.providerReportedTokens());
             metrics.put("prompt_tokens_complete", false);
-            metrics.put("prompt_token_accounting", promptTokenAccounting.wireValue);
+            metrics.put("prompt_token_accounting", promptTokenNormalizer.wireValue());
         } else {
-            metrics.put("prompt_tokens", prompt.atifPromptTokens());
+            metrics.put("prompt_tokens", prompt.inclusiveTokens());
             metrics.put("prompt_tokens_complete", true);
-            metrics.put("prompt_token_accounting", promptTokenAccounting.wireValue);
+            metrics.put("prompt_token_accounting", promptTokenNormalizer.wireValue());
         }
         putIfPresent(metrics, "completion_tokens", usage.getCompletionTokens());
         putIfPresent(metrics, "cached_tokens", usage.getCacheReadInputTokens());
@@ -1103,57 +1083,6 @@ public final class AiTrajectoryRecorder {
         }
         return new AiMetricsSnapshot(Map.copyOf(metrics), contextInputTokens, contextEstimated);
     }
-
-    /**
-     * Spring AI exposes provider-native prompt usage: Anthropic reports cache reads and
-     * writes outside {@code input_tokens}, while OpenAI-compatible providers report cached
-     * input as a subset of their prompt total. ATIF always requires the inclusive total.
-     */
-    private enum PromptTokenAccounting {
-        CACHE_EXCLUDED("cache_excluded"),
-        CACHE_INCLUDED("cache_included"),
-        UNKNOWN("unknown");
-
-        private final String wireValue;
-
-        PromptTokenAccounting(String wireValue) {
-            this.wireValue = wireValue;
-        }
-
-        private static PromptTokenAccounting fromProviderType(String providerType) {
-            if (!StringUtils.hasText(providerType)) {
-                return UNKNOWN;
-            }
-            return switch (providerType.strip().toLowerCase()) {
-                case "anthropic" -> CACHE_EXCLUDED;
-                case "openai", "azure-openai" -> CACHE_INCLUDED;
-                default -> UNKNOWN;
-            };
-        }
-
-        private PromptTokenSnapshot resolve(Usage usage, boolean streaming) {
-            Number reported = usage.getPromptTokens();
-            long providerTokens = reported != null ? reported.longValue() : 0L;
-            long cacheReadTokens = Objects.requireNonNullElse(
-                    usage.getCacheReadInputTokens(), 0L);
-            long cacheWriteTokens = Objects.requireNonNullElse(
-                    usage.getCacheWriteInputTokens(), 0L);
-            long cacheTokens = cacheReadTokens + cacheWriteTokens;
-            long inclusiveTokens = this == CACHE_INCLUDED
-                    ? providerTokens : providerTokens + cacheTokens;
-            boolean missingStreamingCacheUsage = this == CACHE_EXCLUDED && streaming
-                    && usage.getCacheReadInputTokens() == null
-                    && usage.getCacheWriteInputTokens() == null;
-            boolean complete = reported != null
-                    && this != UNKNOWN
-                    && !missingStreamingCacheUsage;
-            return new PromptTokenSnapshot(providerTokens, inclusiveTokens, complete);
-        }
-    }
-
-    private record PromptTokenSnapshot(long providerReportedTokens,
-                                       long atifPromptTokens,
-                                       boolean complete) {}
 
     private void emitContextUsage(AiContextUsageInfo usage) {
         emit(AiExecutionEvent.detail("context_usage", "Context usage updated.",
@@ -1643,12 +1572,39 @@ public final class AiTrajectoryRecorder {
         return stored.get();
     }
 
+    /**
+     * @deprecated Use the execution-package canonical identity for new integrations. This facade
+     * preserves the recorder's established source and binary contract.
+     */
+    @Deprecated(forRemoval = false)
     public record ExecutionEventIdentity(String eventId, long sequence, Instant occurredAt) {
         private static ExecutionEventIdentity from(ExecutionObservation event) {
-            Object id = event.attributes().get(ExecutionEventPublisher.EVENT_ID);
-            Object sequence = event.attributes().get(ExecutionEventPublisher.EVENT_SEQUENCE);
-            if (id == null || !(sequence instanceof Number number)) return null;
-            return new ExecutionEventIdentity(id.toString(), number.longValue(), event.occurredAt());
+            return org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventIdentity
+                    .find(event)
+                    .map(identity -> new ExecutionEventIdentity(identity.eventId(),
+                            identity.sequence(), identity.occurredAt()))
+                    .orElse(null);
+        }
+
+        public org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventIdentity canonical() {
+            return new org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventIdentity(
+                    eventId, sequence, occurredAt);
+        }
+
+        private void putAttributes(Map<String, Object> target) {
+            canonical().putAttributes(target);
+        }
+
+        private static void copyAttributes(Map<String, Object> source,
+                                           Map<String, Object> target) {
+            org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventIdentity
+                    .copyAttributes(source, target);
+        }
+
+        private static void copyAttributes(ExecutionObservation source,
+                                           Map<String, Object> target) {
+            org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventIdentity
+                    .copyAttributes(source, target);
         }
     }
 
@@ -1656,19 +1612,12 @@ public final class AiTrajectoryRecorder {
                                                 Map<String, Object> eventAttributes) {
         Map<String, Object> extra = new LinkedHashMap<>(
                 step.extra() != null ? step.extra() : Map.of());
-        copyEventAttribute(eventAttributes, extra, ExecutionEventPublisher.EVENT_ID);
-        copyEventAttribute(eventAttributes, extra, ExecutionEventPublisher.EVENT_SEQUENCE);
-        copyEventAttribute(eventAttributes, extra, ExecutionEventPublisher.EVENT_OCCURRED_AT);
+        ExecutionEventIdentity.copyAttributes(eventAttributes, extra);
         return new AiChatTrajectoryStep(step.requestId(), step.source(), step.messageKind(),
                 step.visibility(), step.message(), step.reasoningContent(), step.modelName(),
                 step.reasoningEffort(), step.toolCalls(), step.observation(), step.metrics(),
                 extra.isEmpty() ? Map.of() : Map.copyOf(extra), step.llmCallCount(),
                 step.isCopiedContext(), occurredAt);
-    }
-
-    private void copyEventAttribute(Map<String, Object> source, Map<String, Object> target,
-                                    String name) {
-        if (source != null && source.get(name) != null) target.put(name, source.get(name));
     }
 
     private synchronized void emit(AiExecutionEvent event) {
@@ -1690,9 +1639,7 @@ public final class AiTrajectoryRecorder {
     private void deliverRealtime(AiExecutionEvent event, ExecutionObservation canonical) {
         Map<String, Object> metadata = new LinkedHashMap<>(realtimeMetadata(event.metadata()));
         if (canonical != null) {
-            copyEventAttribute(canonical.attributes(), metadata, ExecutionEventPublisher.EVENT_ID);
-            copyEventAttribute(canonical.attributes(), metadata, ExecutionEventPublisher.EVENT_SEQUENCE);
-            copyEventAttribute(canonical.attributes(), metadata, ExecutionEventPublisher.EVENT_OCCURRED_AT);
+            ExecutionEventIdentity.copyAttributes(canonical, metadata);
         }
         AiExecutionEvent realtimeEvent = new AiExecutionEvent(
                 event.type(), event.subtype(), event.content(),

@@ -440,7 +440,7 @@ public final class AiChatExecutor {
                 ? providerRetry.execute(invocation.scope().requestId(), recorder,
                 recorder::executedChangeToolCallCount, providerCall)
                 : providerCall.get();
-        String answer = visibleContent(response);
+        String answer = SpringAiResponseContent.visibleStreaming(response);
         if (!StringUtils.hasText(answer)) {
             throw new IllegalStateException("The Agent returned an empty response.");
         }
@@ -924,7 +924,7 @@ public final class AiChatExecutor {
                     // Raw provider chunks are activity even when they contain only
                     // hidden reasoning or Tool-call protocol data.
                     .doOnNext(ignored -> progress.run())
-                    .map(this::visibleContent)
+                    .map(SpringAiResponseContent::visibleStreaming)
                     .filter(content -> !content.isEmpty())
                     .doOnNext(content -> {
                         long boundary = recorder.completedToolCallCount();
@@ -1014,24 +1014,6 @@ public final class AiChatExecutor {
                 new ToolResponseMessage.ToolResponse(callId, resolution.toolName(),
                         recorder.limitToolOutput(resolution.result(), toolOutputTokenLimit,
                                 resolution.toolName())))).build());
-    }
-
-    private String visibleContent(ChatResponse response) {
-        if (response == null) {
-            return "";
-        }
-        return response.getResults().stream()
-                .map(generation -> generation.getOutput())
-                .filter(output -> !isReasoning(output))
-                .map(AssistantMessage::getText)
-                .filter(text -> text != null && !text.isEmpty())
-                .reduce("", String::concat);
-    }
-
-    private boolean isReasoning(AssistantMessage output) {
-        return output.getMetadata().containsKey("signature")
-                || output.getMetadata().containsKey("data")
-                || Boolean.TRUE.equals(output.getMetadata().get("thinking"));
     }
 
     record Context(ChatRequest request, List<Message> history, UserMessage userMessage,
