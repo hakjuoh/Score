@@ -184,6 +184,7 @@ public record AgentWorkflowContext(
                           boolean hasAttachments, boolean hasPageContext,
                           int maximumAgents, String strategy,
                           String workflowPreference, boolean delegationRequested,
+                          boolean explicitDelegationRequested,
                           boolean mutationConfirmation) {
         public Request {
             requestId = required(requestId, "requestId");

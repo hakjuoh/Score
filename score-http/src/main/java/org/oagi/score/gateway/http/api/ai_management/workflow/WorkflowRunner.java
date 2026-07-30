@@ -8,6 +8,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentExecutionRecorde
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutput;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentToolPolicy;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentWorkflowContext;
+import org.oagi.score.gateway.http.api.ai_management.agent.DelegationIntent;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrailRefusedException;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutputRetryHandoffException;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
@@ -114,7 +115,8 @@ public final class WorkflowRunner {
         WorkflowRunBudget budget = new WorkflowRunBudget(context.requestId(),
                 context.recorder(), inactivityTimeout,
                 () -> cancellationFence(context.requestId()),
-                () -> requestProgress(context.requestId()));
+                () -> requestProgress(context.requestId()),
+                root.request().maximumAgents());
         AgentWorkflowContext rootContext = root.withRunControl(budget)
                 .inWorkflow(null,
                 new AgentWorkflowContext.Location("main", "main", null, 0));
@@ -166,7 +168,9 @@ public final class WorkflowRunner {
                     state.candidate = resultAsCandidate(result, child.workflow(), state.iteration);
                     state.context = state.context.withCandidate(
                             child.workflow(), state.candidate, state.iteration);
-                    if (evaluator != null) queue.addLast(new AgentCall(evaluator.callId()));
+                    if (shouldEvaluate(state.context)) {
+                        queue.addLast(new AgentCall(evaluator.callId()));
+                    }
                 }
             }
             if (state.candidate == null) {
@@ -177,6 +181,7 @@ public final class WorkflowRunner {
             metadata.put("workflow_iterations", state.iteration);
             metadata.put("workflow_queue_calls", budget.usedCalls());
             AgentOutput result = state.candidate.withMetadata(Map.copyOf(metadata));
+            publishFinalWorkflowResult(context.recorder(), budget, state, result);
             budget.settleUsage();
             workflowRecorder.terminalLifecycle("workflow_completed", "Agent call flow completed.",
                     lifecycle(namespace, "completed", Map.of(
@@ -242,7 +247,7 @@ public final class WorkflowRunner {
             return;
         }
         AgentDecision.Delegate delegate = (AgentDecision.Delegate) decision;
-        validate(delegate.workflow(), state.context.request().maximumAgents());
+        validate(delegate.workflow(), state.context.request());
         state.iteration++;
         if (state.iteration > maximumIterations) {
             if (state.candidate != null) return;
@@ -275,6 +280,7 @@ public final class WorkflowRunner {
                         "member_count", workflow.members().size())));
 
         try {
+            announcePlannedAssignments(local, plan, workflow);
             List<WorkflowResult> results = graphScheduler.execute(
                     workflow, local.inputs(), budget::checkpoint,
                     (member, upstream) -> executeMember(local, plan, member, upstream,
@@ -308,19 +314,6 @@ public final class WorkflowRunner {
                     : output.withMetadata(Map.copyOf(metadata));
             WorkflowResult result = WorkflowResult.success(
                     workflow.id(), completedOutput, results);
-            if (depth == 1 && completedOutput.passedOutputGuardrail(
-                    AgentOutputGuardrail.Scope.PUBLIC)) {
-                recorder.callWhileActive(() -> {
-                    budget.checkpoint();
-                    recorder.workflowResult(completedOutput,
-                            lifecycle(namespace, "result", Map.of(
-                                    "completed", completed.size(),
-                                    "failed", directFailed,
-                                    "failure_count", failed,
-                                    "partial_failure", failed > 0)));
-                    return null;
-                });
-            }
             recorder.terminalLifecycle("workflow_completed", plan.synthesisGuideMessage(),
                     lifecycle(namespace, "completed", Map.of(
                             "completed", completed.size(),
@@ -355,6 +348,18 @@ public final class WorkflowRunner {
         }
     }
 
+    private void announcePlannedAssignments(AgentWorkflowContext local,
+                                            AiWorkflowPlan plan,
+                                            AiWorkflowPlan.WorkflowDefinition workflow) {
+        for (AiWorkflowPlan.Member member : workflow.members()) {
+            if (member.agent() == null) continue;
+            Agent agent = assigned(member.agent());
+            AgentWorkflowContext assignment = local.withAssignment(
+                    plan, member.id(), member.agent(), List.of());
+            AgentAssignmentRun.planned(agent, assignment);
+        }
+    }
+
     private WorkflowResult executeMember(AgentWorkflowContext local,
                                          AiWorkflowPlan plan,
                                          AiWorkflowPlan.Member member,
@@ -383,17 +388,22 @@ public final class WorkflowRunner {
                                                 AiWorkflowPlan.Member member,
                                                 List<WorkflowResult> upstream,
                                                 WorkflowRunBudget budget) {
+        Agent agent = assigned(member.agent());
+        AgentToolPolicy policy = assignmentToolPolicy(
+                parent.execution(), member.agent().toolAccess());
+        AgentWorkflowContext context = parent.withExecution(
+                        parent.execution().forWorkflowAssignment(
+                                policy, agent.id().value()))
+                .withAssignment(plan, member.id(), member.agent(), upstream);
         try {
-            Agent agent = assigned(member.agent());
-            AgentToolPolicy policy = assignmentToolPolicy(
-                    parent.execution(), member.agent().toolAccess());
-            AgentWorkflowContext context = parent.withExecution(
-                            parent.execution().forWorkflowAssignment(
-                                    policy, agent.id().value()))
-                    .withAssignment(
-                    plan, member.id(), member.agent(), upstream);
+            budget.admitAssignment();
+        } catch (RuntimeException rejected) {
+            AgentAssignmentRun.rejected(agent, context, rejected);
+            return WorkflowResult.failure(member.id(), rejected);
+        }
+        try {
             AgentDecision decision = budget.invoke(agents, agent.callId(), context);
-            return decisionResult(decision, context, member.id(), budget);
+            return decisionResult(decision, context, member.id(), budget, true);
         } catch (CancellationException | AgentGuardrailRefusedException
                  | AgentOutputRetryHandoffException failure) {
             throw failure;
@@ -404,23 +414,60 @@ public final class WorkflowRunner {
 
     private WorkflowResult decisionResult(AgentDecision decision,
                                           AgentWorkflowContext context,
-                                          String memberId, WorkflowRunBudget budget) {
+                                          String memberId, WorkflowRunBudget budget,
+                                          boolean ownerDecision) {
         if (decision instanceof AgentDecision.Complete complete) {
-            return WorkflowResult.success(memberId, complete.result(), List.of());
+            WorkflowResult result = WorkflowResult.success(
+                    memberId, complete.result(), List.of());
+            if (context.assignment() != null
+                    && context.assignment().delegation() == AiWorkflowPlan.Delegation.FAN_OUT
+                    && !ownerDecision) {
+                AgentAssignmentRun.delegatedFinished(
+                        assigned(context.assignment()), context, result);
+            }
+            return result;
         }
         if (decision instanceof AgentDecision.Delegate delegate) {
-            validate(delegate.workflow(), context.request().maximumAgents());
-            AgentWorkflowContext.Location location = Objects.requireNonNull(
-                    context.location(), "Workflow location");
-            return executeChild(context, delegate.workflow().root(), location.nodeId(),
-                    location.depth() + 1, delegate.workflow(), memberId + "-delegated",
-                    budget);
+            if (context.assignment() != null
+                    && context.assignment().delegation() != AiWorkflowPlan.Delegation.FAN_OUT) {
+                throw new IllegalStateException(
+                        "A DIRECT Agent assignment cannot own a delegated Workflow.");
+            }
+            try {
+                validate(delegate.workflow(), context.request().maximumAgents());
+                AgentWorkflowContext.Location location = Objects.requireNonNull(
+                        context.location(), "Workflow location");
+                String agentNodeId = location.nodeId() + ":agent:" + memberId;
+                WorkflowResult result = executeChild(
+                        context, delegate.workflow().root(), agentNodeId,
+                        location.depth() + 1, delegate.workflow(), memberId + "-delegated",
+                        budget);
+                AgentAssignmentRun.delegatedFinished(
+                        assigned(context.assignment()), context, result);
+                return result;
+            } catch (RuntimeException failure) {
+                if (ownerDecision) {
+                    AgentAssignmentRun.delegatedFinished(assigned(context.assignment()), context,
+                            WorkflowResult.failure(memberId, failure));
+                }
+                throw failure;
+            }
         }
         AgentDecision.Handoff handoff = (AgentDecision.Handoff) decision;
         AgentWorkflowContext next = handoff.feedback() != null
                 ? context.withFeedback(handoff.feedback()) : context;
-        return decisionResult(budget.invoke(agents, resolve(handoff.target()).callId(), next), next,
-                memberId, budget);
+        try {
+            return decisionResult(
+                    budget.invoke(agents, resolve(handoff.target()).callId(), next), next,
+                    memberId, budget, false);
+        } catch (RuntimeException failure) {
+            if (ownerDecision && context.assignment() != null
+                    && context.assignment().delegation() == AiWorkflowPlan.Delegation.FAN_OUT) {
+                AgentAssignmentRun.delegatedFinished(assigned(context.assignment()), context,
+                        WorkflowResult.failure(memberId, failure));
+            }
+            throw failure;
+        }
     }
 
     private AgentOutput synthesize(AgentWorkflowContext parent,
@@ -453,6 +500,31 @@ public final class WorkflowRunner {
         return result.result().withMetadata(Map.copyOf(metadata));
     }
 
+    private boolean shouldEvaluate(AgentWorkflowContext context) {
+        // A delegation explicitly requested in this turn is an execution contract:
+        // evaluating it as an open-ended draft can change the requested fan-out and
+        // reopen the same Workflow after its answer has already been synthesized.
+        return evaluator != null && !context.request().explicitDelegationRequested();
+    }
+
+    private void publishFinalWorkflowResult(AgentExecutionRecorder recorder,
+                                            WorkflowRunBudget budget,
+                                            RunState state,
+                                            AgentOutput result) {
+        if (state.plan == null || !result.passedOutputGuardrail(
+                AgentOutputGuardrail.Scope.PUBLIC)) {
+            return;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>(result.metadata());
+        metadata.put("status", "result");
+        metadata.put("workflow_iterations", state.iteration);
+        recorder.callWhileActive(() -> {
+            budget.checkpoint();
+            recorder.workflowResult(result, Map.copyOf(metadata));
+            return null;
+        });
+    }
+
     private int failureCount(List<WorkflowResult> results) {
         int failures = 0;
         for (WorkflowResult result : results) {
@@ -479,6 +551,16 @@ public final class WorkflowRunner {
 
     private void validate(AiWorkflowPlan plan, int maximumAgents) {
         validator.validate(plan, maximumAgents, agents::assignable);
+    }
+
+    private void validate(AiWorkflowPlan plan, AgentWorkflowContext.Request request) {
+        if (request.explicitDelegationRequested()) {
+            int requiredAgents = DelegationIntent.requestedAgentCount(request.prompt())
+                    .orElse(2);
+            validator.validateExactAgentCalls(plan, requiredAgents, agents::assignable);
+        } else {
+            validate(plan, request.maximumAgents());
+        }
     }
 
     private Agent assigned(AiWorkflowPlan.AgentTask task) {

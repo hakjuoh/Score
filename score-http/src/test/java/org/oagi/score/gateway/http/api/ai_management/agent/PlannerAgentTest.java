@@ -10,6 +10,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDefinition;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.api.ai_management.workflow.AgentRunner;
+import org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowIntent;
 
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,7 @@ class PlannerAgentTest {
                           "agentId": "evidence-researcher",
                           "label": "Research",
                           "instruction": "Find the current evidence.",
+                          "guideMessage": "I’m finding the current evidence for you.",
                           "activeVerb": "Researching",
                           "completedVerb": "Researched",
                           "toolAccess": "READ_ONLY"
@@ -56,16 +58,19 @@ class PlannerAgentTest {
                                 "agentId": "critical-reviewer",
                                 "label": "Review",
                                 "instruction": "Independently verify the evidence.",
+                                "guideMessage": "I’m independently reviewing the evidence for you.",
                                 "activeVerb": "Reviewing",
                                 "completedVerb": "Reviewed",
                                 "toolAccess": "READ_ONLY"
                               },
                               "workflow": null
                             }
-                          ]
+                          ],
+                          "edges": []
                         }
                       }
-                    ]
+                    ],
+                    "edges": []
                   },
                   "guideMessage": "Delegating.",
                   "synthesisGuideMessage": "Combining results."
@@ -80,7 +85,37 @@ class PlannerAgentTest {
                 .isEqualTo("evidence-researcher");
         assertThat(plan.root().members().getLast().workflow().members().getFirst()
                 .agent().agentId()).isEqualTo("critical-reviewer");
+        assertThat(plan.root().edges()).isEmpty();
         assertThat(plan.toString()).doesNotContain("parallel", "routing", "chain");
+    }
+
+    @Test
+    void plannerOutputWithoutExplicitDependencyEdgesUsesTheBoundedFallback() {
+        Fixture fixture = fixture("""
+                {
+                  "root": {
+                    "id": "root",
+                    "members": [{
+                      "id": "research",
+                      "agent": {
+                        "agentId": "evidence-researcher",
+                        "label": "Research",
+                        "instruction": "Find the current evidence.",
+                        "toolAccess": "READ_ONLY"
+                      },
+                      "workflow": null
+                    }]
+                  }
+                }
+                """);
+
+        AiWorkflowPlan plan = ((AgentDecision.Delegate)
+                fixture.runner.run(fixture.planner.callId(), fixture.context)).workflow();
+
+        assertThat(plan.root().members()).hasSize(2);
+        assertThat(plan.root().edges()).isEmpty();
+        verify(fixture.recorder).lifecycle(
+                org.mockito.ArgumentMatchers.eq("workflow_plan_fallback"), any(), any());
     }
 
     @Test
@@ -101,6 +136,44 @@ class PlannerAgentTest {
     }
 
     @Test
+    void missingGuidesUseDeterministicFallbackText() {
+        Fixture fixture = fixture("""
+                {
+                  "root": {
+                    "id": "root",
+                    "members": [{
+                      "id": "research",
+                      "agent": {
+                        "agentId": "evidence-researcher",
+                        "label": "Research",
+                        "instruction": "Find current evidence.",
+                        "guideMessage": null,
+                        "toolAccess": "READ_ONLY"
+                      },
+                      "workflow": null
+                    }],
+                    "edges": []
+                  },
+                  "guideMessage": null,
+                  "synthesisGuideMessage": null
+                }
+                """, 2, "Inspect the release components");
+
+        AiWorkflowPlan plan = ((AgentDecision.Delegate)
+                fixture.runner.run(fixture.planner.callId(), fixture.context)).workflow();
+
+        assertThat(plan.guideMessage())
+                .isEqualTo("I’m checking the request from the necessary perspectives.");
+        assertThat(plan.synthesisGuideMessage())
+                .isEqualTo("I’m combining the findings into one answer.");
+        assertThat(plan.root().members()).allSatisfy(member ->
+                assertThat(member.agent().guideMessage())
+                        .isEqualTo("I’m independently checking the evidence for your request."));
+        verify(fixture.recorder).lifecycle(
+                org.mockito.ArgumentMatchers.eq("workflow_plan_fallback"), any(), any());
+    }
+
+    @Test
     void plannerProviderFailureFallsBackToAllRequestedAgentsInParallel() {
         Fixture fixture = fixture("unused", 3);
         when(fixture.execution.execute(any()))
@@ -113,6 +186,133 @@ class PlannerAgentTest {
         assertThat(plan.root().edges()).isEmpty();
         assertThat(plan.root().members()).allSatisfy(member ->
                 assertThat(plan.root().predecessors(member.id())).isEmpty());
+    }
+
+    @Test
+    void explicitAgentCountRejectsAnUndersizedPlanAndUsesTheExactFallback() {
+        Fixture fixture = fixture("""
+                {
+                  "root": {
+                    "id": "root",
+                    "members": [{
+                      "id": "only-one",
+                      "agent": {
+                        "agentId": "evidence-researcher",
+                        "label": "Research",
+                        "instruction": "Find the evidence.",
+                        "guideMessage": "I’m finding the evidence for you.",
+                        "activeVerb": "Researching",
+                        "completedVerb": "Researched",
+                        "toolAccess": "READ_ONLY"
+                      },
+                      "workflow": null
+                    }],
+                    "edges": []
+                  },
+                  "guideMessage": "I’m delegating the three checks.",
+                  "synthesisGuideMessage": "I’m combining the three findings."
+                }
+                """, 3, "Spawn exactly 3 sub-agents in parallel.");
+
+        AiWorkflowPlan plan = ((AgentDecision.Delegate)
+                fixture.runner.run(fixture.planner.callId(), fixture.context)).workflow();
+
+        assertThat(plan.root().members()).hasSize(3);
+        assertThat(plan.root().edges()).isEmpty();
+        org.mockito.ArgumentCaptor<AgentInvocation> invocation =
+                org.mockito.ArgumentCaptor.forClass(AgentInvocation.class);
+        verify(fixture.execution).execute(invocation.capture());
+        assertThat(invocation.getValue().request().content())
+                .contains("\"userRequest\":\"Spawn exactly 3 sub-agents in parallel.\"")
+                .contains("\"requiredAgentCount\":3");
+        verify(fixture.recorder).lifecycle(
+                org.mockito.ArgumentMatchers.eq("workflow_plan_fallback"), any(), any());
+    }
+
+    @Test
+    void nestedPlanningUsesTheOwningAgentsAssignmentAndItsLocalAgentCount() {
+        Fixture fixture = fixture("""
+                {
+                  "root": {
+                    "id": "nested-checks",
+                    "members": [
+                      {
+                        "id": "first",
+                        "agent": {
+                          "agentId": "evidence-researcher",
+                          "label": "First check",
+                          "instruction": "Check the first source.",
+                          "guideMessage": "I’m checking the first source.",
+                          "activeVerb": "Checking",
+                          "completedVerb": "Checked",
+                          "toolAccess": "READ_ONLY"
+                        },
+                        "workflow": null
+                      },
+                      {
+                        "id": "second",
+                        "agent": {
+                          "agentId": "critical-reviewer",
+                          "label": "Second check",
+                          "instruction": "Check the second source.",
+                          "guideMessage": "I’m checking the second source.",
+                          "activeVerb": "Checking",
+                          "completedVerb": "Checked",
+                          "toolAccess": "READ_ONLY"
+                        },
+                        "workflow": null
+                      }
+                    ],
+                    "edges": []
+                  },
+                  "guideMessage": "I’m running two nested checks.",
+                  "synthesisGuideMessage": "I’m combining the nested checks."
+                }
+                """, 3, "Spawn exactly 3 top-level sub-agents in parallel.");
+        AiWorkflowPlan.AgentTask assignment = new AiWorkflowPlan.AgentTask(
+                "evidence-researcher", "Nested checks",
+                "Spawn exactly 2 sub-agents in parallel to verify this assignment.",
+                "I’m delegating the nested checks.", "Delegating", "Verified",
+                AiWorkflowPlan.ToolAccess.READ_ONLY, AiWorkflowPlan.Delegation.FAN_OUT);
+        AiWorkflowPlan outer = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("outer", List.of(
+                        new AiWorkflowPlan.Member("owner", assignment, null))), null, null);
+        AgentWorkflowContext nested = fixture.context
+                .inWorkflow(outer, new AgentWorkflowContext.Location(
+                        "outer", "main:1:outer", "main", 1))
+                .withAssignment(outer, "owner", assignment, List.of());
+
+        AiWorkflowPlan plan = ((AgentDecision.Delegate)
+                fixture.runner.run(fixture.planner.callId(), nested)).workflow();
+
+        assertThat(plan.root().members()).hasSize(2);
+        org.mockito.ArgumentCaptor<AgentInvocation> invocation =
+                org.mockito.ArgumentCaptor.forClass(AgentInvocation.class);
+        verify(fixture.execution).execute(invocation.capture());
+        assertThat(invocation.getValue().request().content())
+                .contains("\"userRequest\":\"Spawn exactly 2 sub-agents in parallel to verify this assignment.\"")
+                .contains("\"requiredAgentCount\":2");
+    }
+
+    @Test
+    void nestedPlanningCannotExceedTheRootRequestsAgentLimit() {
+        Fixture fixture = fixture("unused", 2, "Inspect it");
+        AiWorkflowPlan.AgentTask assignment = new AiWorkflowPlan.AgentTask(
+                "evidence-researcher", "Nested checks",
+                "Spawn exactly 3 sub-agents in parallel.",
+                "I’m delegating nested checks.", "Delegating", "Verified",
+                AiWorkflowPlan.ToolAccess.READ_ONLY, AiWorkflowPlan.Delegation.FAN_OUT);
+        AiWorkflowPlan outer = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("outer", List.of(
+                        new AiWorkflowPlan.Member("owner", assignment, null))), null, null);
+        AgentWorkflowContext nested = fixture.context
+                .inWorkflow(outer, new AgentWorkflowContext.Location(
+                        "outer", "main:1:outer", "main", 1))
+                .withAssignment(outer, "owner", assignment, List.of());
+
+        assertThatThrownBy(() -> fixture.runner.run(fixture.planner.callId(), nested))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("exceeds the current request limit");
     }
 
     @Test
@@ -130,6 +330,10 @@ class PlannerAgentTest {
     }
 
     private Fixture fixture(String modelOutput, int maximumAgents) {
+        return fixture(modelOutput, maximumAgents, "Investigate it");
+    }
+
+    private Fixture fixture(String modelOutput, int maximumAgents, String prompt) {
         AgentExecutionService execution = mock(AgentExecutionService.class);
         SpringAiModelCatalog models = mock(SpringAiModelCatalog.class);
         AiAgentCatalog catalog = mock(AiAgentCatalog.class);
@@ -157,13 +361,14 @@ class PlannerAgentTest {
                 List.of(planner));
         AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
         AgentWorkflowContext.Request request = new AgentWorkflowContext.Request(
-                "request-1", "conversation-1", "user-1", "model", "Investigate it",
-                false, false, maximumAgents, "verification", "agents", true, false);
-        ChatRequest chatRequest = new ChatRequest("Investigate it", "request-1", null,
+                "request-1", "conversation-1", "user-1", "model", prompt,
+                false, false, maximumAgents, "verification", "agents", true,
+                AiWorkflowIntent.explicitlyRequestsAgents(prompt), false);
+        ChatRequest chatRequest = new ChatRequest(prompt, "request-1", null,
                 "conversation-1", null, List.of(), null, "model", "verification", "agents");
         AgentWorkflowContext context = AgentWorkflowContext.root(
                 ChatExecutionContext.fromRequest(chatRequest, List.of(),
-                        new org.springframework.ai.chat.messages.UserMessage("Investigate it"),
+                        new org.springframework.ai.chat.messages.UserMessage(prompt),
                         null, recorder, false, false), request, 3);
         return new Fixture(planner, runner, context, recorder, execution);
     }

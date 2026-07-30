@@ -1193,14 +1193,13 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
-    void usesTheCurrentPromptLanguageForSyntheticRetryNarration() {
+    void emitsDeterministicSyntheticRetryNarration() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
                 .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
                 mock(ScoreUser.class), "conversation-1", "request-1", events::add);
-        recorder.usePromptLanguage("호출 인자를 고쳐서 다시 시도해 줘");
         ToolDefinition definition = ToolDefinition.builder()
                 .name("create_top_level_asbiep").description("test")
                 .inputSchema("{\"type\":\"object\"}").build();
@@ -1219,8 +1218,8 @@ class AiTrajectoryRecorderTest {
 
         assertThat(events.stream().filter(event -> "guide".equals(event.subtype())))
                 .singleElement().extracting(AiExecutionEvent::content)
-                .isEqualTo("이전 create_top_level_asbiep 호출이 실패했습니다. "
-                        + "툴 호출 인자를 수정해 다시 시도합니다.");
+                .isEqualTo("The previous create_top_level_asbiep call failed. "
+                        + "I corrected the tool arguments and am retrying it.");
     }
 
     @Test

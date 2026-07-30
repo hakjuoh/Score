@@ -31,7 +31,10 @@ class AiAgentCatalogTest {
                 .hasMessageContaining("Unknown worker Agent");
         assertThat(catalog.require("workflow-planner").instruction())
                 .startsWith("You are the Planner Agent")
+                .contains("Every workflow-level and Agent-level guideMessage")
                 .doesNotContain("role: PLANNER");
+        assertThat(catalog.require("workflow-synthesizer").instruction())
+                .contains("Return the synthesized result to the parent workflow");
         assertThat(catalog.systemDefinition("gateway-agent").id().value())
                 .isEqualTo("gateway-agent");
         assertThatThrownBy(() -> catalog.systemDefinition("general-purpose"))

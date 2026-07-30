@@ -161,6 +161,127 @@ class AgentRunnerTest {
     }
 
     @Test
+    void assignedAgentLifecyclePublishesThePostMiddlewareResult() {
+        AiMiddleware replacing = new AiMiddleware() {
+            @Override public String id() { return "replace-assigned-output"; }
+            @Override
+            public AgentResult afterAgent(AgentContext context, AgentDecision response) {
+                return AgentResult.completeWith(new AgentDecision.Complete(
+                        new AgentOutput("final middleware result")));
+            }
+        };
+        ScoreAiProperties.Middleware settings = new ScoreAiProperties.Middleware();
+        settings.setProfiles(Map.of("default", List.of("replace-assigned-output")));
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
+                new ChatRequest("prompt", "request", "assigned-agent", "conversation",
+                        null, List.of(), null, "model", null, null),
+                List.of(), new AiMessage.User("prompt"), null, recorder,
+                false, false, AgentToolPolicy.NONE, 0);
+        AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
+                "assigned-agent", "Assigned", "Complete the assignment.",
+                null, null, null, AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowPlan plan = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("assigned-workflow", List.of(
+                        new AiWorkflowPlan.Member("member", task, null))), null, null);
+        AgentWorkflowContext workflow = AgentWorkflowContext.root(execution,
+                        new AgentWorkflowContext.Request("request", "conversation", "user",
+                                "model", "prompt", false, false, 1, "balanced",
+                                null, true, false, false), 1)
+                .inWorkflow(plan, new AgentWorkflowContext.Location(
+                        "assigned-workflow", "root:assigned", "root", 1))
+                .withAssignment(plan, "member", task, List.of());
+        Agent agent = new DefinedAgent(new AgentDefinition(
+                new Agent.AgentId("assigned-agent"), "Assigned Agent", "Completes an assignment",
+                new AgentDefinition.InstructionTemplate("instruction"),
+                (ignored, context) -> new AgentRunRequest.Skip(
+                        new AgentDecision.Complete(new AgentOutput("initial result"))),
+                org.oagi.score.gateway.http.api.ai_management.agent.AgentToolHandler.none(),
+                org.oagi.score.gateway.http.api.ai_management.agent.AgentResponseHandler.complete(),
+                AgentGuardrails.none(), true));
+
+        AgentDecision.Complete decision = (AgentDecision.Complete) new AgentRunner(
+                null, null, null, null, List.of(agent),
+                new AiMiddlewareChain(settings, List.of(replacing))).run(agent, workflow);
+
+        assertThat(decision.result().content()).isEqualTo("final middleware result");
+        verify(recorder).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_completed"), any(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(metadata ->
+                        "final middleware result".equals(metadata.get("result"))));
+    }
+
+    @Test
+    void assignedAgentLifecycleFailsWhenPostMiddlewareThrows() {
+        AiMiddleware failing = new AiMiddleware() {
+            @Override public String id() { return "fail-assigned-output"; }
+            @Override
+            public AgentResult afterAgent(AgentContext context, AgentDecision response) {
+                throw new IllegalStateException("after-agent failed");
+            }
+        };
+        ScoreAiProperties.Middleware settings = new ScoreAiProperties.Middleware();
+        settings.setProfiles(Map.of("default", List.of("fail-assigned-output")));
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
+                new ChatRequest("prompt", "request", "assigned-agent", "conversation",
+                        null, List.of(), null, "model", null, null),
+                List.of(), new AiMessage.User("prompt"), null, recorder,
+                false, false, AgentToolPolicy.NONE, 0);
+        AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
+                "assigned-agent", "Assigned", "Complete the assignment.",
+                null, null, null, AiWorkflowPlan.ToolAccess.NONE);
+        AiWorkflowPlan plan = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("assigned-workflow", List.of(
+                        new AiWorkflowPlan.Member("member", task, null))), null, null);
+        AgentWorkflowContext workflow = AgentWorkflowContext.root(execution,
+                        new AgentWorkflowContext.Request("request", "conversation", "user",
+                                "model", "prompt", false, false, 1, "balanced",
+                                null, true, false, false), 1)
+                .inWorkflow(plan, new AgentWorkflowContext.Location(
+                        "assigned-workflow", "root:assigned", "root", 1))
+                .withAssignment(plan, "member", task, List.of());
+        Agent agent = new DefinedAgent(new AgentDefinition(
+                new Agent.AgentId("assigned-agent"), "Assigned Agent", "Completes an assignment",
+                new AgentDefinition.InstructionTemplate("instruction"),
+                (ignored, context) -> new AgentRunRequest.Skip(
+                        new AgentDecision.Complete(new AgentOutput("initial result"))),
+                org.oagi.score.gateway.http.api.ai_management.agent.AgentToolHandler.none(),
+                org.oagi.score.gateway.http.api.ai_management.agent.AgentResponseHandler.complete(),
+                AgentGuardrails.none(), true));
+
+        assertThatThrownBy(() -> new AgentRunner(
+                null, null, null, null, List.of(agent),
+                new AiMiddlewareChain(settings, List.of(failing))).run(agent, workflow))
+                .isInstanceOf(org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareException.class)
+                .hasMessageContaining("fail-assigned-output");
+        verify(recorder).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_failed"), any(),
+                org.mockito.ArgumentMatchers.anyMap());
+
+        org.mockito.Mockito.reset(recorder);
+        AiMiddleware beforeFailing = new AiMiddleware() {
+            @Override public String id() { return "fail-before-assigned"; }
+            @Override
+            public AgentResult beforeAgent(AgentContext context) {
+                throw new IllegalStateException("before-agent failed");
+            }
+        };
+        ScoreAiProperties.Middleware beforeSettings = new ScoreAiProperties.Middleware();
+        beforeSettings.setProfiles(Map.of("default", List.of("fail-before-assigned")));
+
+        assertThatThrownBy(() -> new AgentRunner(
+                null, null, null, null, List.of(agent),
+                new AiMiddlewareChain(beforeSettings, List.of(beforeFailing)))
+                .run(agent, workflow))
+                .isInstanceOf(org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareException.class)
+                .hasMessageContaining("fail-before-assigned");
+        verify(recorder).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_failed"), any(),
+                org.mockito.ArgumentMatchers.anyMap());
+    }
+
+    @Test
     void modelOnlyExecutionServiceRemainsLambdaCompatible() {
         AgentExecutionService execution = invocation -> result(
                 "lambda answer", invocation.session().agent());
@@ -471,7 +592,7 @@ class AgentRunnerTest {
         AgentWorkflowContext workflow = AgentWorkflowContext.root(execution,
                         new AgentWorkflowContext.Request("request", "conversation", "user",
                                 "model", "prompt", false, false, 1, "balanced",
-                                null, true, false), 1)
+                                null, true, false, false), 1)
                 .inWorkflow(plan, new AgentWorkflowContext.Location(
                         "preflight-workflow", "root:preflight", "root", 1))
                 .withAssignment(plan, "member", task, List.of());
@@ -488,7 +609,7 @@ class AgentRunnerTest {
                 .hasMessageContaining("prepare failed");
         verify(recorder).lifecycle(org.mockito.ArgumentMatchers.eq("subagent_preparing"),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyMap());
-        verify(recorder).lifecycle(org.mockito.ArgumentMatchers.eq("subagent_preflight_failed"),
+        verify(recorder).lifecycle(org.mockito.ArgumentMatchers.eq("subagent_failed"),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyMap());
         verify(recorder, times(0)).terminalLifecycle(
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
@@ -718,7 +839,7 @@ class AgentRunnerTest {
         ChatExecutionContext execution = executionContext(agentId);
         return AgentWorkflowContext.root(execution, new AgentWorkflowContext.Request(
                 "request", "conversation", "user", "model", "prompt", false, false,
-                1, "balanced", null, false, false), 3, runControl);
+                1, "balanced", null, false, false, false), 3, runControl);
     }
 
     private ChatExecutionContext executionContext(String agentId) {

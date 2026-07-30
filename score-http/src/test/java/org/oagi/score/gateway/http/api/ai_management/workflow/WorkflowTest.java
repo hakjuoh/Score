@@ -34,8 +34,11 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddleware;
+import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareChain;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
+import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -203,6 +206,298 @@ class WorkflowTest {
     }
 
     @Test
+    void delegatedWorkflowIsNestedUnderTheOwningAgentNode() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(fanOutPlan("outer", "delegating-worker")));
+        Agent delegatingWorker = agent("delegating-worker", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(plan("inner", "leaf-worker")));
+        Agent leafWorker = agent("leaf-worker", new ArrayList<>(), ignored ->
+                complete("nested result"));
+        AgentExecutionContext execution = context();
+
+        AgentOutput result = workflow(gateway, delegatingWorker, leafWorker)
+                .execute(workflowContext(execution));
+
+        assertThat(result.content()).isEqualTo("nested result");
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Map<String, Object>> namespaces =
+                org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(execution.recorder(), times(3)).fork(namespaces.capture());
+        assertThat(namespaces.getAllValues().getLast())
+                .containsEntry("node_id",
+                        "main:1:outer:agent:member:member-delegated")
+                .containsEntry("parent_node_id", "main:1:outer:agent:member")
+                .containsEntry("depth", 2);
+    }
+
+    @Test
+    void failedDelegatedWorkflowTerminatesTheOwningAgentLifecycle() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(fanOutPlan("outer", "delegating-worker")));
+        Agent delegatingWorker = agent("delegating-worker", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(plan("inner", "failed-worker")));
+        Agent failedWorker = agent("failed-worker", new ArrayList<>(), ignored -> {
+            throw new IllegalStateException("nested failure");
+        });
+        AgentExecutionContext execution = context();
+
+        assertThatThrownBy(() -> workflow(gateway, delegatingWorker, failedWorker)
+                .execute(workflowContext(execution)))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(execution.recorder()).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_failed"), any(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(metadata ->
+                        "delegating-worker".equals(metadata.get("agent_id"))));
+    }
+
+    @Test
+    void dynamicNestedFanOutSharesOneRequestAgentAssignmentLimit() {
+        List<String> calls = java.util.Collections.synchronizedList(new ArrayList<>());
+        Agent gateway = agent("gateway-agent", calls, ignored ->
+                new AgentDecision.Delegate(fanOutPlan("outer", "delegating-worker")));
+        AiWorkflowPlan inner = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("inner", List.of(
+                        member("leaf-1", "leaf-worker"),
+                        member("leaf-2", "leaf-worker"),
+                        member("leaf-3", "leaf-worker"),
+                        member("leaf-4", "leaf-worker"))), null, null);
+        Agent delegatingWorker = agent("delegating-worker", calls, ignored ->
+                new AgentDecision.Delegate(inner));
+        Agent leafWorker = agent("leaf-worker", calls, ignored -> complete("nested result"));
+        AgentExecutionContext execution = context();
+
+        workflow(gateway, delegatingWorker, leafWorker)
+                .execute(workflowContext(execution));
+
+        assertThat(calls.stream().filter("leaf-worker"::equals)).hasSize(3);
+        verify(execution.recorder()).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_failed"), any(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(metadata ->
+                        "leaf-worker".equals(metadata.get("agent_id"))));
+    }
+
+    @Test
+    void twoRootAssignmentsCanExecuteTwoNestedAssignmentsWithinTheRequestLimit() {
+        List<String> calls = java.util.Collections.synchronizedList(new ArrayList<>());
+        AiWorkflowPlan.AgentTask fanOutTask = new AiWorkflowPlan.AgentTask(
+                "delegating-worker", "Nested checks", "Run two nested checks.",
+                "Starting nested checks.", "Checking", "Checked",
+                AiWorkflowPlan.ToolAccess.NONE, AiWorkflowPlan.Delegation.FAN_OUT);
+        AiWorkflowPlan outer = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("outer", List.of(
+                        new AiWorkflowPlan.Member("nested-owner", fanOutTask, null),
+                        member("direct", "direct-worker")), List.of()), null, null);
+        AiWorkflowPlan inner = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("inner", List.of(
+                        member("nested-1", "leaf-worker"),
+                        member("nested-2", "leaf-worker")), List.of()), null, null);
+        Agent gateway = agent("gateway-agent", calls, ignored ->
+                new AgentDecision.Delegate(outer));
+        Agent delegatingWorker = agent("delegating-worker", calls, ignored ->
+                new AgentDecision.Delegate(inner));
+        Agent directWorker = agent("direct-worker", calls, ignored -> complete("B"));
+        Agent leafWorker = agent("leaf-worker", calls, ignored -> complete("A"));
+
+        workflow(gateway, delegatingWorker, directWorker, leafWorker)
+                .execute(workflowContext(context()));
+
+        assertThat(calls.stream().filter("direct-worker"::equals)).hasSize(1);
+        assertThat(calls.stream().filter("leaf-worker"::equals)).hasSize(2);
+    }
+
+    @Test
+    void directAssignmentCannotOwnADelegatedWorkflow() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(plan("outer", "direct-worker")));
+        Agent directWorker = agent("direct-worker", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(plan("inner", "leaf-worker")));
+        Agent leafWorker = agent("leaf-worker", new ArrayList<>(), ignored -> complete("leaf"));
+
+        assertThatThrownBy(() -> workflow(gateway, directWorker, leafWorker)
+                .execute(workflowContext(context())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Every member");
+    }
+
+    @Test
+    void plannerHandoffKeepsLifecycleOwnedByTheDelegatingAgent() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(fanOutPlan("outer", "delegating-worker")));
+        Agent delegatingWorker = agent("delegating-worker", new ArrayList<>(), ignored ->
+                handoff("workflow-planner"));
+        Agent planner = agent("workflow-planner", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(plan("inner", "leaf-worker")));
+        Agent leafWorker = agent("leaf-worker", new ArrayList<>(), ignored ->
+                complete("nested result"));
+        AgentExecutionContext execution = context();
+
+        AgentOutput result = workflow(gateway, delegatingWorker, planner, leafWorker)
+                .execute(workflowContext(execution));
+
+        assertThat(result.content()).isEqualTo("nested result");
+        verify(execution.recorder(), times(2)).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_started"), any(),
+                org.mockito.ArgumentMatchers.anyMap());
+        verify(execution.recorder(), org.mockito.Mockito.never()).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_started"), any(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(metadata ->
+                        "workflow-planner".equals(metadata.get("agent_id"))));
+    }
+
+    @Test
+    void fanOutOwnerCompletesWhenThePlannerChainReturnsAResultWithoutDelegating() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(fanOutPlan("outer", "delegating-worker")));
+        Agent delegatingWorker = agent("delegating-worker", new ArrayList<>(), ignored ->
+                handoff("workflow-planner"));
+        Agent planner = agent("workflow-planner", new ArrayList<>(), ignored ->
+                complete("short-circuited result"));
+        AgentExecutionContext execution = context();
+
+        AgentOutput result = workflow(gateway, delegatingWorker, planner)
+                .execute(workflowContext(execution));
+
+        assertThat(result.content()).isEqualTo("short-circuited result");
+        verify(execution.recorder()).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_completed"), any(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(metadata ->
+                        "delegating-worker".equals(metadata.get("agent_id"))
+                        && "short-circuited result".equals(metadata.get("result"))));
+    }
+
+    @Test
+    void middlewareReplacementCompletesTheFanOutOwnerOnce() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(fanOutPlan("outer", "delegating-worker")));
+        Agent delegatingWorker = agent("delegating-worker", new ArrayList<>(), ignored ->
+                handoff("workflow-planner"));
+        Agent planner = agent("workflow-planner", new ArrayList<>(), ignored ->
+                complete("must not run"));
+        AiMiddleware replacing = new AiMiddleware() {
+            @Override public String id() { return "replace-owner-handoff"; }
+
+            @Override
+            public AgentResult afterAgent(AgentContext context, AgentDecision response) {
+                if (context.agent().id().value().equals("delegating-worker")) {
+                    return AgentResult.completeWith(new AgentDecision.Complete(
+                            new AgentOutput("middleware result")));
+                }
+                return AgentResult.completeWith(response);
+            }
+        };
+        ScoreAiProperties.Middleware settings = new ScoreAiProperties.Middleware();
+        settings.setProfiles(Map.of("default", List.of("replace-owner-handoff")));
+        AgentExecutionContext execution = context();
+        AgentRunner runner = new AgentRunner(null, null, null, null,
+                List.of(gateway, delegatingWorker, planner),
+                new AiMiddlewareChain(settings, List.of(replacing)));
+
+        AgentOutput result = new WorkflowRunner(runner, null, 3)
+                .execute(workflowContext(execution));
+
+        assertThat(result.content()).isEqualTo("middleware result");
+        verify(execution.recorder(), times(1)).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_completed"), any(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(metadata ->
+                        "delegating-worker".equals(metadata.get("agent_id"))));
+    }
+
+    @Test
+    void plannerHandoffFailureTerminatesTheFanOutOwner() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(fanOutPlan("outer", "delegating-worker")));
+        Agent delegatingWorker = agent("delegating-worker", new ArrayList<>(), ignored ->
+                handoff("workflow-planner"));
+        Agent planner = agent("workflow-planner", new ArrayList<>(), ignored -> {
+            throw new IllegalStateException("planner failed");
+        });
+        AgentExecutionContext execution = context();
+
+        assertThatThrownBy(() -> workflow(gateway, delegatingWorker, planner)
+                .execute(workflowContext(execution)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Every member");
+
+        verify(execution.recorder(), times(1)).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_failed"), any(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(metadata ->
+                        "delegating-worker".equals(metadata.get("agent_id"))));
+    }
+
+    @Test
+    void delegatedFailureAfterPlannerHandoffTerminatesTheFanOutOwnerOnce() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(fanOutPlan("outer", "delegating-worker")));
+        Agent delegatingWorker = agent("delegating-worker", new ArrayList<>(), ignored ->
+                handoff("workflow-planner"));
+        Agent planner = agent("workflow-planner", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(plan("inner", "failed-worker")));
+        Agent failedWorker = agent("failed-worker", new ArrayList<>(), ignored -> {
+            throw new IllegalStateException("nested failure");
+        });
+        AgentExecutionContext execution = context();
+
+        assertThatThrownBy(() -> workflow(gateway, delegatingWorker, planner, failedWorker)
+                .execute(workflowContext(execution)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Every member");
+
+        verify(execution.recorder(), times(1)).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_failed"), any(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(metadata ->
+                        "delegating-worker".equals(metadata.get("agent_id"))));
+    }
+
+    @Test
+    void invalidDelegatedPlanTerminatesTheFanOutOwnerOnce() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(fanOutPlan("outer", "delegating-worker")));
+        AiWorkflowPlan oversized = new AiWorkflowPlan(
+                new AiWorkflowPlan.WorkflowDefinition("oversized", List.of(
+                        member("one", "leaf-worker"),
+                        member("two", "leaf-worker"),
+                        member("three", "leaf-worker"),
+                        member("four", "leaf-worker"),
+                        member("five", "leaf-worker"))), null, null);
+        Agent delegatingWorker = agent("delegating-worker", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(oversized));
+        Agent leafWorker = agent("leaf-worker", new ArrayList<>(), ignored ->
+                complete("must not run"));
+        AgentExecutionContext execution = context();
+
+        assertThatThrownBy(() -> workflow(gateway, delegatingWorker, leafWorker)
+                .execute(workflowContext(execution)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Every member");
+
+        verify(execution.recorder(), times(1)).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_failed"), any(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(metadata ->
+                        "delegating-worker".equals(metadata.get("agent_id"))));
+    }
+
+    @Test
+    void fanOutOwnerFailureBeforeHandoffHasOneTerminalLifecycle() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(fanOutPlan("outer", "delegating-worker")));
+        Agent delegatingWorker = agent("delegating-worker", new ArrayList<>(), ignored -> {
+            throw new IllegalStateException("owner failed");
+        });
+        AgentExecutionContext execution = context();
+
+        assertThatThrownBy(() -> workflow(gateway, delegatingWorker)
+                .execute(workflowContext(execution)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Every member");
+
+        verify(execution.recorder(), times(1)).lifecycle(
+                org.mockito.ArgumentMatchers.eq("subagent_failed"), any(),
+                org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(metadata ->
+                        "delegating-worker".equals(metadata.get("agent_id"))));
+    }
+
+    @Test
     void dependencyEdgesFanOutReadyAgentsAndJoinTheirResultsInDeclarationOrder()
             throws InterruptedException {
         CountDownLatch bothStarted = new CountDownLatch(2);
@@ -237,6 +532,47 @@ class WorkflowTest {
         assertThat(calls.indexOf("join-agent"))
                 .isGreaterThan(calls.indexOf("worker-one"))
                 .isGreaterThan(calls.indexOf("worker-two"));
+    }
+
+    @Test
+    void announcesEveryParallelAssignmentBeforeStartingAnyAgent() {
+        AgentExecutionRecorder recorder = mock(AgentExecutionRecorder.class);
+        when(recorder.fork(any())).thenReturn(recorder);
+        List<String> lifecycle = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<String> plannedNodes = new java.util.concurrent.CopyOnWriteArrayList<>();
+        org.mockito.Mockito.doAnswer(invocation -> {
+            String subtype = invocation.getArgument(0);
+            lifecycle.add(subtype);
+            if ("subagent_planned".equals(subtype)) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> metadata = invocation.getArgument(2);
+                plannedNodes.add(metadata.get("node_id").toString());
+            }
+            return null;
+        }).when(recorder).lifecycle(any(), any(), any());
+
+        List<String> calls = java.util.Collections.synchronizedList(new ArrayList<>());
+        Agent gateway = agent("gateway-agent", calls, ignored -> new AgentDecision.Delegate(
+                new AiWorkflowPlan(new AiWorkflowPlan.WorkflowDefinition("fanout", List.of(
+                        member("first", "worker-one"),
+                        member("second", "worker-two"),
+                        member("third", "worker-three")), List.of()), null, null)));
+
+        workflow(gateway,
+                agent("worker-one", calls, ignored -> complete("one")),
+                agent("worker-two", calls, ignored -> complete("two")),
+                agent("worker-three", calls, ignored -> complete("three")))
+                .execute(workflowContext(context(recorder, "Run all three in parallel")));
+
+        int firstPreparing = lifecycle.indexOf("subagent_preparing");
+        assertThat(firstPreparing).isPositive();
+        assertThat(lifecycle.subList(0, firstPreparing))
+                .filteredOn("subagent_planned"::equals)
+                .hasSize(3);
+        assertThat(plannedNodes).containsExactly(
+                "main:1:fanout:agent:first",
+                "main:1:fanout:agent:second",
+                "main:1:fanout:agent:third");
     }
 
     @Test
@@ -319,6 +655,92 @@ class WorkflowTest {
         assertThat(result.content()).isEqualTo("result-2");
         assertThat(plans).hasValue(2);
         assertThat(evaluations).hasValue(2);
+    }
+
+    @Test
+    void publishesOnlyTheFinalCandidateAfterEvaluatorReplanning() {
+        AtomicInteger plans = new AtomicInteger();
+        AtomicInteger evaluations = new AtomicInteger();
+        AgentExecutionRecorder recorder = mock(AgentExecutionRecorder.class);
+        when(recorder.fork(any())).thenReturn(recorder);
+        when(recorder.callWhileActive(any())).thenAnswer(invocation ->
+                ((Supplier<?>) invocation.getArgument(0)).get());
+        Agent gateway = agent("gateway-agent", new ArrayList<>(),
+                ignored -> handoff("workflow-planner"));
+        Agent planner = agent("workflow-planner", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(plan(
+                        "attempt-" + plans.incrementAndGet(), "worker")));
+        Agent worker = publicAgent("worker",
+                context -> complete("result-" + context.iteration()));
+        Agent evaluator = agent("workflow-evaluator", new ArrayList<>(), context -> {
+            if (evaluations.incrementAndGet() == 1) {
+                return new AgentDecision.Handoff(new Agent.AgentId("workflow-planner"),
+                        new AiWorkflowFeedback(1, "attempt-1", context.candidate().content(),
+                                "The first attempt is incomplete.", "Finish the request."));
+            }
+            return new AgentDecision.Complete(context.candidate());
+        });
+
+        AgentOutput result = workflow(gateway, planner, worker, evaluator)
+                .execute(workflowContext(context(recorder, "Investigate it")));
+
+        assertThat(result.content()).isEqualTo("result-2");
+        org.mockito.ArgumentCaptor<AgentOutput> published =
+                org.mockito.ArgumentCaptor.forClass(AgentOutput.class);
+        verify(recorder, times(1)).workflowResult(published.capture(), any());
+        assertThat(published.getValue().content()).isEqualTo("result-2");
+    }
+
+    @Test
+    void explicitDelegationExecutesOnceWithoutEvaluatorReplanning() {
+        AtomicInteger plans = new AtomicInteger();
+        AtomicInteger evaluations = new AtomicInteger();
+        AgentExecutionRecorder recorder = mock(AgentExecutionRecorder.class);
+        when(recorder.fork(any())).thenReturn(recorder);
+        when(recorder.callWhileActive(any())).thenAnswer(invocation ->
+                ((Supplier<?>) invocation.getArgument(0)).get());
+        Agent gateway = agent("gateway-agent", new ArrayList<>(),
+                ignored -> handoff("workflow-planner"));
+        Agent planner = agent("workflow-planner", new ArrayList<>(), ignored ->
+                new AgentDecision.Delegate(new AiWorkflowPlan(
+                        new AiWorkflowPlan.WorkflowDefinition(
+                                "requested-" + plans.incrementAndGet(), List.of(
+                                member("first", "worker"),
+                                member("second", "worker"),
+                                member("third", "worker"))), null, null)));
+        Agent worker = publicAgent("worker", ignored -> complete("requested result"));
+        Agent evaluator = agent("workflow-evaluator", new ArrayList<>(), context -> {
+            evaluations.incrementAndGet();
+            return new AgentDecision.Handoff(new Agent.AgentId("workflow-planner"),
+                    new AiWorkflowFeedback(1, "requested-1", context.candidate().content(),
+                            "Try another plan.", "Run it again."));
+        });
+
+        AgentOutput result = workflow(gateway, planner, worker, evaluator).execute(
+                workflowContext(context(recorder,
+                        "Spawn exactly 3 sub-agents in parallel."), true));
+
+        assertThat(result.content()).isEqualTo("requested result");
+        assertThat(plans).hasValue(1);
+        assertThat(evaluations).hasValue(0);
+        verify(recorder, times(1)).workflowResult(any(AgentOutput.class), any());
+    }
+
+    @Test
+    void explicitAgentCountUsesThePromptCountInsteadOfTheUiMaximum() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(),
+                ignored -> new AgentDecision.Delegate(new AiWorkflowPlan(
+                        new AiWorkflowPlan.WorkflowDefinition("requested", List.of(
+                                member("first", "worker"),
+                                member("second", "worker"))), null, null)));
+        Agent worker = publicAgent("worker", ignored -> complete("requested result"));
+        AgentExecutionContext execution = context(mock(AgentExecutionRecorder.class),
+                "Spawn exactly 2 sub-agents in parallel.");
+
+        AgentOutput result = workflow(gateway, worker).execute(
+                workflowContext(execution, true));
+
+        assertThat(result.content()).isEqualTo("requested result");
     }
 
     @Test
@@ -1251,6 +1673,14 @@ class WorkflowTest {
                 List.of(member("member", agentId))), null, null);
     }
 
+    private AiWorkflowPlan fanOutPlan(String id, String agentId) {
+        AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
+                agentId, "member", "Do member", null, "Working", "Completed",
+                AiWorkflowPlan.ToolAccess.NONE, AiWorkflowPlan.Delegation.FAN_OUT);
+        return new AiWorkflowPlan(new AiWorkflowPlan.WorkflowDefinition(id,
+                List.of(new AiWorkflowPlan.Member("member", task, null))), null, null);
+    }
+
     private AiWorkflowPlan.Member member(String id, String agentId) {
         return new AiWorkflowPlan.Member(id,
                 new AiWorkflowPlan.AgentTask(agentId, id, "Do " + id,
@@ -1269,10 +1699,17 @@ class WorkflowTest {
     }
 
     private AgentWorkflowContext workflowContext(AgentExecutionContext execution) {
+        return workflowContext(execution, false);
+    }
+
+    private AgentWorkflowContext workflowContext(AgentExecutionContext execution,
+                                                 boolean explicitDelegationRequested) {
+        int maximumAgents = explicitDelegationRequested ? 3 : 4;
         return AgentWorkflowContext.root(execution,
                 new AgentWorkflowContext.Request("request-1", "conversation-1", "user-1",
-                        "model", execution.userMessage().content(), false, false, 4, "balanced",
-                        null, true, false), 3);
+                        "model", execution.userMessage().content(), false, false,
+                        maximumAgents, "balanced",
+                        null, true, explicitDelegationRequested, false), 3);
     }
 
     private AgentExecutionContext context() {
@@ -1297,6 +1734,8 @@ class WorkflowTest {
         when(execution.userMessage()).thenReturn(new AiMessage.User(prompt));
         when(execution.history()).thenReturn(List.of());
         when(execution.recorder()).thenReturn(recorder);
+        when(execution.executionPurpose()).thenReturn(
+                org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.USER_RESPONSE);
         when(execution.toolPolicy()).thenReturn(AgentToolPolicy.NONE);
         when(execution.forWorkflowAssignment(any(), any())).thenReturn(execution);
         return execution;

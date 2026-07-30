@@ -804,6 +804,144 @@ describe('AiChatMessageListComponent', () => {
     expect(closed).toHaveBeenCalledOnce();
   });
 
+  it('recursively renders a nested Workflow inside an Agent conversation', async () => {
+    fixture.componentInstance.agentFocus = {
+      agentId: 'parent', agentName: 'Evidence researcher', status: 'started',
+      content: 'Cross-checking the count.', inProgress: true, isLead: false,
+      firstSeenAt: 1000, lastUpdateAt: 2000, events: [],
+      messages: [
+        {role: 'guide', content: 'I’ll cross-check this result independently.'},
+        {
+          role: 'workflow_group', content: 'Workflow', workflowNodeId: 'nested',
+          workflowParentNodeId: 'parent', children: [], activities: [{
+            agentId: 'child', agentName: 'Independent reader', status: 'started',
+            content: 'Reading the release.', inProgress: true, isLead: false,
+            firstSeenAt: 2000, lastUpdateAt: 3000, events: [], messages: []
+          }]
+        }
+      ]
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const focus = fixture.nativeElement.querySelector('.agent-focus-events') as HTMLElement;
+    expect(focus.textContent).toContain('I’ll cross-check this result independently.');
+    expect(focus.querySelector('.agent-group-block')).not.toBeNull();
+    expect(focus.querySelector('.agent-group-row')?.textContent)
+      .toContain('Independent reader');
+  });
+
+  it('keeps only the leaf Workflow as a polite live region when nested', () => {
+    fixture.componentInstance.messages = [{
+      role: 'workflow_group', content: 'Outer', workflowNodeId: 'outer',
+      workflowStatus: 'started', activities: [], children: [{
+        role: 'progress', content: 'Working...', inProgress: true,
+        eventType: 'composite_status'
+      }, {
+        role: 'workflow_group', content: 'Inner', workflowNodeId: 'inner',
+        workflowParentNodeId: 'outer', workflowStatus: 'started',
+        activities: [], children: []
+      }]
+    }];
+
+    fixture.detectChanges();
+
+    const blocks = fixture.nativeElement.querySelectorAll(
+      '.agent-group-block'
+    ) as NodeListOf<HTMLElement>;
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].getAttribute('role')).toBe('group');
+    expect(blocks[0].getAttribute('aria-live')).toBeNull();
+    expect(blocks[1].getAttribute('role')).toBe('status');
+    expect(blocks[1].getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('renders terminal Workflow state even before an Agent appears', () => {
+    fixture.componentInstance.messages = [{
+      role: 'workflow_group', content: 'Workflow', workflowNodeId: 'empty',
+      workflowStatus: 'failed', activities: [], children: []
+    }];
+
+    fixture.detectChanges();
+
+    const block = fixture.nativeElement.querySelector('.agent-group-block') as HTMLElement;
+    expect(block.textContent).toContain('Workflow failed');
+    expect(block.textContent).toContain('failed');
+    expect(block.textContent).not.toContain('Working...');
+  });
+
+  it('moves keyboard focus into Agent detail and back to its row', () => {
+    const focused: AiAgentActivity = {
+      agentId: 'focus-me', agentName: 'Verifier', status: 'completed',
+      content: 'Verified.', inProgress: false, isLead: false,
+      firstSeenAt: 0, lastUpdateAt: 1, events: [], messages: []
+    };
+    fixture.componentInstance.messages = [{
+      role: 'workflow_group', content: 'Workflow', activities: [focused], children: []
+    }];
+    fixture.componentRef.setInput('agentFocus', focused);
+    fixture.detectChanges();
+
+    const back = fixture.nativeElement.querySelector('.agent-focus-back') as HTMLButtonElement;
+    expect(document.activeElement).toBe(back);
+
+    fixture.componentRef.setInput('agentFocus', undefined);
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector(
+      '.agent-group-row[data-agent-id="focus-me"]'
+    ) as HTMLButtonElement;
+    expect(document.activeElement).toBe(row);
+  });
+
+  it('returns focus from a child Agent to its row in the parent detail', () => {
+    const child: AiAgentActivity = {
+      agentId: 'child', agentName: 'Child', status: 'completed',
+      content: 'Checked.', inProgress: false, isLead: false,
+      firstSeenAt: 0, lastUpdateAt: 1, events: [], messages: []
+    };
+    const parent: AiAgentActivity = {
+      agentId: 'parent', agentName: 'Parent', status: 'completed',
+      content: 'Verified.', inProgress: false, isLead: false,
+      firstSeenAt: 0, lastUpdateAt: 2, events: [], messages: [{
+        role: 'workflow_group', content: 'Nested workflow', activities: [child], children: []
+      }]
+    };
+    fixture.componentRef.setInput('agentFocus', parent);
+    fixture.detectChanges();
+    fixture.componentRef.setInput('agentFocusBackLabel', 'Back to Parent agent activity');
+    fixture.componentRef.setInput('agentFocus', child);
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('.agent-focus-back') as HTMLButtonElement)
+      .getAttribute('aria-label')).toBe('Back to Parent agent activity');
+
+    fixture.componentRef.setInput('agentFocus', parent);
+    fixture.detectChanges();
+
+    const childRow = fixture.nativeElement.querySelector(
+      '.agent-group-row[data-agent-id="child"]'
+    ) as HTMLButtonElement;
+    expect(document.activeElement).toBe(childRow);
+  });
+
+  it('does not revive suppressed lifecycle chatter from legacy events', () => {
+    fixture.componentInstance.agentFocus = {
+      agentId: 'planned', agentName: 'Evidence researcher', status: 'planned',
+      content: 'Queued Count ACCs.', inProgress: false, isLead: false,
+      firstSeenAt: 1000, lastUpdateAt: 1000,
+      events: [{status: 'planned', content: 'Queued Count ACCs.'}],
+      messages: []
+    };
+
+    fixture.detectChanges();
+
+    const focus = fixture.nativeElement.querySelector('.agent-focus-events') as HTMLElement;
+    expect(focus.textContent).not.toContain('Queued Count ACCs.');
+  });
+
   it('settles a focused provider retry when its specialist is terminal', () => {
     fixture.componentInstance.agentFocus = {
       agentId: 'request-1:agent:1', agentName: 'Verifier', status: 'completed',
