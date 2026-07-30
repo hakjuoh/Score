@@ -172,7 +172,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       return;
     }
     const notice = elicitationNotice(
-      event, requestId, expectedConversationId
+      event, requestId, expectedConversationId, this.state.activeRequest?.generation
     );
     if (!notice || (this.state.elicitation
       && this.state.elicitation.elicitationId !== notice.elicitationId)) {
@@ -438,6 +438,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
         requestId: active.requestId,
         conversationId: active.conversationId,
         elicitationId: active.elicitationId,
+        generation: active.generation,
         action: response.action,
         content: response.action === 'ACCEPT' ? response.content : {}
       });

@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.time.Instant;
 
 /**
  * Content-free lifecycle fact shared by execution observers. ATIF remains the
@@ -30,9 +31,14 @@ public record AiExecutionLifecycle(String eventType, String subtype,
             "contextUsage", "reason", "automatic", "batchId", "approved", "denied",
             "elicitationId",
             "workflow", "node_id", "parent_node_id", "fanout_id", "depth", "member_count",
+            "agent_run_id",
             "agent_count", "max_agents", "worker_count", "completed",
             "workflow_iteration", "iteration", "failed", "failed_count", "failure_count",
             "failed_agents");
+    private static final Set<String> CANONICAL_METADATA = Set.of(
+            ExecutionEventPublisher.EVENT_ID,
+            ExecutionEventPublisher.EVENT_SEQUENCE,
+            ExecutionEventPublisher.EVENT_OCCURRED_AT);
     private static final Set<String> BOOLEAN_METADATA = Set.of(
             "mcp", "result_truncated", "automatic");
     private static final Set<String> NUMERIC_METADATA = Set.of(
@@ -44,7 +50,8 @@ public record AiExecutionLifecycle(String eventType, String subtype,
             "failed_agents");
     private static final Set<String> TYPE_METADATA = Set.of("failure_class", "failure_type");
     private static final Set<String> ID_METADATA = Set.of(
-            "batchId", "elicitationId", "node_id", "parent_node_id", "fanout_id");
+            "batchId", "elicitationId", "node_id", "parent_node_id", "fanout_id",
+            "agent_run_id");
 
     public AiExecutionLifecycle {
         eventType = requiredToken(eventType, "eventType", 80);
@@ -64,6 +71,11 @@ public record AiExecutionLifecycle(String eventType, String subtype,
 
     public ExecutionObservation observation(ExecutionScope scope) {
         return ExecutionObservation.of(OBSERVATION_TYPE, scope, Map.of(ATTRIBUTE, this));
+    }
+
+    public ExecutionObservation observation(ExecutionScope scope, Instant occurredAt) {
+        return new ExecutionObservation(OBSERVATION_TYPE, scope, occurredAt,
+                Map.of(ATTRIBUTE, this));
     }
 
     public static Optional<AiExecutionLifecycle> from(ExecutionObservation observation) {
@@ -87,7 +99,8 @@ public record AiExecutionLifecycle(String eventType, String subtype,
                                                            Map<String, Object> source) {
         if (source == null || source.isEmpty()) return Map.of();
         Map<String, Object> safe = new LinkedHashMap<>();
-        OBSERVABLE_METADATA.forEach(name -> {
+        java.util.stream.Stream.concat(OBSERVABLE_METADATA.stream(), CANONICAL_METADATA.stream())
+                .forEach(name -> {
             Object sanitized = sanitizedMetadataValue(subtype, name, source.get(name));
             if (sanitized != null) safe.put(name, sanitized);
         });
@@ -96,6 +109,17 @@ public record AiExecutionLifecycle(String eventType, String subtype,
 
     private static Object sanitizedMetadataValue(String subtype, String name, Object value) {
         if (value == null) return null;
+        if (ExecutionEventPublisher.EVENT_ID.equals(name)) return safeIdentifier(value.toString(), 64);
+        if (ExecutionEventPublisher.EVENT_SEQUENCE.equals(name)) {
+            return value instanceof Number number ? Math.max(1L, number.longValue()) : null;
+        }
+        if (ExecutionEventPublisher.EVENT_OCCURRED_AT.equals(name)) {
+            try {
+                return java.time.Instant.parse(value.toString()).toString();
+            } catch (java.time.format.DateTimeParseException ignored) {
+                return null;
+            }
+        }
         if (BOOLEAN_METADATA.contains(name)) return value instanceof Boolean ? value : null;
         if (NUMERIC_METADATA.contains(name)) {
             return value instanceof Number number ? number.longValue() : null;

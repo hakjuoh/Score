@@ -47,6 +47,8 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrailRefused
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentIdentityProvider;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutputRetryHandoffException;
 import org.oagi.score.gateway.http.api.ai_management.execution.ChatExecutionContext;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.execution.WorkflowRequestAdapter;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
@@ -76,6 +78,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.MimeType;
 import org.springframework.util.StringUtils;
 
@@ -145,8 +149,9 @@ public class ChatService {
                 objectMapper, requests, contextBudgets, workflow, agentRunner,
                 atifTrajectoryService, inputGuardrails, outputGuardrails,
                 resultCommitter, compactor, responseOnlyAgent, files, observability,
-                ExecutionObserver.composite(Objects.nonNull(executionObservers)
-                        ? executionObservers.orderedStream().toList() : List.of())));
+                executionObservers != null
+                        ? executionObservers.getIfAvailable(ExecutionObserver::noop)
+                        : ExecutionObserver.noop()));
     }
 
     ChatService(ScoreAiModelRegistry models, Dependencies dependencies) {
@@ -206,6 +211,11 @@ public class ChatService {
 
     @Transactional
     public ChatRequest prepare(ChatRequest request, ScoreUser requester) {
+        return prepare(request, requester, 0L);
+    }
+
+    @Transactional
+    public ChatRequest prepare(ChatRequest request, ScoreUser requester, long requestGeneration) {
         validate(request);
         AiChatConversationRepository conversationRepository = conversationRepository(requester);
         Optional<AiPersistentWorkflowCommand> workflowCommand =
@@ -243,15 +253,20 @@ public class ChatService {
         String conversationId = conversationRepository.open(request.conversationId(),
                 AiSensitiveDataRedactor.redactText(request.prompt()));
         recordSettingsChange(requester, conversationId, request.requestId(), previousSettings,
-                new AiChatConversationSettings(modelName, reasoningEffort));
+                new AiChatConversationSettings(modelName, reasoningEffort), requestGeneration);
         if (workflowCommand.isPresent()) {
             recordWorkflowPreference(requester, conversationId, request.requestId(),
-                    workflowCommand.orElseThrow(), modelName, reasoningEffort);
+                    workflowCommand.orElseThrow(), modelName, reasoningEffort, requestGeneration);
         }
         return request.withConversation(conversationId, modelName, reasoningEffort);
     }
 
     public ChatResponse chat(ChatRequest request, ScoreUser requester, Consumer<AiExecutionEvent> progress) {
+        return chat(request, requester, progress, 0L);
+    }
+
+    public ChatResponse chat(ChatRequest request, ScoreUser requester,
+                             Consumer<AiExecutionEvent> progress, long requestGeneration) {
         ChatRequest prepared = requirePrepared(request);
         AiChatConversationRepository conversationRepository = conversationRepository(requester);
         List<String> progressMessages = new ArrayList<>();
@@ -261,7 +276,7 @@ public class ChatService {
                 AiWorkflowIntent.persistentWorkflowCommand(prepared.prompt());
         UserMessage userMessage = manualCompact
                 ? compactMessage(compactCommand.instructions()) : userMessage(prepared);
-        ExecutionScope turnScope = executionScope(prepared, requester);
+        ExecutionScope turnScope = executionScope(prepared, requester, requestGeneration);
         List<GuardrailDecision> turnDecisions = List.of();
         if (inputGuardrails != null) {
             AgentInputGuardrailChain.Outcome guarded = inputGuardrails.evaluate(
@@ -272,7 +287,8 @@ public class ChatService {
             observability.recordGuardrails(prepared.requestId(), "turn_input",
                     turnDecisions, guarded.refusal());
             if (!guarded.allowed()) {
-                return commitGuardrailRefusal(prepared, requester, guarded.refusal(), turnDecisions);
+                return commitGuardrailRefusal(
+                        prepared, requester, guarded.refusal(), turnDecisions, turnScope);
             }
             userMessage = SpringAiUserMessageAdapter.toSpring(guarded.input());
             turnScope = withDecisions(turnScope, turnDecisions);
@@ -307,10 +323,7 @@ public class ChatService {
         if (prepared.activeWorkflow() != null) {
             userExtra.put("active_workflow", prepared.activeWorkflow());
         }
-        conversationRepository.append(prepared.conversationId(), new AiChatTrajectoryStep(
-                prepared.requestId(), "user", "user", "visible", visiblePrompt, null, prepared.modelName(),
-                prepared.reasoningEffort(), null, null, null, Map.copyOf(userExtra),
-                null, null, null));
+        recorder.recordUserMessage(visiblePrompt, Map.copyOf(userExtra));
         List<Message> conversationHistory = initialHistory;
 
         String modelName = prepared.modelName();
@@ -458,13 +471,13 @@ public class ChatService {
                                 List.of(summaryMessage(safeAnswer)), null, null))
                         .orElse(0L);
                 recordCompaction(requester, prepared, initialProjectedInputTokens,
-                        afterTokens, safeAnswer, false);
+                        afterTokens, safeAnswer, false, requestGeneration);
             } else {
                 if (automaticSummary[0] != null) {
                     replaceChatMemory(requester, prepared.conversationId(), List.of(
                             summaryMessage(automaticSummary[0]), acceptedUserMessage, assistantMessage));
                     recordCompaction(requester, prepared, automaticBeforeTokens[0],
-                            automaticAfterTokens[0], automaticSummary[0], true);
+                            automaticAfterTokens[0], automaticSummary[0], true, requestGeneration);
                 } else {
                     ChatMemory memory = chatMemory(requester);
                     memory.add(prepared.conversationId(), acceptedUserMessage);
@@ -480,10 +493,7 @@ public class ChatService {
             if (prepared.activeWorkflow() != null) {
                 answerExtra.put("active_workflow", prepared.activeWorkflow());
             }
-            conversationRepository.append(prepared.conversationId(), new AiChatTrajectoryStep(
-                    prepared.requestId(), "agent", "assistant", "visible", safeAnswer, null, modelName,
-                    prepared.reasoningEffort(), null, null, null,
-                    Map.copyOf(answerExtra), 0, null, null));
+            recorder.recordAssistantMessage(safeAnswer, Map.copyOf(answerExtra));
         };
         try {
             commitResult(prepared.requestId(), persistence);
@@ -505,7 +515,7 @@ public class ChatService {
         }
         recorder.sealAgainstLateCallbacks();
         List<AiFileDescriptor> createdFiles = files != null
-                ? files.ensureRequestedFiles(requester, executionScope(prepared, requester),
+                ? files.ensureRequestedFiles(requester, turnScope,
                         prepared.prompt(), safeAnswer)
                 : List.of();
         return new ChatResponse(responseAgentId, safeAnswer, prepared.conversationId(),
@@ -513,12 +523,17 @@ public class ChatService {
     }
 
     private ExecutionScope executionScope(ChatRequest request, ScoreUser requester) {
+        return executionScope(request, requester, 0L);
+    }
+
+    private ExecutionScope executionScope(ChatRequest request, ScoreUser requester,
+                                          long generation) {
         String requesterId = requester != null && requester.userId() != null
                 ? requester.userId().value().toString()
                 : requester != null && StringUtils.hasText(requester.username())
                 ? requester.username() : "unknown";
         return new ExecutionScope(request.requestId(), request.conversationId(), requesterId,
-                0L, ExecutionScope.Purpose.USER_RESPONSE, List.of());
+                Math.max(0L, generation), ExecutionScope.Purpose.USER_RESPONSE, List.of());
     }
 
     private ExecutionScope withDecisions(ExecutionScope scope, List<GuardrailDecision> decisions) {
@@ -560,7 +575,8 @@ public class ChatService {
 
     private ChatResponse commitGuardrailRefusal(ChatRequest request, ScoreUser requester,
                                                 GuardrailRefusal refusal,
-                                                List<GuardrailDecision> decisions) {
+                                                List<GuardrailDecision> decisions,
+                                                ExecutionScope turnScope) {
         String answer = publicGuardrailMessage(refusal);
         String modelId = request.modelName();
         String agentId = rootAgentId();
@@ -578,11 +594,16 @@ public class ChatService {
             safeMetadata.put("retention", refusal.decision().retention().name());
             safeMetadata.put("guardrail_decisions", decisions.stream()
                     .map(GuardrailDecision::decisionId).toList());
-            repository.append(request.conversationId(), new AiChatTrajectoryStep(
+            persistExecutionStep(requester, repository, request.conversationId(),
+                    new AiChatTrajectoryStep(
                     request.requestId(), "system", "guardrail_refusal", "visible", answer, null,
                     modelId, request.reasoningEffort(), null, null, null,
-                    Map.copyOf(safeMetadata), 0, null, null));
-            repository.markExpanded(request.conversationId());
+                    Map.copyOf(safeMetadata), 0, null, null),
+                    ExecutionScope.Purpose.GUARDRAIL_EVALUATION,
+                    Map.of("decision_id", refusal.decision().decisionId(),
+                            "outcome", "refused"),
+                    () -> repository.markExpanded(request.conversationId()),
+                    turnScope != null ? turnScope.generation() : 0L);
         };
         commitResult(request.requestId(), persistence);
         return new ChatResponse(agentId, answer,
@@ -725,11 +746,11 @@ public class ChatService {
                 history = List.of(summaryMessage(summary));
                 targetInputTokens = contextBudgets.estimateInputTokens(history, null, null);
                 recordCompaction(requester, compactionRequest, beforeTokens,
-                        targetInputTokens, summary, true);
+                        targetInputTokens, summary, true, 0L);
                 contextCompacted = true;
-                compactionTurn.complete("COMPLETED", null);
+                completeAfterTransaction(compactionTurn, "COMPLETED", null);
             } catch (RuntimeException failure) {
-                compactionTurn.complete(failure instanceof CancellationException
+                completeAfterTransaction(compactionTurn, failure instanceof CancellationException
                         ? "CANCELLED" : "FAILED", failure);
                 throw failure;
             }
@@ -739,7 +760,20 @@ public class ChatService {
         }
         AiChatConversationSettings updated =
                 new AiChatConversationSettings(modelName, reasoningEffort);
-        recordSettingsChange(requester, conversationId, null, previous, updated);
+        String settingsRequestId = "settings-update-" + UUID.randomUUID();
+        ScoreAiObservability.Turn settingsTurn = observability.startExecution(
+                new ScoreAiObservability.ExecutionDescriptor(settingsRequestId,
+                        conversationId, modelName, "conversation_settings", "none",
+                        reasoningEffort), requester, 0L, traceparent, tracestate);
+        settingsTurn.executionStarted();
+        try {
+            recordSettingsChange(requester, conversationId, settingsRequestId,
+                    previous, updated, 0L);
+            completeAfterTransaction(settingsTurn, "COMPLETED", null);
+        } catch (RuntimeException | Error failure) {
+            completeAfterTransaction(settingsTurn, "FAILED", failure);
+            throw failure;
+        }
         AiContextUsageInfo contextUsage = targetBudget.isPresent()
                 ? targetBudget.get().usage(targetInputTokens, true,
                 contextCompacted ? "post_compaction_estimate" : "model_switch_estimate") : null;
@@ -769,21 +803,31 @@ public class ChatService {
     }
 
     public void recordFailure(ChatRequest request, ScoreUser requester, String message) {
-        recordFailure(request, requester, message, null);
+        recordFailure(request, requester, message, null, 0L);
     }
 
     public void recordFailure(ChatRequest request, ScoreUser requester, String message,
                               String failureClass) {
+        recordFailure(request, requester, message, failureClass, 0L);
+    }
+
+    public void recordFailure(ChatRequest request, ScoreUser requester, String message,
+                              String failureClass, long generation) {
         if (request == null || !StringUtils.hasText(request.conversationId())) {
             return;
         }
         Map<String, Object> extra = new LinkedHashMap<>(observability.correlation(request.requestId()));
         extra.put("terminal", true);
         if (StringUtils.hasText(failureClass)) extra.put("failure_class", failureClass);
-        conversationRepository(requester).append(request.conversationId(), new AiChatTrajectoryStep(
+        AiChatConversationRepository repository = conversationRepository(requester);
+        persistExecutionStep(requester, repository, request.conversationId(),
+                new AiChatTrajectoryStep(
                 request.requestId(), "system", "error", "visible",
                 StringUtils.hasText(message) ? message : "The assistant request failed.",
-                null, null, null, null, null, Map.copyOf(extra), 0, null, null));
+                null, null, null, null, null, Map.copyOf(extra), 0, null, null),
+                ExecutionScope.Purpose.USER_RESPONSE,
+                Map.of("failure_type", Objects.requireNonNullElse(failureClass, "unknown")),
+                generation);
     }
 
     private UserMessage userMessage(ChatRequest request) {
@@ -997,8 +1041,11 @@ public class ChatService {
 
     private void recordCompaction(ScoreUser requester, ChatRequest request,
                                   long beforeTokens, long afterTokens,
-                                  String summary, boolean automatic) {
-        conversationRepository(requester).append(request.conversationId(), new AiChatTrajectoryStep(
+                                  String summary, boolean automatic,
+                                  long generation) {
+        AiChatConversationRepository repository = conversationRepository(requester);
+        persistExecutionStep(requester, repository, request.conversationId(),
+                new AiChatTrajectoryStep(
                 request.requestId(), "system", "context_compaction", "debug",
                 automatic ? "Conversation context compacted automatically."
                         : "Conversation context compacted.", null, request.modelName(),
@@ -1008,7 +1055,8 @@ public class ChatService {
                         "automatic", automatic, "before_input_tokens", Math.max(0L, beforeTokens),
                         "after_input_tokens", Math.max(0L, afterTokens),
                         "summary_characters", Objects.requireNonNullElse(summary, "").length())),
-                0, null, null));
+                0, null, null), ExecutionScope.Purpose.COMPACTION,
+                Map.of("automatic", automatic), generation);
     }
 
     private Map<String, Object> withTrace(Map<String, Object> traceContext,
@@ -1099,7 +1147,8 @@ public class ChatService {
 
     private void recordSettingsChange(ScoreUser requester, String conversationId, String requestId,
                                       AiChatConversationSettings previous,
-                                      AiChatConversationSettings updated) {
+                                      AiChatConversationSettings updated,
+                                      long generation) {
         if (previous != null && sameSettings(previous, updated)) {
             return;
         }
@@ -1109,31 +1158,139 @@ public class ChatService {
             extra.put("before", settingsSnapshot(previous));
         }
         extra.put("after", settingsSnapshot(updated));
-        conversationRepository(requester).append(conversationId, new AiChatTrajectoryStep(
+        AiChatConversationRepository repository = conversationRepository(requester);
+        persistExecutionStep(requester, repository, conversationId, new AiChatTrajectoryStep(
                 requestId, "system", "settings_change", "debug",
                 previous == null ? "Assistant settings initialized." : "Assistant settings changed.",
                 null, updated.modelName(), updated.reasoningEffort(),
                 null, null, null, Map.copyOf(extra),
-                0, null, null));
+                0, null, null), ExecutionScope.Purpose.USER_RESPONSE, Map.of(), generation);
     }
 
     private void recordWorkflowPreference(
             ScoreUser requester, String conversationId, String requestId,
             AiPersistentWorkflowCommand command,
-            String modelName, String reasoningEffort) {
+            String modelName, String reasoningEffort, long generation) {
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.putAll(observability.correlation(requestId));
         if (command.activeWorkflow() != null) {
             extra.put("activeWorkflow", command.activeWorkflow());
         }
         extra.put("automatic", command.activeWorkflow() == null);
-        conversationRepository(requester).append(conversationId, new AiChatTrajectoryStep(
+        AiChatConversationRepository repository = conversationRepository(requester);
+        persistExecutionStep(requester, repository, conversationId, new AiChatTrajectoryStep(
                 requestId, "system", "workflow_preference", "debug",
                 command.activeWorkflow() == null
                         ? "Automatic workflow selection enabled."
                         : "Active workflow set to " + command.activeWorkflow() + ".",
                 null, modelName, reasoningEffort, null, null, null,
-                Map.copyOf(extra), 0, null, null));
+                Map.copyOf(extra), 0, null, null),
+                ExecutionScope.Purpose.WORKFLOW_PLANNING,
+                Map.of("workflow", Objects.requireNonNullElse(command.activeWorkflow(), "automatic")),
+                generation);
+    }
+
+    private void persistExecutionStep(ScoreUser requester,
+                                      AiChatConversationRepository repository,
+                                      String conversationId,
+                                      AiChatTrajectoryStep step,
+                                      ExecutionScope.Purpose purpose,
+                                      Map<String, Object> attributes) {
+        persistExecutionStep(requester, repository, conversationId, step, purpose, attributes,
+                () -> { }, 0L);
+    }
+
+    private void persistExecutionStep(ScoreUser requester,
+                                      AiChatConversationRepository repository,
+                                      String conversationId,
+                                      AiChatTrajectoryStep step,
+                                      ExecutionScope.Purpose purpose,
+                                      Map<String, Object> attributes,
+                                      long generation) {
+        persistExecutionStep(requester, repository, conversationId, step, purpose, attributes,
+                () -> { }, generation);
+    }
+
+    /** Keeps DB projection and every external listener on the canonical request event boundary. */
+    private void persistExecutionStep(ScoreUser requester,
+                                      AiChatConversationRepository repository,
+                                      String conversationId,
+                                      AiChatTrajectoryStep step,
+                                      ExecutionScope.Purpose purpose,
+                                      Map<String, Object> attributes,
+                                      Runnable afterAppend) {
+        persistExecutionStep(requester, repository, conversationId, step, purpose, attributes,
+                afterAppend, 0L);
+    }
+
+    private void persistExecutionStep(ScoreUser requester,
+                                      AiChatConversationRepository repository,
+                                      String conversationId,
+                                      AiChatTrajectoryStep step,
+                                      ExecutionScope.Purpose purpose,
+                                      Map<String, Object> attributes,
+                                      Runnable afterAppend,
+                                      long generation) {
+        if (!StringUtils.hasText(step.requestId())) {
+            throw new IllegalArgumentException(
+                    "A request ID is required for an AI trajectory event.");
+        }
+        String requesterId = requester != null && requester.userId() != null
+                ? requester.userId().value().toString()
+                : requester != null && StringUtils.hasText(requester.username())
+                ? requester.username() : "unknown";
+        ExecutionScope eventScope = new ExecutionScope(step.requestId(), conversationId,
+                requesterId, Math.max(0L, generation), purpose, List.of());
+        Map<String, Object> eventAttributes = new LinkedHashMap<>(
+                attributes != null ? attributes : Map.of());
+        eventAttributes.put("message_kind", step.messageKind());
+        eventAttributes.put("source", step.source());
+        observer.publish(ExecutionObservation.of(
+                "trajectory." + step.messageKind(), eventScope, eventAttributes), event -> {
+            Map<String, Object> extra = new LinkedHashMap<>(
+                    step.extra() != null ? step.extra() : Map.of());
+            copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_ID);
+            copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_SEQUENCE);
+            copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_OCCURRED_AT);
+            repository.append(conversationId, new AiChatTrajectoryStep(
+                    step.requestId(), step.source(), step.messageKind(), step.visibility(),
+                    step.message(), step.reasoningContent(), step.modelName(), step.reasoningEffort(),
+                    step.toolCalls(), step.observation(), step.metrics(), Map.copyOf(extra),
+                    step.llmCallCount(), step.isCopiedContext(), event.occurredAt()));
+            afterAppend.run();
+        });
+    }
+
+    private void copyEventAttribute(ExecutionObservation event, Map<String, Object> target,
+                                    String name) {
+        Object value = event.attributes().get(name);
+        if (value != null) target.put(name, value);
+    }
+
+    /** Finalizes OTel only after the surrounding DB transaction has a real outcome. */
+    private void completeAfterTransaction(ScoreAiObservability.Turn turn,
+                                          String outcome, Throwable failure) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()
+                || !TransactionSynchronizationManager.isSynchronizationActive()) {
+            turn.complete(outcome, failure);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        ExecutionEventPublisher.runAfterTransactionCompletion(() -> {
+                            if (status == STATUS_COMMITTED) {
+                                turn.complete(outcome, failure);
+                                return;
+                            }
+                            Throwable rollback = failure != null ? failure
+                                    : new IllegalStateException(
+                                            "AI conversation transaction rolled back");
+                            turn.complete(failure != null ? outcome : "FAILED", rollback);
+                        });
+                    }
+                });
     }
 
     private boolean sameSettings(AiChatConversationSettings left,

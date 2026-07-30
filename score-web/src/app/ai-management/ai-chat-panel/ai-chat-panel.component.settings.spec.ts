@@ -302,7 +302,7 @@ describe('AiChatPanelComponent settings and active recovery', () => {
       requestId: 'request-running', conversationId: 'conversation-other',
       type: 'system', subtype: 'elicitation_required', visibility: 'visible',
       metadata: {
-        elicitationId: 'elicitation-invalid', mode: 'form',
+        elicitationId: 'elicitation-invalid', generation: 1, mode: 'form',
         expiresAt: '2099-07-15T00:00:00Z', message: 'Choose a strategy.',
         requestedSchema: {type: 'object', properties: {strategy: {type: 'string'}}}
       }
