@@ -2,12 +2,24 @@ import {
   contextUsageValue,
   isReconciliationRequired,
   legacyRecoverableToolName,
+  primaryContent,
   terminalRequestErrorStatus,
   toolCallEventSemantics
 } from './ai-chat-event-semantics';
 import {AiChatSocketEvent} from './ai-chat-panel.model';
 
 describe('AI chat event semantics', () => {
+  it('uses content, response, then message as the canonical event text precedence', () => {
+    const event: AiChatSocketEvent = {
+      requestId: 'request-1', type: 'system', content: 'content',
+      response: 'response', message: 'message'
+    };
+    expect(primaryContent(event)).toBe('content');
+    expect(primaryContent({...event, content: ''})).toBe('response');
+    expect(primaryContent({...event, content: '', response: ''})).toBe('message');
+    expect(primaryContent({...event, content: '', response: '', message: ''})).toBe('');
+  });
+
   it('accepts only internally consistent context usage snapshots', () => {
     const valid = {
       modelName: 'gpt-5_6-sol', currentInputTokens: 75000, contextWindow: 200000,

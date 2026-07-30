@@ -473,7 +473,6 @@ export abstract class AiChatPanelControllerBase {
   protected abstract isToolDiscoveryName(value: unknown): boolean;
   protected abstract isRecognizedRequestEvent(event: AiChatSocketEvent): boolean;
   protected abstract hasActiveStructuredToolRows(): boolean;
-  protected abstract primaryContent(event: AiChatSocketEvent): string;
   protected abstract handleConversationRestoreEvent(event: AiChatSocketEvent): void;
   protected abstract conversationRestoreCallbacks(): AiConversationRestoreCallbacks;
   abstract requestManualCompact(): void;

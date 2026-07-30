@@ -2,6 +2,7 @@ import {Injectable} from '@angular/core';
 import {
   AiToolCallEventSemantics,
   legacyRecoverableToolName,
+  primaryContent,
   toolCallEventSemantics
 } from './ai-chat-event-semantics';
 import {AiChatPanelState} from './ai-chat-panel-state';
@@ -10,6 +11,7 @@ import {
   isWorkingStatusText,
   WORKING_STATUS_LABEL
 } from './ai-chat-panel-display.constants';
+import {defaultToolStatusContent} from './ai-tool-presentation';
 
 @Injectable()
 export class AiChatMessageTrackerService {
@@ -23,7 +25,7 @@ export class AiChatMessageTrackerService {
 
   upsertToolGroup(state: AiChatPanelState, event: AiChatSocketEvent): void {
     const terminal = event.subtype === 'completed' || event.subtype === 'failed';
-    const content = this.primaryContent(event) || 'Used tools';
+    const content = primaryContent(event) || 'Used tools';
     this.showStatus(state, terminal ? WORKING_STATUS_LABEL : content, true);
     state.currentStatus = terminal ? WORKING_STATUS_LABEL : content;
   }
@@ -89,7 +91,7 @@ export class AiChatMessageTrackerService {
       ...active,
       active: false,
       status: 'failed',
-      content: 'Execution failed',
+      content: defaultToolStatusContent('failed', undefined),
       recoverable: true
     });
     this.showStatus(state, 'Continuing after tool failure', true);
@@ -258,7 +260,4 @@ export class AiChatMessageTrackerService {
     });
   }
 
-  private primaryContent(event: AiChatSocketEvent): string {
-    return event.content || event.response || event.message || '';
-  }
 }

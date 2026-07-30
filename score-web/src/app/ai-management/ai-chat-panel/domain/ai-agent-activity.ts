@@ -5,7 +5,12 @@ import {
   AiChatStatusTone,
   AiWorkflowType
 } from './ai-chat-panel.model';
-import {displayToolName, displayToolText} from './ai-tool-presentation';
+import {
+  defaultToolStatusContent,
+  displayToolName,
+  displayToolText
+} from './ai-tool-presentation';
+import {primaryContent} from './ai-chat-event-semantics';
 import {
   isWorkingStatusText,
   WORKING_STATUS_LABEL
@@ -299,7 +304,7 @@ function upsertAgentProviderEvent(activities: AiAgentActivity[],
   const agentId = specialistActivityAgentId(event);
   if (!agentId) return false;
   const activity = activities.find(candidate => candidate.agentId === agentId);
-  const content = event.content || event.response || event.message || '';
+  const content = primaryContent(event);
   if (!activity || !content.trim()) return false;
   if (!activity.inProgress) return true;
   const last = activity.events[activity.events.length - 1];
@@ -332,7 +337,7 @@ export function upsertAgentGuideEvent(activities: AiAgentActivity[],
   const agentId = specialistActivityAgentId(event);
   if (!agentId) return false;
   const activity = activities.find(candidate => candidate.agentId === agentId);
-  const content = event.content || event.response || event.message || '';
+  const content = primaryContent(event);
   if (!activity || !content.trim()) return false;
   if (!activity.inProgress) return true;
   const last = activity.events[activity.events.length - 1];
@@ -353,16 +358,9 @@ export function agentToolEventContent(event: AiChatSocketEvent): string {
   if (subtype === 'started' || subtype === 'progress') {
     return toolName ? `Calling ${toolName}.` : 'Executing...';
   }
-  if (subtype === 'completed') return toolName ? `${toolName} completed.` : 'Executed';
-  if (subtype === 'failed') return toolName ? `${toolName} failed.` : 'Execution failed';
-  if (subtype === 'blocked') {
-    return toolName ? `${toolName} is awaiting approval.` : 'Awaiting approval';
-  }
-  if (subtype === 'denied') {
-    return toolName ? `${toolName} was denied before execution.` : 'Denied before execution';
-  }
-  if (subtype === 'cancelled') {
-    return toolName ? `${toolName} was stopped before execution.` : 'Stopped before execution';
+  if (subtype === 'completed' || subtype === 'failed' || subtype === 'blocked'
+    || subtype === 'denied' || subtype === 'cancelled') {
+    return defaultToolStatusContent(subtype, toolName);
   }
   return 'Executing...';
 }
@@ -402,8 +400,8 @@ export function agentToolEventDetail(event: AiChatSocketEvent): string | undefin
   if (typeof detail === 'string' && detail.trim()) {
     return displayToolText(detail);
   }
-  const content = event.content || event.response || event.message;
-  return typeof content === 'string' && /\nArguments:\s*/.test(content)
+  const content = primaryContent(event);
+  return /\nArguments:\s*/.test(content)
     ? displayToolText(content.trim()) : undefined;
 }
 

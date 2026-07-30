@@ -7,6 +7,7 @@ import {
 } from './ai-agent-activity';
 import {AiChatMessage, AiChatSocketEvent} from './ai-chat-panel.model';
 import {WORKING_STATUS_LABEL} from './ai-chat-panel-display.constants';
+import {primaryContent} from './ai-chat-event-semantics';
 import {
   AiWorkflowPresentation,
   workflowPresentation,
@@ -131,7 +132,7 @@ export class AiExecutionComposite {
       return {container, root, created: true, presentation};
     }
 
-    const content = event.content || event.message || WORKING_STATUS_LABEL;
+    const content = primaryContent(event) || WORKING_STATUS_LABEL;
     const itemCount = metadataPositiveInteger(event, 'member_count', 'memberCount');
     const anchor: AiChatMessage = presentation === 'box' ? {
       role: 'workflow_group', content, eventType: 'workflow_lifecycle',
@@ -165,7 +166,7 @@ export class AiExecutionComposite {
         this.workflowOwners.set(key, owner);
         owner.status = 'started';
         owner.inProgress = true;
-        owner.content = event.content || event.message || owner.content;
+        owner.content = primaryContent(event) || owner.content;
         owner.lastUpdateAt = Date.now();
       }
     }
@@ -187,7 +188,7 @@ export class AiExecutionComposite {
     workflow.workflowStatus = terminalStatus;
     workflow.inProgress = false;
     if (presentation === 'message') {
-      workflow.content = event.content || event.message || workflow.content;
+      workflow.content = primaryContent(event) || workflow.content;
     }
     if (!this.rootWorkflows.has(key)) {
       const container = this.workflowContainers.get(key);
@@ -197,10 +198,10 @@ export class AiExecutionComposite {
     if (owner) {
       owner.status = workflow.workflowStatus || 'completed';
       owner.inProgress = false;
-      owner.content = event.content || event.message || owner.content;
+      owner.content = primaryContent(event) || owner.content;
       owner.lastUpdateAt = Date.now();
       if (terminalStatus !== 'completed') {
-        const content = event.content || event.message || 'The workflow did not complete.';
+        const content = primaryContent(event) || 'The workflow did not complete.';
         const duplicate = owner.messages?.some(message =>
           message.role === 'error' && message.eventType === event.subtype
           && message.workflowNodeId === nodeId && message.content === content);
