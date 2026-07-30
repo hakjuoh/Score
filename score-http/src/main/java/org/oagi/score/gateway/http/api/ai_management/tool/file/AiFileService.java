@@ -1,10 +1,10 @@
-package org.oagi.score.gateway.http.api.ai_management.file;
+package org.oagi.score.gateway.http.api.ai_management.tool.file;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
-import org.oagi.score.gateway.http.api.ai_management.file.storage.AiFileStorage;
-import org.oagi.score.gateway.http.api.ai_management.file.storage.AiFileStorageRegistry;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.storage.AiFileStorage;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.storage.AiFileStorageRegistry;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrailChain;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -14,7 +14,6 @@ import org.springframework.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;

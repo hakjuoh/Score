@@ -1,6 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.controller.payload;
 
-import org.oagi.score.gateway.http.api.ai_management.file.AiFileDescriptor;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.AiFileDescriptor;
 import java.util.List;
 import java.util.Map;
 

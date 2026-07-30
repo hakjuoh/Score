@@ -1,9 +1,11 @@
-package org.oagi.score.gateway.http.api.ai_management.file.storage;
+package org.oagi.score.gateway.http.api.ai_management.tool.file.storage;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.storage.GoogleDriveAiFileStorage;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.storage.S3AiFileStorage;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 
 import java.net.InetSocketAddress;

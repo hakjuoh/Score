@@ -1,7 +1,8 @@
-package org.oagi.score.gateway.http.api.ai_management.file.storage;
+package org.oagi.score.gateway.http.api.ai_management.tool.file.storage;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.storage.LocalAiFileStorage;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 
 import java.nio.file.Files;

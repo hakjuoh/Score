@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.file;
+package org.oagi.score.gateway.http.api.ai_management.tool.file;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;

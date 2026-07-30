@@ -1,6 +1,9 @@
-package org.oagi.score.gateway.http.api.ai_management.file;
+package org.oagi.score.gateway.http.api.ai_management.tool.file;
 
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.AiFileRequestDetector;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.MarkdownFileRenderer;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.PdfFileRenderer;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 
 import java.util.List;
