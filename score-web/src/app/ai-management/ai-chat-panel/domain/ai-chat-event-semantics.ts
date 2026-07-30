@@ -1,4 +1,5 @@
 import {AiChatSocketEvent, AiChatToolStatus, AiContextUsage, AiExecutionStatus} from './ai-chat-panel.model';
+import {displayToolName, displayToolText} from './ai-tool-presentation';
 
 const TEXTUAL_TOOL_CALL_PLACEHOLDER =
   /\*{0,2}\[\s*tool(?:[ -]call)?\s*:\s*[^\]\r\n]+]\*{0,2}(?:\s*(?:→|->).*?)?\s*$/is;
@@ -51,12 +52,13 @@ export function toolCallEventSemantics(event: AiChatSocketEvent): AiToolCallEven
   }
   const active = subtype === 'started' || subtype === 'progress';
   const toolName = nonBlank(event.metadata?.['toolName']);
+  const visibleToolName = displayToolName(toolName);
   const content = active
-    ? (toolName ? `Calling ${toolName}.` : 'Executing...')
-    : terminalToolCallContent(subtype, toolName, event);
+    ? (visibleToolName ? `Calling ${visibleToolName}.` : 'Executing...')
+    : terminalToolCallContent(subtype, visibleToolName, event);
   const turnId = nonBlank(event.turnId);
   const toolCallSeq = nonNegativeSequence(event.metadata?.['toolCallSeq']);
-  const toolDetail = nonBlank(event.metadata?.['toolDetail']);
+  const toolDetail = displayToolText(nonBlank(event.metadata?.['toolDetail']));
   return {
     key: `${groupId}:${toolCallId}`,
     ...(turnId ? {turnId} : {}),
@@ -86,7 +88,7 @@ function terminalToolCallContent(subtype: 'completed' | 'failed' | 'blocked' | '
   }
   const content = nonBlank(primaryContent(event));
   if (content) {
-    return content;
+    return displayToolText(content) || content;
   }
   if (subtype === 'blocked') {
     return toolName ? `${toolName} is awaiting approval.` : 'Awaiting approval';

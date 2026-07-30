@@ -16,7 +16,8 @@ import org.oagi.score.gateway.http.api.application_management.service.BrokerJwtS
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
+import org.springframework.ai.mcp.McpToolUtils;
+import org.springframework.ai.mcp.SyncMcpToolCallback;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.stereotype.Component;
@@ -27,6 +28,7 @@ import java.net.http.HttpRequest.BodyPublishers;
 import java.net.URI;
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -104,10 +106,9 @@ public class ConnectCenterMcpClientFactory {
         McpSyncClient client = clientBuilder.build();
         try {
             McpSchema.InitializeResult initialized = client.initialize();
-            ToolCallbackProvider tools = SyncMcpToolCallbackProvider.builder()
-                    .mcpClients(List.of(client))
-                    .build();
-            return new McpSession(client, tools, readOnlyToolNames(client),
+            DiscoveredTools discovered = discoverTools(client);
+            return new McpSession(client, discovered.callbacks(), discovered.readOnlyNames(),
+                    discovered.catalog(),
                     McpTelemetry.from(connectionName(), connection, initialized));
         } catch (RuntimeException exception) {
             client.closeGracefully();
@@ -120,29 +121,48 @@ public class ConnectCenterMcpClientFactory {
      * through the MCP readOnlyHint tool annotation. Fail-closed: a tool without an
      * explicit readOnlyHint=true annotation is treated as data-changing.
      */
-    private static Set<String> readOnlyToolNames(McpSyncClient client) {
+    static DiscoveredTools discoverTools(McpSyncClient client) {
+        List<ToolCallback> callbacks = new ArrayList<>();
+        List<McpSchema.Tool> catalog = new ArrayList<>();
         Set<String> names = new LinkedHashSet<>();
+        Set<String> callbackNames = new HashSet<>();
         Set<String> visitedCursors = new HashSet<>();
-        int toolCount = 0;
         String cursor = null;
         do {
             McpSchema.ListToolsResult page = cursor == null
                     ? client.listTools() : client.listTools(cursor);
             for (McpSchema.Tool tool : page.tools()) {
-                toolCount++;
+                String callbackName = McpToolUtils.format(tool.name());
+                if (!StringUtils.hasText(callbackName) || !callbackNames.add(callbackName)) {
+                    throw new IllegalStateException(
+                            "MCP tools must have unique Spring-compatible names: " + callbackName);
+                }
+                callbacks.add(SyncMcpToolCallback.builder()
+                        .mcpClient(client)
+                        .tool(tool)
+                        .prefixedToolName(callbackName)
+                        .build());
+                catalog.add(withName(tool, callbackName));
                 McpSchema.ToolAnnotations annotations = tool.annotations();
                 if (annotations != null && Boolean.TRUE.equals(annotations.readOnlyHint())) {
-                    names.add(tool.name());
+                    names.add(callbackName);
                 }
             }
             cursor = page.nextCursor();
         } while (StringUtils.hasText(cursor) && visitedCursors.add(cursor));
-        if (toolCount > 0 && names.isEmpty()) {
+        if (!catalog.isEmpty() && names.isEmpty()) {
             LOGGER.warn("connect-center-mcp declared none of its {} tools read-only;"
                     + " the server likely predates readOnlyHint annotations, so every tool"
-                    + " will require change approval and specialists get no tools.", toolCount);
+                    + " will require change approval and specialists get no tools.", catalog.size());
         }
-        return Set.copyOf(names);
+        ToolCallback[] discoveredCallbacks = callbacks.toArray(ToolCallback[]::new);
+        return new DiscoveredTools(() -> discoveredCallbacks.clone(), Set.copyOf(names),
+                List.copyOf(catalog));
+    }
+
+    private static McpSchema.Tool withName(McpSchema.Tool tool, String name) {
+        return new McpSchema.Tool(name, tool.title(), tool.description(), tool.inputSchema(),
+                tool.outputSchema(), tool.annotations(), tool.meta(), tool.icons());
     }
 
     private Duration longer(Duration first, Duration second) {
@@ -227,15 +247,24 @@ public class ConnectCenterMcpClientFactory {
         }
     }
 
+    record DiscoveredTools(ToolCallbackProvider callbacks, Set<String> readOnlyNames,
+                           List<McpSchema.Tool> catalog) { }
+
     public record McpSession(McpSyncClient client, ToolCallbackProvider tools,
-                             Set<String> readOnlyToolNames,
+                             Set<String> readOnlyToolNames, List<McpSchema.Tool> toolCatalog,
                              McpTelemetry telemetry) implements AutoCloseable {
         public McpSession(McpSyncClient client, ToolCallbackProvider tools,
                           Set<String> readOnlyToolNames) {
-            this(client, tools, readOnlyToolNames, McpTelemetry.EMPTY);
+            this(client, tools, readOnlyToolNames, List.of(), McpTelemetry.EMPTY);
+        }
+
+        public McpSession(McpSyncClient client, ToolCallbackProvider tools,
+                          Set<String> readOnlyToolNames, McpTelemetry telemetry) {
+            this(client, tools, readOnlyToolNames, List.of(), telemetry);
         }
 
         public McpSession {
+            toolCatalog = toolCatalog != null ? List.copyOf(toolCatalog) : List.of();
             telemetry = telemetry != null ? telemetry : McpTelemetry.EMPTY;
         }
 

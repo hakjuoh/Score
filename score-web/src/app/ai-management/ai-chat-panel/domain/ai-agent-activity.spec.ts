@@ -304,6 +304,9 @@ describe('AI agent activity semantics', () => {
       .toBe('Calling get_libraries.');
     expect(agentToolEventContent({...toolEvent, subtype: 'denied'}))
       .toBe('get_libraries was denied before execution.');
+    expect(agentToolEventContent({
+      ...toolEvent, metadata: {...toolEvent.metadata, toolName: 'toolSearchTool'}
+    })).toBe('tool_search_tool completed.');
 
     expect(isSpecialistToolEvent(
       {...toolEvent, metadata: {nodeId: 'fanout-1-agent-02'}}

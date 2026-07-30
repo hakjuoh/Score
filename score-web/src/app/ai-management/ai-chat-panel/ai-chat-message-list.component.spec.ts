@@ -285,6 +285,9 @@ describe('AiChatMessageListComponent', () => {
     fixture.detectChanges();
 
     const indicator = fixture.nativeElement.querySelector('.request-pending-indicator') as HTMLElement;
+    const toolRow = fixture.nativeElement.querySelector('.message-row.tool_call') as HTMLElement;
+    expect(toolRow.textContent).toContain('tool_search_tool completed.');
+    expect(toolRow.textContent).not.toContain('toolSearchTool');
     expect(indicator).not.toBeNull();
     expect(indicator.querySelector('mat-progress-spinner')).not.toBeNull();
     expect(indicator.getAttribute('role')).toBe('status');

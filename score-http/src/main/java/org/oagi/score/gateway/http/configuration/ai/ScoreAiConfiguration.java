@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
 import com.anthropic.models.messages.OutputConfig;
+import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
 import org.springframework.ai.anthropic.AnthropicCacheOptions;
 import org.springframework.ai.anthropic.AnthropicCacheStrategy;
 import org.springframework.ai.anthropic.AnthropicChatModel;
@@ -70,8 +71,11 @@ public class ScoreAiConfiguration {
     }
 
     @Bean
-    public ToolSearchToolCallingAdvisor scoreAiToolSearchAdvisor(ToolIndex toolIndex) {
-        return new ScoreToolSearchToolCallingAdvisor(toolIndex);
+    public ToolSearchToolCallingAdvisor scoreAiToolSearchAdvisor(ToolIndex toolIndex,
+                                                                 AiAgentCatalog agentCatalog) {
+        String systemMessageSuffix = agentCatalog.systemDefinition("tool-search-advisor")
+                .instruction().render().value();
+        return new ScoreToolSearchToolCallingAdvisor(toolIndex, systemMessageSuffix);
     }
 
     @Bean

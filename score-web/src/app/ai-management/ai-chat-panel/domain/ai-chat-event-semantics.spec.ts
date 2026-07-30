@@ -94,10 +94,25 @@ describe('AI chat event semantics', () => {
     expect(toolCallEventSemantics({
       requestId: 'request-1', type: 'tool_call', subtype: 'started',
       groupId: 'discovery', toolCallId: 'search-1',
-      metadata: {toolName: 'tool_search_agent', toolDiscovery: true}
+      metadata: {toolName: 'toolSearchTool', toolDiscovery: true}
     })).toEqual(expect.objectContaining({
-      key: 'discovery:search-1', toolName: 'tool_search_agent',
-      active: true, hidden: false, content: 'Calling tool_search_agent.'
+      key: 'discovery:search-1', toolName: 'toolSearchTool',
+      active: true, hidden: false, content: 'Calling tool_search_tool.'
+    }));
+  });
+
+  it('normalizes the discovery tool name in terminal content and detail only', () => {
+    expect(toolCallEventSemantics({
+      requestId: 'request-1', type: 'tool_call', subtype: 'completed',
+      groupId: 'discovery', toolCallId: 'search-1',
+      metadata: {
+        toolName: 'toolSearchTool',
+        toolDetail: 'toolSearchTool\nArguments: {"query":"contexts"}'
+      }
+    })).toEqual(expect.objectContaining({
+      toolName: 'toolSearchTool',
+      content: 'tool_search_tool completed.',
+      toolDetail: 'tool_search_tool\nArguments: {"query":"contexts"}'
     }));
   });
 

@@ -1,5 +1,7 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
+import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.spec.McpSchema;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
@@ -11,6 +13,8 @@ import org.oagi.score.gateway.http.common.model.ScoreUser;
 import java.time.Duration;
 import java.net.URI;
 import java.net.http.HttpRequest;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -19,6 +23,41 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 class ConnectCenterMcpClientFactoryTest {
+
+    @Test
+    void discoversEveryMcpToolPageOnceAndRetainsProtocolMetadata() {
+        McpSyncClient client = mock(McpSyncClient.class);
+        McpSchema.Tool first = new McpSchema.Tool("first_tool", "First", "First page.",
+                Map.of("type", "object"), Map.of("type", "object"),
+                McpSchema.ToolAnnotations.builder().readOnlyHint(true).build(),
+                Map.of("page", 1), List.of());
+        McpSchema.Tool second = new McpSchema.Tool("second_tool", "Second", "Second page.",
+                Map.of("type", "object", "properties", Map.of("id", Map.of("type", "integer"))),
+                Map.of("type", "object", "properties", Map.of("name", Map.of("type", "string"))),
+                McpSchema.ToolAnnotations.builder()
+                        .readOnlyHint(false).destructiveHint(true).idempotentHint(false).build(),
+                Map.of("page", 2), List.of(new McpSchema.Icon(
+                        "https://example.test/tool.svg", "image/svg+xml", List.of("any"), "dark")));
+        when(client.listTools()).thenReturn(
+                new McpSchema.ListToolsResult(List.of(first), "page-2", Map.of("page", 1)));
+        when(client.listTools("page-2")).thenReturn(
+                new McpSchema.ListToolsResult(List.of(second), null, Map.of("page", 2)));
+
+        ConnectCenterMcpClientFactory.DiscoveredTools discovered =
+                ConnectCenterMcpClientFactory.discoverTools(client);
+
+        assertThat(discovered.callbacks().getToolCallbacks())
+                .extracting(callback -> callback.getToolDefinition().name())
+                .containsExactly("first_tool", "second_tool");
+        assertThat(discovered.readOnlyNames()).containsExactly("first_tool");
+        assertThat(discovered.catalog()).containsExactly(first, second);
+        assertThat(discovered.catalog().get(1).outputSchema()).containsKey("properties");
+        assertThat(discovered.catalog().get(1).annotations().destructiveHint()).isTrue();
+        assertThat(discovered.catalog().get(1).meta()).containsEntry("page", 2);
+        assertThat(discovered.catalog().get(1).icons()).hasSize(1);
+        verify(client).listTools();
+        verify(client).listTools("page-2");
+    }
 
     @Test
     void propagatesTheCurrentPrivateSpanToMcpHttpRequests() {

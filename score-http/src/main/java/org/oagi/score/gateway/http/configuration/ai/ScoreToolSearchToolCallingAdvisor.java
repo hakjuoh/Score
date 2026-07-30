@@ -21,6 +21,7 @@ import org.springframework.ai.tool.toolsearch.ToolSearchTool;
 import org.springframework.ai.tool.toolsearch.eviction.LruEvictionStrategy;
 import org.springframework.ai.tool.toolsearch.eviction.ToolIndexEvictionStrategy;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -50,19 +51,6 @@ public final class ScoreToolSearchToolCallingAdvisor extends ToolSearchToolCalli
 
     private static final String CACHED_TOOL_CALLBACKS_KEY =
             ScoreToolSearchToolCallingAdvisor.class.getName() + ".cachedToolCallbacks";
-    private static final String SYSTEM_MESSAGE_SUFFIX = """
-
-            You are the tool-search agent for the current workflow. The compact catalog below
-            contains names only; full schemas are deliberately deferred to conserve context.
-            Before execution, identify every capability required by the complete request, including
-            changes, relationship operations, and final read-back. Prefer `select:name1,name2`
-            with exact names from the catalog. If more than 10 tools are required, issue multiple
-            searches in parallel in the same response. Use a specific natural-language query only
-            when no exact catalog name is suitable. Search results accumulate and only their full
-            definitions become available on the next step. Do not guess an unknown tool name.
-            Never write or simulate `[Tool call: ...]`, `[Tool: ...]`, or another textual placeholder;
-            invoke toolSearchTool and selected tools only through the structured tool interface.
-            """;
     private static final String DEFERRED_TOOLS_START = "\n<available-deferred-tools>\n";
     private static final String DEFERRED_TOOLS_END = "\n</available-deferred-tools>";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -80,21 +68,25 @@ public final class ScoreToolSearchToolCallingAdvisor extends ToolSearchToolCalli
 
     private final ToolIndex toolIndex;
     private final ToolCallback toolSearchToolCallback;
+    private final String systemMessageSuffix;
     private final ConcurrentHashMap<String, String> indexedSessionFingerprints =
             new ConcurrentHashMap<>();
     private final ToolIndexEvictionStrategy evictionStrategy = new LruEvictionStrategy(1000);
 
-    public ScoreToolSearchToolCallingAdvisor(ToolIndex toolIndex) {
-        this(toolIndex, new RegistryAwareToolCallingManager());
+    public ScoreToolSearchToolCallingAdvisor(ToolIndex toolIndex, String systemMessageSuffix) {
+        this(toolIndex, new RegistryAwareToolCallingManager(),
+                formatSystemMessageSuffix(systemMessageSuffix));
     }
 
     private ScoreToolSearchToolCallingAdvisor(ToolIndex toolIndex,
-                                               RegistryAwareToolCallingManager toolCallingManager) {
+                                               RegistryAwareToolCallingManager toolCallingManager,
+                                               String systemMessageSuffix) {
         super(toolCallingManager, ToolCallingAdvisor.DEFAULT_ORDER,
                 DEFAULT_TOOL_EXECUTION_ELIGIBILITY_CHECKER, toolIndex,
-                SYSTEM_MESSAGE_SUFFIX, true, MAX_RESULTS, true,
+                systemMessageSuffix, true, MAX_RESULTS, true,
                 ChatMemory.CONVERSATION_ID, new LruEvictionStrategy(1000));
         this.toolIndex = Objects.requireNonNull(toolIndex, "toolIndex");
+        this.systemMessageSuffix = systemMessageSuffix;
         this.toolSearchToolCallback = MethodToolCallbackProvider.builder()
                 .toolObjects(new ToolSearchTool(toolIndex, MAX_RESULTS))
                 .build()
@@ -172,9 +164,16 @@ public final class ScoreToolSearchToolCallingAdvisor extends ToolSearchToolCalli
         return request.mutate()
                 .prompt(request.prompt().copy().augmentSystemMessage(systemMessage -> systemMessage
                         .copy().mutate()
-                        .text(systemMessage.getText() + SYSTEM_MESSAGE_SUFFIX + deferredToolCatalog)
+                        .text(systemMessage.getText() + systemMessageSuffix + deferredToolCatalog)
                         .build()))
                 .build();
+    }
+
+    private static String formatSystemMessageSuffix(String value) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalArgumentException("The tool-search system message must not be blank.");
+        }
+        return "\n" + value.strip() + "\n";
     }
 
     ChatClientRequest prepareIteration(ChatClientRequest request) {
