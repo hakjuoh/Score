@@ -37,7 +37,9 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
 import org.oagi.score.gateway.http.api.ai_management.execution.AgentInputRefusedException;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor;
 import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionService;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.memory.AiContextBudgetService;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
@@ -54,6 +56,9 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -736,7 +741,9 @@ class ChatServiceTest {
         when(models.resolveReasoningEffort("gpt-5_6-sol", "high")).thenReturn("high");
         when(repository.settingsForUpdate("conversation-1"))
                 .thenReturn(new AiChatConversationSettings("claude-fable-5", "medium"));
-        ChatService service = service(models, identity(), null, null, repository, null);
+        List<String> boundaryEvents = new java.util.ArrayList<>();
+        ExecutionObserver boundary = event -> boundaryEvents.add(event.type());
+        ChatService service = service(models, identity(), null, null, repository, null, boundary);
 
         service.updateConversationModel(requester, "conversation-1",
                 "gpt-5_6-sol", "high");
@@ -745,12 +752,49 @@ class ChatServiceTest {
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
         verify(repository).append(org.mockito.ArgumentMatchers.eq("conversation-1"), step.capture());
         assertEquals("settings_change", step.getValue().messageKind());
+        assertThat(step.getValue().requestId()).startsWith("settings-update-");
+        assertThat(boundaryEvents).containsExactly("trajectory.settings_change");
         assertEquals("gpt-5_6-sol", step.getValue().modelName());
         assertEquals("high", step.getValue().reasoningEffort());
         assertEquals("claude-fable-5",
                 ((Map<?, ?>) step.getValue().extra().get("before")).get("modelName"));
         assertEquals("gpt-5_6-sol",
                 ((Map<?, ?>) step.getValue().extra().get("after")).get("modelName"));
+    }
+
+    @Test
+    void finalizesASettingsWorkflowOnlyAfterTheActualTransactionOutcome() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        ScoreAiObservability.Turn committedTurn = mock(ScoreAiObservability.Turn.class);
+        ScoreAiObservability.Turn rolledBackTurn = mock(ScoreAiObservability.Turn.class);
+        when(models.resolveModelName("gpt-5_6-sol")).thenReturn("gpt-5_6-sol");
+        when(models.resolveReasoningEffort("gpt-5_6-sol", "high")).thenReturn("high");
+        when(repository.settingsForUpdate("conversation-1"))
+                .thenReturn(new AiChatConversationSettings("claude-fable-5", "medium"));
+        when(observability.startExecution(any(), eq(requester), eq(0L),
+                any(), any())).thenReturn(committedTurn, rolledBackTurn);
+        ChatService service = service(models, identity(), null, null, repository, null,
+                observability);
+        TransactionTemplate transactions = new TransactionTemplate(new TestTransactionManager());
+
+        transactions.executeWithoutResult(ignored -> {
+            service.updateConversationModel(requester, "conversation-1",
+                    "gpt-5_6-sol", "high", null, null);
+            verify(committedTurn, never()).complete(any(), any());
+        });
+        verify(committedTurn).complete("COMPLETED", null);
+
+        assertThatThrownBy(() -> transactions.executeWithoutResult(ignored -> {
+            service.updateConversationModel(requester, "conversation-1",
+                    "gpt-5_6-sol", "high", null, null);
+            verify(rolledBackTurn, never()).complete(any(), any());
+            throw new IllegalStateException("force rollback");
+        })).isInstanceOf(IllegalStateException.class).hasMessage("force rollback");
+        verify(rolledBackTurn).complete(eq("FAILED"),
+                org.mockito.ArgumentMatchers.isA(IllegalStateException.class));
     }
 
     @Test
@@ -1381,6 +1425,26 @@ class ChatServiceTest {
                 return executor.executeAgentChat(session);
             }
         };
+    }
+
+    private static final class TestTransactionManager extends AbstractPlatformTransactionManager {
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected void doBegin(Object transaction,
+                               org.springframework.transaction.TransactionDefinition definition) {
+        }
+
+        @Override
+        protected void doCommit(DefaultTransactionStatus status) {
+        }
+
+        @Override
+        protected void doRollback(DefaultTransactionStatus status) {
+        }
     }
 
     private ScoreUser user() {

@@ -81,7 +81,7 @@ class AiChatControllerTest {
                 ignored -> { throw new RejectedExecutionException("executor closed"); });
         ChatRequest request = request("request-rejected", "conversation-rejected");
         when(sessionService.asScoreUser(principal)).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         assertThatThrownBy(() -> controller.chat(principal, request))
@@ -90,41 +90,57 @@ class AiChatControllerTest {
 
         assertThat(registry.status("request-rejected", user).status()).isEqualTo("FAILED");
         verify(chatService).recordFailure(any(ChatRequest.class), eq(user),
-                any(String.class), eq(RejectedExecutionException.class.getName()));
+                any(String.class), eq(RejectedExecutionException.class.getName()), anyLong());
     }
 
     @Test
-    void closesTheTurnWhenTheWebSocketAcceptedEventCannotBeSent() {
-        AiRequestRegistry registry = new AiRequestRegistry();
+    void closesTheTurnWithTheOriginalFailureWhenRejectedRequestSettlementAlsoFails() {
+        AiRequestRegistry registry = spy(new AiRequestRegistry());
         ScoreAiObservability observability = mock(ScoreAiObservability.class);
         ScoreAiObservability.Turn turn = mock(ScoreAiObservability.Turn.class);
+        AiChangeApprovalCoordinator approvals = mock(AiChangeApprovalCoordinator.class);
         when(observability.startTurn(any(ChatRequest.class), eq(user), anyLong(),
                 nullable(String.class), nullable(String.class))).thenReturn(turn);
         AiChatController controller = new AiChatController(
                 chatService, sessionService, messagingTemplate, webSocketUsers, registry,
                 mock(AiChangeConfirmationService.class), mock(AiElicitationService.class),
-                mock(AiChangeApprovalCoordinator.class), new ScoreAiProperties(), observability,
+                approvals, new ScoreAiProperties(), observability,
                 Runnable::run);
         Principal wsPrincipal = mock(Principal.class);
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
         when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        doThrow(new IllegalStateException("socket unavailable"))
+        IllegalStateException transportFailure = new IllegalStateException("socket unavailable");
+        AiSharedStateUnavailableException settlementFailure =
+                new AiSharedStateUnavailableException("settlement unavailable");
+        IllegalStateException cleanupFailure = new IllegalStateException("cleanup unavailable");
+        IllegalStateException rejectionFailure = new IllegalStateException("rejection unavailable");
+        IllegalStateException persistenceFailure = new IllegalStateException("persistence unavailable");
+        doThrow(transportFailure)
                 .when(messagingTemplate).convertAndSendToUser(
                         eq("tester"), eq("/queue/ai/chat/request-send-failed"),
                         any(AiChatSocketEvent.class));
+        doThrow(settlementFailure).when(registry).finish(
+                any(AiRequestRegistry.Entry.class), eq(transportFailure));
+        doThrow(cleanupFailure).when(approvals).cancelRequest("request-send-failed");
+        doThrow(rejectionFailure).when(turn).admissionRejected("transport_send_failed");
+        doThrow(persistenceFailure).when(chatService).recordFailure(any(ChatRequest.class), eq(user),
+                any(String.class), eq(IllegalStateException.class.getName()), anyLong());
 
         assertThatThrownBy(() -> controller.chat(
                 new AiChatSocketRequest("request-send-failed", "Help", null,
                         "conversation-send-failed", null, List.of(), null),
                 wsPrincipal, headers))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("socket unavailable");
+                .isSameAs(transportFailure)
+                .satisfies(failure -> assertThat(failure.getSuppressed())
+                        .containsExactly(settlementFailure, cleanupFailure, rejectionFailure,
+                                persistenceFailure));
 
-        assertThat(registry.status("request-send-failed", user).status()).isEqualTo("FAILED");
         verify(turn).admissionRejected("transport_send_failed");
-        verify(turn).complete(eq("admission_rejected"), any(IllegalStateException.class));
+        verify(chatService).recordFailure(any(ChatRequest.class), eq(user), any(String.class),
+                eq(IllegalStateException.class.getName()), anyLong());
+        verify(turn).complete("admission_rejected", transportFailure);
     }
 
     @Test
@@ -134,15 +150,15 @@ class AiChatControllerTest {
         ChatRequest request = new ChatRequest("Help me", null, null, "conversation-1",
                 null, List.of(), null, "model", "high", "ask", options, null, null);
         when(sessionService.asScoreUser(principal)).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenReturn(
+        when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong())).thenReturn(
                 new ChatResponse("agent", "done", "conversation-1", false, List.of()));
 
         controller.chat(principal, request).get(1, TimeUnit.SECONDS);
 
         ArgumentCaptor<ChatRequest> correlated = ArgumentCaptor.forClass(ChatRequest.class);
-        verify(chatService).prepare(correlated.capture(), eq(user));
+        verify(chatService).prepare(correlated.capture(), eq(user), anyLong());
         assertThat(correlated.getValue().requestId()).isNotBlank();
         assertThat(correlated.getValue().multiAgent()).isEqualTo(options);
     }
@@ -152,8 +168,8 @@ class AiChatControllerTest {
         AiChatController controller = controller(new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
         ChatRequest request = request("request-1", "conversation-1");
         when(sessionService.asScoreUser(principal)).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong())).thenAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             Consumer<AiExecutionEvent> events = invocation.getArgument(2);
             events.accept(AiExecutionEvent.progress("internal progress"));
@@ -185,9 +201,9 @@ class AiChatControllerTest {
                 new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
         ChatRequest request = request("request-1", "conversation-1");
         when(sessionService.asScoreUser(principal)).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
+        when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong())).thenAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             Consumer<AiExecutionEvent> events = invocation.getArgument(2);
             events.accept(AiExecutionEvent.detail(
@@ -222,9 +238,9 @@ class AiChatControllerTest {
                 new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
         ChatRequest request = request("request-1", "conversation-1");
         when(sessionService.asScoreUser(principal)).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
+        when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong())).thenAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             Consumer<AiExecutionEvent> events = invocation.getArgument(2);
             events.accept(AiExecutionEvent.detail("change_approval_batch_required",
@@ -296,13 +312,14 @@ class AiChatControllerTest {
         when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
         AiElicitationDecisionRequest accepted = new AiElicitationDecisionRequest(
                 "request-accepted", "conversation-accepted", "elicitation-accepted",
-                "ACCEPT", Map.of("private", "DO_NOT_OBSERVE"));
+                "ACCEPT", Map.of("private", "DO_NOT_OBSERVE"), 7L);
         AiElicitationDecisionRequest rejected = new AiElicitationDecisionRequest(
                 "request-rejected", "conversation-rejected", "elicitation-rejected",
-                "ACCEPT", Map.of("private", "DO_NOT_OBSERVE"));
+                "ACCEPT", Map.of("private", "DO_NOT_OBSERVE"), 8L);
         doThrow(new IllegalArgumentException("already answered"))
                 .when(elicitations).decide(user, rejected.requestId(), rejected.conversationId(),
-                        rejected.elicitationId(), rejected.action(), rejected.content());
+                        rejected.elicitationId(), rejected.generation(),
+                        rejected.action(), rejected.content());
 
         controller.decideElicitation(accepted, wsPrincipal, headers);
         controller.decideElicitation(rejected, wsPrincipal, headers);
@@ -444,8 +461,8 @@ class AiChatControllerTest {
         AiChatController controller = controller(new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
         ChatRequest request = request("request-1", "conversation-1");
         when(sessionService.asScoreUser(principal)).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong())).thenAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             Consumer<AiExecutionEvent> events = invocation.getArgument(2);
             events.accept(AiExecutionEvent.detail("subagent_started", "Specialist started.", Map.of(
@@ -480,9 +497,9 @@ class AiChatControllerTest {
         AiChatController controller = controller(new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
         ChatRequest request = request("request-1", "conversation-1");
         when(sessionService.asScoreUser(principal)).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
+        when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong())).thenAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             Consumer<AiExecutionEvent> events = invocation.getArgument(2);
             events.accept(AiExecutionEvent.tool("failed", "create_item failed.",
@@ -551,10 +568,10 @@ class AiChatControllerTest {
             AiChatController controller = controller(new AiRequestRegistry(), properties, executor);
             ChatRequest request = request("request-timeout", "conversation-timeout");
             when(sessionService.asScoreUser(principal)).thenReturn(user);
-            when(chatService.prepare(any(ChatRequest.class), eq(user)))
+            when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
                     .thenAnswer(invocation -> invocation.getArgument(0));
             when(chatService.rootAgentId()).thenReturn("configured-root-agent");
-            when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
+            when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong())).thenAnswer(invocation -> {
                 @SuppressWarnings("unchecked")
                 Consumer<AiExecutionEvent> events = invocation.getArgument(2);
                 events.accept(changeNotice());
@@ -577,7 +594,7 @@ class AiChatControllerTest {
                     .isEqualTo("confirmation-1");
             verify(chatService, timeout(1_000)).recordFailure(any(ChatRequest.class), eq(user),
                     eq("The assistant request stopped after no observable activity."),
-                    eq(CancellationException.class.getName()));
+                    eq(CancellationException.class.getName()), anyLong());
         }
     }
 
@@ -588,14 +605,14 @@ class AiChatControllerTest {
         CountDownLatch preparing = new CountDownLatch(1);
         CountDownLatch releasePreparation = new CountDownLatch(1);
         when(sessionService.asScoreUser(principal)).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user))).thenAnswer(invocation -> {
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong())).thenAnswer(invocation -> {
             preparing.countDown();
             if (!releasePreparation.await(1, TimeUnit.SECONDS)) {
                 throw new IllegalStateException("test preparation was not released");
             }
             return invocation.getArgument(0);
         });
-        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenReturn(
+        when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong())).thenReturn(
                 new ChatResponse("agent", "done", "conversation-1", false, List.of()));
 
         try (var caller = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -615,7 +632,8 @@ class AiChatControllerTest {
 
             releasePreparation.countDown();
             assertThat(first.get(1, TimeUnit.SECONDS).getStatusCode()).isEqualTo(HttpStatus.OK);
-            verify(chatService, times(1)).prepare(any(ChatRequest.class), eq(user));
+            verify(chatService, times(1)).prepare(
+                    any(ChatRequest.class), eq(user), anyLong());
         } finally {
             releasePreparation.countDown();
         }
@@ -627,7 +645,7 @@ class AiChatControllerTest {
         Principal wsPrincipal = mock(Principal.class);
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
         when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user))).thenThrow(
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong())).thenThrow(
                 new IllegalArgumentException("A prompt must not exceed the configured length."));
         AiChatSocketRequest socketRequest = new AiChatSocketRequest("request-1", "Help me", null,
                 "conversation-1", null, List.of(), null);
@@ -649,6 +667,34 @@ class AiChatControllerTest {
     }
 
     @Test
+    void closesTheExactGenerationEvenWhenRejectedRequestSettlementFails() {
+        AiRequestRegistry registry = spy(new AiRequestRegistry());
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        AiChatController controller = new AiChatController(
+                chatService, sessionService, messagingTemplate, webSocketUsers, registry,
+                mock(AiChangeConfirmationService.class), mock(AiElicitationService.class),
+                mock(AiChangeApprovalCoordinator.class), new ScoreAiProperties(), observability,
+                Runnable::run);
+        IllegalArgumentException admission =
+                new IllegalArgumentException("invalid prepared request");
+        when(sessionService.asScoreUser(principal)).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
+                .thenThrow(admission);
+        doThrow(new AiSharedStateUnavailableException("settlement unavailable"))
+                .when(registry).finish(any(AiRequestRegistry.Entry.class), eq(admission));
+
+        assertThatThrownBy(() -> controller.chat(
+                principal, request("request-settlement", "conversation-1")))
+                .isSameAs(admission)
+                .satisfies(failure -> assertThat(failure.getSuppressed()).hasSize(1));
+        ArgumentCaptor<Long> generation = ArgumentCaptor.forClass(Long.class);
+        verify(observability).recordAdmissionRejection(
+                any(ChatRequest.class), eq(user), eq(admission), any(String.class),
+                nullable(String.class), nullable(String.class), generation.capture());
+        assertThat(generation.getValue()).isPositive();
+    }
+
+    @Test
     void stillEndsTheTurnOnTheSocketWhenTheSharedRequestStateCannotBeSettled() {
         AiRequestRegistry registry = spy(new AiRequestRegistry());
         doThrow(new AiSharedStateUnavailableException("The AI request state stayed locked."))
@@ -657,9 +703,9 @@ class AiChatControllerTest {
         Principal wsPrincipal = mock(Principal.class);
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
         when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
-        when(chatService.prepare(any(ChatRequest.class), eq(user)))
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenReturn(
+        when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong())).thenReturn(
                 new ChatResponse("assistant", "Here is the comparison.", "conversation-stuck",
                         false, List.of()));
 
@@ -683,11 +729,11 @@ class AiChatControllerTest {
                     new AiRequestRegistry(), new ScoreAiProperties(), executor);
             ChatRequest request = request("request-provider", "conversation-provider");
             when(sessionService.asScoreUser(principal)).thenReturn(user);
-            when(chatService.prepare(any(ChatRequest.class), eq(user)))
+            when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
                     .thenAnswer(invocation -> invocation.getArgument(0));
             String providerMessage = "This request would exceed your rate limit tier of"
                     + " 50,000,000 input tokens per minute.";
-            when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenThrow(
+            when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong())).thenThrow(
                     new org.oagi.score.gateway.http.api.ai_management.provider.AiProviderException(
                             new org.oagi.score.gateway.http.api.ai_management.provider.AiProviderFailure(
                                     "org.springframework.ai.retry.TransientAiException", 429,
@@ -701,7 +747,7 @@ class AiChatControllerTest {
             // diagnostic failure class keeps the original provider exception.
             verify(chatService, timeout(1_000)).recordFailure(any(ChatRequest.class), eq(user),
                     eq(providerMessage + " (failed after 10 attempts)"),
-                    eq(IllegalStateException.class.getName()));
+                    eq(IllegalStateException.class.getName()), anyLong());
         }
     }
 

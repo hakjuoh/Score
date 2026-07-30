@@ -8,15 +8,18 @@ export function elicitationNotice(
   event: AiChatSocketEvent,
   expectedRequestId: string,
   expectedConversationId: string | undefined,
+  expectedGeneration: number | undefined,
   nowEpochMs = Date.now()
 ): AiElicitationNotice | undefined {
   if (event.type !== 'system' || event.subtype !== 'elicitation_required'
     || event.visibility !== 'visible' || event.requestId !== expectedRequestId
-    || !expectedConversationId || event.conversationId !== expectedConversationId) {
+    || !expectedConversationId || event.conversationId !== expectedConversationId
+    || !Number.isSafeInteger(expectedGeneration) || (expectedGeneration ?? 0) <= 0) {
     return undefined;
   }
   const metadata = record(event.metadata);
   if (!metadata || metadata['mode'] !== 'form'
+    || metadata['generation'] !== expectedGeneration
     || !validId(metadata['elicitationId'])
     || !validFutureInstant(metadata['expiresAt'], nowEpochMs)
     || typeof metadata['message'] !== 'string'
@@ -39,6 +42,7 @@ export function elicitationNotice(
   return {
     elicitationId: metadata['elicitationId'] as string,
     requestId: event.requestId,
+    generation: expectedGeneration,
     conversationId: expectedConversationId,
     expiresAt: metadata['expiresAt'] as string,
     message: metadata['message'],

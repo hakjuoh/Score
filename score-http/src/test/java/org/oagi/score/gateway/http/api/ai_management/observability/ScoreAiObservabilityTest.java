@@ -24,6 +24,9 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequ
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventListener;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
@@ -37,14 +40,17 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.List;
 import java.util.Map;
 import java.math.BigDecimal;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,6 +66,7 @@ class ScoreAiObservabilityTest {
     private SdkTracerProvider tracerProvider;
     private SdkMeterProvider meterProvider;
     private ScoreAiObservability observability;
+    private OpenTelemetry openTelemetry;
 
     @BeforeEach
     void setUp() {
@@ -69,11 +76,83 @@ class ScoreAiObservabilityTest {
                 .addSpanProcessor(SimpleSpanProcessor.create(spans))
                 .build();
         meterProvider = SdkMeterProvider.builder().registerMetricReader(metrics).build();
-        OpenTelemetry openTelemetry = OpenTelemetrySdk.builder()
+        openTelemetry = OpenTelemetrySdk.builder()
                 .setTracerProvider(tracerProvider)
                 .setMeterProvider(meterProvider)
                 .build();
         observability = new ScoreAiObservability(openTelemetry, "3.6.0-test");
+    }
+
+    @Test
+    void turnCompletionDoesNotHoldTurnStateWhileWaitingForEarlierCausalEvents()
+            throws Exception {
+        AtomicReference<ExecutionObserver> installed = new AtomicReference<>();
+        @SuppressWarnings("unchecked")
+        ObjectProvider<ExecutionObserver> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenAnswer(ignored -> installed.get());
+        ScoreAiObservability observed = new ScoreAiObservability(
+                openTelemetry, "3.6.0-test", Function.identity(), provider);
+        CountDownLatch agentListenerEntered = new CountDownLatch(1);
+        CountDownLatch releaseAgentListener = new CountDownLatch(1);
+        List<String> publishedTypes = new CopyOnWriteArrayList<>();
+        ExecutionEventListener blocker = event -> {
+            publishedTypes.add(event.type());
+            if (!"agent.run.started".equals(event.type())) return;
+            agentListenerEntered.countDown();
+            try {
+                releaseAgentListener.await(2, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        };
+        AiExecutionObservationExporter exporter = new AiExecutionObservationExporter(observed);
+        ExecutionEventPublisher publisher = ExecutionEventPublisher.forListeners(
+                List.of(blocker, exporter));
+        installed.set(publisher);
+        ChatRequest request = new ChatRequest("private", "request-lock", null,
+                "conversation-lock", null, List.of(), null,
+                "model", "medium", "ask");
+        ScoreAiObservability.Turn turn = observed.startTurn(request, null, 41, null, null);
+        ExecutionScope scope = new ExecutionScope(
+                "request-lock", "conversation-lock", "user-1", 41,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of());
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var agent = executor.submit(() -> publisher.observe(ExecutionObservation.of(
+                    "agent.run.started", scope, Map.of(
+                            "agent_run_id", "run-1", "agent_id", "researcher",
+                            "model_id", "model"))));
+            assertThat(agentListenerEntered.await(1, TimeUnit.SECONDS)).isTrue();
+            var completion = executor.submit(() -> turn.complete("COMPLETED", null));
+            assertThat(completion.isDone()).isFalse();
+
+            boolean admissionClosed = false;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+            while (System.nanoTime() < deadline) {
+                if (!observed.whileActive("request-lock", () -> { })) {
+                    admissionClosed = true;
+                    break;
+                }
+                Thread.onSpinWait();
+            }
+            assertThat(admissionClosed).isTrue();
+            observed.startModelCall("request-lock", "model", "openai", "assistant")
+                    .complete(null);
+            observed.startPlan("request-lock", "planner").close();
+            observed.recordGuardrails("request-lock", "agent_output", List.of(
+                    GuardrailDecision.of("closed", "1", GuardrailDecision.Action.REFUSE)));
+            assertThat(publishedTypes).doesNotContain(
+                    "model.call.started", "plan.started", "guardrail.decision");
+
+            releaseAgentListener.countDown();
+            agent.get(2, TimeUnit.SECONDS);
+            completion.get(2, TimeUnit.SECONDS);
+            executor.shutdown();
+        }
+
+        assertThat(spans.getFinishedSpanItems()).anySatisfy(span ->
+                assertThat(span.getAttributes().get(
+                        AttributeKey.stringKey("score.ai.agent_run.id"))).isEqualTo("run-1"));
     }
 
     @AfterEach
@@ -140,7 +219,9 @@ class ScoreAiObservabilityTest {
         assertThat(root.getAttributes().get(
                 AttributeKey.stringKey("gen_ai.workflow.name"))).isEqualTo("assistant");
         assertThat(root.getAttributes().get(
-                AttributeKey.booleanKey("gen_ai.workflow.nested"))).isNull();
+                AttributeKey.stringKey("score.ai.workflow.id"))).isEqualTo("assistant");
+        assertThat(root.getAttributes().get(
+                AttributeKey.booleanKey("score.ai.workflow.nested"))).isNull();
         assertThat(modelSpan.getName()).isEqualTo("chat claude-fable-5");
         assertThat(toolSpan.getName()).isEqualTo("execute_tool get_business_contexts");
         assertThat(root.getAttributes().get(
@@ -403,10 +484,12 @@ class ScoreAiObservabilityTest {
 
         SpanData root = span(spans.getFinishedSpanItems(), "score.ai.turn");
         SpanData child = spans.getFinishedSpanItems().stream()
-                .filter(span -> span.getName().equals("invoke_workflow research-group"))
+                .filter(span -> "research-group".equals(span.getAttributes().get(
+                        AttributeKey.stringKey("score.ai.workflow.name"))))
                 .findFirst().orElseThrow();
         SpanData grandchild = spans.getFinishedSpanItems().stream()
-                .filter(span -> span.getName().equals("invoke_workflow review-group"))
+                .filter(span -> "review-group".equals(span.getAttributes().get(
+                        AttributeKey.stringKey("score.ai.workflow.name"))))
                 .findFirst().orElseThrow();
         // The implicit depth-zero queue is not a Workflow, so the planned Workflow hangs off the
         // turn itself instead of an invented "invoke_workflow main" wrapper.
@@ -417,13 +500,46 @@ class ScoreAiObservabilityTest {
         assertThat(child.getAttributes().get(
                 AttributeKey.stringKey("score.ai.workflow.run_id"))).isEqualTo("child-1");
         assertThat(child.getAttributes().get(
-                AttributeKey.stringKey("gen_ai.workflow.name"))).isEqualTo("research-group");
+                AttributeKey.stringKey("gen_ai.workflow.name"))).isEqualTo("recursive");
         assertThat(child.getAttributes().get(
-                AttributeKey.booleanKey("gen_ai.workflow.nested"))).isTrue();
+                AttributeKey.booleanKey("score.ai.workflow.nested"))).isTrue();
         assertThat(child.getAttributes().get(
                 AttributeKey.longKey("score.ai.workflow.completed"))).isEqualTo(2L);
         assertThat(child.getAttributes().get(
                 AttributeKey.longKey("score.ai.workflow.failed"))).isZero();
+    }
+
+    @Test
+    void nestsADelegatedWorkflowUnderItsExplicitAgentNodeDuringParallelFanout() {
+        ChatRequest request = new ChatRequest("prompt", "request-agent-workflow", null,
+                "conversation-agent-workflow", null, List.of(), null,
+                "gpt-5", "medium", "ask");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        AiExecutionObservationExporter exporter = new AiExecutionObservationExporter(observability);
+        ExecutionScope scope = new ExecutionScope(request.requestId(), request.conversationId(),
+                "user-1", 1, ExecutionScope.Purpose.WORKER, List.of());
+        Map<String, Object> agent = Map.of(
+                "agent_run_id", "run-agent-a", "agent_id", "agent-a",
+                "model_id", "gpt-5", "workflow_node_id", "agent-a-node");
+
+        exporter.observe(ExecutionObservation.of("agent.run.started", scope, agent));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_started", "", Map.of(
+                        "node_id", "agent-a-delegated", "parent_node_id", "agent-a-node",
+                        "workflow", "delegated")));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_completed", "", Map.of(
+                        "node_id", "agent-a-delegated", "parent_node_id", "agent-a-node",
+                        "workflow", "delegated")));
+        exporter.observe(ExecutionObservation.of("agent.run.completed", scope, agent));
+        turn.complete("COMPLETED", null);
+
+        SpanData agentSpan = span(spans.getFinishedSpanItems(), "score.ai.agent");
+        SpanData workflowSpan = spans.getFinishedSpanItems().stream()
+                .filter(span -> "delegated".equals(span.getAttributes().get(
+                        AttributeKey.stringKey("score.ai.workflow.name"))))
+                .findFirst().orElseThrow();
+        assertThat(workflowSpan.getParentSpanId()).isEqualTo(agentSpan.getSpanId());
     }
 
     @Test
@@ -458,7 +574,7 @@ class ScoreAiObservabilityTest {
                 .filter(span -> !turnEntrypoint(span))
                 .toList();
         assertThat(workflows).hasSize(1);
-        assertThat(workflows.getFirst().getName()).isEqualTo("invoke_workflow research-group");
+        assertThat(workflows.getFirst().getName()).isEqualTo("invoke_workflow recursive");
         assertThat(workflows.getFirst().getAttributes().get(
                 AttributeKey.stringKey("score.ai.outcome"))).isEqualTo("refused");
     }
@@ -480,7 +596,8 @@ class ScoreAiObservabilityTest {
         turn.complete("COMPLETED", null);
 
         SpanData workflow = spans.getFinishedSpanItems().stream()
-                .filter(span -> span.getName().equals("invoke_workflow research-group"))
+                .filter(span -> "research-group".equals(span.getAttributes().get(
+                        AttributeKey.stringKey("score.ai.workflow.name"))))
                 .findFirst().orElseThrow();
         assertThat(workflow.getAttributes().get(
                 AttributeKey.stringKey("score.ai.outcome"))).isEqualTo("stalled");
@@ -506,7 +623,9 @@ class ScoreAiObservabilityTest {
                 .filter(span -> !turnEntrypoint(span))
                 .findFirst().orElseThrow();
         assertThat(workflow.getAttributes().get(
-                AttributeKey.stringKey("gen_ai.workflow.name"))).isEqualTo(workflowId);
+                AttributeKey.stringKey("gen_ai.workflow.name"))).isEqualTo("recursive");
+        assertThat(workflow.getAttributes().get(
+                AttributeKey.stringKey("score.ai.workflow.name"))).isEqualTo(workflowId);
     }
 
     @Test
@@ -1057,7 +1176,7 @@ class ScoreAiObservabilityTest {
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
                 mock(AiChatConversationRepository.class), new ObjectMapper(), mock(ScoreUser.class),
                 "conversation-recorder-tool", "request-recorder-tool", "gpt-5", "medium",
-                ignored -> { }, null, 0L, Map.of(), scope, exporter, observability);
+                ignored -> { }, null, 0L, Map.of(), scope, exporter::onEvent, observability);
         AtomicReference<String> callbackSpanId = new AtomicReference<>();
         ToolCallback callback = mock(ToolCallback.class);
         when(callback.getToolDefinition()).thenReturn(ToolDefinition.builder()

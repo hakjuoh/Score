@@ -45,6 +45,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,6 +59,80 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AiTrajectoryRecorderTest {
+
+    @Test
+    void persistsExactlyTheCanonicalIdentityDeliveredToExternalListeners() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+        AtomicReference<org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation>
+                observed = new AtomicReference<>();
+        var publisher = org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher
+                .forListeners(List.of(observed::set));
+        ExecutionScope scope = new ExecutionScope("request-1", "conversation-1", "user-1", 1,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        publisher.observe(ExecutionObservation.of("workflow.root.started", scope, Map.of()));
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", "gpt-5", "medium",
+                ignored -> { }, null, 0L, Map.of(), scope, publisher,
+                org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext.noop());
+
+        recorder.lifecycle("workflow_started", "private", Map.of(
+                "workflow", "research", "node_id", "workflow-1"));
+
+        ArgumentCaptor<AiChatTrajectoryStep> persisted =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq("conversation-1"), persisted.capture());
+        var event = observed.get();
+        assertThat(persisted.getValue().extra())
+                .containsEntry(org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher.EVENT_ID,
+                        event.attributes().get(org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher.EVENT_ID))
+                .containsEntry(org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher.EVENT_SEQUENCE, 2L)
+                .containsEntry(org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher.EVENT_OCCURRED_AT,
+                        event.occurredAt().toString());
+        assertThat(persisted.getValue().createdAt()).isEqualTo(event.occurredAt());
+    }
+
+    @Test
+    void reservesParallelModelRowsInTheSameStartOrderExportedToTelemetry() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(11L, 1L, Instant.now()),
+                        new AiChatStoredStep(12L, 2L, Instant.now()));
+        List<ExecutionObservation> exported = new ArrayList<>();
+        var publisher = org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher
+                .forListeners(List.of(exported::add));
+        ExecutionScope scope = new ExecutionScope("request-1", "conversation-1", "user-1", 1,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        publisher.observe(ExecutionObservation.of("workflow.root.started", scope, Map.of()));
+        exported.clear();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", "gpt-5", "medium",
+                ignored -> { }, null, 0L, Map.of(), scope, publisher,
+                ExecutionObservationContext.noop());
+
+        AiTrajectoryRecorder.ModelCallRecording first = recorder.beginModelCall("first");
+        AiTrajectoryRecorder.ModelCallRecording second = recorder.beginModelCall("second");
+        ChatResponse response = new ChatResponse(List.of(
+                new Generation(new AssistantMessage("done"))));
+        recorder.recordModelResponse(second, response, false);
+        recorder.recordModelResponse(first, response, false);
+
+        ArgumentCaptor<AiChatTrajectoryStep> starts = ArgumentCaptor.forClass(
+                AiChatTrajectoryStep.class);
+        verify(repository, times(2)).append(eq("conversation-1"), starts.capture());
+        assertThat(starts.getAllValues()).extracting(step -> step.extra().get("phase"))
+                .containsExactly("first", "second");
+        assertThat(starts.getAllValues()).extracting(step -> step.extra().get(
+                        org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher.EVENT_SEQUENCE))
+                .containsExactly(2L, 3L);
+        assertThat(exported).extracting(ExecutionObservation::type)
+                .containsExactly("ai.lifecycle", "ai.lifecycle", "ai.lifecycle", "ai.lifecycle");
+        assertThat(exported).extracting(event -> AiExecutionLifecycle.from(event)
+                        .orElseThrow().subtype())
+                .containsExactly("model_call_started", "model_call_started",
+                        "model_call_completed", "model_call_completed");
+    }
 
     @Test
     void terminalSealAndSideEffectStartHaveOneAtomicOrdering() throws Exception {
@@ -130,7 +205,7 @@ class AiTrajectoryRecorderTest {
             public String call(String input, ToolContext context) {
                 Thread transport = new Thread(() -> {
                     recorder.elicitationRequired(new AiElicitationNotice("elicitation-1",
-                            "request-1", "conversation-1", "Are you sure?", Map.of(),
+                            "request-1", 7L, "conversation-1", "Are you sure?", Map.of(),
                             Instant.now().plusSeconds(120)));
                     published.countDown();
                 });

@@ -9,6 +9,8 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutput;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.model.AiBoundedToolOutput;
@@ -122,6 +124,9 @@ public final class AiTrajectoryRecorder {
     private volatile boolean sealed;
     private volatile boolean usageAccountingSealed;
     private volatile String lastGuideContent;
+    private volatile ExecutionEventIdentity lastEventIdentity;
+    private final ThreadLocal<java.util.ArrayDeque<String>> activeAgentRuns =
+            ThreadLocal.withInitial(java.util.ArrayDeque::new);
 
     public AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
                                 ScoreUser requester, String conversationId, String requestId,
@@ -264,21 +269,31 @@ public final class AiTrajectoryRecorder {
                 modelName, reasoningEffort, realtimeEvents, contextBudget,
                 estimatedInputFloor.get(), promptTokenAccounting, eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovalIds,
-                traceMetadata(childNamespace), executionScope, observer, observationContext,
+                traceMetadata(childNamespace), childExecutionScope(childConversationId),
+                observer, observationContext,
                 true, kind);
-        repository.append(childConversationId, new AiChatTrajectoryStep(
+        child.persistWithoutRealtime(new AiChatTrajectoryStep(
                 requestId, "system", "settings_change", "debug",
                 "Child execution settings initialized.", null, modelName, reasoningEffort,
                 null, null, null,
-                child.traceMetadata(Map.of("agent_id", workerId)), 0, null, Instant.now()));
-        repository.append(childConversationId, new AiChatTrajectoryStep(
+                child.traceMetadata(Map.of("agent_id", workerId)), 0, null, null),
+                AiExecutionEvent.detail("child_settings_recorded", "", Map.of()));
+        child.persistWithoutRealtime(new AiChatTrajectoryStep(
                 requestId, "user",
                 kind == AiChatConversationKind.PARALLEL ? "parallel_assignment" : "assignment",
                 "visible",
                 Objects.requireNonNullElse(assignment, ""), null, modelName, reasoningEffort,
                 null, null, null,
-                child.traceMetadata(Map.of("copied_from_parent", true)), 0, true, Instant.now()));
+                child.traceMetadata(Map.of("copied_from_parent", true)), 0, true, null),
+                AiExecutionEvent.detail("child_assignment_recorded", "", Map.of()));
         return child;
+    }
+
+    private ExecutionScope childExecutionScope(String childConversationId) {
+        if (executionScope == null) return null;
+        return new ExecutionScope(executionScope.requestId(), childConversationId,
+                executionScope.requesterId(), executionScope.generation(),
+                ExecutionScope.Purpose.WORKER, executionScope.guardrailDecisionIds());
     }
 
     public String conversationId() {
@@ -293,6 +308,47 @@ public final class AiTrajectoryRecorder {
     public String modelName() { return modelName; }
     public String requestModelName() { return requestModelName; }
     public String modelProvider() { return modelProvider; }
+    public long executionGeneration() {
+        return executionScope != null ? executionScope.generation() : 0L;
+    }
+    public String activeAgentRunId() { return activeAgentRuns.get().peek(); }
+
+    public AgentRunActivation activateAgentRun(String runId) {
+        if (!StringUtils.hasText(runId)) return AgentRunActivation.noop();
+        java.util.ArrayDeque<String> runs = activeAgentRuns.get();
+        runs.push(runId.strip());
+        return () -> {
+            java.util.ArrayDeque<String> active = activeAgentRuns.get();
+            if (!active.isEmpty()) active.pop();
+            if (active.isEmpty()) activeAgentRuns.remove();
+        };
+    }
+
+    @FunctionalInterface
+    public interface AgentRunActivation extends AutoCloseable {
+        @Override
+        void close();
+
+        static AgentRunActivation noop() { return () -> { }; }
+    }
+
+    /** Records the accepted user turn without exposing its content to event listeners. */
+    public synchronized void recordUserMessage(String content, Map<String, Object> metadata) {
+        persistWithoutRealtime(new AiChatTrajectoryStep(
+                        requestId, "user", "user", "visible", Objects.requireNonNullElse(content, ""),
+                        null, modelName, reasoningEffort, null, null, null,
+                        traceMetadata(metadata), null, null, null),
+                AiExecutionEvent.detail("user_message_recorded", "", Map.of()));
+    }
+
+    /** Records the output-guarded assistant answer without exposing its content to listeners. */
+    public synchronized void recordAssistantMessage(String content, Map<String, Object> metadata) {
+        persistWithoutRealtime(new AiChatTrajectoryStep(
+                        requestId, "agent", "assistant", "visible", Objects.requireNonNullElse(content, ""),
+                        null, modelName, reasoningEffort, null, null, null,
+                        traceMetadata(metadata), 0, null, null),
+                AiExecutionEvent.detail("assistant_message_recorded", "", Map.of()));
+    }
 
     public Map<String, Object> observationContext() {
         Map<String, Object> context = new LinkedHashMap<>();
@@ -396,13 +452,15 @@ public final class AiTrajectoryRecorder {
             item.put("model_calls", agent.modelCalls());
             return Map.copyOf(item);
         }).toList());
-        repository.append(conversationId, new AiChatTrajectoryStep(
+        persistWithoutRealtime(new AiChatTrajectoryStep(
                 requestId, "system", FANOUT_USAGE_STEP_KIND, "debug",
                 "parallel".equals(executionKind)
                         ? "Parallel workflow usage settled." : "Multi-agent fan-out usage settled.",
                 null, modelName,
                 reasoningEffort,
-                null, null, Map.copyOf(metrics), traceMetadata(extra), 0, null, Instant.now()));
+                null, null, Map.copyOf(metrics), traceMetadata(extra), 0, null, null),
+                AiExecutionEvent.detail("fanout_usage_recorded", "", Map.of(
+                        "fanout_id", Objects.requireNonNullElse(fanoutId, "unknown"))));
         if (contextBudget != null) {
             emitContextUsage(contextBudget.usage(estimatedInputFloor.get(), true, "fanout_settled"));
         }
@@ -454,11 +512,11 @@ public final class AiTrajectoryRecorder {
         Map<String, Object> lifecycle = new LinkedHashMap<>(metadata != null ? metadata : Map.of());
         lifecycle.put("lifecycle_subtype", subtype);
         Map<String, Object> extra = traceMetadata(lifecycle);
-        repository.append(conversationId, new AiChatTrajectoryStep(
+        persistAndEmit(new AiChatTrajectoryStep(
                 requestId, "agent", "agent_lifecycle", "debug", content, null,
                 modelName, reasoningEffort,
-                null, null, null, extra, 0, null, Instant.now()));
-        emit(AiExecutionEvent.detail(subtype, content, extra));
+                null, null, null, extra, 0, null, null),
+                AiExecutionEvent.detail(subtype, content, extra));
     }
 
     /** Persists user-facing model narration as a normal chat row, not a progress pill. */
@@ -477,11 +535,11 @@ public final class AiTrajectoryRecorder {
         if (sealed || !StringUtils.hasText(content)) return;
         String stripped = content.strip();
         Map<String, Object> extra = traceMetadata(metadata);
-        repository.append(conversationId, new AiChatTrajectoryStep(
+        persistAndEmit(new AiChatTrajectoryStep(
                 requestId, "agent", "workflow_result", "visible", stripped, null,
                 modelName, reasoningEffort,
-                null, null, null, extra, 0, null, Instant.now()));
-        emit(AiExecutionEvent.detail("workflow_result", stripped, extra));
+                null, null, null, extra, 0, null, null),
+                AiExecutionEvent.detail("workflow_result", stripped, extra));
     }
 
     private boolean appendGuide(String content, Map<String, Object> metadata,
@@ -493,11 +551,11 @@ public final class AiTrajectoryRecorder {
         if (deduplicateAdjacent && stripped.equals(lastGuideContent)) return false;
         lastGuideContent = stripped;
         Map<String, Object> extra = traceMetadata(metadata);
-        repository.append(conversationId, new AiChatTrajectoryStep(
+        persistAndEmit(new AiChatTrajectoryStep(
                 requestId, "agent", "guide", "visible", stripped, null,
                 modelName, reasoningEffort,
-                null, null, null, extra, 0, null, Instant.now()));
-        emit(AiExecutionEvent.detail("guide", stripped, extra));
+                null, null, null, extra, 0, null, null),
+                AiExecutionEvent.detail("guide", stripped, extra));
         return true;
     }
 
@@ -530,31 +588,30 @@ public final class AiTrajectoryRecorder {
         Map<String, Object> extra = traceMetadata(metadata);
         String errorContent = StringUtils.hasText(reason)
                 ? reason.strip() : "The model provider could not complete the request.";
-        repository.append(conversationId, new AiChatTrajectoryStep(
+        persistAndEmit(new AiChatTrajectoryStep(
                 requestId, "system", "provider_error", "debug", errorContent, null,
                 modelName, reasoningEffort,
-                null, null, null, extra, 0, null, Instant.now()));
-        emit(AiExecutionEvent.detail("provider_error", errorContent, extra));
+                null, null, null, extra, 0, null, null),
+                AiExecutionEvent.detail("provider_error", errorContent, extra));
 
         String retryContent = "The model provider request failed; retrying (attempt "
                 + attempt + " of " + maxAttempts + ").";
-        repository.append(conversationId, new AiChatTrajectoryStep(
+        persistAndEmit(new AiChatTrajectoryStep(
                 requestId, "system", "provider_retry", "debug", retryContent, null,
                 modelName, reasoningEffort,
-                null, null, null, extra, 0, null, Instant.now()));
-        emit(AiExecutionEvent.detail("provider_retry", retryContent, extra));
+                null, null, null, extra, 0, null, null),
+                AiExecutionEvent.detail("provider_retry", retryContent, extra));
     }
 
     public synchronized void progress(String content) {
         if (sealed || !StringUtils.hasText(content)) {
             return;
         }
-        repository.append(conversationId, new AiChatTrajectoryStep(
+        persistAndEmit(new AiChatTrajectoryStep(
                 requestId, "system", "progress", "debug", content, null, null,
                 null, null, null, traceMetadata(
                         Map.of("event_sequence", eventSequence.incrementAndGet())),
-                0, null, Instant.now()));
-        emit(AiExecutionEvent.progress(content));
+                0, null, null), AiExecutionEvent.progress(content));
     }
 
     /** Emits streamed visible content without persisting partial duplicates. */
@@ -624,6 +681,7 @@ public final class AiTrajectoryRecorder {
         }
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("elicitationId", notice.elicitationId());
+        metadata.put("generation", notice.generation());
         metadata.put("expiresAt", notice.expiresAt().toString());
         metadata.put("mode", "form");
         metadata.put("message", notice.message());
@@ -632,25 +690,46 @@ public final class AiTrajectoryRecorder {
                 "The assistant needs your input before it can continue.", metadata));
     }
 
-    public synchronized void recordModelResponse(ChatResponse response, String phase) {
-        recordModelResponse(response, phase, false);
+    public synchronized ModelCallRecording beginModelCall(String phase) {
+        if (sealed) return ModelCallRecording.noop();
+        String normalizedPhase = StringUtils.hasText(phase) ? phase : "model";
+        Map<String, Object> extra = traceMetadata(Map.of(
+                "phase", normalizedPhase, "status", "started"));
+        AiChatStoredStep stored = persistWithoutRealtime(new AiChatTrajectoryStep(
+                        requestId, "agent", "model_call", "debug", "", null,
+                        modelName, reasoningEffort, null, null, null, extra, 1, null, null),
+                AiExecutionEvent.detail("model_call_started", "", Map.of(
+                        "phase", normalizedPhase,
+                        "model", Objects.requireNonNullElse(requestModelName, "unknown"),
+                        "provider", Objects.requireNonNullElse(modelProvider, "unknown"))));
+        return new ModelCallRecording(stored != null ? stored.id() : -1L,
+                normalizedPhase, lastEventIdentity);
+    }
+
+    public synchronized ExecutionEventIdentity recordModelResponse(ChatResponse response, String phase) {
+        return recordModelResponse(new ModelCallRecording(-1L,
+                StringUtils.hasText(phase) ? phase : "model", null), response, false);
     }
 
     /** Records a response aggregated from streaming chunks with cache metadata loss in mind. */
-    public synchronized void recordStreamingModelResponse(ChatResponse response, String phase) {
-        recordModelResponse(response, phase, true);
+    public synchronized ExecutionEventIdentity recordStreamingModelResponse(ChatResponse response, String phase) {
+        return recordModelResponse(new ModelCallRecording(-1L,
+                StringUtils.hasText(phase) ? phase : "model", null), response, true);
     }
 
-    private void recordModelResponse(ChatResponse response, String phase, boolean streaming) {
+    public synchronized ExecutionEventIdentity recordModelResponse(
+            ModelCallRecording call, ChatResponse response, boolean streaming) {
         if (response == null || response.getResults().isEmpty()) {
-            return;
+            return null;
         }
         AiMetricsSnapshot metricsSnapshot = metrics(response, streaming);
         if (sealed) {
             if (!usageAccountingSealed) recordOwnUsage(metricsSnapshot);
-            return;
+            return null;
         }
-        String normalizedPhase = StringUtils.hasText(phase) ? phase : "model";
+        ModelCallRecording activeCall = call != null ? call : ModelCallRecording.noop();
+        String normalizedPhase = StringUtils.hasText(activeCall.phase())
+                ? activeCall.phase() : "model";
         boolean reasoningPresent = StringUtils.hasText(reasoning(response.getResults()));
         String message = visibleMessage(response.getResults());
         List<Map<String, Object>> toolCalls = toolCalls(response.getResults());
@@ -674,19 +753,34 @@ public final class AiTrajectoryRecorder {
         }
         extra = new LinkedHashMap<>(traceMetadata(extra));
 
-        AiChatStoredStep stored = repository.append(conversationId,
-                new AiChatTrajectoryStep(requestId, "agent", "model_call", "debug",
+        AiChatTrajectoryStep completed = new AiChatTrajectoryStep(
+                        requestId, "agent", "model_call", "debug",
                         "", null,
                         StringUtils.hasText(modelName) ? modelName : response.getMetadata().getModel(),
                         reasoningEffort,
-                        auditedToolCalls, null, metrics, extra, 1, null, Instant.now()));
+                        auditedToolCalls, null, metrics, extra, 1, null, null);
+        AiChatStoredStep legacyStored = null;
+        ExecutionEventIdentity completion;
+        if (activeCall.stepId() > 0) {
+            completion = completeModelCall(activeCall, completed, "completed");
+        } else {
+            legacyStored = persistWithoutRealtime(completed, AiExecutionEvent.detail(
+                    "model_call_completed", "", Map.of(
+                            "phase", normalizedPhase,
+                            "model", Objects.requireNonNullElse(requestModelName, "unknown"),
+                            "provider", Objects.requireNonNullElse(modelProvider, "unknown"))));
+            completion = lastEventIdentity;
+        }
 
-        AiObservationAccumulator observations = new AiObservationAccumulator(stored.id(), toolCalls);
-        for (Map<String, Object> call : toolCalls) {
-            String name = Objects.toString(call.get("function_name"), "tool");
-            String callId = Objects.toString(call.get("tool_call_id"), UUID.randomUUID().toString());
+        long observationStepId = activeCall.stepId() > 0
+                ? activeCall.stepId() : legacyStored != null ? legacyStored.id() : 0L;
+        AiObservationAccumulator observations = new AiObservationAccumulator(
+                observationStepId, toolCalls);
+        for (Map<String, Object> toolCall : toolCalls) {
+            String name = Objects.toString(toolCall.get("function_name"), "tool");
+            String callId = Objects.toString(toolCall.get("tool_call_id"), UUID.randomUUID().toString());
             pendingTools.computeIfAbsent(name, ignored -> new ConcurrentLinkedQueue<>())
-                    .add(new AiPendingTool(callId, name, call.get("arguments"), observations,
+                    .add(new AiPendingTool(callId, name, toolCall.get("arguments"), observations,
                             toolSequence.getAndIncrement()));
         }
         recordOwnUsage(metricsSnapshot);
@@ -695,6 +789,67 @@ public final class AiTrajectoryRecorder {
         if (metricsSnapshot != null && contextBudget != null && !subagentScope) {
             emitContextUsage(contextBudget.usage(metricsSnapshot.contextInputTokens(),
                     metricsSnapshot.estimated(), metricsSnapshot.estimated() ? "estimate_floor" : "provider"));
+        }
+        return completion;
+    }
+
+    public synchronized ExecutionEventIdentity failModelCall(ModelCallRecording call,
+                                                              Throwable failure) {
+        if (call == null || call.stepId() <= 0 || sealed) return null;
+        Map<String, Object> extra = new LinkedHashMap<>(traceMetadata(Map.of(
+                "phase", call.phase(), "status", "failed",
+                "failure_type", failure != null ? failure.getClass().getName() : "unknown")));
+        AiChatTrajectoryStep failed = new AiChatTrajectoryStep(
+                requestId, "agent", "model_call", "debug", "", null, modelName,
+                reasoningEffort, null, null, null, extra, 1, null, null);
+        return completeModelCall(call, failed, "failed");
+    }
+
+    private ExecutionEventIdentity completeModelCall(ModelCallRecording call,
+                                                       AiChatTrajectoryStep step,
+                                                       String outcome) {
+        if (call.stepId() <= 0) return null;
+        if (executionScope == null) {
+            repository.updateModelCall(conversationId, call.stepId(), step);
+            return null;
+        }
+        java.util.concurrent.atomic.AtomicReference<ExecutionEventIdentity> identity =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        ExecutionObservation observation = AiExecutionLifecycle.from(AiExecutionEvent.detail(
+                "model_call_" + outcome, "", Map.of(
+                        "phase", call.phase(),
+                        "model", Objects.requireNonNullElse(requestModelName, "unknown"),
+                        "provider", Objects.requireNonNullElse(modelProvider, "unknown"))))
+                .observation(executionScope, Instant.now());
+        observer.publish(observation, event -> {
+            ExecutionEventIdentity terminal = ExecutionEventIdentity.from(event);
+            identity.set(terminal);
+            Map<String, Object> extra = new LinkedHashMap<>(
+                    step.extra() != null ? step.extra() : Map.of());
+            if (call.started() != null) {
+                extra.put(ExecutionEventPublisher.EVENT_ID, call.started().eventId());
+                extra.put(ExecutionEventPublisher.EVENT_SEQUENCE, call.started().sequence());
+                extra.put(ExecutionEventPublisher.EVENT_OCCURRED_AT,
+                        call.started().occurredAt().toString());
+            }
+            if (terminal != null) {
+                extra.put("score.event.end.id", terminal.eventId());
+                extra.put("score.event.end.sequence", terminal.sequence());
+                extra.put("score.event.end.occurred_at", terminal.occurredAt().toString());
+            }
+            repository.updateModelCall(conversationId, call.stepId(),
+                    new AiChatTrajectoryStep(step.requestId(), step.source(), step.messageKind(),
+                            step.visibility(), step.message(), step.reasoningContent(),
+                            step.modelName(), step.reasoningEffort(), step.toolCalls(),
+                            step.observation(), step.metrics(), Map.copyOf(extra),
+                            step.llmCallCount(), step.isCopiedContext(), step.createdAt()));
+        });
+        return identity.get();
+    }
+
+    public record ModelCallRecording(long stepId, String phase, ExecutionEventIdentity started) {
+        public static ModelCallRecording noop() {
+            return new ModelCallRecording(-1L, "model", null);
         }
     }
 
@@ -1044,12 +1199,12 @@ public final class AiTrajectoryRecorder {
         extra.put("read_only", readOnlyToolNames.contains(pending.name()));
         extra.put("tool_call_sequence", pending.sequence());
         extra.put("arguments", boundedRedactedValue(pending.arguments()));
-        repository.append(conversationId, new AiChatTrajectoryStep(
+        persistAndEmit(new AiChatTrajectoryStep(
                 requestId, "agent", "tool_call_update", "debug",
                 "Calling " + pending.name() + ".", null, modelName,
                 reasoningEffort,
-                null, null, null, traceMetadata(extra), 0, null, Instant.now()));
-        emit(AiExecutionEvent.tool("started", "Calling " + pending.name() + ".",
+                null, null, null, traceMetadata(extra), 0, null, null),
+                AiExecutionEvent.tool("started", "Calling " + pending.name() + ".",
                 pending.id(), pending.name(), pending.sequence(),
                 toolObservationMetadata(pending.name())));
     }
@@ -1101,11 +1256,7 @@ public final class AiTrajectoryRecorder {
                 "duration_ms", duration.toMillis(),
                 "success", successful));
         pending.observations().results().put(pending.id(), result);
-        if (pending.observations().stepId() > 0) {
-            repository.updateObservation(conversationId, pending.observations().stepId(),
-                    Map.of("results", pending.observations().orderedResults()));
-        }
-
+        updateModelObservation(pending);
         String detail = toolDetail(pending, output, failure);
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("tool_call_id", pending.id());
@@ -1119,10 +1270,10 @@ public final class AiTrajectoryRecorder {
         extra.put("result_truncated", resultTruncated);
         if (failure != null) extra.put("failure_type", failure.getClass().getName());
         extra = new LinkedHashMap<>(traceMetadata(extra));
-        repository.append(conversationId, new AiChatTrajectoryStep(
+        AiChatTrajectoryStep completedStep = new AiChatTrajectoryStep(
                 requestId, "agent", "tool_call", "debug", detail, null, modelName,
                 reasoningEffort,
-                null, null, null, extra, 0, null, Instant.now()));
+                null, null, null, extra, 0, null, null);
         Map<String, Object> eventMetadata = new LinkedHashMap<>();
         eventMetadata.put("toolDetail", detail);
         eventMetadata.put("duration_ms", duration.toMillis());
@@ -1130,11 +1281,14 @@ public final class AiTrajectoryRecorder {
         eventMetadata.put("result_truncated", resultTruncated);
         eventMetadata.put("read_only", readOnlyToolNames.contains(pending.name()));
         eventMetadata.put("mcp", mcpToolNames.contains(pending.name()));
+        if (StringUtils.hasText(activeAgentRunId())) {
+            eventMetadata.put("agent_run_id", activeAgentRunId());
+        }
         if (mcpToolNames.contains(pending.name())) {
             eventMetadata.putAll(mcpObservationMetadata());
         }
         if (failure != null) eventMetadata.put("failure_type", failure.getClass().getName());
-        emit(AiExecutionEvent.tool(status,
+        persistAndEmit(completedStep, AiExecutionEvent.tool(status,
                 switch (status) {
                     case "failed" -> pending.name() + " failed.";
                     case "blocked" -> pending.name() + " is awaiting approval.";
@@ -1143,6 +1297,20 @@ public final class AiTrajectoryRecorder {
                     default -> pending.name() + " completed.";
                 },
                 pending.id(), pending.name(), pending.sequence(), Map.copyOf(eventMetadata)));
+    }
+
+    private void updateModelObservation(AiPendingTool pending) {
+        if (pending.observations().stepId() <= 0) return;
+        Map<String, Object> observation = Map.of(
+                "results", pending.observations().orderedResults());
+        if (executionScope == null) {
+            repository.updateObservation(conversationId, pending.observations().stepId(), observation);
+            return;
+        }
+        observer.publish(ExecutionObservation.of("model.observation.updated", executionScope,
+                        Map.of("tool_id", pending.id(), "tool_name", pending.name())),
+                ignored -> repository.updateObservation(conversationId,
+                        pending.observations().stepId(), observation));
     }
 
     /** Returns the stable confirmation identity embedded by the change guard. */
@@ -1392,8 +1560,13 @@ public final class AiTrajectoryRecorder {
     }
 
     private Map<String, Object> toolObservationMetadata(String toolName) {
-        if (!mcpToolNames.contains(toolName)) return Map.of("mcp", false);
-        return Map.copyOf(mcpObservationMetadata());
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("mcp", mcpToolNames.contains(toolName));
+        if (mcpToolNames.contains(toolName)) metadata.putAll(mcpObservationMetadata());
+        if (StringUtils.hasText(activeAgentRunId())) {
+            metadata.put("agent_run_id", activeAgentRunId());
+        }
+        return Map.copyOf(metadata);
     }
 
     private Map<String, Object> mcpObservationMetadata() {
@@ -1432,23 +1605,99 @@ public final class AiTrajectoryRecorder {
         if (metadata != null) merged.putAll(metadata);
         // The server-owned namespace wins over provider/tool metadata.
         merged.putAll(traceContext);
+        if (StringUtils.hasText(activeAgentRunId())) {
+            merged.put("agent_run_id", activeAgentRunId());
+        }
         return Map.copyOf(merged);
+    }
+
+    private AiChatStoredStep persistAndEmit(AiChatTrajectoryStep step, AiExecutionEvent event) {
+        return persist(step, event, true);
+    }
+
+    private AiChatStoredStep persistWithoutRealtime(AiChatTrajectoryStep step,
+                                                     AiExecutionEvent event) {
+        return persist(step, event, false);
+    }
+
+    private AiChatStoredStep persist(AiChatTrajectoryStep step, AiExecutionEvent event,
+                                     boolean deliverRealtime) {
+        Objects.requireNonNull(step, "step");
+        Objects.requireNonNull(event, "event");
+        if (executionScope == null) {
+            AiChatStoredStep stored = repository.append(conversationId,
+                    canonicalStep(step, Instant.now(), Map.of()));
+            if (deliverRealtime) emit(event);
+            lastEventIdentity = null;
+            return stored;
+        }
+        java.util.concurrent.atomic.AtomicReference<AiChatStoredStep> stored =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        ExecutionObservation observation = AiExecutionLifecycle.from(event)
+                .observation(executionScope, Instant.now());
+        observer.publish(observation, published -> {
+            lastEventIdentity = ExecutionEventIdentity.from(published);
+            stored.set(repository.append(conversationId,
+                    canonicalStep(step, published.occurredAt(), published.attributes())));
+        }, deliverRealtime ? published -> deliverRealtime(event, published) : ignored -> { });
+        return stored.get();
+    }
+
+    public record ExecutionEventIdentity(String eventId, long sequence, Instant occurredAt) {
+        private static ExecutionEventIdentity from(ExecutionObservation event) {
+            Object id = event.attributes().get(ExecutionEventPublisher.EVENT_ID);
+            Object sequence = event.attributes().get(ExecutionEventPublisher.EVENT_SEQUENCE);
+            if (id == null || !(sequence instanceof Number number)) return null;
+            return new ExecutionEventIdentity(id.toString(), number.longValue(), event.occurredAt());
+        }
+    }
+
+    private AiChatTrajectoryStep canonicalStep(AiChatTrajectoryStep step, Instant occurredAt,
+                                                Map<String, Object> eventAttributes) {
+        Map<String, Object> extra = new LinkedHashMap<>(
+                step.extra() != null ? step.extra() : Map.of());
+        copyEventAttribute(eventAttributes, extra, ExecutionEventPublisher.EVENT_ID);
+        copyEventAttribute(eventAttributes, extra, ExecutionEventPublisher.EVENT_SEQUENCE);
+        copyEventAttribute(eventAttributes, extra, ExecutionEventPublisher.EVENT_OCCURRED_AT);
+        return new AiChatTrajectoryStep(step.requestId(), step.source(), step.messageKind(),
+                step.visibility(), step.message(), step.reasoningContent(), step.modelName(),
+                step.reasoningEffort(), step.toolCalls(), step.observation(), step.metrics(),
+                extra.isEmpty() ? Map.of() : Map.copyOf(extra), step.llmCallCount(),
+                step.isCopiedContext(), occurredAt);
+    }
+
+    private void copyEventAttribute(Map<String, Object> source, Map<String, Object> target,
+                                    String name) {
+        if (source != null && source.get(name) != null) target.put(name, source.get(name));
     }
 
     private synchronized void emit(AiExecutionEvent event) {
         if (sealed) return;
-        AiExecutionEvent realtimeEvent = new AiExecutionEvent(
-                event.type(), event.subtype(), event.content(),
-                event.toolCallId(), event.toolName(), event.toolCallSequence(),
-                realtimeMetadata(event.metadata()));
         if (executionScope != null) {
             try {
-                observer.observe(AiExecutionLifecycle.from(realtimeEvent).observation(executionScope));
+                observer.publish(AiExecutionLifecycle.from(event).observation(
+                        executionScope, Instant.now()), ignored -> { },
+                        published -> deliverRealtime(event, published));
             } catch (RuntimeException failure) {
                 LOGGER.warn("Could not observe AI trajectory event {} for request {}",
                         event.subtype(), requestId, failure);
             }
+            return;
         }
+        deliverRealtime(event, null);
+    }
+
+    private void deliverRealtime(AiExecutionEvent event, ExecutionObservation canonical) {
+        Map<String, Object> metadata = new LinkedHashMap<>(realtimeMetadata(event.metadata()));
+        if (canonical != null) {
+            copyEventAttribute(canonical.attributes(), metadata, ExecutionEventPublisher.EVENT_ID);
+            copyEventAttribute(canonical.attributes(), metadata, ExecutionEventPublisher.EVENT_SEQUENCE);
+            copyEventAttribute(canonical.attributes(), metadata, ExecutionEventPublisher.EVENT_OCCURRED_AT);
+        }
+        AiExecutionEvent realtimeEvent = new AiExecutionEvent(
+                event.type(), event.subtype(), event.content(),
+                event.toolCallId(), event.toolName(), event.toolCallSequence(),
+                metadata.isEmpty() ? Map.of() : Map.copyOf(metadata));
         try {
             realtimeEvents.accept(realtimeEvent);
         } catch (RuntimeException failure) {

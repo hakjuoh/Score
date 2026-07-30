@@ -117,8 +117,7 @@ public class AiChatController {
                             @Qualifier("scoreAiChatExecutor") Executor executor) {
         this(chatService, sessionService, messagingTemplate, webSocketUsers, requests,
                 changeConfirmations, elicitations, changeApprovals, aiProperties,
-                observability, ExecutionObserver.composite(
-                        executionObservers.orderedStream().toList()), executor);
+                observability, executionObservers.getIfAvailable(ExecutionObserver::noop), executor);
     }
 
     AiChatController(ChatService chatService, SessionService sessionService,
@@ -223,7 +222,7 @@ public class AiChatController {
                             }
                         }
                     }
-                });
+                }, entry.generation());
                 return response.withEvents(orderedResponseEvents(responseEvents));
             }, executor);
         } catch (RuntimeException failure) {
@@ -243,7 +242,8 @@ public class AiChatController {
                 clearChangeApprovalState(prepared.requestId());
                 if ("FAILED".equals(status) || "TIMED_OUT".equals(status)) {
                     chatService.recordFailure(prepared, requester,
-                            terminalMessage(status, throwable), failureClass(throwable));
+                            terminalMessage(status, throwable), failureClass(throwable),
+                            entry.generation());
                 }
                 if ("COMPLETED".equals(status)) {
                     return ResponseEntity.ok(response);
@@ -421,7 +421,7 @@ public class AiChatController {
                             requests.progress(prepared.requestId());
                             send(requester, destination, socketEvent(
                                     prepared, sequence.incrementAndGet(), event));
-                        });
+                        }, entry.generation());
             }, executor);
         } catch (RuntimeException failure) {
             finishBeforeExecution(entry, prepared, requester, observation,
@@ -458,7 +458,8 @@ public class AiChatController {
                             prepared.conversationId(), entry.generation()));
                 } else {
                     String message = terminalMessage(status, throwable);
-                    chatService.recordFailure(prepared, requester, message, failureClass(throwable));
+                    chatService.recordFailure(prepared, requester, message,
+                            failureClass(throwable), entry.generation());
                     send(requester, destination, AiChatSocketEvent.terminalError(prepared.requestId(),
                             prepared.conversationId(), entry.generation(), status, message));
                 }
@@ -481,16 +482,31 @@ public class AiChatController {
         try {
             status = requests.finish(entry, failure);
         } catch (RuntimeException finishFailure) {
-            observation.complete("FAILED", finishFailure);
-            throw finishFailure;
+            status = "FAILED";
+            if (finishFailure != failure) failure.addSuppressed(finishFailure);
+            LOGGER.error("Could not settle rejected AI request {}", entry.requestId(),
+                    finishFailure);
         }
+        String terminalStatus = status;
+        finishRejectedRequestStep(entry, failure, "clear its approval state",
+                () -> clearChangeApprovalState(request.requestId()));
+        finishRejectedRequestStep(entry, failure, "record its admission rejection",
+                () -> observation.admissionRejected(reason));
+        finishRejectedRequestStep(entry, failure, "persist its trajectory failure",
+                () -> chatService.recordFailure(request, requester,
+                        terminalMessage(terminalStatus, failure), failureClass(failure), entry.generation()));
+        finishRejectedRequestStep(entry, failure, "complete its observation",
+                () -> observation.complete("admission_rejected", failure));
+    }
+
+    private void finishRejectedRequestStep(AiRequestRegistry.Entry entry, RuntimeException failure,
+                                           String operation, Runnable action) {
         try {
-            clearChangeApprovalState(request.requestId());
-            observation.admissionRejected(reason);
-            chatService.recordFailure(request, requester,
-                    terminalMessage(status, failure), failureClass(failure));
-        } finally {
-            observation.complete("admission_rejected", failure);
+            action.run();
+        } catch (RuntimeException stepFailure) {
+            if (stepFailure != failure) failure.addSuppressed(stepFailure);
+            LOGGER.error("Could not {} for rejected AI request {}", operation, entry.requestId(),
+                    stepFailure);
         }
     }
 
@@ -560,9 +576,9 @@ public class AiChatController {
         ScoreUser requester = webSocketUsers.resolve(principal, headers.getSessionAttributes());
         try {
             elicitations.decide(requester, command.requestId(), command.conversationId(),
-                    command.elicitationId(), command.action(), command.content());
+                    command.elicitationId(), command.generation(), command.action(), command.content());
             observeLifecycle(requester, command.requestId(), command.conversationId(),
-                    "elicitation_decision_accepted",
+                    command.generation(), "elicitation_decision_accepted",
                     Map.of("elicitationId", command.elicitationId()));
             send(requester, queue(command.requestId()), AiChatSocketEvent.system(
                     command.requestId(), command.conversationId(), null,
@@ -570,7 +586,7 @@ public class AiChatController {
                     Map.of("elicitationId", command.elicitationId())));
         } catch (RuntimeException exception) {
             observeLifecycle(requester, command.requestId(), command.conversationId(),
-                    "elicitation_decision_rejected",
+                    command.generation(), "elicitation_decision_rejected",
                     Map.of("elicitationId", command.elicitationId()));
             send(requester, queue(command.requestId()), AiChatSocketEvent.system(
                     command.requestId(), command.conversationId(), null,
@@ -637,17 +653,22 @@ public class AiChatController {
                     admissionReason(failure), traceparent, tracestate);
             throw failure;
         }
-        ScoreAiObservability.Turn observation = observability.startTurn(
-                correlated, requester, entry.generation(), traceparent, tracestate);
         try {
-            ChatRequest prepared = chatService.prepare(correlated, requester);
+            ChatRequest prepared = chatService.prepare(correlated, requester, entry.generation());
             requests.bindConversation(entry, prepared.conversationId());
-            observation.prepared(prepared);
+            ScoreAiObservability.Turn observation = observability.startTurn(
+                    prepared, requester, entry.generation(), traceparent, tracestate);
             return new Admission(prepared, entry, deadline, observation);
         } catch (RuntimeException | Error failure) {
-            requests.finish(entry, failure);
-            observation.admissionRejected(admissionReason(failure));
-            observation.complete("admission_rejected", failure);
+            try {
+                requests.finish(entry, failure);
+            } catch (RuntimeException | Error settlementFailure) {
+                if (settlementFailure != failure) failure.addSuppressed(settlementFailure);
+                LOGGER.error("Could not settle rejected AI request {}", entry.requestId(),
+                        settlementFailure);
+            }
+            observability.recordAdmissionRejection(correlated, requester, failure,
+                    admissionReason(failure), traceparent, tracestate, entry.generation());
             throw failure;
         }
     }
@@ -801,14 +822,17 @@ public class AiChatController {
     }
 
     private void observeLifecycle(ScoreUser requester, String requestId, String conversationId,
-                                  String subtype, Map<String, Object> metadata) {
+                                  Long generation, String subtype,
+                                  Map<String, Object> metadata) {
         if (!StringUtils.hasText(requestId) || !StringUtils.hasText(conversationId)) return;
+        if (generation == null || generation <= 0L) return;
         String requesterId = requester != null && requester.userId() != null
                 ? requester.userId().value().toString()
                 : requester != null && StringUtils.hasText(requester.username())
                 ? requester.username() : "unknown";
         try {
-            ExecutionScope scope = new ExecutionScope(requestId, conversationId, requesterId, 0L,
+            ExecutionScope scope = new ExecutionScope(requestId, conversationId, requesterId,
+                    generation,
                     ExecutionScope.Purpose.USER_RESPONSE, List.of());
             observer.observe(new AiExecutionLifecycle(
                     "detail", subtype, null, null, null, metadata).observation(scope));
@@ -817,6 +841,7 @@ public class AiChatController {
                     subtype, requestId, failure);
         }
     }
+
 
     static AiChatSocketEvent socketEvent(ChatRequest request, long sequence, AiExecutionEvent event) {
         if ("assistant_update".equals(event.type())) {

@@ -45,6 +45,9 @@ class TrajectoryRecordingAdvisorTest {
         when(request.prompt()).thenReturn(prompt);
         when(prompt.getInstructions()).thenReturn(List.of());
         when(request.context()).thenReturn(Map.of(AiTrajectoryRecorder.PHASE_CONTEXT_KEY, "assistant"));
+        AiTrajectoryRecorder.ModelCallRecording recording =
+                AiTrajectoryRecorder.ModelCallRecording.noop();
+        when(recorder.beginModelCall("assistant")).thenReturn(recording);
         StreamAdvisorChain chain = mock(StreamAdvisorChain.class);
         when(chain.nextStream(request)).thenReturn(Flux.just(chunk("Hel"), chunk("lo")));
 
@@ -53,9 +56,8 @@ class TrajectoryRecordingAdvisorTest {
 
         assertThat(chunks).hasSize(2);
         verify(recorder).recordToolResponses(List.of());
-        verify(recorder).recordStreamingModelResponse(argThat(response -> response != null
-                && "Hello".equals(response.getResult().getOutput().getText())),
-                org.mockito.ArgumentMatchers.eq("assistant"));
+        verify(recorder).recordModelResponse(eq(recording), argThat(response -> response != null
+                && "Hello".equals(response.getResult().getOutput().getText())), eq(true));
     }
 
     @Test
@@ -65,6 +67,9 @@ class TrajectoryRecordingAdvisorTest {
         when(recorder.modelName()).thenReturn("claude-fable-5_alias");
         when(recorder.requestModelName()).thenReturn("claude-fable-5");
         when(recorder.modelProvider()).thenReturn("anthropic");
+        AiTrajectoryRecorder.ModelCallRecording recording =
+                AiTrajectoryRecorder.ModelCallRecording.noop();
+        when(recorder.beginModelCall("assistant")).thenReturn(recording);
         ChatClientRequest request = request("assistant");
         StreamAdvisorChain chain = mock(StreamAdvisorChain.class);
         when(chain.nextStream(request)).thenReturn(Flux.just(chunk(""), chunk("done")));
@@ -72,7 +77,7 @@ class TrajectoryRecordingAdvisorTest {
         ScoreAiObservability.ModelCall modelCall = mock(ScoreAiObservability.ModelCall.class);
         when(observability.startModelCall(
                 "request-stream", "claude-fable-5_alias", "claude-fable-5",
-                "anthropic", "assistant"))
+                "anthropic", "assistant", null, null, null))
                 .thenReturn(modelCall);
 
         new TrajectoryRecordingAdvisor(recorder, observability)
@@ -90,6 +95,9 @@ class TrajectoryRecordingAdvisorTest {
         when(recorder.modelName()).thenReturn("claude-fable-5_alias");
         when(recorder.requestModelName()).thenReturn("claude-fable-5");
         when(recorder.modelProvider()).thenReturn("anthropic");
+        AiTrajectoryRecorder.ModelCallRecording recording =
+                AiTrajectoryRecorder.ModelCallRecording.noop();
+        when(recorder.beginModelCall("assistant")).thenReturn(recording);
         ChatClientRequest request = request("assistant");
         StreamAdvisorChain chain = mock(StreamAdvisorChain.class);
         IllegalStateException failure = new IllegalStateException("provider unavailable");
@@ -98,7 +106,7 @@ class TrajectoryRecordingAdvisorTest {
         ScoreAiObservability.ModelCall modelCall = mock(ScoreAiObservability.ModelCall.class);
         when(observability.startModelCall(
                 "request-failure", "claude-fable-5_alias", "claude-fable-5",
-                "anthropic", "assistant"))
+                "anthropic", "assistant", null, null, null))
                 .thenReturn(modelCall);
 
         assertThatThrownBy(() -> new TrajectoryRecordingAdvisor(recorder, observability)
@@ -136,7 +144,7 @@ class TrajectoryRecordingAdvisorTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> step =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository).append(eq("conversation-1"), step.capture());
+        verify(repository).updateModelCall(eq("conversation-1"), eq(1L), step.capture());
         assertThat(step.getValue().metrics())
                 .doesNotContainKey("prompt_tokens")
                 .containsEntry("provider_reported_prompt_tokens", 2L)

@@ -9,6 +9,7 @@ import java.util.Map;
 public record AiElicitationNotice(
         String elicitationId,
         String requestId,
+        long generation,
         String conversationId,
         String message,
         Map<String, Object> requestedSchema,

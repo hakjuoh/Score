@@ -44,6 +44,7 @@ public class AiElicitationService {
     }
 
     public McpSchema.ElicitResult await(ScoreUser requester, String conversationId, String requestId,
+                                       long generation,
                                        McpSchema.ElicitFormRequest request,
                                        Consumer<AiElicitationNotice> noticeConsumer) {
         if (request == null || !StringUtils.hasText(request.message())
@@ -57,7 +58,7 @@ public class AiElicitationService {
         Instant expiresAt = Instant.now().plus(elicitationTimeout);
         AiElicitationPending interaction = new AiElicitationPending(
                 elicitationId, requester.userId().value().toString(), conversationId, requestId,
-                new CompletableFuture<>(), expiresAt);
+                generation, new CompletableFuture<>(), expiresAt);
         if (pending.putIfAbsent(elicitationId, interaction) != null) {
             throw new IllegalStateException("Could not reserve an AI user interaction.");
         }
@@ -68,7 +69,8 @@ public class AiElicitationService {
             return cancelled();
         }
         try {
-            noticeConsumer.accept(new AiElicitationNotice(elicitationId, requestId, conversationId,
+            noticeConsumer.accept(new AiElicitationNotice(elicitationId, requestId, generation,
+                    conversationId,
                     request.message(), request.requestedSchema(), expiresAt));
             return interaction.response().get(
                     Math.max(1L, elicitationTimeout.toMillis()), TimeUnit.MILLISECONDS);
@@ -89,7 +91,8 @@ public class AiElicitationService {
     }
 
     public void decide(ScoreUser requester, String requestId, String conversationId,
-                       String elicitationId, String action, Map<String, Object> content) {
+                       String elicitationId, Long generation,
+                       String action, Map<String, Object> content) {
         AiElicitationPending interaction = pending.get(elicitationId);
         if (interaction == null) {
             throw new IllegalArgumentException("The AI user interaction is no longer pending.");
@@ -100,6 +103,9 @@ public class AiElicitationService {
         if (!interaction.requestId().equals(requestId)
                 || !interaction.conversationId().equals(conversationId)) {
             throw new IllegalArgumentException("The AI user interaction identity does not match.");
+        }
+        if (generation == null || generation <= 0L || interaction.generation() != generation) {
+            throw new IllegalArgumentException("The AI user interaction generation is stale.");
         }
         if (Instant.now().isAfter(interaction.expiresAt())) {
             pending.remove(elicitationId, interaction);

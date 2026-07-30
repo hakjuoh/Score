@@ -11,6 +11,7 @@ public record AiElicitationPending(
         String appUserId,
         String conversationId,
         String requestId,
+        long generation,
         CompletableFuture<McpSchema.ElicitResult> response,
         Instant expiresAt) {
 }

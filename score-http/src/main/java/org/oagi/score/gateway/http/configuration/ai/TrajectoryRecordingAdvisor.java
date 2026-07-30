@@ -32,14 +32,18 @@ public final class TrajectoryRecordingAdvisor implements CallAdvisor, StreamAdvi
     public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
         Object phase = request.context().get(AiTrajectoryRecorder.PHASE_CONTEXT_KEY);
         String phaseName = phase != null ? phase.toString() : null;
-        ScoreAiObservability.ModelCall modelCall = modelCall(phaseName);
+        AiTrajectoryRecorder.ModelCallRecording recording = recording(phaseName);
+        ScoreAiObservability.ModelCall modelCall = modelCall(phaseName, recording);
         try {
             ChatClientResponse response = chain.nextCall(request);
+            AiTrajectoryRecorder.ExecutionEventIdentity event =
+                    recorder.recordModelResponse(recording, response.chatResponse(), false);
+            modelCall.eventIdentity(event);
             modelCall.complete(response.chatResponse());
             recorder.recordToolResponses(request.prompt().getInstructions());
-            recorder.recordModelResponse(response.chatResponse(), phaseName);
             return response;
         } catch (RuntimeException failure) {
+            modelCall.eventIdentity(recorder.failModelCall(recording, failure));
             modelCall.fail(failure);
             throw failure;
         }
@@ -50,7 +54,8 @@ public final class TrajectoryRecordingAdvisor implements CallAdvisor, StreamAdvi
         Object phase = request.context().get(AiTrajectoryRecorder.PHASE_CONTEXT_KEY);
         String phaseName = phase != null ? phase.toString() : null;
         return Flux.defer(() -> {
-            ScoreAiObservability.ModelCall modelCall = modelCall(phaseName);
+            AiTrajectoryRecorder.ModelCallRecording recording = recording(phaseName);
+            ScoreAiObservability.ModelCall modelCall = modelCall(phaseName, recording);
             modelCall.streaming();
             try {
                 recorder.recordToolResponses(request.prompt().getInstructions());
@@ -61,22 +66,40 @@ public final class TrajectoryRecordingAdvisor implements CallAdvisor, StreamAdvi
                         });
                 return new ChatClientMessageAggregator().aggregateChatClientResponse(
                                 source, response -> {
+                                    AiTrajectoryRecorder.ExecutionEventIdentity event =
+                                            recorder.recordModelResponse(
+                                            recording, response.chatResponse(), true);
+                                    modelCall.eventIdentity(event);
                                     modelCall.complete(response.chatResponse());
-                                    recorder.recordStreamingModelResponse(
-                                            response.chatResponse(), phaseName);
                                 })
-                        .doOnError(modelCall::fail)
-                        .doOnCancel(modelCall::cancel);
+                        .doOnError(failure -> {
+                            modelCall.eventIdentity(recorder.failModelCall(recording, failure));
+                            modelCall.fail(failure);
+                        })
+                        .doOnCancel(() -> {
+                            modelCall.eventIdentity(recorder.failModelCall(recording,
+                                    new java.util.concurrent.CancellationException(
+                                            "Model stream cancelled")));
+                            modelCall.cancel();
+                        });
             } catch (RuntimeException failure) {
+                modelCall.eventIdentity(recorder.failModelCall(recording, failure));
                 modelCall.fail(failure);
                 throw failure;
             }
         });
     }
 
-    private ScoreAiObservability.ModelCall modelCall(String phase) {
+    private ScoreAiObservability.ModelCall modelCall(
+            String phase, AiTrajectoryRecorder.ModelCallRecording recording) {
         return observability.startModelCall(recorder.requestId(), recorder.modelName(),
-                recorder.requestModelName(), recorder.modelProvider(), phase);
+                recorder.requestModelName(), recorder.modelProvider(), phase,
+                recorder.activeAgentRunId(), recorder.conversationId(), recording.started());
+    }
+
+    private AiTrajectoryRecorder.ModelCallRecording recording(String phase) {
+        AiTrajectoryRecorder.ModelCallRecording recording = recorder.beginModelCall(phase);
+        return recording != null ? recording : AiTrajectoryRecorder.ModelCallRecording.noop();
     }
 
     private boolean containsToken(ChatClientResponse response) {

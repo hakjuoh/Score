@@ -28,13 +28,15 @@ class AiElicitationServiceTest {
         AiElicitationService service = service();
         ArrayBlockingQueue<AiElicitationNotice> notices = new ArrayBlockingQueue<>(1);
         CompletableFuture<McpSchema.ElicitResult> result = CompletableFuture.supplyAsync(() ->
-                service.await(user, "conversation-1", "request-1", request(), notices::add));
+                service.await(user, "conversation-1", "request-1", 7L,
+                        request(), notices::add));
 
         AiElicitationNotice notice = notices.poll(1, TimeUnit.SECONDS);
         assertThat(notice).isNotNull();
+        assertThat(notice.generation()).isEqualTo(7L);
         assertThat(notice.requestedSchema()).containsEntry("type", "object");
 
-        service.decide(user, "request-1", "conversation-1", notice.elicitationId(),
+        service.decide(user, "request-1", "conversation-1", notice.elicitationId(), 7L,
                 "ACCEPT", Map.of("definition", "Reusable invoice data"));
 
         assertThat(result.get(1, TimeUnit.SECONDS).action())
@@ -48,11 +50,12 @@ class AiElicitationServiceTest {
         AiElicitationService service = service();
         ArrayBlockingQueue<AiElicitationNotice> notices = new ArrayBlockingQueue<>(1);
         CompletableFuture<McpSchema.ElicitResult> result = CompletableFuture.supplyAsync(() ->
-                service.await(user, "conversation-1", "request-1", request(), notices::add));
+                service.await(user, "conversation-1", "request-1", 7L,
+                        request(), notices::add));
         AiElicitationNotice notice = notices.poll(1, TimeUnit.SECONDS);
 
         assertThatThrownBy(() -> service.decide(user(2L, "other"), "request-1",
-                "conversation-1", notice.elicitationId(), "ACCEPT", Map.of()))
+                "conversation-1", notice.elicitationId(), 7L, "ACCEPT", Map.of()))
                 .isInstanceOf(AccessDeniedException.class);
         assertThat(result).isNotDone();
 
@@ -74,7 +77,7 @@ class AiElicitationServiceTest {
         CompletableFuture<McpSchema.ElicitResult> result = CompletableFuture.supplyAsync(() -> {
             assertThat(registry.start(entry)).isTrue();
             McpSchema.ElicitResult elicited = service.await(user, "conversation-1",
-                    entry.requestId(), request(), notices::add);
+                    entry.requestId(), entry.generation(), request(), notices::add);
             registry.finish(entry, null);
             return elicited;
         });
@@ -86,6 +89,7 @@ class AiElicitationServiceTest {
         assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
 
         service.decide(user, entry.requestId(), "conversation-1", notice.elicitationId(),
+                entry.generation(),
                 "ACCEPT", Map.of("definition", "Still active"));
         assertThat(result.get(1, TimeUnit.SECONDS).action())
                 .isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
@@ -103,13 +107,34 @@ class AiElicitationServiceTest {
         AiElicitationService service = new AiElicitationService(properties, registry);
 
         assertThatThrownBy(() -> service.await(user, "conversation-1", entry.requestId(),
-                request(), ignored -> {
+                entry.generation(), request(), ignored -> {
                     throw new IllegalStateException("socket unavailable");
                 })).isInstanceOf(IllegalStateException.class)
                 .hasMessage("socket unavailable");
 
         Thread.sleep(200);
         assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("TIMED_OUT");
+    }
+
+    @Test
+    void rejectsAStaleGenerationWithoutReleasingTheCurrentInteraction() throws Exception {
+        AiElicitationService service = service();
+        ArrayBlockingQueue<AiElicitationNotice> notices = new ArrayBlockingQueue<>(1);
+        CompletableFuture<McpSchema.ElicitResult> result = CompletableFuture.supplyAsync(() ->
+                service.await(user, "conversation-1", "reused-request", 8L,
+                        request(), notices::add));
+        AiElicitationNotice notice = notices.poll(1, TimeUnit.SECONDS);
+
+        assertThatThrownBy(() -> service.decide(user, "reused-request", "conversation-1",
+                notice.elicitationId(), 7L, "ACCEPT", Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("generation");
+        assertThat(result).isNotDone();
+
+        service.decide(user, "reused-request", "conversation-1", notice.elicitationId(),
+                8L, "DECLINE", Map.of());
+        assertThat(result.get(1, TimeUnit.SECONDS).action())
+                .isEqualTo(McpSchema.ElicitResult.Action.DECLINE);
     }
 
     private AiElicitationService service() {

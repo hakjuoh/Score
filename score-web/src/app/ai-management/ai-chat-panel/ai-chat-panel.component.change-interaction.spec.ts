@@ -31,7 +31,7 @@ describe('AiChatPanelComponent elicitation and change interaction', () => {
 
     expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/elicitation', {
       requestId: 'request-1', conversationId: 'conversation-1',
-      elicitationId: 'elicitation-1', action: 'ACCEPT',
+      elicitationId: 'elicitation-1', generation: 7, action: 'ACCEPT',
       content: {strategy: 'merge'}
     });
     expect(component.state.elicitationBusy).toBe(true);
@@ -43,6 +43,13 @@ describe('AiChatPanelComponent elicitation and change interaction', () => {
     });
     expect(component.state.elicitation).toBeUndefined();
     expect(component.state.pending).toBe(true);
+  });
+
+  it('ignores a delayed elicitation from an older generation of a reused request ID', () => {
+    startElicitation(7, 8);
+
+    expect(component.state.activeRequest?.generation).toBe(8);
+    expect(component.state.elicitation).toBeUndefined();
   });
 
   it('sends one complete decision for a parallel change batch and resumes the active request', () => {
@@ -414,7 +421,7 @@ describe('AiChatPanelComponent elicitation and change interaction', () => {
     });
     expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/elicitation', {
       requestId: 'request-1', conversationId: 'conversation-1',
-      elicitationId: 'elicitation-1', action: 'ACCEPT',
+      elicitationId: 'elicitation-1', generation: 7, action: 'ACCEPT',
       content: {strategy: 'replace'}
     });
     expect(component.state.elicitationBusy).toBe(true);
@@ -484,7 +491,7 @@ describe('AiChatPanelComponent elicitation and change interaction', () => {
     });
     expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/elicitation', {
       requestId: 'request-1', conversationId: 'conversation-1',
-      elicitationId: 'elicitation-1', action: 'ACCEPT',
+      elicitationId: 'elicitation-1', generation: 7, action: 'ACCEPT',
       content: {strategy: 'replace'}
     });
     expect(component.state.elicitationBusy).toBe(true);
@@ -848,17 +855,20 @@ describe('AiChatPanelComponent elicitation and change interaction', () => {
 
 });
 
-function startElicitation(): void {
+function startElicitation(noticeGeneration = 7, activeGeneration = 7): void {
   component.state.conversationId = 'conversation-1';
   component.state.prompt = 'Perform the complex operation';
   component.send();
   transport.publishWhenConnected.mock.calls[0][0].publish();
+  if (component.state.activeRequest) {
+    component.state.activeRequest.generation = activeGeneration;
+  }
   (component as any).handleSocketEvent({
     requestId: 'request-1', conversationId: 'conversation-1',
     type: 'system', subtype: 'elicitation_required', visibility: 'visible',
     content: 'The assistant needs your input before it can continue.',
     metadata: {
-      elicitationId: 'elicitation-1', mode: 'form',
+      elicitationId: 'elicitation-1', generation: noticeGeneration, mode: 'form',
       expiresAt: '2099-07-15T00:00:00Z',
       message: 'Choose an import strategy.',
       requestedSchema: {
