@@ -48,8 +48,8 @@ class AiMiddlewareChainTest {
     }
 
     @Test
-    void preventsMiddlewareFromInvokingAMutationContinuationTwice() {
-        AtomicInteger mutations = new AtomicInteger();
+    void preventsMiddlewareFromInvokingAChangeContinuationTwice() {
+        AtomicInteger changes = new AtomicInteger();
         AiMiddleware replaying = new NamedMiddleware("replaying") {
             @Override
             public AiTool.ToolResult wrapToolCall(ToolContext context, ToolCall next) {
@@ -59,14 +59,14 @@ class AiMiddlewareChainTest {
         };
         AiMiddlewareChain chain = chain(List.of("replaying"), replaying);
 
-        assertThatThrownBy(() -> chain.executeTool(toolContext(AiTool.ToolEffect.MUTATION), context -> {
-            mutations.incrementAndGet();
+        assertThatThrownBy(() -> chain.executeTool(toolContext(AiTool.ToolEffect.CHANGE), context -> {
+            changes.incrementAndGet();
             return new AiTool.ToolResult("changed");
         })).isInstanceOf(AiMiddlewareException.class)
                 .hasMessageContaining("replaying")
                 .rootCause()
                 .hasMessageContaining("more than once");
-        assertThat(mutations).hasValue(1);
+        assertThat(changes).hasValue(1);
     }
 
     @Test
@@ -98,7 +98,7 @@ class AiMiddlewareChainTest {
     @Test
     void revokesAContinuationWhenItsWrapperReturns() {
         AtomicReference<AiMiddleware.ToolCall> captured = new AtomicReference<>();
-        AtomicInteger mutations = new AtomicInteger();
+        AtomicInteger changes = new AtomicInteger();
         AiMiddleware deferring = new NamedMiddleware("deferring") {
             @Override
             public AiTool.ToolResult wrapToolCall(ToolContext context, ToolCall next) {
@@ -107,23 +107,23 @@ class AiMiddlewareChainTest {
             }
         };
         AiMiddlewareChain chain = chain(List.of("deferring"), deferring);
-        AiMiddleware.ToolContext context = toolContext(AiTool.ToolEffect.MUTATION);
+        AiMiddleware.ToolContext context = toolContext(AiTool.ToolEffect.CHANGE);
 
         assertThat(chain.executeTool(context, ignored -> {
-            mutations.incrementAndGet();
+            changes.incrementAndGet();
             return new AiTool.ToolResult("changed");
         }).json()).isEqualTo("deferred");
 
         assertThatThrownBy(() -> captured.get().call(context))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("after its wrapper returned");
-        assertThat(mutations).hasValue(0);
+        assertThat(changes).hasValue(0);
     }
 
     @Test
-    void rejectsCrossThreadContinuationExecutionBeforeMutationAdmission() {
+    void rejectsCrossThreadContinuationExecutionBeforeChangeAdmission() {
         AtomicReference<RuntimeException> rejected = new AtomicReference<>();
-        AtomicInteger mutations = new AtomicInteger();
+        AtomicInteger changes = new AtomicInteger();
         AiMiddleware asynchronous = new NamedMiddleware("asynchronous") {
             @Override
             public AiTool.ToolResult wrapToolCall(ToolContext context, ToolCall next) {
@@ -146,13 +146,13 @@ class AiMiddlewareChainTest {
         };
         AiMiddlewareChain chain = chain(List.of("asynchronous"), asynchronous);
 
-        chain.executeTool(toolContext(AiTool.ToolEffect.MUTATION), context -> {
-            mutations.incrementAndGet();
+        chain.executeTool(toolContext(AiTool.ToolEffect.CHANGE), context -> {
+            changes.incrementAndGet();
             return new AiTool.ToolResult("changed");
         });
 
         assertThat(rejected.get()).hasMessageContaining("synchronously", "wrapper thread");
-        assertThat(mutations).hasValue(0);
+        assertThat(changes).hasValue(0);
     }
 
     @Test
@@ -200,7 +200,7 @@ class AiMiddlewareChainTest {
         AiMiddlewareChain chain = new AiMiddlewareChain(settings, List.of(observer));
         IllegalStateException providerFailure = new IllegalStateException("provider failed");
 
-        assertThatThrownBy(() -> chain.executeTool(toolContext(AiTool.ToolEffect.MUTATION), context -> {
+        assertThatThrownBy(() -> chain.executeTool(toolContext(AiTool.ToolEffect.CHANGE), context -> {
             calls.incrementAndGet();
             assertThat(context.arguments().json()).isEqualTo("{}");
             throw providerFailure;
@@ -307,7 +307,7 @@ class AiMiddlewareChainTest {
     }
 
     @Test
-    void snapshotsRequiredPolicySoConfigurationMutationCannotWeakenIt() {
+    void snapshotsRequiredPolicySoConfigurationChangeCannotWeakenIt() {
         AtomicInteger calls = new AtomicInteger();
         AiMiddleware required = new NamedMiddleware("required-policy") {
             @Override public boolean required() { return true; }
@@ -324,7 +324,7 @@ class AiMiddlewareChainTest {
 
         policy.setMode(ScoreAiProperties.MiddlewareMode.SHADOW);
         policy.setPurposes(List.of(ExecutionScope.Purpose.COMPACTION));
-        chain.executeTool(toolContext(AiTool.ToolEffect.MUTATION),
+        chain.executeTool(toolContext(AiTool.ToolEffect.CHANGE),
                 context -> new AiTool.ToolResult("changed"));
 
         assertThat(calls).hasValue(1);
@@ -353,23 +353,23 @@ class AiMiddlewareChainTest {
                 .hasMessageContaining("Invalid AI middleware id");
 
         AtomicInteger calls = new AtomicInteger();
-        AiMiddleware conditional = new NamedMiddleware("mutation-approval") {
+        AiMiddleware conditional = new NamedMiddleware("change-approval") {
             @Override
             public AiTool.ToolResult wrapToolCall(ToolContext context, ToolCall next) {
                 calls.incrementAndGet();
                 return next.call(context);
             }
         };
-        ScoreAiProperties.Middleware settings = settings(List.of("mutation-approval"));
+        ScoreAiProperties.Middleware settings = settings(List.of("change-approval"));
         ScoreAiProperties.MiddlewarePolicy policy = new ScoreAiProperties.MiddlewarePolicy();
         policy.setPurposes(List.of(ExecutionScope.Purpose.USER_RESPONSE));
-        policy.setToolEffects(List.of(AiTool.ToolEffect.MUTATION));
-        settings.setPolicies(Map.of("mutation-approval", policy));
+        policy.setToolEffects(List.of(AiTool.ToolEffect.CHANGE));
+        settings.setPolicies(Map.of("change-approval", policy));
         AiMiddlewareChain chain = new AiMiddlewareChain(settings, List.of(conditional));
 
         chain.executeTool(toolContext(AiTool.ToolEffect.READ_ONLY),
                 context -> new AiTool.ToolResult("read"));
-        chain.executeTool(toolContext(AiTool.ToolEffect.MUTATION),
+        chain.executeTool(toolContext(AiTool.ToolEffect.CHANGE),
                 context -> new AiTool.ToolResult("write"));
 
         assertThat(calls).hasValue(1);

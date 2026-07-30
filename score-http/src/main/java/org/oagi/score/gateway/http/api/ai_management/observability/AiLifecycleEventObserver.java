@@ -53,8 +53,8 @@ final class AiLifecycleEventObserver {
             case "tool_output_truncated" -> observeTruncation(requestId, event.metadata());
             case "context_usage" -> observeContextUsage(requestId, event.metadata());
             case "context_compacted" -> observeCompaction(requestId, event.metadata());
-            case "mutation_approval_batch_required" -> approvalStarted(requestId, event.metadata());
-            case "mutation_approval_decision_accepted" -> approvalCompleted(requestId, event.metadata());
+            case "change_approval_batch_required" -> approvalStarted(requestId, event.metadata());
+            case "change_approval_decision_accepted" -> approvalCompleted(requestId, event.metadata());
             case "elicitation_required" -> elicitationStarted(requestId, event.metadata());
             case "elicitation_decision_accepted", "elicitation_decision_rejected" ->
                     elicitationCompleted(requestId, subtype, event.metadata());
@@ -71,7 +71,7 @@ final class AiLifecycleEventObserver {
                 operation -> operation.finish(requestOutcome, true));
         approvals.closeMatching(key -> key.requestId.equals(requestId), started ->
             instruments.approvalWait.record(elapsedMillis(started),
-                    Attributes.builder().put("score.ai.approval.type", "mutation")
+                    Attributes.builder().put("score.ai.approval.type", "change")
                             .put("score.ai.approval.outcome", outcome(requestOutcome)).build()));
         elicitations.closeMatching(key -> key.requestId.equals(requestId), started ->
             instruments.approvalWait.record(elapsedMillis(started),
@@ -165,7 +165,7 @@ final class AiLifecycleEventObserver {
         if (started == null) return;
         String result = number(metadata.get("denied")) > 0 ? "partially_denied" : "approved";
         instruments.approvalWait.record(elapsedMillis(started),
-                Attributes.builder().put("score.ai.approval.type", "mutation")
+                Attributes.builder().put("score.ai.approval.type", "change")
                         .put("score.ai.approval.outcome", result).build());
         Span.fromContext(parents.apply(requestId)).addEvent("score.ai.approval.decided",
                 Attributes.builder()

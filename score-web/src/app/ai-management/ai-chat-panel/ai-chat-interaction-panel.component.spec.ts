@@ -14,27 +14,27 @@ describe('AiChatInteractionPanelComponent', () => {
     component = fixture.componentInstance;
   });
 
-  it('renders mutation approval as inline chat choices', () => {
-    component.mutation = {
+  it('renders change approval as inline chat choices', () => {
+    component.change = {
       mode: 'confirm', busy: false, toolName: 'create_business_context',
       argumentsSummary: '{"name":"Example"}'
     };
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent || '';
-    expect(text).toContain('Approve this action?');
-    expect(text).toContain('1. Approve action');
+    expect(text).toContain('Approve this change?');
+    expect(text).toContain('1. Approve change');
     expect(text).toContain('2. Deny');
-    expect(text).toContain('3. Modify action');
-    expect(text).toContain('The modified action will run without another confirmation.');
+    expect(text).toContain('3. Revise change');
+    expect(text).toContain('The revised change will run without another confirmation.');
     expect(text).toContain('create_business_context');
     expect(text).toContain('{"name":"Example"}');
   });
 
   it('renders one shared parallel approval and emits one batch decision', () => {
     const approve = vi.fn();
-    component.mutationBatchApproved.subscribe(approve);
-    component.mutationApprovalBatch = {
+    component.changeBatchApproved.subscribe(approve);
+    component.changeApprovalBatch = {
       batchId: 'batch-1', requestId: 'request-1', conversationId: 'conversation-1',
       parallel: true, expiresAt: '2099-07-15T00:00:00Z', items: [
         {confirmationRequestId: 'confirmation-1', toolName: 'update_bbie',
@@ -46,7 +46,7 @@ describe('AiChatInteractionPanelComponent', () => {
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.textContent).toContain('Approve 2 actions?');
+    expect(element.textContent).toContain('Approve 2 changes?');
     expect(element.textContent).toContain('Parallel assistants have reached one shared approval barrier.');
     expect(element.textContent).toContain('Material agent');
     expect(element.textContent).toContain('Context agent');
@@ -63,8 +63,8 @@ describe('AiChatInteractionPanelComponent', () => {
 
   it('collects mixed per-item choices and submits them as one decision', () => {
     const decide = vi.fn();
-    component.mutationBatchDecided.subscribe(decide);
-    component.mutationApprovalBatch = {
+    component.changeBatchDecided.subscribe(decide);
+    component.changeApprovalBatch = {
       batchId: 'batch-1', requestId: 'request-1', conversationId: 'conversation-1',
       parallel: true, expiresAt: '2099-07-15T00:00:00Z', items: [
         {confirmationRequestId: 'confirmation-1', toolName: 'update_bbie',
@@ -73,13 +73,13 @@ describe('AiChatInteractionPanelComponent', () => {
           argumentsSummary: '{"id":2}'}
       ]
     };
-    component.ngOnChanges({mutationApprovalBatch: {
-      previousValue: undefined, currentValue: component.mutationApprovalBatch,
+    component.ngOnChanges({changeApprovalBatch: {
+      previousValue: undefined, currentValue: component.changeApprovalBatch,
       firstChange: true, isFirstChange: () => true
     }});
-    component.chooseMutationDecision('confirmation-1', 'APPROVE');
-    component.chooseMutationDecision('confirmation-2', 'DENY');
-    component.submitMutationBatchDecision();
+    component.chooseChangeDecision('confirmation-1', 'APPROVE');
+    component.chooseChangeDecision('confirmation-2', 'DENY');
+    component.submitChangeBatchDecision();
 
     expect(decide).toHaveBeenCalledWith([
       {confirmationRequestId: 'confirmation-1', decision: 'APPROVE'},
@@ -91,10 +91,10 @@ describe('AiChatInteractionPanelComponent', () => {
     const requestChanges = vi.fn();
     const approve = vi.fn();
     const deny = vi.fn();
-    component.mutationChangeRequested.subscribe(requestChanges);
-    component.mutationApproved.subscribe(approve);
-    component.mutationDenied.subscribe(deny);
-    component.mutation = {
+    component.changeRevisionRequested.subscribe(requestChanges);
+    component.changeApproved.subscribe(approve);
+    component.changeDenied.subscribe(deny);
+    component.change = {
       mode: 'confirm', busy: false, toolName: 'create_business_context',
       argumentsSummary: '{"name":"Example"}'
     };
@@ -102,7 +102,7 @@ describe('AiChatInteractionPanelComponent', () => {
 
     const buttons = Array.from((fixture.nativeElement as HTMLElement)
       .querySelectorAll<HTMLButtonElement>('.model-command-option'));
-    buttons.find(button => button.textContent?.includes('Modify action'))?.click();
+    buttons.find(button => button.textContent?.includes('Revise change'))?.click();
 
     expect(requestChanges).toHaveBeenCalledOnce();
     expect(approve).not.toHaveBeenCalled();

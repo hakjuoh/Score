@@ -78,6 +78,27 @@ describe('AiConversationRestoreService', () => {
     expect(finished).toHaveBeenCalledOnce();
   });
 
+  it('restores downloadable files on assistant history messages', async () => {
+    handle({requestId: 'r1', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
+    handle({
+      requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'assistant',
+      response: 'Download the generated report.', index: 0,
+      files: [{
+        fileId: 'file-history', format: 'pdf', filename: 'report.pdf',
+        mediaType: 'application/pdf', size: 96, sha256: 'history-sha256',
+        downloadUrl: '/api/ai/chat/conversations/c1/files/file-history'
+      }]
+    }, callbacks);
+    handle({requestId: 'r1', type: 'HISTORY_FINAL', conversationId: 'c1'}, callbacks);
+
+    await vi.runAllTimersAsync();
+
+    expect(messages).toEqual([{
+      role: 'assistant', content: 'Download the generated report.',
+      files: [expect.objectContaining({fileId: 'file-history', filename: 'report.pdf'})]
+    }]);
+  });
+
   it('restores only the canonical answer after legacy Workflow iterations', async () => {
     handle({requestId: 'restore', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
     handle({
@@ -551,7 +572,7 @@ describe('AiConversationRestoreService', () => {
       groupId: 'tool-calls-1-batch-1-connect-center-mcp', toolCallId: 'call-1',
       metadata: {
         toolName: 'get_business_contexts', recoverable: true,
-        retryable: false, mutationSafe: false
+        retryable: false, changeSafe: false
       }, index: 0
     }, callbacks);
     handle({requestId: 'r1', type: 'HISTORY_FINAL', conversationId: 'c1'}, callbacks);
@@ -562,7 +583,7 @@ describe('AiConversationRestoreService', () => {
       role: 'tool_call', content: 'get_business_contexts failed.',
       groupId: 'tool-calls-1-batch-1-connect-center-mcp',
       toolCallId: 'call-1', toolName: 'get_business_contexts',
-      toolStatus: 'failed', recoverable: true, retryable: false, mutationSafe: false
+      toolStatus: 'failed', recoverable: true, retryable: false, changeSafe: false
     }]);
   });
 
@@ -570,7 +591,7 @@ describe('AiConversationRestoreService', () => {
     handle({requestId: 'r1', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
     handle({
       requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'tool_call',
-      response: 'create_business_context\nArguments: {"name":"Example"}\nResult: {"error":"MUTATION_CONFIRMATION_REQUIRED"}',
+      response: 'create_business_context\nArguments: {"name":"Example"}\nResult: {"error":"CHANGE_CONFIRMATION_REQUIRED"}',
       subtype: 'blocked', groupId: 'mcp', toolCallId: 'call-1',
       metadata: {toolName: 'create_business_context'}, index: 0
     }, callbacks);
@@ -582,7 +603,7 @@ describe('AiConversationRestoreService', () => {
     }, callbacks);
     handle({
       requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'tool_call',
-      response: 'delete_business_context\nArguments: {"id":3}\nResult: {"error":"MUTATION_CONFIRMATION_DENIED"}',
+      response: 'delete_business_context\nArguments: {"id":3}\nResult: {"error":"CHANGE_CONFIRMATION_DENIED"}',
       subtype: 'denied', groupId: 'mcp', toolCallId: 'call-3',
       metadata: {toolName: 'delete_business_context'}, index: 2
     }, callbacks);
@@ -594,7 +615,7 @@ describe('AiConversationRestoreService', () => {
       {
         role: 'tool_call', content: 'create_business_context is awaiting approval.',
         groupId: 'mcp', toolCallId: 'call-1', toolName: 'create_business_context',
-        toolDetail: 'create_business_context\nArguments: {"name":"Example"}\nResult: {"error":"MUTATION_CONFIRMATION_REQUIRED"}',
+        toolDetail: 'create_business_context\nArguments: {"name":"Example"}\nResult: {"error":"CHANGE_CONFIRMATION_REQUIRED"}',
         toolStatus: 'blocked'
       },
       {
@@ -606,7 +627,7 @@ describe('AiConversationRestoreService', () => {
       {
         role: 'tool_call', content: 'delete_business_context was denied before execution.',
         groupId: 'mcp', toolCallId: 'call-3', toolName: 'delete_business_context',
-        toolDetail: 'delete_business_context\nArguments: {"id":3}\nResult: {"error":"MUTATION_CONFIRMATION_DENIED"}',
+        toolDetail: 'delete_business_context\nArguments: {"id":3}\nResult: {"error":"CHANGE_CONFIRMATION_DENIED"}',
         toolStatus: 'denied'
       }
     ]);

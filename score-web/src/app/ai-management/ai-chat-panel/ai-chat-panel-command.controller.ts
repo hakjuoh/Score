@@ -172,7 +172,7 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
       return;
     }
     const requestId = this.activeRequestId;
-    this.clearMutationRepeatDraft(requestId);
+    this.clearChangeRepeatDraft(requestId);
     if (!this.activeRequestPublished) {
       // A disconnected RxStomp client queues publishes. Sending cancel here
       // would put it ahead of the original chat, so the server would reject the
@@ -188,8 +188,8 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
     // Once Stop is issued, the original chat admission/response watchdogs no
     // longer own the UI. Cancellation has independent 2s/5s deadlines.
     this.clearTimers();
-    if (this.state.mutationApprovalBatch) {
-      this.scheduleMutationApprovalExpiry();
+    if (this.state.changeApprovalBatch) {
+      this.scheduleChangeApprovalExpiry();
     }
     this.cancellationService.start(
       this.state.activeRequest || {requestId}, this.cancellationCallbacks()
@@ -205,9 +205,9 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
   }
 
   loadConversation(conversationId: string): void {
-    if (this.mutationDecisionOpen || this.mutationDecisionInFlight) {
+    if (this.changeDecisionOpen || this.changeDecisionInFlight) {
       this.snackBar.open(
-        'Finish the action approval decision before opening another chat.',
+        'Finish the change approval decision before opening another chat.',
         'Dismiss', {duration: 3500}
       );
       return;

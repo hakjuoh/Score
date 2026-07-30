@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.execution.ChatExecutionContext;
 import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionService;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalScope;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalScope;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
@@ -58,7 +58,7 @@ class AssignedAgentTest {
         ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
                 chatRequest, List.of(), new AiMessage.User("Inspect it"), null, rootRecorder,
                 true, false, AgentToolPolicy.READ_ONLY, 0,
-                AiMutationApprovalScope.root("conversation-1"))
+                AiChangeApprovalScope.root("conversation-1"))
                 .withGuardrailDecisions(List.of("guard-1"));
 
         AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
@@ -127,7 +127,7 @@ class AssignedAgentTest {
         ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
                 request, List.of(), new AiMessage.User("Inspect it"), null, recorder,
                 true, false, AgentToolPolicy.READ_ONLY, 0,
-                AiMutationApprovalScope.root("conversation-1"));
+                AiChangeApprovalScope.root("conversation-1"));
         AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
                 "researcher", "Nested verification",
                 "Spawn exactly 2 sub-agents in parallel and combine their findings.",
@@ -196,7 +196,7 @@ class AssignedAgentTest {
         ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
                 request, List.of(), new AiMessage.User("Inspect it"), null, root,
                 false, false, AgentToolPolicy.NONE, 0,
-                AiMutationApprovalScope.root("conversation-1"));
+                AiChangeApprovalScope.root("conversation-1"));
         AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
                 "researcher", "Research", "Verify the current record.",
                 null, null, null, AiWorkflowPlan.ToolAccess.NONE);
@@ -266,7 +266,7 @@ class AssignedAgentTest {
         ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
                 request, List.of(), new AiMessage.User("Inspect it"), null, root,
                 false, false, AgentToolPolicy.NONE, 0,
-                AiMutationApprovalScope.root("conversation-1"));
+                AiChangeApprovalScope.root("conversation-1"));
         AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
                 "researcher", "Research", "Verify the current record.",
                 null, null, null, AiWorkflowPlan.ToolAccess.NONE);
@@ -321,7 +321,7 @@ class AssignedAgentTest {
         ChatExecutionContext execution = ChatExecutionContext.fromCoreMessages(
                 request, List.of(), new AiMessage.User("prompt"), null, root,
                 false, false, AgentToolPolicy.NONE, 0,
-                AiMutationApprovalScope.root("conversation-1"));
+                AiChangeApprovalScope.root("conversation-1"));
         AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
                 "worker", "Work", "Do work", null, null, null,
                 AiWorkflowPlan.ToolAccess.NONE);

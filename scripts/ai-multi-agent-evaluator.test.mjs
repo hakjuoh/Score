@@ -18,7 +18,7 @@ const verificationRoles = [
 const task = {
   label: 'MA Strict 01',
   prompt: "Create exactly one Context Category named 'MA Strict 01' with description 'strict evidence'.",
-  expectedMutation: 'create_context_category',
+  expectedChange: 'create_context_category',
   expectedReads: ['get_context_category', 'get_context_categories'],
   expectedRecord: {
     idKey: 'ctx_category_id',
@@ -143,7 +143,7 @@ function strictTrajectory() {
     }),
     lifecycle(leadNodeId, 0, 'synthesizing'),
     tool('create_context_category', {
-      error: 'MUTATION_CONFIRMATION_REQUIRED',
+      error: 'CHANGE_CONFIRMATION_REQUIRED',
       message: 'not executed'
     }, {...leadNamespace(), arguments: {
       name: 'MA Strict 01', description: 'strict evidence'
@@ -189,13 +189,13 @@ function evaluate(trajectory = strictTrajectory(), responseText = 'Created ID 90
   });
 }
 
-test('accepts exact mutation, read-back, and deterministic graph evidence', () => {
+test('accepts exact change, read-back, and deterministic graph evidence', () => {
   const trajectory = strictTrajectory();
   const result = evaluate(trajectory);
   assert.equal(result.success, true);
   assert.equal(result.tools.createdId, '90');
-  assert.equal(result.tools.executedMutations, 1);
-  assert.equal(result.tools.rejectedMutationCalls, 1);
+  assert.equal(result.tools.executedChanges, 1);
+  assert.equal(result.tools.rejectedChangeCalls, 1);
 });
 
 test('rejects a lead tool attached to the wrong graph node', () => {
@@ -222,7 +222,7 @@ test('rejects an error nested in an MCP text envelope', () => {
   assert.equal(evaluate(trajectory).success, false);
 });
 
-test('does not accept a matching pre-read as mutation read-back', () => {
+test('does not accept a matching pre-read as change read-back', () => {
   const trajectory = strictTrajectory();
   const read = trajectory.steps.splice(9, 1)[0];
   trajectory.steps.splice(8, 0, read);
@@ -242,7 +242,7 @@ test('requires exact read-back description and final response ID', () => {
   assert.equal(evaluate(strictTrajectory(), 'Created the requested record.').success, false);
 });
 
-test('rejects mixed fan-out IDs, nested depth, and child mutation tools', () => {
+test('rejects mixed fan-out IDs, nested depth, and child change tools', () => {
   const mixed = strictTrajectory();
   mixed.steps[3].extra.fanout_id = 'fanout-other';
   assert.equal(evaluate(mixed).graph.valid, false);
@@ -251,11 +251,11 @@ test('rejects mixed fan-out IDs, nested depth, and child mutation tools', () => 
   nested.steps[2].extra.depth = 2;
   assert.equal(evaluate(nested).graph.valid, false);
 
-  const mutation = strictTrajectory();
-  mutation.steps[2] = childTool('create_context_category');
-  const result = evaluate(mutation);
+  const change = strictTrajectory();
+  change.steps[2] = childTool('create_context_category');
+  const result = evaluate(change);
   assert.equal(result.success, false);
-  assert.equal(result.tools.specialistMutationAttempts, 1);
+  assert.equal(result.tools.specialistChangeAttempts, 1);
 });
 
 test('rejects a specialist tool the guard did not classify as read-only', () => {
@@ -277,19 +277,19 @@ test('requires the boolean guard classification on every tool step at schema v4'
     .includes('every tool step must carry the boolean guard read-only classification'), false);
 });
 
-test('rejects out-of-lifecycle tools, unexpected lead mutations, and conversation mismatch', () => {
+test('rejects out-of-lifecycle tools, unexpected lead changes, and conversation mismatch', () => {
   const lateChildTool = strictTrajectory();
   const moved = lateChildTool.steps.splice(2, 1)[0];
   lateChildTool.steps.push(moved);
   assert.equal(evaluate(lateChildTool).success, false);
 
-  const unexpectedMutation = strictTrajectory();
-  unexpectedMutation.steps.splice(10, 0, {
+  const unexpectedChange = strictTrajectory();
+  unexpectedChange.steps.splice(10, 0, {
     ...tool('delete_context_category', {deleted: true}, {request_id: continuationRequestId}),
     step_id: 11
   });
-  unexpectedMutation.steps[11].step_id = 12;
-  assert.equal(evaluate(unexpectedMutation).success, false);
+  unexpectedChange.steps[11].step_id = 12;
+  assert.equal(evaluate(unexpectedChange).success, false);
 
   const result = evaluateMultiAgentCase({
     testCase: {mode: 'parallel', strategy: 'verification', combo: {}},
@@ -308,7 +308,7 @@ test('rejects out-of-lifecycle tools, unexpected lead mutations, and conversatio
   assert.equal(result.conversationMatches, false);
 });
 
-test('requires saved confirmation evidence when ask mode approves a mutation', () => {
+test('requires saved confirmation evidence when ask mode approves a change', () => {
   const result = evaluateMultiAgentCase({
     testCase: {mode: 'parallel', strategy: 'verification', combo: {}},
     task,
@@ -395,7 +395,7 @@ test('binds confirmation tool, exact arguments, conversation, and server decisio
   }
 });
 
-test('rejects forged decision state, short grant evidence, and extra mutation arguments', () => {
+test('rejects forged decision state, short grant evidence, and extra change arguments', () => {
   for (const decision of [
     {...approvalDecisions[0], confirmationGrantDigest: 'x'},
     {...approvalDecisions[0], status: 'DENIED', disposition: 'DENIED'},
@@ -416,12 +416,12 @@ test('rejects forged decision state, short grant evidence, and extra mutation ar
   assert.equal(result.tools.approvalValid, false);
 });
 
-test('binds approved arguments to the executed mutation and created-ID read request', () => {
-  const forgedMutation = strictTrajectory();
-  forgedMutation.steps[8].extra.arguments = {name: 'forged', description: 'forged'};
-  const mutationResult = evaluate(forgedMutation);
-  assert.equal(mutationResult.success, false);
-  assert.equal(mutationResult.tools.mutationArgumentsValid, false);
+test('binds approved arguments to the executed change and created-ID read request', () => {
+  const forgedChange = strictTrajectory();
+  forgedChange.steps[8].extra.arguments = {name: 'forged', description: 'forged'};
+  const changeResult = evaluate(forgedChange);
+  assert.equal(changeResult.success, false);
+  assert.equal(changeResult.tools.changeArgumentsValid, false);
 
   const forgedRead = strictTrajectory();
   forgedRead.steps[9].extra.arguments = {ctx_category_id: 999};
@@ -430,7 +430,7 @@ test('binds approved arguments to the executed mutation and created-ID read requ
   assert.equal(readResult.tools.readBack, false);
 });
 
-test('requires exactly one pre-approval mutation rejection in ask mode', () => {
+test('requires exactly one pre-approval change rejection in ask mode', () => {
   const missingRejection = strictTrajectory();
   missingRejection.steps.splice(5, 1);
   missingRejection.steps.forEach((step, index) => step.step_id = index + 1);
@@ -438,7 +438,7 @@ test('requires exactly one pre-approval mutation rejection in ask mode', () => {
   const result = evaluate(missingRejection);
   assert.equal(result.success, false);
   assert.equal(result.tools.approvalTraceValid, false);
-  assert.equal(result.tools.rejectedMutationCalls, 0);
+  assert.equal(result.tools.rejectedChangeCalls, 0);
 });
 
 test('rejects namespace downgrade, forged agents, and all-child failure', () => {
@@ -497,7 +497,7 @@ test('binds unique ATIF finals exactly to ordered REST responses', () => {
 
 test('requires one grounded single-mode final and non-empty identifier evidence', () => {
   const readTask = {
-    expectedMutation: null,
+    expectedChange: null,
     expectedReads: ['get_libraries']
   };
   const single = result => ({
@@ -540,7 +540,7 @@ test('requires one grounded single-mode final and non-empty identifier evidence'
 
 test('requires grounded coverage for every requested read domain', () => {
   const multiDomainTask = {
-    expectedMutation: null,
+    expectedChange: null,
     expectedReads: [
       'get_libraries', 'get_releases', 'get_data_types', 'get_core_components'
     ]
@@ -621,7 +621,7 @@ test('requires grounded coverage for every requested read domain', () => {
 test('accepts bold and indented numbering while ignoring nested sub-lists', () => {
   const creativeTask = {
     label: 'creative read-only review',
-    expectedMutation: null,
+    expectedChange: null,
     expectedReads: [
       'get_libraries', 'get_releases', 'get_data_types', 'get_core_components'
     ]
@@ -754,7 +754,7 @@ function singleModeTrajectory(orchestrationSteps) {
 function evaluateSingleMode(trajectory) {
   return evaluateMultiAgentCase({
     testCase: {mode: 'single', strategy: 'balanced', combo: {}},
-    task: {expectedMutation: null, expectedReads: ['get_libraries']},
+    task: {expectedChange: null, expectedReads: ['get_libraries']},
     trajectory,
     response: {conversationId: 'single-session', response: 'Observed library ID 3.'},
     sourceResponses: [{conversationId: 'single-session', response: 'Observed library ID 3.'}],
@@ -826,7 +826,7 @@ test('flags an exempt lifecycle step that leaks into a fan-out namespace', () =>
 });
 
 test('does not count a trailing version number as a cited release ID', () => {
-  const releaseTask = {expectedMutation: null, expectedReads: ['get_releases']};
+  const releaseTask = {expectedChange: null, expectedReads: ['get_releases']};
   const run = text => evaluateMultiAgentCase({
     testCase: {mode: 'single', strategy: 'balanced', combo: {}},
     task: releaseTask,

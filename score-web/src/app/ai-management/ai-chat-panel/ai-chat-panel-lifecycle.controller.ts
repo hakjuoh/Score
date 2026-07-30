@@ -49,13 +49,13 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.clearRequestStatusWatchdog();
     this.clearResponseTimeout();
     this.clearProviderRecoveryState();
-    if (this.mutationApprovalExpiryTimeout !== undefined) {
-      window.clearTimeout(this.mutationApprovalExpiryTimeout);
-      this.mutationApprovalExpiryTimeout = undefined;
+    if (this.changeApprovalExpiryTimeout !== undefined) {
+      window.clearTimeout(this.changeApprovalExpiryTimeout);
+      this.changeApprovalExpiryTimeout = undefined;
     }
-    if (this.mutationApprovalAcknowledgementTimeout !== undefined) {
-      window.clearTimeout(this.mutationApprovalAcknowledgementTimeout);
-      this.mutationApprovalAcknowledgementTimeout = undefined;
+    if (this.changeApprovalAcknowledgementTimeout !== undefined) {
+      window.clearTimeout(this.changeApprovalAcknowledgementTimeout);
+      this.changeApprovalAcknowledgementTimeout = undefined;
     }
     if (this.acknowledgementTimeout) {
       window.clearTimeout(this.acknowledgementTimeout);
@@ -100,12 +100,12 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     if (!identity || !this.matchesActiveIdentity(identity)) {
       return;
     }
-    if (this.pendingMutationConfirmation
-      && this.mutationRepeatDraft?.requestId === identity.requestId
-      && this.pendingMutationConfirmation.conversationId
+    if (this.pendingChangeConfirmation
+      && this.changeRepeatDraft?.requestId === identity.requestId
+      && this.pendingChangeConfirmation.conversationId
         !== identity.conversationId) {
-      this.pendingMutationConfirmation = undefined;
-      this.rejectedMutationConfirmationRequestId = identity.requestId;
+      this.pendingChangeConfirmation = undefined;
+      this.rejectedChangeConfirmationRequestId = identity.requestId;
     }
     this.updateActiveIdentity(identity);
     this.cancellationService.updateIdentity(identity);
@@ -229,7 +229,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
 
   protected completeCancellationTerminal(status: AiExecutionStatus,
                                        response?: AiCancellationResponse): void {
-    this.confirmedMutationRequests.cancel(this.activeRequestId);
+    this.confirmedChangeRequests.cancel(this.activeRequestId);
     if (status === 'CANCELLED') {
       this.completeCancelledRequest('Request cancelled.');
       return;
@@ -245,8 +245,8 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.clearMutationApprovalBatch();
-    this.clearMutationRepeatDraft(this.activeRequestId);
+    this.clearChangeApprovalBatch();
+    this.clearChangeRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
     this.state.pending = false;
@@ -336,9 +336,9 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.clearMutationApprovalBatch();
-    this.confirmedMutationRequests.cancel(requestId);
-    this.clearMutationRepeatDraft(requestId);
+    this.clearChangeApprovalBatch();
+    this.confirmedChangeRequests.cancel(requestId);
+    this.clearChangeRepeatDraft(requestId);
     this.state.conversationId = conversationId || this.state.conversationId;
     this.sessionPersistence.rememberLastConversation(this.state.conversationId);
     this.activeRequestId = undefined;

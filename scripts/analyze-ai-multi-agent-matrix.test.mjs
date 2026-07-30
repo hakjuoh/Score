@@ -54,7 +54,7 @@ test('reports a case with a missing trajectory as a failure without crashing', a
     },
     task: {
       label: 'read-only landscape',
-      expectedMutation: null,
+      expectedChange: null,
       expectedReads: ['get_libraries']
     }
   })}\n`);

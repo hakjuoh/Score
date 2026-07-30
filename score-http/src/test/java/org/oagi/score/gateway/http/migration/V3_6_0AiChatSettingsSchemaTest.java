@@ -12,6 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_CHANGE_CONFIRMATION;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_FILE;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_FILE_OBJECT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_STEP;
 
 class V3_6_0AiChatSettingsSchemaTest {
@@ -33,10 +36,17 @@ class V3_6_0AiChatSettingsSchemaTest {
         assertFalse(migration.contains("CONSTRAINT `ai_chat_step_settings_change_ck`"));
         assertTrue(migration.contains("`ai_chat_step_settings_idx`"
                 + " (`ai_chat_conversation_id`, `message_kind`, `step_sequence`)"));
-        assertTrue(migration.contains("CREATE TABLE `ai_chat_mutation_confirmation`"));
-        assertTrue(migration.contains("UNIQUE KEY `ai_chat_mutation_confirmation_grant_uk`"));
+        assertTrue(migration.contains("CREATE TABLE `ai_chat_change_confirmation`"));
+        assertTrue(migration.contains("UNIQUE KEY `ai_chat_change_confirmation_grant_uk`"));
+        assertTrue(migration.contains("CREATE TABLE `ai_chat_file`"));
+        assertTrue(migration.contains("CREATE TABLE `ai_chat_file_object`"));
+        assertFalse(migration.contains("ai_chat_mutation_confirmation"));
+        assertFalse(migration.contains("ai_chat_artifact"));
         assertTrue(migration.contains("Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and EXPIRED"));
         assertTrue(conversationTable.contains("`compacted`"));
+        assertEquals("ai_chat_change_confirmation", AI_CHAT_CHANGE_CONFIRMATION.getName());
+        assertEquals("ai_chat_file", AI_CHAT_FILE.getName());
+        assertEquals("ai_chat_file_object", AI_CHAT_FILE_OBJECT.getName());
     }
 
     @Test
@@ -44,7 +54,7 @@ class V3_6_0AiChatSettingsSchemaTest {
         String migration = readMigration();
         String stepTable = migration.substring(
                 migration.indexOf("CREATE TABLE `ai_chat_step`"),
-                migration.indexOf("CREATE TABLE `ai_chat_mutation_confirmation`"));
+                migration.indexOf("CREATE TABLE `ai_chat_change_confirmation`"));
         Matcher definition = MESSAGE_KIND_DEFINITION.matcher(stepTable);
 
         assertTrue(definition.find(), "ai_chat_step.message_kind definition not found");

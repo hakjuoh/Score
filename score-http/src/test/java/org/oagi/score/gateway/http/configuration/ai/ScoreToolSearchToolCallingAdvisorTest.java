@@ -27,14 +27,14 @@ class ScoreToolSearchToolCallingAdvisorTest {
         ToolCallback getContext = tool("get_business_context");
         ToolCallback listSchemes = tool("get_context_schemes");
         ToolCallback getScheme = tool("get_context_scheme");
-        ToolCallback mutation = tool("create_context_scheme");
+        ToolCallback change = tool("create_context_scheme");
         ScoreToolSearchToolCallingAdvisor advisor =
                 new ScoreToolSearchToolCallingAdvisor(new ScoreToolIndex());
         ChatClientRequest initialized = advisor.initializeSession(request(
                 List.of(new SystemMessage("system"),
                         new UserMessage("Use get_business_contexts/get_business_context and "
                                 + "get_context_schemes/get_context_scheme to read everything back")),
-                listContexts, getContext, listSchemes, getScheme, mutation));
+                listContexts, getContext, listSchemes, getScheme, change));
 
         ChatClientRequest prepared = advisor.prepareIteration(initialized);
 

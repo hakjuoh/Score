@@ -10,9 +10,9 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalScope;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationPermissionMode;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalScope;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangePermissionMode;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeToolGuard;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.springframework.ai.chat.messages.Message;
@@ -45,7 +45,7 @@ public final class ChatExecutionContext implements AgentExecutionContext {
     private final boolean streamVisibleContent;
     private final AgentToolPolicy toolPolicy;
     private final int agentDepth;
-    private final AiMutationApprovalScope approvalScope;
+    private final AiChangeApprovalScope approvalScope;
     private final AgentApprovalWaitLifecycle approvalWaitLifecycle;
     private final String agentId;
     private final ExecutionScope.Purpose executionPurpose;
@@ -57,7 +57,7 @@ public final class ChatExecutionContext implements AgentExecutionContext {
                                  AiMessage.User userMessage, ScoreUser requester,
                                  AgentExecutionRecorder recorder, boolean toolsEnabled,
                                  boolean streamVisibleContent, AgentToolPolicy toolPolicy,
-                                 int agentDepth, AiMutationApprovalScope approvalScope,
+                                 int agentDepth, AiChangeApprovalScope approvalScope,
                                  AgentApprovalWaitLifecycle approvalWaitLifecycle,
                                  String agentId, ExecutionScope.Purpose executionPurpose,
                                  List<String> guardrailDecisionIds,
@@ -106,7 +106,7 @@ public final class ChatExecutionContext implements AgentExecutionContext {
                 requester, AgentExecutionRecorderAdapter.of(recorder), toolsEnabled,
                 streamVisibleContent, policy, 0,
                 request != null && request.conversationId() != null
-                        ? AiMutationApprovalScope.root(request.conversationId()) : null);
+                        ? AiChangeApprovalScope.root(request.conversationId()) : null);
     }
 
     public static ChatExecutionContext fromCoreMessages(ChatRequest request,
@@ -121,7 +121,7 @@ public final class ChatExecutionContext implements AgentExecutionContext {
         return fromCoreMessages(request, history, userMessage, requester, recorder,
                 toolsEnabled, streamVisibleContent, toolPolicy, agentDepth,
                 request != null && request.conversationId() != null
-                        ? AiMutationApprovalScope.root(request.conversationId()) : null);
+                        ? AiChangeApprovalScope.root(request.conversationId()) : null);
     }
 
     public static ChatExecutionContext fromCoreMessages(ChatRequest request,
@@ -133,7 +133,7 @@ public final class ChatExecutionContext implements AgentExecutionContext {
                                                         boolean streamVisibleContent,
                                                         AgentToolPolicy toolPolicy,
                                                         int agentDepth,
-                                                        AiMutationApprovalScope approvalScope) {
+                                                        AiChangeApprovalScope approvalScope) {
         return create(request, history, userMessage, requester,
                 AgentExecutionRecorderAdapter.of(recorder), toolsEnabled,
                 streamVisibleContent, toolPolicy, agentDepth, approvalScope);
@@ -145,7 +145,7 @@ public final class ChatExecutionContext implements AgentExecutionContext {
                                                boolean toolsEnabled,
                                                boolean streamVisibleContent,
                                                AgentToolPolicy toolPolicy, int agentDepth,
-                                               AiMutationApprovalScope approvalScope) {
+                                               AiChangeApprovalScope approvalScope) {
         AgentToolPolicy effective = toolsEnabled
                 ? Objects.requireNonNullElse(toolPolicy, AgentToolPolicy.FULL)
                 : AgentToolPolicy.NONE;
@@ -190,7 +190,7 @@ public final class ChatExecutionContext implements AgentExecutionContext {
                                                  AgentExecutionRecorder assignedRecorder,
                                                  AgentToolPolicy policy,
                                                  String assignedAgentId,
-                                                 AiMutationApprovalScope assignedApprovalScope) {
+                                                 AiChangeApprovalScope assignedApprovalScope) {
         AgentToolPolicy effective = Objects.requireNonNullElse(policy, AgentToolPolicy.NONE);
         ChatRequest childRequest = request.withConversationId(childConversationId)
                 .withMultiAgent(AiMultiAgentOptions.single());
@@ -290,7 +290,7 @@ public final class ChatExecutionContext implements AgentExecutionContext {
     }
 
     @Override
-    public AiMutationApprovalScope approvalScope() {
+    public AiChangeApprovalScope approvalScope() {
         return approvalScope;
     }
 
@@ -302,11 +302,11 @@ public final class ChatExecutionContext implements AgentExecutionContext {
     @Override
     public Map<String, Object> instructionParameters() {
         return Map.of(
-                "mutationConfirmationRequired",
-                AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED,
-                "mutationApprovalPolicy",
-                AiMutationPermissionMode.resolve(request.permissionMode()).assistantPolicy(),
-                "requestStopping", AiMutationToolGuard.REQUEST_STOPPING,
+                "changeConfirmationRequired",
+                AiChangeToolGuard.CHANGE_CONFIRMATION_REQUIRED,
+                "changeApprovalPolicy",
+                AiChangePermissionMode.resolve(request.permissionMode()).assistantPolicy(),
+                "requestStopping", AiChangeToolGuard.REQUEST_STOPPING,
                 "pageContext", PAGE_CONTEXT_REFERENCE);
     }
 
@@ -377,7 +377,7 @@ public final class ChatExecutionContext implements AgentExecutionContext {
                                       boolean nextStreamVisibleContent,
                                       AgentToolPolicy nextToolPolicy,
                                       int nextAgentDepth,
-                                      AiMutationApprovalScope nextApprovalScope,
+                                      AiChangeApprovalScope nextApprovalScope,
                                       AgentApprovalWaitLifecycle nextApprovalWaitLifecycle,
                                       String nextAgentId,
                                       ExecutionScope.Purpose nextPurpose,

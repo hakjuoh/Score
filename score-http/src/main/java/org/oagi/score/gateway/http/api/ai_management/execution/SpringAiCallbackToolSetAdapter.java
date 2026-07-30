@@ -24,7 +24,7 @@ public final class SpringAiCallbackToolSetAdapter {
     private AiTool tool(ToolCallback callback, Set<String> readOnly) {
         var definition = callback.getToolDefinition();
         AiTool.ToolEffect effect = readOnly.contains(definition.name())
-                ? AiTool.ToolEffect.READ_ONLY : AiTool.ToolEffect.MUTATION;
+                ? AiTool.ToolEffect.READ_ONLY : AiTool.ToolEffect.CHANGE;
         AiTool.ToolSpecification specification = new AiTool.ToolSpecification(
                 new AiTool.ToolId(definition.name()), definition.name(), definition.description(),
                 definition.inputSchema(), "{}", effect);

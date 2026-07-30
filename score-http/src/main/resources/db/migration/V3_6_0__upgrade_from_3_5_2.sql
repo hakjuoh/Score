@@ -82,10 +82,10 @@ CREATE TABLE `ai_chat_step`
   COLLATE = utf8mb4_general_ci
   ROW_FORMAT = DYNAMIC COMMENT ='Complete connectCenter assistant trajectory in ATIF-reconstructable steps.';
 
-CREATE TABLE `ai_chat_mutation_confirmation`
+CREATE TABLE `ai_chat_change_confirmation`
 (
-    `ai_chat_mutation_confirmation_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'The primary key of the AI mutation confirmation record.',
-    `guid`                             char(36) COLLATE utf8mb4_bin     NOT NULL COMMENT 'The public unique identifier of the mutation confirmation request.',
+    `ai_chat_change_confirmation_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'The primary key of the AI change confirmation record.',
+    `guid`                             char(36) COLLATE utf8mb4_bin     NOT NULL COMMENT 'The public unique identifier of the change confirmation request.',
     `ai_chat_conversation_id`          bigint(20) unsigned NOT NULL COMMENT 'Foreign key to the AI_CHAT_CONVERSATION table identifying the owning conversation.',
     `request_id`                       varchar(128) COLLATE utf8mb4_bin NOT NULL COMMENT 'The chat request identifier that originally requested the data-changing tool call.',
     `tool_name`                        varchar(240)                     NOT NULL COMMENT 'The name of the data-changing tool that requires explicit user approval.',
@@ -93,58 +93,58 @@ CREATE TABLE `ai_chat_mutation_confirmation`
     `status`                           varchar(16)                      NULL DEFAULT 'REQUESTED' COMMENT 'Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and EXPIRED; other values are handled by the application.',
     `grant_digest`                     char(64) COLLATE ascii_bin NULL COMMENT 'The SHA-256 digest of the one-time approval grant; cleared after consumption, denial, or expiration.',
     `expires_at`                       datetime(6) NOT NULL COMMENT 'The timestamp after which the confirmation request or approval grant is invalid.',
-    `approved_at`                      datetime(6) NULL COMMENT 'The timestamp when the mutation request was approved.',
-    `denied_at`                        datetime(6) NULL COMMENT 'The timestamp when the mutation request was denied.',
+    `approved_at`                      datetime(6) NULL COMMENT 'The timestamp when the change request was approved.',
+    `denied_at`                        datetime(6) NULL COMMENT 'The timestamp when the change request was denied.',
     `consumed_at`                      datetime(6) NULL COMMENT 'The timestamp when the one-time approval grant was consumed.',
     `expired_at`                       datetime(6) NULL COMMENT 'The timestamp when the confirmation request or approval grant expired.',
-    `created_at`                       datetime(6) NOT NULL COMMENT 'The timestamp when the mutation confirmation request was created.',
-    PRIMARY KEY (`ai_chat_mutation_confirmation_id`),
-    UNIQUE KEY `ai_chat_mutation_confirmation_guid_uk` (`guid`),
-    UNIQUE KEY `ai_chat_mutation_confirmation_grant_uk` (`grant_digest`),
-    KEY                                `ai_chat_mutation_confirmation_request_idx` (`ai_chat_conversation_id`, `request_id`, `tool_name`, `arguments_digest`),
-    KEY                                `ai_chat_mutation_confirmation_expiry_idx` (`status`, `expires_at`),
-    CONSTRAINT `ai_chat_mutation_confirmation_conversation_fk`
+    `created_at`                       datetime(6) NOT NULL COMMENT 'The timestamp when the change confirmation request was created.',
+    PRIMARY KEY (`ai_chat_change_confirmation_id`),
+    UNIQUE KEY `ai_chat_change_confirmation_guid_uk` (`guid`),
+    UNIQUE KEY `ai_chat_change_confirmation_grant_uk` (`grant_digest`),
+    KEY                                `ai_chat_change_confirmation_request_idx` (`ai_chat_conversation_id`, `request_id`, `tool_name`, `arguments_digest`),
+    KEY                                `ai_chat_change_confirmation_expiry_idx` (`status`, `expires_at`),
+    CONSTRAINT `ai_chat_change_confirmation_conversation_fk`
         FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci
-  ROW_FORMAT = DYNAMIC COMMENT ='One-time server-authoritative grants for AI mutation tool calls.';
+  ROW_FORMAT = DYNAMIC COMMENT ='One-time server-authoritative grants for AI change tool calls.';
 
-CREATE TABLE `ai_chat_artifact`
+CREATE TABLE `ai_chat_file`
 (
-    `ai_chat_artifact_id`     bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'The primary key of the generated AI artifact.',
-    `guid`                    char(36) COLLATE utf8mb4_bin NOT NULL COMMENT 'Public artifact identifier.',
+    `ai_chat_file_id`     bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'The primary key of the generated AI file.',
+    `guid`                    char(36) COLLATE utf8mb4_bin NOT NULL COMMENT 'Public file identifier.',
     `ai_chat_conversation_id` bigint(20) unsigned NOT NULL COMMENT 'Owning AI chat conversation.',
-    `request_id`              varchar(128) COLLATE utf8mb4_bin NOT NULL COMMENT 'Request that created the artifact.',
+    `request_id`              varchar(128) COLLATE utf8mb4_bin NOT NULL COMMENT 'Request that created the file.',
     `format`                  varchar(64) NOT NULL COMMENT 'Renderer format identifier.',
     `filename`                varchar(240) NOT NULL COMMENT 'Safe download filename.',
-    `media_type`              varchar(160) NOT NULL COMMENT 'Artifact media type.',
+    `media_type`              varchar(160) NOT NULL COMMENT 'File media type.',
     `byte_size`               bigint unsigned NOT NULL COMMENT 'Stored content size in bytes.',
     `sha256`                  char(64) COLLATE ascii_bin NOT NULL COMMENT 'SHA-256 digest of stored content.',
-    `storage_provider`        varchar(64) NOT NULL COMMENT 'Configured artifact storage provider identifier.',
+    `storage_provider`        varchar(64) NOT NULL COMMENT 'Configured file storage provider identifier.',
     `storage_location`        varchar(1024) COLLATE utf8mb4_bin NOT NULL COMMENT 'Provider-owned opaque object location.',
-    `created_at`              datetime(6) NOT NULL COMMENT 'Artifact creation timestamp.',
-    `expires_at`              datetime(6) NOT NULL COMMENT 'Artifact retention deadline.',
-    PRIMARY KEY (`ai_chat_artifact_id`),
-    UNIQUE KEY `ai_chat_artifact_guid_uk` (`guid`),
-    UNIQUE KEY `ai_chat_artifact_request_digest_uk`
+    `created_at`              datetime(6) NOT NULL COMMENT 'File creation timestamp.',
+    `expires_at`              datetime(6) NOT NULL COMMENT 'File retention deadline.',
+    PRIMARY KEY (`ai_chat_file_id`),
+    UNIQUE KEY `ai_chat_file_guid_uk` (`guid`),
+    UNIQUE KEY `ai_chat_file_request_digest_uk`
         (`ai_chat_conversation_id`, `request_id`, `filename`, `sha256`),
-    KEY `ai_chat_artifact_request_idx` (`ai_chat_conversation_id`, `request_id`, `created_at`),
-    KEY `ai_chat_artifact_expiry_idx` (`expires_at`),
-    CONSTRAINT `ai_chat_artifact_conversation_fk`
+    KEY `ai_chat_file_request_idx` (`ai_chat_conversation_id`, `request_id`, `created_at`),
+    KEY `ai_chat_file_expiry_idx` (`expires_at`),
+    CONSTRAINT `ai_chat_file_conversation_fk`
         FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci
-  ROW_FORMAT = DYNAMIC COMMENT ='Generated Assistant artifact metadata and provider location history.';
+  ROW_FORMAT = DYNAMIC COMMENT ='Generated Assistant file metadata and provider location history.';
 
-CREATE TABLE `ai_chat_artifact_object`
+CREATE TABLE `ai_chat_file_object`
 (
     `storage_location` varchar(512) COLLATE utf8mb4_bin NOT NULL COMMENT 'Opaque database-storage object key.',
-    `content`          longblob NOT NULL COMMENT 'Artifact bytes for the database storage provider.',
+    `content`          longblob NOT NULL COMMENT 'File bytes for the database storage provider.',
     `created_at`       datetime(6) NOT NULL COMMENT 'Object creation timestamp.',
     PRIMARY KEY (`storage_location`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci
-  ROW_FORMAT = DYNAMIC COMMENT ='Binary objects used only when score.ai.tools.artifacts.storage.provider is db.';
+  ROW_FORMAT = DYNAMIC COMMENT ='Binary objects used only when score.ai.tools.files.storage.provider is db.';

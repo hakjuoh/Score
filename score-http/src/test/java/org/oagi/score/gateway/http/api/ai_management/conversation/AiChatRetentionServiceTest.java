@@ -1,7 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.conversation;
 
 import org.junit.jupiter.api.Test;
-import org.oagi.score.gateway.http.api.ai_management.artifact.AiArtifactService;
+import org.oagi.score.gateway.http.api.ai_management.file.AiFileService;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMaintenanceRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
@@ -30,13 +30,13 @@ class AiChatRetentionServiceTest {
         SessionService sessions = mock(SessionService.class);
         ScoreUser systemRequester = mock(ScoreUser.class);
         AiChatMaintenanceRepository repository = mock(AiChatMaintenanceRepository.class);
-        AiArtifactService artifacts = mock(AiArtifactService.class);
+        AiFileService files = mock(AiFileService.class);
         when(sessions.getScoreSystemUser()).thenReturn(systemRequester);
         when(repositories.aiChatMaintenanceRepository(systemRequester)).thenReturn(repository);
         AiChatRetentionService service = new AiChatRetentionService(
-                repositories, sessions, new ScoreAiProperties(), artifacts);
+                repositories, sessions, new ScoreAiProperties(), files);
 
-        service.expireMutationConfirmations();
+        service.expireChangeConfirmations();
 
         verify(repositories).aiChatMaintenanceRepository(systemRequester);
     }
@@ -44,7 +44,7 @@ class AiChatRetentionServiceTest {
     @Test
     void expiresGrantsAndDeletesConversationsOutsideTheRetentionWindow() {
         AiChatMaintenanceRepository repository = mock(AiChatMaintenanceRepository.class);
-        AiArtifactService artifacts = mock(AiArtifactService.class);
+        AiFileService files = mock(AiFileService.class);
         ScoreAiProperties properties = new ScoreAiProperties();
         properties.getMemory().setRetention(Duration.ofDays(90));
         Instant now = Instant.parse("2026-07-17T12:00:00Z");
@@ -52,33 +52,33 @@ class AiChatRetentionServiceTest {
         when(repository.findExpiredConversationGuids(cutoff))
                 .thenReturn(List.of("conversation-1", "conversation-2"));
         AiChatRetentionService service = new AiChatRetentionService(
-                repository, properties, Clock.fixed(now, ZoneOffset.UTC), artifacts);
+                repository, properties, Clock.fixed(now, ZoneOffset.UTC), files);
 
-        service.expireMutationConfirmations();
+        service.expireChangeConfirmations();
         service.deleteExpiredConversations();
 
-        var ordered = inOrder(repository, artifacts);
-        ordered.verify(repository).expireMutationConfirmations(now);
+        var ordered = inOrder(repository, files);
+        ordered.verify(repository).expireChangeConfirmations(now);
         ordered.verify(repository).findExpiredConversationGuids(cutoff);
-        ordered.verify(artifacts).deleteConversationArtifactsForRetention("conversation-1");
-        ordered.verify(artifacts).deleteConversationArtifactsForRetention("conversation-2");
+        ordered.verify(files).deleteConversationFilesForRetention("conversation-1");
+        ordered.verify(files).deleteConversationFilesForRetention("conversation-2");
         ordered.verify(repository).deleteExpiredConversations(cutoff);
     }
 
     @Test
     void disabledConversationRetentionDoesNotDisableSecurityGrantExpiry() {
         AiChatMaintenanceRepository repository = mock(AiChatMaintenanceRepository.class);
-        AiArtifactService artifacts = mock(AiArtifactService.class);
+        AiFileService files = mock(AiFileService.class);
         ScoreAiProperties properties = new ScoreAiProperties();
         properties.getMemory().setRetention(Duration.ZERO);
         Instant now = Instant.parse("2026-07-17T12:00:00Z");
         AiChatRetentionService service = new AiChatRetentionService(
-                repository, properties, Clock.fixed(now, ZoneOffset.UTC), artifacts);
+                repository, properties, Clock.fixed(now, ZoneOffset.UTC), files);
 
         service.deleteExpiredConversations();
-        service.expireMutationConfirmations();
+        service.expireChangeConfirmations();
 
-        verify(repository).expireMutationConfirmations(now);
+        verify(repository).expireChangeConfirmations(now);
         verify(repository, never()).deleteExpiredConversations(now);
         verify(repository, never()).findExpiredConversationGuids(now);
     }
@@ -86,15 +86,15 @@ class AiChatRetentionServiceTest {
     @Test
     void providerCleanupFailureKeepsConversationMetadataForRetry() {
         AiChatMaintenanceRepository repository = mock(AiChatMaintenanceRepository.class);
-        AiArtifactService artifacts = mock(AiArtifactService.class);
+        AiFileService files = mock(AiFileService.class);
         ScoreAiProperties properties = new ScoreAiProperties();
         Instant now = Instant.parse("2026-07-17T12:00:00Z");
         Instant cutoff = now.minus(properties.getMemory().getRetention());
         when(repository.findExpiredConversationGuids(cutoff)).thenReturn(List.of("conversation-1"));
         doThrow(new IllegalStateException("storage unavailable"))
-                .when(artifacts).deleteConversationArtifactsForRetention("conversation-1");
+                .when(files).deleteConversationFilesForRetention("conversation-1");
         AiChatRetentionService service = new AiChatRetentionService(
-                repository, properties, Clock.fixed(now, ZoneOffset.UTC), artifacts);
+                repository, properties, Clock.fixed(now, ZoneOffset.UTC), files);
 
         assertThatThrownBy(service::deleteExpiredConversations)
                 .isInstanceOf(IllegalStateException.class)

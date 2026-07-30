@@ -23,7 +23,7 @@ import java.util.function.Supplier;
  * the provider's own error message is surfaced unchanged.
  *
  * <p>An attempt that executed a data-changing tool is never retried, even for a
- * transient failure: re-running the model could repeat the mutation.</p>
+ * transient failure: re-running the model could repeat the change.</p>
  */
 @Component
 public final class AiProviderRetryExecutor {
@@ -44,30 +44,30 @@ public final class AiProviderRetryExecutor {
     }
 
     public <T> T execute(ChatRequest request, AiTrajectoryRecorder recorder,
-                         LongSupplier executedMutations, Supplier<T> attempt) {
+                         LongSupplier executedChanges, Supplier<T> attempt) {
         return execute(request != null ? request.requestId() : null,
-                recorder, executedMutations, null, attempt);
+                recorder, executedChanges, null, attempt);
     }
 
     public <T> T execute(ChatRequest request, AiTrajectoryRecorder recorder,
-                         LongSupplier executedMutations, ExecutionState state,
+                         LongSupplier executedChanges, ExecutionState state,
                          Supplier<T> attempt) {
         return execute(request != null ? request.requestId() : null,
-                recorder, executedMutations, state, attempt);
+                recorder, executedChanges, state, attempt);
     }
 
     /** Executes a provider call that has no transport-level {@link ChatRequest}. */
     public <T> T execute(String requestId, AiTrajectoryRecorder recorder,
-                         LongSupplier executedMutations, Supplier<T> attempt) {
-        return execute(requestId, recorder, executedMutations, null, attempt);
+                         LongSupplier executedChanges, Supplier<T> attempt) {
+        return execute(requestId, recorder, executedChanges, null, attempt);
     }
 
     public <T> T execute(String requestId, AiTrajectoryRecorder recorder,
-                         LongSupplier executedMutations, ExecutionState state,
+                         LongSupplier executedChanges, ExecutionState state,
                          Supplier<T> attempt) {
         int maxAttempts = settings.getMaxAttempts();
         for (int attemptNumber = 1; ; attemptNumber++) {
-            long mutationsBefore = executedMutations.getAsLong();
+            long changesBefore = executedChanges.getAsLong();
             try {
                 return attempt.get();
             } catch (CancellationException cancellation) {
@@ -77,7 +77,7 @@ public final class AiProviderRetryExecutor {
                 if (classified == null) {
                     throw failure;
                 }
-                boolean mutated = executedMutations.getAsLong() != mutationsBefore;
+                boolean mutated = executedChanges.getAsLong() != changesBefore;
                 if (!classified.retryable() || mutated
                         || attemptNumber >= maxAttempts || requestStopping(requestId)) {
                     throw new AiProviderException(classified, attemptNumber, mutated, failure);
