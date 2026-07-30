@@ -3,13 +3,14 @@ package org.oagi.score.gateway.http.configuration.ai;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiTool;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.unit.DataSize;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Application settings for the assistant model, memory, and MCP connection. */
+/** Application settings for the assistant model, memory, and tool integrations. */
 @ConfigurationProperties("score.ai")
 public class ScoreAiProperties {
 
@@ -28,7 +29,7 @@ public class ScoreAiProperties {
     private Gateway gateway = new Gateway();
     private MultiAgent multiAgent = new MultiAgent();
     private Memory memory = new Memory();
-    private Mcp mcp = new Mcp();
+    private Tools tools = new Tools();
     private ProviderRetry providerRetry = new ProviderRetry();
     private Middleware middleware = new Middleware();
 
@@ -131,6 +132,11 @@ public class ScoreAiProperties {
         this.middleware = middleware != null ? middleware : new Middleware();
     }
 
+    public Tools getTools() { return tools; }
+    public void setTools(Tools tools) {
+        this.tools = tools != null ? tools : new Tools();
+    }
+
     /**
      * Application-level retry for transient model-provider failures. The provider
      * SDKs' internal retries are disabled so this single loop owns the backoff and
@@ -229,14 +235,6 @@ public class ScoreAiProperties {
 
     public void setMemory(Memory memory) {
         this.memory = memory != null ? memory : new Memory();
-    }
-
-    public Mcp getMcp() {
-        return mcp;
-    }
-
-    public void setMcp(Mcp mcp) {
-        this.mcp = mcp != null ? mcp : new Mcp();
     }
 
     public static class Provider {
@@ -475,38 +473,134 @@ public class ScoreAiProperties {
         }
     }
 
+    /** Independently configurable tool integrations. */
+    public static class Tools {
+        private Artifacts artifacts = new Artifacts();
+        private Mcp connectCenterMcp = new Mcp();
+
+        public Artifacts getArtifacts() { return artifacts; }
+        public void setArtifacts(Artifacts artifacts) {
+            this.artifacts = artifacts != null ? artifacts : new Artifacts();
+        }
+        public Mcp getConnectCenterMcp() { return connectCenterMcp; }
+        public void setConnectCenterMcp(Mcp connectCenterMcp) {
+            this.connectCenterMcp = connectCenterMcp != null ? connectCenterMcp : new Mcp();
+        }
+    }
+
+    /** The create_artifact tool, including rendering, storage, and retention. */
+    public static class Artifacts {
+        private boolean enabled = true;
+        private Duration retention = Duration.ofDays(7);
+        private DataSize maxBytes = DataSize.ofMegabytes(20);
+        private ArtifactStorage storage = new ArtifactStorage();
+        private ArtifactRendering rendering = new ArtifactRendering();
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public Duration getRetention() { return retention; }
+        public void setRetention(Duration retention) {
+            this.retention = retention != null ? retention : Duration.ofDays(7);
+        }
+        public DataSize getMaxBytes() { return maxBytes; }
+        public void setMaxBytes(DataSize maxBytes) {
+            this.maxBytes = maxBytes != null ? maxBytes : DataSize.ofMegabytes(20);
+        }
+        public ArtifactStorage getStorage() { return storage; }
+        public void setStorage(ArtifactStorage storage) {
+            this.storage = storage != null ? storage : new ArtifactStorage();
+        }
+        public ArtifactRendering getRendering() { return rendering; }
+        public void setRendering(ArtifactRendering rendering) {
+            this.rendering = rendering != null ? rendering : new ArtifactRendering();
+        }
+    }
+
+    public static class ArtifactStorage {
+        private String provider = "local";
+        private LocalArtifactStorage local = new LocalArtifactStorage();
+        private S3ArtifactStorage s3 = new S3ArtifactStorage();
+        private GoogleDriveArtifactStorage googleDrive = new GoogleDriveArtifactStorage();
+
+        public String getProvider() { return provider; }
+        public void setProvider(String provider) { this.provider = provider; }
+        public LocalArtifactStorage getLocal() { return local; }
+        public void setLocal(LocalArtifactStorage local) {
+            this.local = local != null ? local : new LocalArtifactStorage();
+        }
+        public S3ArtifactStorage getS3() { return s3; }
+        public void setS3(S3ArtifactStorage s3) {
+            this.s3 = s3 != null ? s3 : new S3ArtifactStorage();
+        }
+        public GoogleDriveArtifactStorage getGoogleDrive() { return googleDrive; }
+        public void setGoogleDrive(GoogleDriveArtifactStorage googleDrive) {
+            this.googleDrive = googleDrive != null ? googleDrive : new GoogleDriveArtifactStorage();
+        }
+    }
+
+    public static class LocalArtifactStorage {
+        private String rootDirectory = "./data/ai-artifacts";
+        public String getRootDirectory() { return rootDirectory; }
+        public void setRootDirectory(String rootDirectory) { this.rootDirectory = rootDirectory; }
+    }
+
+    public static class S3ArtifactStorage {
+        private String bucket;
+        private String prefix = "ai-artifacts";
+        private String region = "us-east-1";
+        private String endpoint;
+        private String accessKey;
+        private String secretKey;
+        private boolean pathStyleAccess;
+        public String getBucket() { return bucket; }
+        public void setBucket(String bucket) { this.bucket = bucket; }
+        public String getPrefix() { return prefix; }
+        public void setPrefix(String prefix) { this.prefix = prefix; }
+        public String getRegion() { return region; }
+        public void setRegion(String region) { this.region = region; }
+        public String getEndpoint() { return endpoint; }
+        public void setEndpoint(String endpoint) { this.endpoint = endpoint; }
+        public String getAccessKey() { return accessKey; }
+        public void setAccessKey(String accessKey) { this.accessKey = accessKey; }
+        public String getSecretKey() { return secretKey; }
+        public void setSecretKey(String secretKey) { this.secretKey = secretKey; }
+        public boolean isPathStyleAccess() { return pathStyleAccess; }
+        public void setPathStyleAccess(boolean pathStyleAccess) { this.pathStyleAccess = pathStyleAccess; }
+    }
+
+    public static class GoogleDriveArtifactStorage {
+        private String accessToken;
+        private String folderId;
+        private String apiBaseUrl = "https://www.googleapis.com";
+        public String getAccessToken() { return accessToken; }
+        public void setAccessToken(String accessToken) { this.accessToken = accessToken; }
+        public String getFolderId() { return folderId; }
+        public void setFolderId(String folderId) { this.folderId = folderId; }
+        public String getApiBaseUrl() { return apiBaseUrl; }
+        public void setApiBaseUrl(String apiBaseUrl) { this.apiBaseUrl = apiBaseUrl; }
+    }
+
+    public static class ArtifactRendering {
+        private String assetBaseUri;
+        private List<String> fontFiles = List.of();
+        private DataSize maxExternalAssetBytes = DataSize.ofMegabytes(5);
+        public String getAssetBaseUri() { return assetBaseUri; }
+        public void setAssetBaseUri(String assetBaseUri) { this.assetBaseUri = assetBaseUri; }
+        public List<String> getFontFiles() { return fontFiles; }
+        public void setFontFiles(List<String> fontFiles) {
+            this.fontFiles = fontFiles != null ? List.copyOf(fontFiles) : List.of();
+        }
+        public DataSize getMaxExternalAssetBytes() { return maxExternalAssetBytes; }
+        public void setMaxExternalAssetBytes(DataSize maxExternalAssetBytes) {
+            this.maxExternalAssetBytes = maxExternalAssetBytes != null
+                    ? maxExternalAssetBytes : DataSize.ofMegabytes(5);
+        }
+    }
+
     public static class Mcp {
         private String connectionName = "connect-center-mcp";
-        private Duration requestTimeout = Duration.ofSeconds(60);
-        private Duration initializationTimeout = Duration.ofSeconds(20);
-        private Auth auth = new Auth();
 
         public String getConnectionName() { return connectionName; }
         public void setConnectionName(String connectionName) { this.connectionName = connectionName; }
-        public Duration getRequestTimeout() { return requestTimeout; }
-        public void setRequestTimeout(Duration requestTimeout) { this.requestTimeout = requestTimeout; }
-        public Duration getInitializationTimeout() { return initializationTimeout; }
-        public void setInitializationTimeout(Duration initializationTimeout) { this.initializationTimeout = initializationTimeout; }
-        public Auth getAuth() { return auth; }
-        public void setAuth(Auth auth) { this.auth = auth != null ? auth : new Auth(); }
-    }
-
-    public static class Auth {
-        private String bearerToken;
-        private String issuerUrl;
-        private String audience = "connect-center-mcp";
-        private String algorithm = "ES256";
-        private long tokenTtlSeconds = 300;
-
-        public String getBearerToken() { return bearerToken; }
-        public void setBearerToken(String bearerToken) { this.bearerToken = bearerToken; }
-        public String getIssuerUrl() { return issuerUrl; }
-        public void setIssuerUrl(String issuerUrl) { this.issuerUrl = issuerUrl; }
-        public String getAudience() { return audience; }
-        public void setAudience(String audience) { this.audience = audience; }
-        public String getAlgorithm() { return algorithm; }
-        public void setAlgorithm(String algorithm) { this.algorithm = algorithm; }
-        public long getTokenTtlSeconds() { return tokenTtlSeconds; }
-        public void setTokenTtlSeconds(long tokenTtlSeconds) { this.tokenTtlSeconds = tokenTtlSeconds; }
     }
 }

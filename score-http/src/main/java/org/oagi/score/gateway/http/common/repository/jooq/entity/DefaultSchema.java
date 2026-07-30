@@ -19,6 +19,8 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyId
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValueManifest;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatArtifact;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatArtifactObject;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMutationConfirmation;
@@ -225,6 +227,17 @@ public class Oagi extends SchemaImpl {
      * next releases.
      */
     public final AgencyIdListValueManifest AGENCY_ID_LIST_VALUE_MANIFEST = AgencyIdListValueManifest.AGENCY_ID_LIST_VALUE_MANIFEST;
+
+    /**
+     * Generated Assistant artifact metadata and provider location history.
+     */
+    public final AiChatArtifact AI_CHAT_ARTIFACT = AiChatArtifact.AI_CHAT_ARTIFACT;
+
+    /**
+     * Binary objects used only when score.ai.tools.artifacts.storage.provider
+     * is db.
+     */
+    public final AiChatArtifactObject AI_CHAT_ARTIFACT_OBJECT = AiChatArtifactObject.AI_CHAT_ARTIFACT_OBJECT;
 
     /**
      * User-owned AI chat conversation metadata.
@@ -1112,6 +1125,8 @@ public class Oagi extends SchemaImpl {
             AgencyIdListManifest.AGENCY_ID_LIST_MANIFEST,
             AgencyIdListValue.AGENCY_ID_LIST_VALUE,
             AgencyIdListValueManifest.AGENCY_ID_LIST_VALUE_MANIFEST,
+            AiChatArtifact.AI_CHAT_ARTIFACT,
+            AiChatArtifactObject.AI_CHAT_ARTIFACT_OBJECT,
             AiChatConversation.AI_CHAT_CONVERSATION,
             AiChatMemory.AI_CHAT_MEMORY,
             AiChatMutationConfirmation.AI_CHAT_MUTATION_CONFIRMATION,

@@ -52,6 +52,19 @@ export interface AiChatMessage {
   workflowNodeId?: string;
   workflowParentNodeId?: string;
   workflowStatus?: AiAgentExecutionStatus;
+  artifacts?: AiChatArtifact[];
+}
+
+export interface AiChatArtifact {
+  artifactId: string;
+  format: string;
+  filename: string;
+  mediaType: string;
+  size: number;
+  sha256: string;
+  createdAt?: string;
+  expiresAt?: string;
+  downloadUrl: string;
 }
 
 export interface AiChatAttachment {
@@ -230,6 +243,7 @@ export interface AiChatSocketEvent {
   targetPath?: string;
   ids?: string[];
   index?: number;
+  artifacts?: AiChatArtifact[];
 }
 
 export interface AiChatRestResponse {
@@ -239,6 +253,7 @@ export interface AiChatRestResponse {
   continuationRequired?: boolean;
   progress?: string[];
   events?: AiChatSocketEvent[];
+  artifacts?: AiChatArtifact[];
 }
 
 export type AiExecutionStatus =
@@ -349,6 +364,7 @@ export interface AiChatHistoryMessage {
   subtype?: string;
   visibility?: string;
   metadata?: {[key: string]: unknown};
+  artifacts?: AiChatArtifact[];
 }
 
 export interface AiChatConversationDetails {

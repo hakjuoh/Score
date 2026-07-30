@@ -480,7 +480,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     this.activeRequestId = undefined;
     const content = withoutTextualToolCallPlaceholder(this.primaryContent(event));
     if (content) {
-      this.commitAssistantMessage(event.requestId, content);
+      this.commitAssistantMessage(event.requestId, content, event.artifacts);
     }
     this.clearToolCallTracking();
     this.state.pending = false;
@@ -503,7 +503,8 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
    * identical workflow preview and any streamed copy are replaced by one final
    * row at the chronological end of the turn.
    */
-  protected commitAssistantMessage(requestId: string, content: string): number {
+  protected commitAssistantMessage(requestId: string, content: string,
+                                   artifacts?: import('./domain/ai-chat-panel.model').AiChatArtifact[]): number {
     const workflowResultIndexes: number[] = [];
     let streamedIndex = -1;
     for (let index = this.state.messages.length - 1; index >= 0; index--) {
@@ -518,18 +519,21 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       }
     }
 
+    const assistantMessage = artifacts?.length
+      ? {role: 'assistant' as const, content, artifacts}
+      : {role: 'assistant' as const, content};
     if (workflowResultIndexes.length > 0) {
       for (const index of [...workflowResultIndexes, streamedIndex]
         .filter(candidate => candidate >= 0)
         .sort((left, right) => right - left)) {
         this.state.messages.splice(index, 1);
       }
-      this.state.messages.push({role: 'assistant', content});
+      this.state.messages.push(assistantMessage);
     } else if (streamedIndex === this.state.messages.length - 1 && streamedIndex >= 0) {
-      this.state.messages[streamedIndex] = {role: 'assistant', content};
+      this.state.messages[streamedIndex] = assistantMessage;
     } else {
       if (streamedIndex >= 0) this.state.messages.splice(streamedIndex, 1);
-      this.state.messages.push({role: 'assistant', content});
+      this.state.messages.push(assistantMessage);
     }
     const index = this.state.messages.length - 1;
     this.assistantMessageIndexesByRequestId.set(requestId, index);

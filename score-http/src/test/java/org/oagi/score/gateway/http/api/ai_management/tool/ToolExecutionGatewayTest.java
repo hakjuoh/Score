@@ -94,6 +94,22 @@ class ToolExecutionGatewayTest {
     }
 
     @Test
+    void outputWriteDoesNotTriggerDataMutationReplayFence() {
+        ExecutionState state = new ExecutionState();
+        AiTool outputWrite = tool(AiTool.ToolEffect.OUTPUT_WRITE,
+                ignored -> new AiTool.ToolResult("artifact created"));
+        ToolExecutionGateway gateway = new ToolExecutionGateway(new ToolSet(List.of(outputWrite)),
+                passThroughRegistry(request -> new ToolOutputGuardrail.Result.Allow(
+                        request.output(), decision(GuardrailDecision.Action.ALLOW))),
+                List.of(), null, null, state, 1024);
+
+        assertThat(gateway.execute(outputWrite.specification().id(),
+                new AiTool.ToolArguments("{}"), scope).json()).isEqualTo("artifact created");
+        assertThat(state.completedToolCalls()).isEqualTo(1);
+        assertThat(state.completedMutations()).isZero();
+    }
+
+    @Test
     void outputPolicyFailureStillFencesTheCompletedMutationFromRetry() {
         ExecutionState state = new ExecutionState();
         AiTool mutation = tool(AiTool.ToolEffect.MUTATION,

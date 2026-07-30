@@ -52,7 +52,7 @@ public interface AiTool {
         }
     }
 
-    enum ToolEffect { READ_ONLY, MUTATION, UNKNOWN }
+    enum ToolEffect { READ_ONLY, OUTPUT_WRITE, MUTATION, UNKNOWN }
 
     private static String required(String value, String label) {
         String normalized = Objects.requireNonNull(value, label).strip();

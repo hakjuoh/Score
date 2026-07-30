@@ -104,6 +104,7 @@ export class AiConversationRestoreService {
       groupId: message.groupId,
       toolCallId: message.toolCallId,
       subtype: message.subtype || message.toolStatus,
+      artifacts: message.artifacts,
       metadata: {
         ...(message.metadata || {}),
         ...((message.toolCallSeq ?? message.toolCallSequence) !== undefined
@@ -348,7 +349,7 @@ export class AiConversationRestoreService {
       && message.workflowNodeId && content) {
       return [{role: 'guide', content}, message];
     }
-    return [message];
+    return [{...message, ...(event.artifacts?.length ? {artifacts: event.artifacts} : {})}];
   }
 
   private restoredToolContent(

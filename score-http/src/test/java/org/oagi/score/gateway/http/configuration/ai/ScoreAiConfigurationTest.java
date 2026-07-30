@@ -12,12 +12,14 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.toolsearch.ToolIndex;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.EnumerablePropertySource;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
-import org.springframework.core.env.StandardEnvironment;
-import org.springframework.core.env.MapPropertySource;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -39,8 +41,85 @@ import static org.mockito.Mockito.mock;
 class ScoreAiConfigurationTest {
 
     @Test
+    void baseConfigurationContainsTheCompleteRuntimeConfiguration() throws Exception {
+        MockEnvironment environment = new MockEnvironment();
+        new YamlPropertySourceLoader().load(
+                        "application", new ClassPathResource("application.yml"))
+                .forEach(environment.getPropertySources()::addLast);
+
+        ScoreAiProperties properties = Binder.get(environment)
+                .bind("score.ai", ScoreAiProperties.class)
+                .orElseThrow(() -> new IllegalStateException("score.ai configuration was not bound"));
+        ScoreMcpClientProperties mcpProperties = Binder.get(environment)
+                .bind("spring.ai.mcp.client", ScoreMcpClientProperties.class)
+                .orElseThrow(() -> new IllegalStateException("MCP client configuration was not bound"));
+
+        assertThat(properties.getModels()).hasSize(7).containsKey("claude-opus-5");
+        assertThat(properties.getTools().getArtifacts().getStorage().getProvider()).isEqualTo("local");
+        assertThat(properties.getTools().getConnectCenterMcp().getConnectionName())
+                .isEqualTo("connect-center-mcp");
+        assertThat(mcpProperties.connection("connect-center-mcp").getUrl()).isEmpty();
+        assertThat(mcpProperties.connection("connect-center-mcp").getAuth().getIssuerUrl())
+                .isEmpty();
+        assertThat(environment.getProperty("management.tracing.export.enabled"))
+                .isEqualTo("false");
+        assertThat(environment.getProperty("management.otlp.metrics.export.enabled"))
+                .isEqualTo("false");
+        assertThat(environment.getProperty("management.opentelemetry.resource-attributes"
+                + ".deployment.environment.name")).isEqualTo("unknown");
+        assertThat(environment.getProperty("score.ai.observability.enabled")).isEqualTo("false");
+    }
+
+    @Test
+    void developmentProfileContainsOnlyDevtoolsAndDevelopmentOverrides() throws Exception {
+        List<PropertySource<?>> sources = new YamlPropertySourceLoader().load(
+                "application-dev", new ClassPathResource("application-dev.yml"));
+
+        assertThat(sources).hasSize(1);
+        PropertySource<?> source = sources.getFirst();
+        assertThat(source).isInstanceOf(EnumerablePropertySource.class);
+        assertThat(((EnumerablePropertySource<?>) source).getPropertyNames())
+                .containsExactlyInAnyOrder(
+                        "spring.devtools.restart.enabled",
+                        "spring.devtools.restart.additional-paths[0]",
+                        "spring.devtools.restart.additional-paths[1]",
+                        "spring.devtools.restart.poll-interval",
+                        "spring.devtools.restart.quiet-period",
+                        "spring.ai.mcp.client.streamable-http.connections"
+                                + ".connect-center-mcp.url",
+                        "spring.ai.mcp.client.streamable-http.connections"
+                                + ".connect-center-mcp.auth.issuer-url",
+                        "logging.level.org.springframework.boot.devtools",
+                        "management.tracing.export.enabled",
+                        "management.tracing.export.otlp.enabled",
+                        "management.opentelemetry.resource-attributes"
+                                + ".deployment.environment.name",
+                        "management.otlp.metrics.export.enabled",
+                        "score.ai.observability.enabled");
+
+        MockEnvironment environment = new MockEnvironment();
+        new YamlPropertySourceLoader().load(
+                        "application", new ClassPathResource("application.yml"))
+                .forEach(environment.getPropertySources()::addLast);
+        sources.forEach(environment.getPropertySources()::addFirst);
+
+        assertThat(environment.getProperty("spring.ai.mcp.client.streamable-http.connections"
+                + ".connect-center-mcp.url")).isEqualTo("http://127.0.0.1:5555");
+        assertThat(environment.getProperty("spring.ai.mcp.client.streamable-http.connections"
+                + ".connect-center-mcp.auth.issuer-url"))
+                .isEqualTo("http://127.0.0.1:9000/broker");
+        assertThat(environment.getProperty("management.tracing.export.enabled"))
+                .isEqualTo("true");
+        assertThat(environment.getProperty("management.otlp.metrics.export.enabled"))
+                .isEqualTo("true");
+        assertThat(environment.getProperty("management.opentelemetry.resource-attributes"
+                + ".deployment.environment.name")).isEqualTo("development");
+        assertThat(environment.getProperty("score.ai.observability.enabled")).isEqualTo("true");
+    }
+
+    @Test
     void bindsMiddlewareProfilesPoliciesAndTypedConditions() {
-        StandardEnvironment environment = new StandardEnvironment();
+        MockEnvironment environment = new MockEnvironment();
         environment.getPropertySources().addFirst(new MapPropertySource("middleware-test", Map.of(
                 "score.ai.middleware.profiles.default[0]", "secret-redactor",
                 "score.ai.middleware.profile-by-purpose.compaction", "compactor",
@@ -215,10 +294,10 @@ class ScoreAiConfigurationTest {
     }
 
     @Test
-    void bindsEveryDevelopmentModelToItsDeployment() throws Exception {
-        StandardEnvironment environment = new StandardEnvironment();
+    void baseConfigurationBindsEveryModelToItsDeployment() throws Exception {
+        MockEnvironment environment = new MockEnvironment();
         new YamlPropertySourceLoader().load(
-                        "application-dev", new ClassPathResource("application-dev.yml"))
+                        "application", new ClassPathResource("application.yml"))
                 .forEach(environment.getPropertySources()::addLast);
 
         ScoreAiProperties properties = Binder.get(environment)
@@ -241,6 +320,22 @@ class ScoreAiConfigurationTest {
                 properties.getAssistant().getSystemPromptResource());
         assertEquals(Duration.ofMinutes(2),
                 properties.getMultiAgent().getSpecialistInactivityTimeout());
+        assertEquals("local", properties.getTools().getArtifacts().getStorage().getProvider());
+        assertEquals("./data/ai-artifacts", properties.getTools().getArtifacts()
+                .getStorage().getLocal().getRootDirectory());
+        assertEquals(Duration.ofDays(7), properties.getTools().getArtifacts().getRetention());
+        assertEquals("connect-center-mcp",
+                properties.getTools().getConnectCenterMcp().getConnectionName());
+        ScoreMcpClientProperties mcpProperties = Binder.get(environment)
+                .bind("spring.ai.mcp.client", ScoreMcpClientProperties.class)
+                .orElseThrow(() -> new IllegalStateException("MCP client configuration was not bound"));
+        assertEquals(Duration.ofSeconds(60), mcpProperties.getRequestTimeout());
+        assertEquals(Duration.ofSeconds(20), mcpProperties.getInitializationTimeout());
+        assertTrue(mcpProperties.connection("connect-center-mcp").getUrl().isEmpty());
+        assertTrue(mcpProperties.connection("connect-center-mcp").getAuth().getIssuerUrl()
+                .isEmpty());
+        assertNull(environment.getProperty("score.ai.artifacts.storage.provider"));
+        assertNull(environment.getProperty("score.ai.mcp.connection-name"));
         assertNull(environment.getProperty("score.ai.gateway.model-name"));
         Map.of(
                 "claude-fable-5", "max",
@@ -393,12 +488,15 @@ class ScoreAiConfigurationTest {
     }
 
     private ScoreAiProperties bindAi(Map<String, Object> environmentValues) throws Exception {
-        StandardEnvironment environment = new StandardEnvironment();
+        MockEnvironment environment = new MockEnvironment();
         environment.getPropertySources().addFirst(
                 new MapPropertySource("specialist-timeout-test", environmentValues));
         new YamlPropertySourceLoader().load(
-                        "application-dev", new ClassPathResource("application-dev.yml"))
+                        "application", new ClassPathResource("application.yml"))
                 .forEach(environment.getPropertySources()::addLast);
+        new YamlPropertySourceLoader().load(
+                        "application-dev", new ClassPathResource("application-dev.yml"))
+                .forEach(environment.getPropertySources()::addFirst);
         return Binder.get(environment).bind("score.ai", ScoreAiProperties.class)
                 .orElseThrow(() -> new IllegalStateException("score.ai configuration was not bound"));
     }

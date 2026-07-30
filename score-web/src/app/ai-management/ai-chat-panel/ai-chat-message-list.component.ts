@@ -146,6 +146,13 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
 
   constructor(private readonly host: ElementRef<HTMLElement>) {}
 
+  artifactSize(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes < 0) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['messages']) {
       this.expandedHistoryUserIndexes.clear();

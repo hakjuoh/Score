@@ -46,6 +46,27 @@ describe('AiChatMessageListComponent', () => {
     expect(markdown.querySelectorAll('li')).toHaveLength(2);
   });
 
+  it('renders generated artifacts as accessible download links', () => {
+    fixture.componentInstance.messages = [{
+      role: 'assistant',
+      content: 'The report is ready.',
+      artifacts: [{
+        artifactId: 'artifact-1', format: 'pdf', filename: 'work-report.pdf',
+        mediaType: 'application/pdf', size: 1536, sha256: 'abc',
+        downloadUrl: '/api/ai/chat/conversations/c1/artifacts/artifact-1'
+      }]
+    }];
+    fixture.detectChanges();
+
+    const group = fixture.nativeElement.querySelector('.message-artifacts') as HTMLElement;
+    const link = group.querySelector('.message-artifact') as HTMLAnchorElement;
+    expect(group.getAttribute('aria-label')).toBe('Generated files');
+    expect(link.getAttribute('href')).toBe('/api/ai/chat/conversations/c1/artifacts/artifact-1');
+    expect(link.hasAttribute('download')).toBe(true);
+    expect(link.textContent).toContain('work-report.pdf');
+    expect(link.textContent).toContain('1.5 KB');
+  });
+
   it('uses the user message prefix to toggle request history', () => {
     fixture.componentInstance.messages = [
       {role: 'user', content: 'Summarize this request.'},

@@ -25,7 +25,8 @@ import java.util.concurrent.ScheduledExecutorService;
 
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
-@EnableConfigurationProperties({ScoreAiProperties.class, AnthropicChatProperties.class,
+@EnableConfigurationProperties({ScoreAiProperties.class, ScoreMcpClientProperties.class,
+        AnthropicChatProperties.class,
         OpenAiChatProperties.class})
 public class ScoreAiConfiguration {
 

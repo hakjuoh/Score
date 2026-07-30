@@ -35,6 +35,7 @@ import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatArtifact.AiChatArtifactPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory.AiChatMemoryPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMutationConfirmation.AiChatMutationConfirmationPath;
@@ -249,6 +250,19 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
             _aiChatConversation = new AiChatConversationPath(this, Keys.AI_CHAT_CONVERSATION_PARENT_FK, null);
 
         return _aiChatConversation;
+    }
+
+    private transient AiChatArtifactPath _aiChatArtifact;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_chat_artifact</code> table
+     */
+    public AiChatArtifactPath aiChatArtifact() {
+        if (_aiChatArtifact == null)
+            _aiChatArtifact = new AiChatArtifactPath(this, null, Keys.AI_CHAT_ARTIFACT_CONVERSATION_FK.getInverseKey());
+
+        return _aiChatArtifact;
     }
 
     private transient AiChatMemoryPath _aiChatMemory;

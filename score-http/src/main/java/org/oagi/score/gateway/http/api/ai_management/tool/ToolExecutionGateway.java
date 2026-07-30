@@ -208,8 +208,9 @@ public final class ToolExecutionGateway {
                         AiTool.ToolResult result = Objects.requireNonNull(tool.execute(
                                 middlewareContext.arguments(),
                                 new AiTool.ToolExecutionContext(scope, Map.of())), "Tool result");
-                        state.toolCompleted(tool.specification().effect()
-                                != AiTool.ToolEffect.READ_ONLY);
+                        AiTool.ToolEffect effect = tool.specification().effect();
+                        state.toolCompleted(effect == AiTool.ToolEffect.MUTATION
+                                || effect == AiTool.ToolEffect.UNKNOWN);
                         return result;
                     });
         } catch (RuntimeException failure) {

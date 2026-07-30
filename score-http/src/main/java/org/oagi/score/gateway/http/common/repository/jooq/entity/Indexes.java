@@ -10,6 +10,7 @@ import org.jooq.impl.DSL;
 import org.jooq.impl.Internal;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Abie;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Acc;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatArtifact;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMutationConfirmation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatStep;
@@ -51,6 +52,8 @@ public class Indexes {
     public static final Index ABIE_ABIE_PATH_K = Internal.createIndex(DSL.name("abie_path_k"), Abie.ABIE, new OrderField[] { Abie.ABIE.PATH }, false);
     public static final Index ACC_ACC_GUID_IDX = Internal.createIndex(DSL.name("acc_guid_idx"), Acc.ACC, new OrderField[] { Acc.ACC.GUID }, false);
     public static final Index ACC_ACC_LAST_UPDATE_TIMESTAMP_DESC_IDX = Internal.createIndex(DSL.name("acc_last_update_timestamp_desc_idx"), Acc.ACC, new OrderField[] { Acc.ACC.LAST_UPDATE_TIMESTAMP }, false);
+    public static final Index AI_CHAT_ARTIFACT_AI_CHAT_ARTIFACT_EXPIRY_IDX = Internal.createIndex(DSL.name("ai_chat_artifact_expiry_idx"), AiChatArtifact.AI_CHAT_ARTIFACT, new OrderField[] { AiChatArtifact.AI_CHAT_ARTIFACT.EXPIRES_AT }, false);
+    public static final Index AI_CHAT_ARTIFACT_AI_CHAT_ARTIFACT_REQUEST_IDX = Internal.createIndex(DSL.name("ai_chat_artifact_request_idx"), AiChatArtifact.AI_CHAT_ARTIFACT, new OrderField[] { AiChatArtifact.AI_CHAT_ARTIFACT.AI_CHAT_CONVERSATION_ID, AiChatArtifact.AI_CHAT_ARTIFACT.REQUEST_ID, AiChatArtifact.AI_CHAT_ARTIFACT.CREATED_AT }, false);
     public static final Index AI_CHAT_CONVERSATION_AI_CHAT_CONVERSATION_OWNER_UPDATED_IDX = Internal.createIndex(DSL.name("ai_chat_conversation_owner_updated_idx"), AiChatConversation.AI_CHAT_CONVERSATION, new OrderField[] { AiChatConversation.AI_CHAT_CONVERSATION.APP_USER_ID, AiChatConversation.AI_CHAT_CONVERSATION.UPDATED_AT }, false);
     public static final Index AI_CHAT_CONVERSATION_AI_CHAT_CONVERSATION_PARENT_IDX = Internal.createIndex(DSL.name("ai_chat_conversation_parent_idx"), AiChatConversation.AI_CHAT_CONVERSATION, new OrderField[] { AiChatConversation.AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID, AiChatConversation.AI_CHAT_CONVERSATION.CREATED_AT }, false);
     public static final Index AI_CHAT_CONVERSATION_AI_CHAT_CONVERSATION_PARENT_REQUEST_IDX = Internal.createIndex(DSL.name("ai_chat_conversation_parent_request_idx"), AiChatConversation.AI_CHAT_CONVERSATION, new OrderField[] { AiChatConversation.AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID, AiChatConversation.AI_CHAT_CONVERSATION.PARENT_REQUEST_ID }, false);
