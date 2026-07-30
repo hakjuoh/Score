@@ -19,7 +19,11 @@ import {
   upsertAgentRetryEvent,
   upsertAgentToolEvent
 } from './ai-agent-activity';
-import {displayToolName, displayToolText} from './ai-tool-presentation';
+import {
+  defaultToolStatusContent,
+  displayToolName,
+  displayToolText
+} from './ai-tool-presentation';
 import {
   AiExecutionComposite,
   appendWorkflowConversation,
@@ -327,7 +331,7 @@ export class AiConversationRestoreService {
     const toolDetail = this.restoredToolDetail(event, content);
     return {
       role,
-      content: this.restoredToolContent(toolStatus, displayToolName(toolName) || toolName),
+      content: defaultToolStatusContent(toolStatus, displayToolName(toolName) || toolName),
       ...(turnId ? {turnId} : {}),
       groupId,
       toolCallId,
@@ -356,21 +360,6 @@ export class AiConversationRestoreService {
     // Keep the Composite-owned object identity. Later lifecycle frames update
     // this exact restored message in place, just as live socket frames do.
     return [message];
-  }
-
-  private restoredToolContent(
-    toolStatus: 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled', toolName: string
-  ): string {
-    if (toolStatus === 'blocked') {
-      return `${toolName} is awaiting approval.`;
-    }
-    if (toolStatus === 'cancelled') {
-      return `${toolName} was stopped before execution.`;
-    }
-    if (toolStatus === 'denied') {
-      return `${toolName} was denied before execution.`;
-    }
-    return toolStatus === 'completed' ? `${toolName} completed.` : `${toolName} failed.`;
   }
 
   private restoredAgentEvent(event: AiChatSocketEvent, content: string): AiChatMessage | null {

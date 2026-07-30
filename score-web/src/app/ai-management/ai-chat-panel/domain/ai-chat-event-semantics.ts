@@ -1,5 +1,9 @@
 import {AiChatSocketEvent, AiChatToolStatus, AiContextUsage, AiExecutionStatus} from './ai-chat-panel.model';
-import {displayToolName, displayToolText} from './ai-tool-presentation';
+import {
+  defaultToolStatusContent,
+  displayToolName,
+  displayToolText
+} from './ai-tool-presentation';
 
 const TEXTUAL_TOOL_CALL_PLACEHOLDER =
   /\*{0,2}\[\s*tool(?:[ -]call)?\s*:\s*[^\]\r\n]+]\*{0,2}(?:\s*(?:→|->).*?)?\s*$/is;
@@ -80,23 +84,14 @@ export function toolCallEventSemantics(event: AiChatSocketEvent): AiToolCallEven
 function terminalToolCallContent(subtype: 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled',
                                  toolName: string | undefined,
                                  event: AiChatSocketEvent): string {
-  if (subtype === 'completed') {
-    return toolName ? `${toolName} completed.` : 'Executed';
-  }
-  if (subtype === 'failed') {
-    return toolName ? `${toolName} failed.` : 'Execution failed';
+  if (subtype === 'completed' || subtype === 'failed') {
+    return defaultToolStatusContent(subtype, toolName);
   }
   const content = nonBlank(primaryContent(event));
   if (content) {
     return displayToolText(content) || content;
   }
-  if (subtype === 'blocked') {
-    return toolName ? `${toolName} is awaiting approval.` : 'Awaiting approval';
-  }
-  if (subtype === 'denied') {
-    return toolName ? `${toolName} was denied before execution.` : 'Denied before execution';
-  }
-  return toolName ? `${toolName} was stopped before execution.` : 'Stopped before execution';
+  return defaultToolStatusContent(subtype, toolName);
 }
 
 /** Returns a terminal status only when the complete explicit contract agrees. */

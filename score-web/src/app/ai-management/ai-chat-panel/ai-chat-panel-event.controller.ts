@@ -16,8 +16,12 @@ import {
   AiChangeApprovalBatchDecision,
   AiChangeConfirmationAuthorization
 } from './domain/ai-chat-panel.model';
-import {withoutTextualToolCallPlaceholder} from './domain/ai-chat-event-semantics';
 import {
+  primaryContent,
+  withoutTextualToolCallPlaceholder
+} from './domain/ai-chat-event-semantics';
+import {
+  changeApprovalBatchStatus,
   isUnexpiredChangeApprovalBatch,
   changeApprovalBatchNotice
 } from './domain/ai-change-approval-batch';
@@ -114,11 +118,11 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       window.clearTimeout(this.acknowledgementTimeout);
       this.acknowledgementTimeout = undefined;
     }
-    if (event.type === 'assistant_update' && this.primaryContent(event)) {
+    if (event.type === 'assistant_update' && primaryContent(event)) {
       this.clearProviderRecoveryState();
       this.completeProgressMessages();
       this.clearStatusMessage();
-      const content = this.primaryContent(event);
+      const content = primaryContent(event);
       const alreadyShownAsWorkflowResult = this.state.messages.some(message =>
         message.role === 'assistant' && message.eventType === 'workflow_result'
         && message.requestId === event.requestId && message.content === content);
@@ -219,8 +223,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     this.state.changeApprovalBatch = notice;
     this.state.changeApprovalBatchBusy = false;
     this.scheduleChangeApprovalExpiry();
-    this.state.currentStatus = notice.items.length === 1
-      ? 'Approval required' : `${notice.items.length} approvals required`;
+    this.state.currentStatus = changeApprovalBatchStatus(notice);
   }
 
   protected handleChangeApprovalDecisionEvent(event: AiChatSocketEvent): void {
@@ -237,13 +240,10 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       this.state.changeApprovalBatchBusy = false;
       this.scheduleChangeApprovalExpiry();
       this.state.currentStatus = this.state.changeApprovalBatch
-        ? (this.state.changeApprovalBatch.items.length === 1
-          ? 'Approval required'
-          : `${this.state.changeApprovalBatch.items.length} approvals required`)
-        : 'Working';
+        ? changeApprovalBatchStatus(this.state.changeApprovalBatch) : 'Working';
       this.state.messages.push({
         role: 'guide',
-        content: this.primaryContent(event).trim()
+        content: primaryContent(event).trim()
           || 'Approval decision recorded. Continuing the active request.'
       });
       return;
@@ -253,10 +253,10 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       this.expireChangeApprovalBatch(active.batchId);
       return;
     }
-    this.state.currentStatus = 'Approval required';
+    this.state.currentStatus = changeApprovalBatchStatus(active);
     this.state.messages.push({
       role: 'error',
-      content: this.primaryContent(event).trim()
+      content: primaryContent(event).trim()
         || 'The assistant could not accept that approval decision. Please try again.'
     });
   }
@@ -318,10 +318,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     this.state.changeApprovalBatch = this.nextChangeApprovalBatch();
     this.state.changeApprovalBatchBusy = false;
     this.state.currentStatus = this.state.changeApprovalBatch
-      ? (this.state.changeApprovalBatch.items.length === 1
-        ? 'Approval required'
-        : `${this.state.changeApprovalBatch.items.length} approvals required`)
-      : 'Approval expired';
+      ? changeApprovalBatchStatus(this.state.changeApprovalBatch) : 'Approval expired';
     this.state.messages.push({
       role: 'error',
       content: this.state.changeApprovalBatch
@@ -361,7 +358,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       this.scheduleChangeApprovalAcknowledgementTimeout(active.batchId);
     } catch {
       this.state.changeApprovalBatchBusy = false;
-      this.state.currentStatus = 'Approval required';
+      this.state.currentStatus = changeApprovalBatchStatus(active);
       this.state.messages.push({
         role: 'error', content: 'Could not send the approval decision.'
       });
@@ -387,7 +384,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
         this.expireChangeApprovalBatch(batchId);
         return;
       }
-      this.state.currentStatus = 'Approval required';
+      this.state.currentStatus = changeApprovalBatchStatus(current);
       this.state.messages.push({
         role: 'error',
         content: 'No acknowledgement was received. You can retry the approval decision.'
@@ -420,7 +417,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       return;
     }
     this.showElicitationResponseError(
-      this.primaryContent(event).trim()
+      primaryContent(event).trim()
       || 'The assistant could not accept that response. Please try again.'
     );
   }
@@ -479,7 +476,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     this.sessionPersistence.rememberLastConversation(this.state.conversationId);
     this.confirmedChangeRequests.cancel(event.requestId);
     this.activeRequestId = undefined;
-    const content = withoutTextualToolCallPlaceholder(this.primaryContent(event));
+    const content = withoutTextualToolCallPlaceholder(primaryContent(event));
     if (content) {
       this.commitAssistantMessage(event.requestId, content, event.files);
     }
