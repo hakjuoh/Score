@@ -129,7 +129,7 @@ class ChatServiceTest {
                 identity, advisor, ignored -> memory, ignored -> repository,
                 objectMapper, requests, budgets, workflow, runner, atif,
                 inputGuardrails, outputGuardrails, committer, compactor,
-                responseOnly, observability, observer));
+                responseOnly, null, observability, observer));
     }
 
     @Test

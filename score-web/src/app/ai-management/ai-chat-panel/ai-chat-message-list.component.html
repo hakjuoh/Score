@@ -272,6 +272,19 @@
         } @else {
           <markdown class="message-markdown markdown-body" [data]="message.content"></markdown>
         }
+        @if (message.artifacts?.length) {
+          <div class="message-artifacts" aria-label="Generated files">
+            @for (artifact of message.artifacts; track artifact.artifactId) {
+              <a class="message-artifact" [href]="artifact.downloadUrl" download>
+                <mat-icon aria-hidden="true">download</mat-icon>
+                <span class="message-artifact-details">
+                  <span class="message-artifact-name">{{ artifact.filename }}</span>
+                  <span class="message-artifact-meta">{{ artifact.format.toUpperCase() }} · {{ artifactSize(artifact.size) }}</span>
+                </span>
+              </a>
+            }
+          </div>
+        }
       } @else if (message.role === 'user') {
         @if (historyCount > 0) {
           <button type="button"

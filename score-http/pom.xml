@@ -87,6 +87,9 @@
         <fastods.version>0.8.1</fastods.version>
         <poi.version>5.5.1</poi.version>
         <plantuml.version>1.2026.8</plantuml.version>
+        <flexmark.version>0.64.8</flexmark.version>
+        <openhtmltopdf.version>1.0.10</openhtmltopdf.version>
+        <aws-sdk.version>2.31.77</aws-sdk.version>
         <archunit.version>1.4.1</archunit.version>
         <springdoc.version>3.1.1</springdoc.version>
         <snakeyaml.version>2.7</snakeyaml.version>
@@ -227,7 +230,7 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-mcp-client</artifactId>
+            <artifactId>spring-ai-mcp</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
@@ -367,6 +370,21 @@
             <groupId>net.sourceforge.plantuml</groupId>
             <artifactId>plantuml-mit</artifactId>
             <version>${plantuml.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.vladsch.flexmark</groupId>
+            <artifactId>flexmark</artifactId>
+            <version>${flexmark.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.openhtmltopdf</groupId>
+            <artifactId>openhtmltopdf-pdfbox</artifactId>
+            <version>${openhtmltopdf.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws-sdk.version}</version>
         </dependency>
 
         <dependency>

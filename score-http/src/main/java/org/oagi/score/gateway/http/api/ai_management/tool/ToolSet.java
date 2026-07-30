@@ -32,4 +32,12 @@ public final class ToolSet {
     public int size() { return tools.size(); }
     public Collection<AiTool> values() { return tools.values(); }
     public Optional<AiTool> find(AiTool.ToolId id) { return Optional.ofNullable(tools.get(id)); }
+
+    public ToolSet plus(ToolSet additional) {
+        if (additional == null || additional.isEmpty()) return this;
+        if (isEmpty()) return additional;
+        java.util.ArrayList<AiTool> combined = new java.util.ArrayList<>(values());
+        combined.addAll(additional.values());
+        return new ToolSet(combined);
+    }
 }

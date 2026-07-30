@@ -65,15 +65,21 @@ spring:
         timeout: ${OLLAMA_TIMEOUT:20s}
     mcp:
       client:
-        # Requester-scoped broker JWTs require a fresh MCP client per chat turn.
-        # The connection remains in the framework's standard property namespace, while the
-        # generic starter lifecycle is disabled in favor of ConnectCenterMcpClientFactory.
-        enabled: false
+        # ConnectCenterMcpClientFactory creates a requester-scoped client per chat turn.
+        request-timeout: ${SCORE_AI_MCP_REQUEST_TIMEOUT:60s}
+        initialization-timeout: ${SCORE_AI_MCP_INITIALIZATION_TIMEOUT:20s}
         streamable-http:
           connections:
             connect-center-mcp:
               url: ${CONNECT_CENTER_MCP_URL:}
               endpoint: ${CONNECT_CENTER_MCP_ENDPOINT:/mcp/}
+              auth:
+                bearer-token: ${CONNECT_CENTER_MCP_BEARER_TOKEN:}
+                issuer-url: ${CONNECT_CENTER_MCP_ISSUER_URL:}
+                audience: ${CONNECT_CENTER_MCP_AUDIENCE:connect-center-mcp}
+                algorithm: ${CONNECT_CENTER_MCP_JWT_ALGORITHM:ES256}
+                # Raised to at least the elicitation timeout plus 60 seconds at runtime.
+                token-ttl-seconds: ${CONNECT_CENTER_MCP_TOKEN_TTL_SECONDS:300}
     chat:
       client:
         tool-search-advisor:
@@ -92,6 +98,35 @@ logging:
     org.oagi.score: ${LOG_LEVEL_SCORE:INFO}
 
 management:
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+    export:
+      enabled: ${OTEL_TRACES_EXPORT_ENABLED:false}
+      otlp:
+        enabled: ${OTEL_TRACES_EXPORT_ENABLED:false}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: ${OTEL_SERVICE_NAMESPACE:oagi.score}
+      deployment.environment.name: ${OTEL_DEPLOYMENT_ENVIRONMENT:unknown}
+    tracing:
+      sampler: ${OTEL_TRACES_SAMPLER:parentbased_traceidratio}
+      export:
+        schedule-delay: ${OTEL_BSP_SCHEDULE_DELAY:5s}
+        timeout: ${OTEL_BSP_EXPORT_TIMEOUT:10s}
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://127.0.0.1:4318/v1/traces}
+          connect-timeout: ${OTEL_EXPORTER_OTLP_TRACES_TIMEOUT:10s}
+          timeout: ${OTEL_EXPORTER_OTLP_TRACES_TIMEOUT:10s}
+  otlp:
+    metrics:
+      export:
+        enabled: ${OTEL_METRICS_EXPORT_ENABLED:false}
+        step: ${OTEL_METRIC_EXPORT_INTERVAL:10s}
+        connect-timeout: ${OTEL_EXPORTER_OTLP_METRICS_TIMEOUT:10s}
+        read-timeout: ${OTEL_EXPORTER_OTLP_METRICS_TIMEOUT:10s}
+        url: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:http://127.0.0.1:4318/v1/metrics}
+
   endpoint:
     health:
       probes:
@@ -109,15 +144,6 @@ springdoc:
     tags-sorter: alpha
 
 score:
-  ai:
-    middleware:
-      # Profiles contain registered middleware bean IDs only. Required middleware
-      # is added to every profile by the engine and cannot be disabled or shadowed.
-      profiles:
-        default: []
-    observability:
-      # AI-only SDK/exporters. Environment profiles opt in explicitly.
-      enabled: false
   redis:
     # Destructive maintenance switch. Keep false for every multi-instance deployment.
     flush-on-startup: ${SCORE_REDIS_FLUSH_ON_STARTUP:false}
@@ -161,3 +187,303 @@ score:
         Draft: ${SCORE_GITHUB_PROJECT_FIELD_OPTION_DRAFT:Implemented}
         Candidate: ${SCORE_GITHUB_PROJECT_FIELD_OPTION_CANDIDATE:Candidate}
         ReleaseDraft: ${SCORE_GITHUB_PROJECT_FIELD_OPTION_RELEASE_DRAFT:Ready for release}
+  ai:
+    observability:
+      enabled: ${SCORE_AI_OBSERVABILITY_ENABLED:false}
+      service-name: ${SCORE_AI_OBSERVABILITY_SERVICE_NAME:score-ai}
+    multi-agent:
+      # Caps apply per application instance; cluster-wide bounding comes from the
+      # per-user active-request limit enforced by the shared AI request registry.
+      max-concurrent-specialists: ${SCORE_AI_MULTI_AGENT_MAX_CONCURRENT_SPECIALISTS:16}
+      max-concurrent-specialists-per-user: ${SCORE_AI_MULTI_AGENT_MAX_CONCURRENT_SPECIALISTS_PER_USER:8}
+      specialist-inactivity-timeout: ${SCORE_AI_MULTI_AGENT_SPECIALIST_INACTIVITY_TIMEOUT:${SCORE_AI_MULTI_AGENT_SPECIALIST_TIMEOUT:2m}}
+      maximum-workflow-iterations: ${SCORE_AI_MULTI_AGENT_MAXIMUM_WORKFLOW_ITERATIONS:3}
+    providers:
+      azure-foundry:
+        type: anthropic
+        base-url: ${AZURE_FOUNDRY_BASE_URL:${ANTHROPIC_FOUNDRY_BASE_URL:}}
+        key: ${AZURE_FOUNDRY_API_KEY:${ANTHROPIC_FOUNDRY_API_KEY:}}
+      azure-openai:
+        type: azure-openai
+        base-url: ${AZURE_OPENAI_ENDPOINT:}
+        key: ${AZURE_OPENAI_API_KEY:}
+        api-version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
+    models:
+      # max-tokens is the maximum output-token budget for one model call. It may include
+      # provider-counted reasoning/thinking tokens and is not the context-window size.
+      # Anthropic requires max_tokens; when omitted, Spring AI falls back to 4096 instead
+      # of leaving it unlimited. GPT models intentionally omit it so the provider decides.
+      claude-fable-5:
+        display-name: Claude Fable 5
+        description: Frontier Claude model for complex reasoning and tool-driven work.
+        provider: azure-foundry
+        model: claude-fable-5
+        reasoning-effort: high
+        reasoning-efforts:
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: max
+            display-name: Extra High
+            description: Maximum reasoning depth for the most complex problems.
+        max-tokens: 16000
+        context-window: ${CLAUDE_FABLE_5_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 16000
+          auto-compact-threshold-tokens: ${CLAUDE_FABLE_5_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          # Azure Foundry support for Anthropic's compaction beta is deployment-dependent.
+          provider-compaction-enabled: false
+        adaptive-thinking: true
+        output-effort: high
+        cache-strategy: conversation-history
+        model-capabilities:
+          output-effort: true
+          temperature: false
+          thinking-modes: [adaptive]
+          default-thinking: adaptive
+      claude-opus-5:
+        display-name: Claude Opus 5
+        description: Most capable Claude model for advanced reasoning and complex agentic work.
+        provider: azure-foundry
+        model: claude-opus-5
+        reasoning-effort: high
+        reasoning-efforts:
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: max
+            display-name: Extra High
+            description: Maximum reasoning depth for the most complex problems.
+        max-tokens: 16000
+        context-window: ${CLAUDE_OPUS_5_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 16000
+          auto-compact-threshold-tokens: ${CLAUDE_OPUS_5_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: false
+        adaptive-thinking: true
+        output-effort: high
+        cache-strategy: conversation-history
+        model-capabilities:
+          output-effort: true
+          temperature: false
+          thinking-modes: [adaptive]
+          default-thinking: adaptive
+      claude-sonnet-5:
+        display-name: Claude Sonnet 5
+        description: Balanced Claude model for everyday reasoning and agentic work.
+        provider: azure-foundry
+        model: claude-sonnet-5
+        reasoning-effort: medium
+        reasoning-efforts:
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: max
+            display-name: Extra High
+            description: Maximum reasoning depth for the most complex problems.
+        max-tokens: 16000
+        context-window: ${CLAUDE_SONNET_5_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 16000
+          auto-compact-threshold-tokens: ${CLAUDE_SONNET_5_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: false
+        adaptive-thinking: true
+        output-effort: medium
+        cache-strategy: conversation-history
+        model-capabilities:
+          output-effort: true
+          temperature: false
+          thinking-modes: [adaptive, disabled]
+          default-thinking: adaptive
+      claude-haiku-4_5:
+        display-name: Claude Haiku 4.5
+        description: Fast and efficient Claude model for lightweight everyday tasks.
+        provider: azure-foundry
+        model: claude-haiku-4-5
+        reasoning-effort: default
+        reasoning-efforts:
+          - name: default
+            display-name: Default
+            description: Uses the model's built-in response behavior.
+        max-tokens: 16000
+        context-window: ${CLAUDE_HAIKU_4_5_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 16000
+          auto-compact-threshold-tokens: ${CLAUDE_HAIKU_4_5_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: false
+        thinking-budget-tokens: 4096
+        cache-strategy: conversation-history
+        model-capabilities:
+          output-effort: false
+          temperature: false
+          thinking-modes: [enabled, disabled]
+          default-thinking: disabled
+      gpt-5_6-sol:
+        display-name: GPT-5.6 Sol
+        description: Latest frontier agentic model for complex reasoning and tool-driven work.
+        provider: azure-openai
+        model: gpt-5.6-sol
+        reasoning-effort: medium
+        context-window: ${GPT_5_6_SOL_CONTEXT_WINDOW:200000}
+        context-budget:
+          # This reserve protects the context calculation but is not sent as max_output_tokens.
+          output-reserve-tokens: 32768
+          auto-compact-threshold-tokens: ${GPT_5_6_SOL_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: false
+        reasoning-efforts:
+          - name: minimal
+            display-name: Minimal
+            description: Use only minimal reasoning for simple requests.
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: xhigh
+            display-name: Extra High
+            description: Maximum reasoning depth for the most complex problems.
+        model-capabilities:
+          reasoning-model: true
+          verbosity: true
+          temperature: false
+      gpt-5_6-terra:
+        display-name: GPT-5.6 Terra
+        description: Balanced agentic model for everyday reasoning and tool-driven work.
+        provider: azure-openai
+        model: gpt-5.6-terra
+        reasoning-effort: medium
+        context-window: ${GPT_5_6_TERRA_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 32768
+          auto-compact-threshold-tokens: ${GPT_5_6_TERRA_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: false
+        reasoning-efforts:
+          - name: minimal
+            display-name: Minimal
+            description: Use only minimal reasoning for simple requests.
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: xhigh
+            display-name: Extra High
+            description: Maximum reasoning depth for the most complex problems.
+        model-capabilities:
+          reasoning-model: true
+          verbosity: true
+          temperature: false
+      gpt-5_6-luna:
+        display-name: GPT-5.6 Luna
+        description: Fast and affordable agentic model for lightweight everyday tasks.
+        provider: azure-openai
+        model: gpt-5.6-luna
+        reasoning-effort: low
+        context-window: ${GPT_5_6_LUNA_CONTEXT_WINDOW:200000}
+        context-budget:
+          output-reserve-tokens: 32768
+          auto-compact-threshold-tokens: ${GPT_5_6_LUNA_AUTO_COMPACT_THRESHOLD:150000}
+          emergency-headroom-tokens: 8192
+          tool-output-token-limit: 32000
+          provider-compaction-enabled: false
+        reasoning-efforts:
+          - name: minimal
+            display-name: Minimal
+            description: Use only minimal reasoning for simple requests.
+          - name: low
+            display-name: Low
+            description: Fast responses with lighter reasoning.
+          - name: medium
+            display-name: Medium
+            description: Balances speed and reasoning depth for everyday tasks.
+          - name: high
+            display-name: High
+            description: Greater reasoning depth for complex problems.
+          - name: xhigh
+            display-name: Extra High
+            description: Maximum reasoning depth for the most complex problems.
+        model-capabilities:
+          reasoning-model: true
+          verbosity: true
+          temperature: false
+    model-name: claude-opus-5
+    request-inactivity-timeout: ${SCORE_AI_REQUEST_INACTIVITY_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
+    elicitation-timeout: ${SCORE_AI_ELICITATION_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
+    mutation-approval-timeout: ${SCORE_AI_MUTATION_APPROVAL_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
+    assistant:
+      # For Docker, mount a file and set this to e.g. file:/config/system-prompt-connect-center-assistant.md.
+      system-prompt-resource: ${SCORE_AI_ASSISTANT_SYSTEM_PROMPT_RESOURCE:classpath:ai/system/system-prompt-connect-center-assistant.md}
+    memory:
+      max-messages: ${SCORE_AI_MEMORY_MAX_MESSAGES:40}
+      retention: ${SCORE_AI_CONVERSATION_RETENTION:90d}
+      cleanup-interval: ${SCORE_AI_CONVERSATION_CLEANUP_INTERVAL:24h}
+    tools:
+      artifacts:
+        enabled: ${SCORE_AI_ARTIFACTS_ENABLED:true}
+        retention: ${SCORE_AI_ARTIFACT_RETENTION:7d}
+        max-bytes: ${SCORE_AI_ARTIFACT_MAX_BYTES:20MB}
+        storage:
+          provider: ${SCORE_AI_ARTIFACT_STORAGE_PROVIDER:local}
+          local:
+            root-directory: ${SCORE_AI_ARTIFACT_LOCAL_ROOT:./data/ai-artifacts}
+          s3:
+            bucket: ${SCORE_AI_ARTIFACT_S3_BUCKET:}
+            prefix: ${SCORE_AI_ARTIFACT_S3_PREFIX:ai-artifacts}
+            region: ${SCORE_AI_ARTIFACT_S3_REGION:us-east-1}
+            endpoint: ${SCORE_AI_ARTIFACT_S3_ENDPOINT:}
+            access-key: ${SCORE_AI_ARTIFACT_S3_ACCESS_KEY:}
+            secret-key: ${SCORE_AI_ARTIFACT_S3_SECRET_KEY:}
+            path-style-access: ${SCORE_AI_ARTIFACT_S3_PATH_STYLE:false}
+          google-drive:
+            access-token: ${SCORE_AI_ARTIFACT_GOOGLE_DRIVE_ACCESS_TOKEN:}
+            folder-id: ${SCORE_AI_ARTIFACT_GOOGLE_DRIVE_FOLDER_ID:}
+            api-base-url: ${SCORE_AI_ARTIFACT_GOOGLE_DRIVE_API_BASE_URL:https://www.googleapis.com}
+        rendering:
+          asset-base-uri: ${SCORE_AI_ARTIFACT_ASSET_BASE_URI:}
+          font-files: ${SCORE_AI_ARTIFACT_FONT_FILES:}
+          max-external-asset-bytes: ${SCORE_AI_ARTIFACT_MAX_EXTERNAL_ASSET_BYTES:5MB}
+      connect-center-mcp:
+        connection-name: connect-center-mcp
+    middleware:
+      # Profiles contain registered middleware bean IDs only. Required middleware
+      # is added to every profile by the engine and cannot be disabled or shadowed.
+      profiles:
+        default: []

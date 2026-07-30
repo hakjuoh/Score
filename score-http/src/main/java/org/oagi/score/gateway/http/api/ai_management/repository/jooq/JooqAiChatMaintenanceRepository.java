@@ -9,6 +9,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Objects;
 
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_CONVERSATION;
@@ -22,6 +23,17 @@ public class JooqAiChatMaintenanceRepository extends JooqBaseRepository
                                            RepositoryFactory repositoryFactory) {
         super(dslContext, Objects.requireNonNull(requester, "requester must not be null"),
                 repositoryFactory);
+    }
+
+    @Override
+    public List<String> findExpiredConversationGuids(Instant cutoff) {
+        return dslContext().select(AI_CHAT_CONVERSATION.GUID)
+                .from(AI_CHAT_CONVERSATION)
+                .where(AI_CHAT_CONVERSATION.UPDATED_AT.lt(localDateTime(cutoff))
+                        .and(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID.isNull()))
+                .orderBy(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID)
+                .forUpdate()
+                .fetch(AI_CHAT_CONVERSATION.GUID);
     }
 
     @Override

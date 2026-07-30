@@ -12,6 +12,8 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyId
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValueManifest;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatArtifact;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatArtifactObject;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMutationConfirmation;
@@ -211,6 +213,17 @@ public class Tables {
      * next releases.
      */
     public static final AgencyIdListValueManifest AGENCY_ID_LIST_VALUE_MANIFEST = AgencyIdListValueManifest.AGENCY_ID_LIST_VALUE_MANIFEST;
+
+    /**
+     * Generated Assistant artifact metadata and provider location history.
+     */
+    public static final AiChatArtifact AI_CHAT_ARTIFACT = AiChatArtifact.AI_CHAT_ARTIFACT;
+
+    /**
+     * Binary objects used only when score.ai.tools.artifacts.storage.provider
+     * is db.
+     */
+    public static final AiChatArtifactObject AI_CHAT_ARTIFACT_OBJECT = AiChatArtifactObject.AI_CHAT_ARTIFACT_OBJECT;
 
     /**
      * User-owned AI chat conversation metadata.

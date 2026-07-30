@@ -41,6 +41,7 @@ import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.configuration.ai.ConnectCenterMcpClientFactory;
+import org.oagi.score.gateway.http.api.ai_management.artifact.AiPlatformToolProvider;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiChatOptionsFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
 import org.oagi.score.gateway.http.configuration.ai.TrajectoryRecordingAdvisor;
@@ -67,6 +68,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.function.Supplier;
@@ -100,6 +102,7 @@ public final class AiChatExecutor {
     private final ExecutionObserver observer;
     private final ScoreAiObservability observability;
     private final AiMiddlewareChain middleware;
+    private final AiPlatformToolProvider platformTools;
 
     @Autowired
     public AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
@@ -117,6 +120,7 @@ public final class AiChatExecutor {
                           AiExecutionInstructions instructions,
                           ScoreAiObservability observability,
                           AiMiddlewareChain middleware,
+                          AiPlatformToolProvider platformTools,
                           ObjectProvider<ExecutionObserver> executionObservers) {
         this.models = models;
         this.mcpClients = mcpClients;
@@ -134,6 +138,7 @@ public final class AiChatExecutor {
         this.instructions = Objects.requireNonNull(instructions, "instructions");
         this.observability = observability != null ? observability : ScoreAiObservability.noop();
         this.middleware = middleware != null ? middleware : AiMiddlewareChain.none();
+        this.platformTools = platformTools;
         this.observer = ExecutionObserver.composite(executionObservers != null
                 ? executionObservers.orderedStream().toList() : List.of());
     }
@@ -157,7 +162,7 @@ public final class AiChatExecutor {
         this(models, mcpClients, toolSearchAdvisor, mutationGuard, elicitations,
                 providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
                 callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
-                instructions, observability, AiMiddlewareChain.none(), executionObservers);
+                instructions, observability, AiMiddlewareChain.none(), null, executionObservers);
     }
 
     AiChatExecutor(ScoreAiModelRegistry models,
@@ -178,7 +183,7 @@ public final class AiChatExecutor {
                 providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
                 callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
                 AiExecutionInstructions.bundled(), ScoreAiObservability.noop(),
-                AiMiddlewareChain.none(), executionObservers);
+                AiMiddlewareChain.none(), null, executionObservers);
     }
 
     /** Compatibility constructor for focused executor tests. */
@@ -519,40 +524,57 @@ public final class AiChatExecutor {
             org.springframework.ai.tool.ToolCallbackProvider executableTools = null;
             if (context.agentToolBinding() != null) {
                 configureBoundTools(context, assistantBuilder, recorder, toolOutputTokenLimit);
-            } else if (mcp != null && mcp.client() != null
-                    && context.toolPolicy() != ToolPolicy.NONE) {
-                recorder.readOnlyToolNames(mcp.readOnlyToolNames());
+            } else if (context.toolPolicy() != ToolPolicy.NONE) {
+                var mcpCallbacks = mcp != null && mcp.tools() != null
+                        ? mcp.tools()
+                        : (org.springframework.ai.tool.ToolCallbackProvider) () ->
+                        new org.springframework.ai.tool.ToolCallback[0];
+                Set<String> readOnlyToolNames = mcp != null ? mcp.readOnlyToolNames() : Set.of();
                 boolean commonToolGateway = toolGuardrails != null
                         && callbackToolAdapter != null && springAiToolAdapter != null;
-                boolean hasTools = mcp.tools() != null
-                        && mcp.tools().getToolCallbacks().length > 0;
-                if (hasTools && !commonToolGateway) {
+                boolean hasMcpTools = mcpCallbacks.getToolCallbacks().length > 0;
+                var localTools = context.toolPolicy() == ToolPolicy.FULL && platformTools != null
+                        ? platformTools.tools(context.requester(), executionScope(context))
+                        : org.oagi.score.gateway.http.api.ai_management.tool.ToolSet.empty();
+                Set<String> nonMutationToolNames = java.util.stream.Stream.concat(
+                                readOnlyToolNames.stream(), localTools.values().stream()
+                                        .filter(tool -> tool.specification().effect()
+                                                == org.oagi.score.gateway.http.api.ai_management.tool.AiTool.ToolEffect.READ_ONLY
+                                                || tool.specification().effect()
+                                                == org.oagi.score.gateway.http.api.ai_management.tool.AiTool.ToolEffect.OUTPUT_WRITE)
+                                        .map(tool -> tool.specification().name()))
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                recorder.readOnlyToolNames(nonMutationToolNames);
+                if ((hasMcpTools || !localTools.isEmpty()) && !commonToolGateway) {
                     throw new IllegalStateException(
                             "The mandatory Tool execution gateway is not configured.");
                 }
-                if (context.toolPolicy() == ToolPolicy.FULL) {
+                if (context.toolPolicy() == ToolPolicy.FULL
+                        && (mcp != null || !localTools.isEmpty())) {
                     guardedSession = mutationGuard != null
                             ? commonToolGateway
                             ? mutationGuard.authorizationSession(request, context.requester(),
                                     approvalCoordinator != null
                                             ? ignored -> { }
                                             : recorder::mutationConfirmationRequired,
-                                    mcp.tools(), mcp.readOnlyToolNames(), runControl)
+                                    mcpCallbacks, nonMutationToolNames, runControl)
                             : mutationGuard.session(request, context.requester(),
                                     approvalCoordinator != null
                                             ? ignored -> { }
                                             : recorder::mutationConfirmationRequired,
-                                    mcp.tools(), mcp.readOnlyToolNames(), runControl)
+                                    mcpCallbacks, nonMutationToolNames, runControl)
                             : null;
                 }
                 var guardedTools = context.toolPolicy() == ToolPolicy.READ_ONLY
                         ? mutationGuard != null
-                                ? mutationGuard.readOnly(mcp.tools(), mcp.readOnlyToolNames())
+                                ? mutationGuard.readOnly(mcpCallbacks, readOnlyToolNames)
                                 : (org.springframework.ai.tool.ToolCallbackProvider) () ->
                                         new org.springframework.ai.tool.ToolCallback[0]
-                        : guardedSession != null ? guardedSession : mcp.tools();
-                if (hasTools) {
-                    var coreTools = callbackToolAdapter.adapt(guardedTools, mcp.readOnlyToolNames());
+                        : guardedSession != null ? guardedSession : mcpCallbacks;
+                var coreTools = callbackToolAdapter != null
+                        ? callbackToolAdapter.adapt(guardedTools, readOnlyToolNames).plus(localTools)
+                        : localTools;
+                if (!coreTools.isEmpty()) {
                     ExecutionScope scope = executionScope(context);
                     long rawByteLimit = toolOutputTokenLimit == Long.MAX_VALUE
                             ? 16L * 1024L * 1024L
@@ -601,10 +623,8 @@ public final class AiChatExecutor {
                     executableTools = recorder.recordingTools(
                             springAiToolAdapter.adapt(coreTools, gateway, scope),
                             toolOutputTokenLimit);
-                } else {
-                    executableTools = recorder.recordingTools(guardedTools, toolOutputTokenLimit);
                 }
-                assistantBuilder.defaultTools(executableTools);
+                if (executableTools != null) assistantBuilder.defaultTools(executableTools);
                 // A confirmed continuation already has a server-bound target tool.
                 // Give the model the guarded callbacks directly so it can resume that
                 // invocation and read it back without rediscovering it through
