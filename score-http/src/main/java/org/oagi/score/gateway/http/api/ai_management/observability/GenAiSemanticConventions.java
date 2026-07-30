@@ -27,13 +27,8 @@ final class GenAiSemanticConventions {
     static final String PLAN = "plan";
     static final String EXECUTE_TOOL = "execute_tool";
 
-    /**
-     * Marks an {@code invoke_workflow} span or measurement that runs inside another Workflow. The
-     * entrypoint Workflow omits it entirely, so dashboards can separate the turn from the
-     * Workflows it plans. The attribute is not in the registry yet; it follows Google ADK, which
-     * introduced it for the same entrypoint-versus-nested distinction.
-     */
-    static final String WORKFLOW_NESTED = "gen_ai.workflow.nested";
+    /** SCORE extension; the GenAI registry does not currently define a nested marker. */
+    static final String WORKFLOW_NESTED = "score.ai.workflow.nested";
 
     static final List<Double> DURATION_BUCKETS_SECONDS = List.of(
             0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28,

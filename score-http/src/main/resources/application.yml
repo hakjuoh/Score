@@ -180,6 +180,16 @@ score:
     observability:
       enabled: ${SCORE_AI_OBSERVABILITY_ENABLED:false}
       service-name: ${SCORE_AI_OBSERVABILITY_SERVICE_NAME:score-ai}
+      webhook:
+        enabled: ${SCORE_AI_OBSERVABILITY_WEBHOOK_ENABLED:false}
+        endpoint: ${SCORE_AI_OBSERVABILITY_WEBHOOK_ENDPOINT:}
+        secret: ${SCORE_AI_OBSERVABILITY_WEBHOOK_SECRET:}
+        key-id: ${SCORE_AI_OBSERVABILITY_WEBHOOK_KEY_ID:default}
+        allow-insecure-http: ${SCORE_AI_OBSERVABILITY_WEBHOOK_ALLOW_INSECURE_HTTP:false}
+        allow-private-network: ${SCORE_AI_OBSERVABILITY_WEBHOOK_ALLOW_PRIVATE_NETWORK:false}
+        queue-capacity: ${SCORE_AI_OBSERVABILITY_WEBHOOK_QUEUE_CAPACITY:1024}
+        connect-timeout: ${SCORE_AI_OBSERVABILITY_WEBHOOK_CONNECT_TIMEOUT:2s}
+        timeout: ${SCORE_AI_OBSERVABILITY_WEBHOOK_TIMEOUT:5s}
     multi-agent:
       # Caps apply per application instance; cluster-wide bounding comes from the
       # per-user active-request limit enforced by the shared AI request registry.

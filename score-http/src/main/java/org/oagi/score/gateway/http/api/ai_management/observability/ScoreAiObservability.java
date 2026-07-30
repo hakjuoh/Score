@@ -17,6 +17,11 @@ import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
+import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -26,6 +31,7 @@ import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -76,11 +82,13 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
     private final ConcurrentMap<String, TurnState> turns = new ConcurrentHashMap<>();
     private final List<BiConsumer<String, String>> closeListeners = new CopyOnWriteArrayList<>();
     private final AiLifecycleEventObserver lifecycleEvents;
+    private final ObjectProvider<ExecutionObserver> eventPublishers;
 
     @Autowired
-    public ScoreAiObservability(ScoreAiObservabilitySdk sdk, ScoreAiModelRegistry models) {
+    public ScoreAiObservability(ScoreAiObservabilitySdk sdk, ScoreAiModelRegistry models,
+                                ObjectProvider<ExecutionObserver> eventPublishers) {
         this(sdk.openTelemetry(), sdk.serviceVersion(), alias ->
-                models.modelConfiguration(alias).model());
+                models.modelConfiguration(alias).model(), eventPublishers);
     }
 
     ScoreAiObservability(OpenTelemetry openTelemetry, String serviceVersion) {
@@ -89,14 +97,22 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
 
     ScoreAiObservability(OpenTelemetry openTelemetry, String serviceVersion,
                          Function<String, String> requestModelResolver) {
+        this(openTelemetry, serviceVersion, requestModelResolver, null);
+    }
+
+    ScoreAiObservability(OpenTelemetry openTelemetry, String serviceVersion,
+                         Function<String, String> requestModelResolver,
+                         ObjectProvider<ExecutionObserver> eventPublishers) {
         OpenTelemetry installed = Objects.requireNonNull(openTelemetry, "openTelemetry");
         this.serviceVersion = StringUtils.hasText(serviceVersion) ? serviceVersion : "unknown";
         this.tracer = installed.getTracer(INSTRUMENTATION_SCOPE);
         this.instruments = new AiObservationInstruments(installed.getMeter(INSTRUMENTATION_SCOPE));
         this.requestModelResolver = Objects.requireNonNull(
                 requestModelResolver, "requestModelResolver");
+        this.eventPublishers = eventPublishers;
         this.lifecycleEvents = new AiLifecycleEventObserver(
-                tracer, instruments, this::parentContext, this::activeAgentName);
+                tracer, instruments, this::parentContext, this::activeAgentName,
+                this::explicitParentContext);
     }
 
     public static ScoreAiObservability noop() {
@@ -129,16 +145,25 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         Context parent = extractedParent(traceparent, tracestate);
         String workflowName = value(execution.kind());
         String requestModel = requestModel(execution.model());
+        ExecutionObservation startEvent = publish("workflow.root.started",
+                scope(execution.requestId(), execution.conversationId(), requester, generation,
+                        ExecutionScope.Purpose.USER_RESPONSE), Map.of(
+                        "workflow", workflowName,
+                        "model_id", requestModel,
+                        "permission_mode", value(execution.permissionMode())));
         SpanBuilder builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
                         GenAiSemanticConventions.INVOKE_WORKFLOW, workflowName)).setParent(parent)
                 .setAttribute("gen_ai.operation.name", GenAiSemanticConventions.INVOKE_WORKFLOW)
                 .setAttribute("gen_ai.workflow.name", workflowName)
+                .setAttribute("score.ai.workflow.id", workflowName)
+                .setAttribute("score.ai.workflow.run_id", execution.requestId())
                 .setAttribute("gen_ai.request.model", requestModel)
                 .setAttribute("score.ai.request.id", value(execution.requestId()))
                 .setAttribute("score.ai.conversation.id", value(execution.conversationId()))
                 .setAttribute("score.ai.execution.kind", value(execution.kind()))
                 .setAttribute("score.ai.generation", generation)
                 .setAttribute("score.ai.permission_mode", value(execution.permissionMode()));
+        eventIdentity(builder, startEvent);
         putModelAlias(builder, execution.model(), requestModel);
         GenAiSemanticConventions.putIfKnown(builder, "gen_ai.request.reasoning.level",
                 execution.reasoningLevel());
@@ -150,7 +175,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         }
         Span span = builder.startSpan();
         AtomicBoolean ended = new AtomicBoolean();
-        TurnState state = new TurnState(execution.requestId(), execution.conversationId(),
+        TurnState state = new TurnState(execution.requestId(), execution.conversationId(), generation,
                 requestModel, execution.reasoningLevel(), workflowName, span,
                 privateContext(parent, span, ended), System.nanoTime(), ended);
         TurnState active = turns.putIfAbsent(execution.requestId(), state);
@@ -180,16 +205,29 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
     public void recordAdmissionRejection(ChatRequest request, ScoreUser requester,
                                          Throwable failure, String traceparent, String tracestate) {
         recordAdmissionRejection(request, requester, failure, "admission_failed",
-                traceparent, tracestate);
+                traceparent, tracestate, 0L);
     }
 
     public void recordAdmissionRejection(ChatRequest request, ScoreUser requester,
                                          Throwable failure, String reason,
                                          String traceparent, String tracestate) {
+        recordAdmissionRejection(request, requester, failure, reason, traceparent, tracestate, 0L);
+    }
+
+    public void recordAdmissionRejection(ChatRequest request, ScoreUser requester,
+                                         Throwable failure, String reason,
+                                         String traceparent, String tracestate,
+                                         long generation) {
         if (request == null) return;
         long startedNanos = System.nanoTime();
         String normalizedReason = admissionReasonCategory(reason);
         String requestModel = requestModel(request.modelName());
+        ExecutionObservation rejectionEvent = publish("workflow.root.rejected",
+                scope(request.requestId(), request.conversationId(), requester, generation,
+                        ExecutionScope.Purpose.USER_RESPONSE), Map.of(
+                        "outcome", "admission_rejected",
+                        "failure_type", failure != null
+                                ? failure.getClass().getSimpleName() : "admission_rejected"));
         SpanBuilder builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
                         GenAiSemanticConventions.INVOKE_WORKFLOW, "assistant"))
                 .setParent(extractedParent(traceparent, tracestate))
@@ -200,6 +238,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                 .setAttribute("score.ai.conversation.id", value(request.conversationId()))
                 .setAttribute("score.ai.outcome", "admission_rejected")
                 .setAttribute("score.ai.admission.reason", normalizedReason);
+        eventIdentity(builder, rejectionEvent);
         putModelAlias(builder, request.modelName(), requestModel);
         if (StringUtils.hasText(request.conversationId())) {
             builder.setAttribute("gen_ai.conversation.id", request.conversationId().strip());
@@ -223,6 +262,13 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                 failure != null ? failure.getClass().getName() : "admission_rejected", false);
         instruments.genAiWorkflowDuration.record(
                 GenAiSemanticConventions.elapsedSeconds(startedNanos), standard);
+        ExecutionObservation closed = publish(ExecutionEventPublisher.REQUEST_CLOSED,
+                scope(request.requestId(), request.conversationId(), requester, generation,
+                        ExecutionScope.Purpose.USER_RESPONSE), Map.of(
+                        "outcome", "admission_rejected",
+                        "failure_type", failure != null
+                                ? failure.getClass().getSimpleName() : "admission_rejected"));
+        terminalEventIdentity(span, closed);
         span.end();
     }
 
@@ -232,14 +278,35 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
 
     public ModelCall startModelCall(String requestId, String modelAlias, String requestModel,
                                     String provider, String phase) {
+        return startModelCall(requestId, modelAlias, requestModel, provider, phase, null, null);
+    }
+
+    public ModelCall startModelCall(String requestId, String modelAlias, String requestModel,
+                                    String provider, String phase, String parentOperationId,
+                                    String conversationId) {
+        return startModelCall(requestId, modelAlias, requestModel, provider, phase,
+                parentOperationId, conversationId, null);
+    }
+
+    public ModelCall startModelCall(String requestId, String modelAlias, String requestModel,
+                                    String provider, String phase, String parentOperationId,
+                                    String conversationId,
+                                    AiTrajectoryRecorder.ExecutionEventIdentity started) {
         String semanticModel = StringUtils.hasText(requestModel)
                 ? requestModel.strip() : value(modelAlias);
-        TurnState turn = requestId != null ? turns.get(requestId) : null;
-        if (turn == null) return noopModelCall(semanticModel, provider);
-        synchronized (turn) {
-            if (turn.ended.get()) return noopModelCall(semanticModel, provider);
+        return withActiveTurn(requestId, noopModelCall(semanticModel, provider), turn -> {
             String semanticProvider = GenAiSemanticConventions.providerName(provider);
-            Context parent = parentContext(requestId);
+            Context explicitParent = explicitParentContext(requestId, parentOperationId);
+            Context parent = explicitParent != null ? explicitParent : parentContext(requestId);
+            ExecutionObservation startEvent = started == null
+                    ? publish("model.call.started",
+                            scope(requestId, conversationId, null, turn.generation,
+                                    ExecutionScope.Purpose.USER_RESPONSE), Map.of(
+                                    "model_id", semanticModel,
+                                    "provider", value(semanticProvider),
+                                    "phase", value(phase),
+                                    "parent_operation_id", value(parentOperationId)))
+                    : null;
             ModelIdentity identity = turn.nextModelIdentity(parent);
             SpanBuilder builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
                             GenAiSemanticConventions.CHAT, semanticModel))
@@ -251,9 +318,13 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                     .setAttribute("score.ai.model_call.id", identity.callId())
                     .setAttribute("score.ai.attempt", identity.attempt())
                     .setAttribute("score.ai.phase", value(phase));
+            eventIdentity(builder, startEvent);
+            eventIdentity(builder, started);
             putModelAlias(builder, modelAlias, semanticModel);
-            if (StringUtils.hasText(turn.conversationId)) {
-                builder.setAttribute("gen_ai.conversation.id", turn.conversationId);
+            String semanticConversationId = StringUtils.hasText(conversationId)
+                    ? conversationId.strip() : turn.conversationId;
+            if (StringUtils.hasText(semanticConversationId)) {
+                builder.setAttribute("gen_ai.conversation.id", semanticConversationId);
             }
             GenAiSemanticConventions.putIfKnown(builder, "gen_ai.request.reasoning.level",
                     turn.reasoningLevel);
@@ -264,9 +335,11 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
             ModelCall call = new ModelCall(turn, span, semanticModel, semanticProvider,
                     identity.agentInvocation(), identity.sequence(),
                     System.nanoTime(), true);
-            turn.activeModelCalls.add(call);
+            synchronized (turn) {
+                turn.activeModelCalls.add(call);
+            }
             return call;
-        }
+        });
     }
 
     private String requestModel(String alias) {
@@ -277,6 +350,70 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         } catch (RuntimeException ignored) {
             return fallback;
         }
+    }
+
+    private ExecutionScope scope(String requestId, String conversationId, ScoreUser requester,
+                                 long generation, ExecutionScope.Purpose purpose) {
+        String requesterId = requester != null && requester.userId() != null
+                ? requester.userId().value().toString()
+                : requester != null && StringUtils.hasText(requester.username())
+                ? requester.username() : "unknown";
+        String correlatedConversation = StringUtils.hasText(conversationId)
+                ? conversationId.strip() : requestId;
+        return new ExecutionScope(requestId, correlatedConversation, requesterId,
+                Math.max(0L, generation), purpose, List.of());
+    }
+
+    private ExecutionObservation publish(String type, ExecutionScope scope,
+                                         Map<String, Object> attributes) {
+        return publish(type, scope, attributes, ignored -> { });
+    }
+
+    private ExecutionObservation publish(String type, ExecutionScope scope,
+                                         Map<String, Object> attributes,
+                                         java.util.function.Consumer<ExecutionObservation> projection) {
+        if (eventPublishers == null) return null;
+        ExecutionObserver publisher = eventPublishers.getIfAvailable();
+        if (publisher == null) return null;
+        java.util.concurrent.atomic.AtomicReference<ExecutionObservation> published =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        publisher.publish(ExecutionObservation.of(type, scope, attributes), published::set,
+                projection);
+        return published.get();
+    }
+
+    private static void eventIdentity(SpanBuilder builder, ExecutionObservation event) {
+        if (event == null) return;
+        Object id = event.attributes().get(ExecutionEventPublisher.EVENT_ID);
+        Object sequence = event.attributes().get(ExecutionEventPublisher.EVENT_SEQUENCE);
+        if (id != null) builder.setAttribute(ExecutionEventPublisher.EVENT_ID, id.toString());
+        if (sequence instanceof Number number) {
+            builder.setAttribute(ExecutionEventPublisher.EVENT_SEQUENCE, number.longValue());
+        }
+        builder.setAttribute(ExecutionEventPublisher.EVENT_OCCURRED_AT,
+                event.occurredAt().toString());
+        builder.setStartTimestamp(event.occurredAt());
+    }
+
+    private static void eventIdentity(SpanBuilder builder,
+                                      AiTrajectoryRecorder.ExecutionEventIdentity event) {
+        if (event == null) return;
+        builder.setAttribute(ExecutionEventPublisher.EVENT_ID, event.eventId());
+        builder.setAttribute(ExecutionEventPublisher.EVENT_SEQUENCE, event.sequence());
+        builder.setAttribute(ExecutionEventPublisher.EVENT_OCCURRED_AT,
+                event.occurredAt().toString());
+        builder.setStartTimestamp(event.occurredAt());
+    }
+
+    private static void terminalEventIdentity(Span span, ExecutionObservation event) {
+        if (event == null) return;
+        Object id = event.attributes().get(ExecutionEventPublisher.EVENT_ID);
+        Object sequence = event.attributes().get(ExecutionEventPublisher.EVENT_SEQUENCE);
+        if (id != null) span.setAttribute("score.event.end.id", id.toString());
+        if (sequence instanceof Number number) {
+            span.setAttribute("score.event.end.sequence", number.longValue());
+        }
+        span.setAttribute("score.event.end.occurred_at", event.occurredAt().toString());
     }
 
     private static void putModelAlias(SpanBuilder builder, String alias, String requestModel) {
@@ -328,17 +465,43 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         for (GuardrailDecision decision : recorded) {
             if (decision == null) continue;
             String action = decision.action().name().toLowerCase();
+            TurnState turn = turns.get(requestId);
             Attributes labels = Attributes.builder()
                     .put("score.ai.guardrail.scope", value(scope).toLowerCase())
                     .put("score.ai.guardrail.action", action)
                     .build();
-            instruments.guardrailDecisions.add(1, labels);
-            Span.fromContext(parentContext(requestId)).addEvent("score.ai.guardrail.decision",
-                    Attributes.builder().putAll(labels)
-                            .put("score.ai.guardrail.decision_id", decision.decisionId())
-                            .put("score.ai.guardrail.policy_id", decision.policyId())
-                            .put("score.ai.guardrail.policy_version", decision.policyVersion())
-                            .build());
+            ExecutionObservation published = null;
+            if (turn != null) {
+                published = publish("guardrail.decision",
+                        scope(requestId, turn.conversationId, null, turn.generation,
+                                ExecutionScope.Purpose.GUARDRAIL_EVALUATION), Map.of(
+                                "action", action,
+                                "decision_id", decision.decisionId(),
+                                "policy_id", decision.policyId()), event -> {
+                            AttributesBuilder eventAttributes = Attributes.builder().putAll(labels)
+                                    .put("score.ai.guardrail.decision_id", decision.decisionId())
+                                    .put("score.ai.guardrail.policy_id", decision.policyId())
+                                    .put("score.ai.guardrail.policy_version", decision.policyVersion())
+                                    .put(ExecutionEventPublisher.EVENT_ID,
+                                            event.attributes().get(
+                                                    ExecutionEventPublisher.EVENT_ID).toString())
+                                    .put(ExecutionEventPublisher.EVENT_SEQUENCE,
+                                            ((Number) event.attributes().get(
+                                                    ExecutionEventPublisher.EVENT_SEQUENCE)).longValue());
+                            instruments.guardrailDecisions.add(1, labels);
+                            Span.fromContext(parentContext(requestId)).addEvent(
+                                    "score.ai.guardrail.decision", eventAttributes.build());
+                        });
+            }
+            if (published == null) {
+                instruments.guardrailDecisions.add(1, labels);
+                Span.fromContext(parentContext(requestId)).addEvent(
+                        "score.ai.guardrail.decision", Attributes.builder().putAll(labels)
+                                .put("score.ai.guardrail.decision_id", decision.decisionId())
+                                .put("score.ai.guardrail.policy_id", decision.policyId())
+                                .put("score.ai.guardrail.policy_version", decision.policyVersion())
+                                .build());
+            }
         }
     }
 
@@ -414,7 +577,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         TurnState state = requestId != null ? turns.get(requestId) : null;
         if (state == null || runId == null) return Scope.noop();
         synchronized (state) {
-            if (state.ended.get()) return Scope.noop();
+            if (state.ended.get() || state.closing.get()) return Scope.noop();
             Context context = state.agentContexts.get(runId);
             return context != null ? context.makeCurrent() : Scope.noop();
         }
@@ -425,7 +588,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         TurnState state = requestId != null ? turns.get(requestId) : null;
         if (state == null || toolCallId == null) return () -> { };
         synchronized (state) {
-            if (state.ended.get()) return () -> { };
+            if (state.ended.get() || state.closing.get()) return () -> { };
             Context context = lifecycleEvents.toolContext(requestId, toolCallId);
             Scope scope = context != null ? context.makeCurrent() : Scope.noop();
             return scope::close;
@@ -434,38 +597,45 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
 
     @Override
     public ExecutionObservationContext.Operation startPlan(String requestId, String agentName) {
-        TurnState state = requestId != null ? turns.get(requestId) : null;
-        if (state == null) return ExecutionObservationContext.Operation.noop();
-        synchronized (state) {
-            if (state.ended.get() || turns.get(requestId) != state) {
-                return ExecutionObservationContext.Operation.noop();
-            }
+        return withActiveTurn(requestId, ExecutionObservationContext.Operation.noop(), state -> {
             String semanticTarget = value(agentName);
             Context parent = parentContext(requestId);
+            ExecutionObservation startEvent = publish("plan.started",
+                    scope(requestId, state.conversationId, null, state.generation,
+                            ExecutionScope.Purpose.WORKFLOW_PLANNING),
+                    Map.of("agent_id", semanticTarget));
             SpanBuilder builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
                             GenAiSemanticConventions.PLAN, semanticTarget))
                     .setParent(parent)
                     .setSpanKind(SpanKind.INTERNAL)
                     .setAttribute("gen_ai.operation.name", GenAiSemanticConventions.PLAN);
+            eventIdentity(builder, startEvent);
             GenAiSemanticConventions.putIfKnown(
                     builder, "gen_ai.agent.name", semanticTarget);
             Span span = builder.startSpan();
             ObservedOperation observed = new ObservedOperation(
                     state, span, privateContext(parent, span));
-            state.activeOperations.add(observed);
+            synchronized (state) {
+                state.activeOperations.add(observed);
+            }
             observed.activate();
             return observed;
-        }
+        });
     }
 
-    void registerAgentContext(String requestId, String runId, String agentName, Context context) {
+    void registerAgentContext(String requestId, String runId, String agentName,
+                              String workflowNodeId, Context context) {
         TurnState state = requestId != null ? turns.get(requestId) : null;
         if (state == null || runId == null || context == null) return;
         synchronized (state) {
             if (!state.ended.get() && turns.get(requestId) == state) {
                 Context attributed = context.with(ACTIVE_AGENT_RUN_ID, runId);
                 state.agentContexts.put(runId, attributed);
-                state.agentInvocations.put(runId, new AgentInvocation(agentName, attributed));
+                state.agentInvocations.put(runId,
+                        new AgentInvocation(agentName, workflowNodeId, attributed));
+                if (StringUtils.hasText(workflowNodeId)) {
+                    state.agentNodeContexts.put(workflowNodeId, attributed);
+                }
             }
         }
     }
@@ -476,6 +646,9 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         synchronized (state) {
             state.agentContexts.remove(runId);
             AgentInvocation invocation = state.agentInvocations.remove(runId);
+            if (invocation != null && StringUtils.hasText(invocation.workflowNodeId)) {
+                state.agentNodeContexts.remove(invocation.workflowNodeId, invocation.context);
+            }
             return invocation != null ? invocation.snapshot() : AgentInvocationCounts.EMPTY;
         }
     }
@@ -494,11 +667,34 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
 
     boolean whileActive(String requestId, Runnable action) {
         TurnState state = requestId != null ? turns.get(requestId) : null;
+        if (state == null || !state.reservePublication()) return false;
+        try {
+            action.run();
+            return true;
+        } finally {
+            state.releasePublication();
+        }
+    }
+
+    /** Allows a listener for an already-sequenced event to drain while terminal close waits. */
+    boolean whileCausallyActive(String requestId, Runnable action) {
+        TurnState state = requestId != null ? turns.get(requestId) : null;
         if (state == null) return false;
         synchronized (state) {
             if (state.ended.get() || turns.get(requestId) != state) return false;
-            action.run();
-            return true;
+        }
+        action.run();
+        return true;
+    }
+
+    private <T> T withActiveTurn(String requestId, T inactive,
+                                 Function<TurnState, T> action) {
+        TurnState state = requestId != null ? turns.get(requestId) : null;
+        if (state == null || !state.reservePublication()) return inactive;
+        try {
+            return action.apply(state);
+        } finally {
+            state.releasePublication();
         }
     }
 
@@ -512,6 +708,18 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         // Without a Workflow node the Agent invocations of a turn are peers. Anchoring them on the
         // turn keeps them side by side instead of chaining each run under the one still running.
         return state.context;
+    }
+
+    private Context explicitParentContext(String requestId, String operationId) {
+        if (!StringUtils.hasText(requestId) || !StringUtils.hasText(operationId)) return null;
+        Context workflow = lifecycleEvents.workflowContext(requestId, operationId);
+        if (workflow != null) return workflow;
+        TurnState state = turns.get(requestId);
+        if (state == null || state.ended.get()) return null;
+        Context agent = state.agentNodeContexts.get(operationId);
+        if (agent != null) return agent;
+        AgentInvocation invocation = state.agentInvocations.get(operationId);
+        return invocation != null ? invocation.context : null;
     }
 
     void onTurnClosed(BiConsumer<String, String> listener) {
@@ -561,6 +769,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
 
     private final class TurnState {
         private final String requestId;
+        private final long generation;
         private volatile String model;
         private final String reasoningLevel;
         private volatile String conversationId;
@@ -583,17 +792,21 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         private final ConcurrentMap<String, Context> agentContexts = new ConcurrentHashMap<>();
         private final ConcurrentMap<String, AgentInvocation> agentInvocations =
                 new ConcurrentHashMap<>();
+        private final ConcurrentMap<String, Context> agentNodeContexts = new ConcurrentHashMap<>();
         private final Set<ObservedOperation> activeOperations = new HashSet<>();
         private final AtomicBoolean firstToken = new AtomicBoolean();
         private final AtomicBoolean executionStarted = new AtomicBoolean();
         private final AtomicBoolean compacted = new AtomicBoolean();
         private final AtomicBoolean ended;
+        private final AtomicBoolean closing = new AtomicBoolean();
+        private int activePublications;
 
-        private TurnState(String requestId, String conversationId, String model,
+        private TurnState(String requestId, String conversationId, long generation, String model,
                           String reasoningLevel, String workflowName,
                           Span span, Context context,
                           long startedNanos, AtomicBoolean ended) {
             this.requestId = requestId;
+            this.generation = generation;
             this.conversationId = StringUtils.hasText(conversationId)
                     ? conversationId.strip() : null;
             this.model = model;
@@ -604,6 +817,31 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
             this.startedNanos = startedNanos;
             this.ended = ended;
             this.activeRequestAttributes = modelAttributes(model, null);
+        }
+
+        private synchronized boolean reservePublication() {
+            if (ended.get() || closing.get() || turns.get(requestId) != this) return false;
+            activePublications++;
+            return true;
+        }
+
+        private synchronized void releasePublication() {
+            activePublications--;
+            if (activePublications == 0) notifyAll();
+        }
+
+        private synchronized boolean beginClosing() {
+            if (!closing.compareAndSet(false, true)) return false;
+            boolean interrupted = false;
+            while (activePublications > 0) {
+                try {
+                    wait();
+                } catch (InterruptedException ignored) {
+                    interrupted = true;
+                }
+            }
+            if (interrupted) Thread.currentThread().interrupt();
+            return true;
         }
 
         private ModelIdentity nextModelIdentity(Context parent) {
@@ -647,6 +885,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
 
     private static final class AgentInvocation {
         private final String agentName;
+        private final String workflowNodeId;
         private final Context context;
         private final AtomicLong inferenceCalls = new AtomicLong();
         private final AtomicLong toolCalls = new AtomicLong();
@@ -659,8 +898,9 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         private final AtomicLong finishReasonSequence = new AtomicLong();
         private volatile List<String> finishReasons = List.of();
 
-        private AgentInvocation(String agentName, Context context) {
+        private AgentInvocation(String agentName, String workflowNodeId, Context context) {
             this.agentName = agentName;
+            this.workflowNodeId = workflowNodeId;
             this.context = context;
         }
 
@@ -709,51 +949,79 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         private Turn(TurnState state) { this.state = state; }
 
         public void executionStarted() {
-            if (state == null || !state.executionStarted.compareAndSet(false, true)) return;
-            double delay = elapsedMillis(state.startedNanos);
-            state.span.setAttribute("score.ai.queue_delay_ms", delay);
-            instruments.queueDelay.record(delay, modelAttributes(state.model, null));
+            if (state == null || !state.reservePublication()) return;
+            try {
+                if (!state.executionStarted.compareAndSet(false, true)) return;
+                double delay = elapsedMillis(state.startedNanos);
+                state.span.setAttribute("score.ai.queue_delay_ms", delay);
+                instruments.queueDelay.record(delay, modelAttributes(state.model, null));
+            } finally {
+                state.releasePublication();
+            }
         }
 
         public void prepared(ChatRequest request) {
-            if (state == null || request == null || state.ended.get()) return;
-            String requestModel = requestModel(request.modelName());
-            state.model = requestModel;
-            state.conversationId = StringUtils.hasText(request.conversationId())
-                    ? request.conversationId().strip() : null;
-            state.span.setAttribute("gen_ai.request.model", requestModel);
-            if (StringUtils.hasText(request.modelName())
-                    && !request.modelName().strip().equals(requestModel)) {
-                state.span.setAttribute("score.ai.model.alias", request.modelName().strip());
-            }
-            state.span.setAttribute("score.ai.conversation.id", value(request.conversationId()));
-            if (state.conversationId != null) {
-                state.span.setAttribute("gen_ai.conversation.id", state.conversationId);
+            if (state == null || request == null || !state.reservePublication()) return;
+            try {
+                String requestModel = requestModel(request.modelName());
+                state.model = requestModel;
+                state.conversationId = StringUtils.hasText(request.conversationId())
+                        ? request.conversationId().strip() : null;
+                state.span.setAttribute("gen_ai.request.model", requestModel);
+                if (StringUtils.hasText(request.modelName())
+                        && !request.modelName().strip().equals(requestModel)) {
+                    state.span.setAttribute("score.ai.model.alias", request.modelName().strip());
+                }
+                state.span.setAttribute("score.ai.conversation.id", value(request.conversationId()));
+                if (state.conversationId != null) {
+                    state.span.setAttribute("gen_ai.conversation.id", state.conversationId);
+                }
+            } finally {
+                state.releasePublication();
             }
         }
 
         public void admissionRejected(String reason) {
-            if (state == null || state.ended.get()) return;
-            String normalized = admissionReasonCategory(reason);
-            state.span.setAttribute("score.ai.admission.reason", normalized);
-            instruments.admissionRejections.add(1, Attributes.builder()
-                    .put("gen_ai.request.model", value(state.model))
-                    .put("score.ai.admission.reason", normalized)
-                    .build());
+            if (state == null || !state.reservePublication()) return;
+            try {
+                String normalized = admissionReasonCategory(reason);
+                state.span.setAttribute("score.ai.admission.reason", normalized);
+                instruments.admissionRejections.add(1, Attributes.builder()
+                        .put("gen_ai.request.model", value(state.model))
+                        .put("score.ai.admission.reason", normalized)
+                        .build());
+            } finally {
+                state.releasePublication();
+            }
         }
 
         public void complete(String outcome, Throwable failure) {
-            if (state == null) return;
+            if (state == null || !state.beginClosing()) return;
+            String normalized = AiLifecycleEventObserver.outcome(outcome);
+            List<ModelCall> modelCalls;
+            List<ObservedOperation> operations;
+            synchronized (state) {
+                modelCalls = List.copyOf(state.activeModelCalls);
+                operations = List.copyOf(state.activeOperations);
+            }
+            for (ModelCall modelCall : modelCalls) {
+                modelCall.closeFromTurn(normalized);
+            }
+            for (ObservedOperation operation : operations) {
+                operation.closeFromTurn(normalized);
+            }
+            Map<String, Object> terminal = new LinkedHashMap<>();
+            terminal.put("outcome", normalized);
+            if (failure != null) {
+                terminal.put("failure_type", failure.getClass().getSimpleName());
+            }
+            ExecutionObservation closed = publish(ExecutionEventPublisher.REQUEST_CLOSED,
+                    scope(state.requestId, state.conversationId, null, state.generation,
+                            ExecutionScope.Purpose.USER_RESPONSE), Map.copyOf(terminal));
             synchronized (state) {
                 if (!state.ended.compareAndSet(false, true)) return;
-                String normalized = AiLifecycleEventObserver.outcome(outcome);
-                for (ModelCall modelCall : List.copyOf(state.activeModelCalls)) {
-                    modelCall.closeFromTurn(normalized);
-                }
+                terminalEventIdentity(state.span, closed);
                 state.activeModelCalls.clear();
-                for (ObservedOperation operation : List.copyOf(state.activeOperations)) {
-                    operation.closeFromTurn(normalized);
-                }
                 state.activeOperations.clear();
                 if (failure != null) {
                     state.span.setAttribute("error.type", failure.getClass().getName());
@@ -863,6 +1131,12 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                 span.setAttribute("error.type", errorType);
                 span.setStatus(StatusCode.ERROR, normalized);
             }
+            ExecutionObservation terminal = publish("plan.completed",
+                    scope(turn.requestId, turn.conversationId, null, turn.generation,
+                            ExecutionScope.Purpose.WORKFLOW_PLANNING), Map.of(
+                            "outcome", normalized,
+                            "failure_type", errorType != null ? errorType : "none"));
+            terminalEventIdentity(span, terminal);
             synchronized (turn) {
                 turn.activeOperations.remove(this);
             }
@@ -932,6 +1206,13 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                             providerModelAttributes(provider, model, null));
                 }
             }
+        }
+
+        public void eventIdentity(AiTrajectoryRecorder.ExecutionEventIdentity event) {
+            if (!recording || event == null || turn.ended.get() || ended.get()) return;
+            span.setAttribute("score.event.end.id", event.eventId());
+            span.setAttribute("score.event.end.sequence", event.sequence());
+            span.setAttribute("score.event.end.occurred_at", event.occurredAt().toString());
         }
 
         public void complete(ChatResponse response) {
@@ -1071,16 +1352,22 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         }
 
         private void closeFromTurn(String turnOutcome) {
-            if (!ended.compareAndSet(false, true)) return;
-            String outcome = switch (turnOutcome) {
-                case "cancelled", "timeout" -> turnOutcome;
-                default -> "error";
-            };
-            finishLocked(outcome, null, true);
+            synchronized (turn) {
+                if (!ended.compareAndSet(false, true)) return;
+                String outcome = switch (turnOutcome) {
+                    case "cancelled", "timeout" -> turnOutcome;
+                    default -> "error";
+                };
+                finishLocked(outcome, null, true);
+            }
         }
 
         private void finishLocked(String outcome, Throwable failure, boolean incomplete) {
-            if (turn != null) turn.activeModelCalls.remove(this);
+            if (turn != null) {
+                synchronized (turn) {
+                    turn.activeModelCalls.remove(this);
+                }
+            }
             if (failure != null) {
                 span.setAttribute("error.type", failure.getClass().getName());
                 span.setStatus(StatusCode.ERROR, outcome);

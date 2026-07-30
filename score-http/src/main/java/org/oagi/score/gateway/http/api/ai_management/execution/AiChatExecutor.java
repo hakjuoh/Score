@@ -144,8 +144,9 @@ public final class AiChatExecutor {
         this.platformTools = platformTools;
         this.toolSearchEnabled = properties == null
                 || properties.getTools().getToolSearch().isEnabled();
-        this.observer = ExecutionObserver.composite(executionObservers != null
-                ? executionObservers.orderedStream().toList() : List.of());
+        this.observer = executionObservers != null
+                ? executionObservers.getIfAvailable(ExecutionObserver::noop)
+                : ExecutionObserver.noop();
     }
 
     /** Compatibility constructor for callers predating configurable middleware. */
@@ -301,7 +302,8 @@ public final class AiChatExecutor {
         String telemetryModel = telemetryModel(context.request().modelName());
         observe("agent.run.started", scope, runId, context.agentId(),
                 telemetryModel, observationContext(context), null);
-        try (var ignored = observability.makeAgentCurrent(scope.requestId(), runId)) {
+        try (var recorderRun = context.recorder().activateAgentRun(runId);
+             var ignored = observability.makeAgentCurrent(scope.requestId(), runId)) {
             try {
                 Result identified;
                 try (var planning = planningOperation(context, scope)) {
@@ -358,7 +360,12 @@ public final class AiChatExecutor {
         observe("agent.run.started", invocation.scope(), runId,
                 invocation.session().agent().id().value(),
                 telemetryModel, invocation.observationContext(), null);
-        try (var ignored = observability.makeAgentCurrent(invocation.scope().requestId(), runId)) {
+        AiTrajectoryRecorder providerRecorder = AgentExecutionRecorderAdapter.providerRecorderOrNull(
+                invocation.recorder());
+        try (var recorderRun = providerRecorder != null
+                ? providerRecorder.activateAgentRun(runId)
+                : AiTrajectoryRecorder.AgentRunActivation.noop();
+             var ignored = observability.makeAgentCurrent(invocation.scope().requestId(), runId)) {
             try {
                 AgentRunResult result = executeAgentInternal(invocation);
                 observe("agent.run.completed", invocation.scope(), runId,
@@ -410,16 +417,28 @@ public final class AiChatExecutor {
                 invocation.recorder());
         Supplier<ChatResponse> providerCall = () -> {
             if (recorder != null) recorder.verifyActive();
+            AiTrajectoryRecorder.ModelCallRecording candidate = recorder != null
+                    ? recorder.beginModelCall("agent") : null;
+            AiTrajectoryRecorder.ModelCallRecording recording = candidate != null
+                    ? candidate : AiTrajectoryRecorder.ModelCallRecording.noop();
             ScoreAiObservability.ModelCall modelCall = observability.startModelCall(
                     invocation.scope().requestId(), modelId, model.model(),
-                    model.providerType(), "agent");
+                    model.providerType(), "agent",
+                    recorder != null ? recorder.activeAgentRunId() : null,
+                    invocation.scope().conversationId(), recording.started());
             try {
                 ChatResponse response = builder.build().prompt()
                         .options(optionsFactory.create(modelId, reasoningEffort, null).mutate())
                         .messages(messages).call().chatResponse();
+                if (recorder != null) {
+                    modelCall.eventIdentity(recorder.recordModelResponse(recording, response, false));
+                }
                 modelCall.complete(response);
                 return response;
             } catch (RuntimeException failure) {
+                if (recorder != null) {
+                    modelCall.eventIdentity(recorder.failModelCall(recording, failure));
+                }
                 modelCall.fail(failure);
                 throw failure;
             }
@@ -731,7 +750,8 @@ public final class AiChatExecutor {
                                     context.requester(), request.requestId(), request.conversationId(),
                                     approvalScope, pendingApprovals,
                                     recorder::changeApprovalBatchRequired,
-                                    recorder::changeApprovalDecisionAccepted);
+                                    recorder::changeApprovalDecisionAccepted,
+                                    recorder.executionGeneration());
                         } finally {
                             runControl.definiteActivityFinished();
                         }
@@ -810,7 +830,7 @@ public final class AiChatExecutor {
                 : context.requester() != null && StringUtils.hasText(context.requester().username())
                 ? context.requester().username() : "unknown";
         return new ExecutionScope(context.request().requestId(), context.request().conversationId(),
-                requesterId, context.agentDepth(), context.executionPurpose(),
+                requesterId, context.recorder().executionGeneration(), context.executionPurpose(),
                 context.guardrailDecisionIds());
     }
 
@@ -826,7 +846,8 @@ public final class AiChatExecutor {
         runControl.definiteActivityStarted();
         try {
             return elicitations.await(context.requester(), request.conversationId(),
-                    request.requestId(), elicitation, recorder::elicitationRequired);
+                    request.requestId(), recorder.executionGeneration(), elicitation,
+                    recorder::elicitationRequired);
         } finally {
             runControl.definiteActivityFinished();
         }

@@ -1,6 +1,10 @@
 package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChangeApprovalDecisionRequest;
+import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalBatchNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalResolution;
@@ -15,6 +19,7 @@ import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,6 +68,7 @@ public class AiChangeApprovalCoordinator {
     private final AiRequestRegistry requests;
     private final Duration approvalTimeout;
     private final Consumer<String> batchRegisteredHook;
+    private final ExecutionObserver observer;
     private final Map<String, ParallelGroup> groups = new ConcurrentHashMap<>();
     private final Map<String, PendingBatch> batches = new ConcurrentHashMap<>();
     private final Map<String, DecidedBatch> decidedBatches = new ConcurrentHashMap<>();
@@ -74,15 +80,20 @@ public class AiChangeApprovalCoordinator {
             AiChangeConfirmationService confirmations,
             RepositoryFactory repositoryFactory,
             ScoreAiProperties properties,
-            AiRequestRegistry requests) {
-        this(confirmations, repositoryFactory, properties, requests, ignored -> { });
+            AiRequestRegistry requests,
+            ObjectProvider<ExecutionObserver> executionObservers) {
+        this(confirmations, repositoryFactory, properties, requests, ignored -> { },
+                executionObservers != null
+                        ? executionObservers.getIfAvailable(ExecutionObserver::noop)
+                        : ExecutionObserver.noop());
     }
 
     AiChangeApprovalCoordinator(
             AiChangeConfirmationService confirmations,
             RepositoryFactory repositoryFactory,
             ScoreAiProperties properties) {
-        this(confirmations, repositoryFactory, properties, null, ignored -> { });
+        this(confirmations, repositoryFactory, properties, null, ignored -> { },
+                ExecutionObserver.noop());
     }
 
     AiChangeApprovalCoordinator(
@@ -90,7 +101,8 @@ public class AiChangeApprovalCoordinator {
             RepositoryFactory repositoryFactory,
             ScoreAiProperties properties,
             Consumer<String> batchRegisteredHook) {
-        this(confirmations, repositoryFactory, properties, null, batchRegisteredHook);
+        this(confirmations, repositoryFactory, properties, null, batchRegisteredHook,
+                ExecutionObserver.noop());
     }
 
     AiChangeApprovalCoordinator(
@@ -99,6 +111,17 @@ public class AiChangeApprovalCoordinator {
             ScoreAiProperties properties,
             AiRequestRegistry requests,
             Consumer<String> batchRegisteredHook) {
+        this(confirmations, repositoryFactory, properties, requests, batchRegisteredHook,
+                ExecutionObserver.noop());
+    }
+
+    AiChangeApprovalCoordinator(
+            AiChangeConfirmationService confirmations,
+            RepositoryFactory repositoryFactory,
+            ScoreAiProperties properties,
+            AiRequestRegistry requests,
+            Consumer<String> batchRegisteredHook,
+            ExecutionObserver observer) {
         this.confirmations = Objects.requireNonNull(confirmations, "confirmations");
         this.repositoryFactory = Objects.requireNonNull(repositoryFactory, "repositoryFactory");
         this.requests = requests;
@@ -106,6 +129,7 @@ public class AiChangeApprovalCoordinator {
                 ? properties.getChangeApprovalTimeout() : Duration.ofMinutes(10);
         this.batchRegisteredHook = Objects.requireNonNull(
                 batchRegisteredHook, "batchRegisteredHook");
+        this.observer = observer != null ? observer : ExecutionObserver.noop();
     }
 
     public Duration decisionTimeout() {
@@ -185,7 +209,7 @@ public class AiChangeApprovalCoordinator {
             List<AiPendingChangeApproval> approvals,
             Consumer<AiChangeApprovalBatchNotice> noticeConsumer) {
         return awaitDecisions(requester, requestId, sourceConversationId, scope, approvals,
-                noticeConsumer, ignored -> { });
+                noticeConsumer, ignored -> { }, 0L);
     }
 
     /** Waits for one decision and emits its committed acknowledgement before resuming work. */
@@ -197,6 +221,19 @@ public class AiChangeApprovalCoordinator {
             List<AiPendingChangeApproval> approvals,
             Consumer<AiChangeApprovalBatchNotice> noticeConsumer,
             Consumer<DecisionAcknowledgement> acknowledgementConsumer) {
+        return awaitDecisions(requester, requestId, sourceConversationId, scope, approvals,
+                noticeConsumer, acknowledgementConsumer, 0L);
+    }
+
+    public Map<String, AiChangeApprovalResolution> awaitDecisions(
+            ScoreUser requester,
+            String requestId,
+            String sourceConversationId,
+            AiChangeApprovalScope scope,
+            List<AiPendingChangeApproval> approvals,
+            Consumer<AiChangeApprovalBatchNotice> noticeConsumer,
+            Consumer<DecisionAcknowledgement> acknowledgementConsumer,
+            long generation) {
         if (requester == null || !StringUtils.hasText(requestId)
                 || !StringUtils.hasText(sourceConversationId) || scope == null
                 || approvals == null || approvals.isEmpty() || noticeConsumer == null
@@ -206,7 +243,7 @@ public class AiChangeApprovalCoordinator {
         if (batches.size() >= MAX_PENDING_BATCHES) {
             throw new IllegalStateException("Too many change approvals are pending.");
         }
-        Waiter waiter = new Waiter(requester, requestId, sourceConversationId,
+        Waiter waiter = new Waiter(requester, requestId, Math.max(0L, generation), sourceConversationId,
                 scope, List.copyOf(approvals), noticeConsumer,
                 acknowledgementConsumer,
                 decisionDeadline(), new CompletableFuture<>());
@@ -571,9 +608,15 @@ public class AiChangeApprovalCoordinator {
         if (confirmationExpiry.isBefore(expiresAt)) {
             expiresAt = confirmationExpiry;
         }
+        long generation = waiters.getFirst().generation;
+        if (waiters.stream().anyMatch(waiter -> waiter.generation != generation)) {
+            throw new IllegalStateException(
+                    "A change approval batch cannot span request generations.");
+        }
         PendingBatch batch = new PendingBatch(id,
                 waiters.getFirst().requester.userId().value().toString(), rootConversationId,
-                requestId, parallel, expiresAt, decisionDeadline, immutableLinkedMap(items),
+                requestId, generation, parallel, expiresAt, decisionDeadline,
+                immutableLinkedMap(items),
                 List.copyOf(waiters), group,
                 new AtomicReference<>(BatchState.REGISTERED), new AtomicBoolean());
         if (batches.putIfAbsent(batch.id, batch) != null) {
@@ -608,7 +651,7 @@ public class AiChangeApprovalCoordinator {
                     batch.id, batch.requestId, batch.rootConversationId,
                     batch.parallel, batch.expiresAt, items);
             try {
-                recordRequested(batch.waiters.getFirst().requester(), notice);
+                recordRequested(batch.waiters.getFirst().requester(), notice, batch.generation);
                 batch.waiters.getFirst().noticeConsumer.accept(notice);
             } catch (RuntimeException failure) {
                 cancelBatch(batch);
@@ -779,7 +822,8 @@ public class AiChangeApprovalCoordinator {
         return Map.copyOf(result);
     }
 
-    private void recordRequested(ScoreUser requester, AiChangeApprovalBatchNotice notice) {
+    private void recordRequested(ScoreUser requester, AiChangeApprovalBatchNotice notice,
+                                 long generation) {
         List<Map<String, Object>> items = notice.items().stream().map(item -> Map.<String, Object>of(
                 "confirmationRequestId", item.confirmationRequestId(),
                 "toolName", item.toolName(),
@@ -794,7 +838,7 @@ public class AiChangeApprovalCoordinator {
                 null, null, null, null, null, null,
                 Map.of("batchId", notice.batchId(), "parallel", notice.parallel(),
                         "expiresAt", notice.expiresAt().toString(), "items", items),
-                0, null, Instant.now()));
+                0, null, Instant.now()), generation);
     }
 
     private void recordDecision(ScoreUser requester, PendingBatch batch, Map<String, String> decisions) {
@@ -806,14 +850,46 @@ public class AiChangeApprovalCoordinator {
                         + " and denied " + denied + ".",
                 null, null, null, null, null, null,
                 Map.of("batchId", batch.id, "decisions", decisions),
-                0, null, Instant.now()));
+                0, null, Instant.now()), batch.generation);
     }
 
-    private void append(ScoreUser requester, String conversationId, AiChatTrajectoryStep step) {
+    private void append(ScoreUser requester, String conversationId, AiChatTrajectoryStep step,
+                        long generation) {
         AiChatConversationRepository repository =
                 repositoryFactory.aiChatConversationRepository(
                         requester, AiChatJsonSerializer.getInstance());
-        repository.append(conversationId, step);
+        if (!StringUtils.hasText(step.requestId())) {
+            throw new IllegalArgumentException(
+                    "A request ID is required for an AI trajectory event.");
+        }
+        String requesterId = requester != null && requester.userId() != null
+                ? requester.userId().value().toString()
+                : requester != null && StringUtils.hasText(requester.username())
+                ? requester.username() : "unknown";
+        ExecutionScope scope = new ExecutionScope(step.requestId(), conversationId,
+                requesterId, Math.max(0L, generation),
+                ExecutionScope.Purpose.GUARDRAIL_EVALUATION, List.of());
+        observer.publish(ExecutionObservation.of("trajectory." + step.messageKind(), scope,
+                        Map.of("message_kind", step.messageKind(), "source", step.source())),
+                event -> {
+                    Map<String, Object> extra = new LinkedHashMap<>(
+                            step.extra() != null ? step.extra() : Map.of());
+                    copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_ID);
+                    copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_SEQUENCE);
+                    copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_OCCURRED_AT);
+                    repository.append(conversationId, new AiChatTrajectoryStep(
+                            step.requestId(), step.source(), step.messageKind(), step.visibility(),
+                            step.message(), step.reasoningContent(), step.modelName(),
+                            step.reasoningEffort(), step.toolCalls(), step.observation(),
+                            step.metrics(), Map.copyOf(extra), step.llmCallCount(),
+                            step.isCopiedContext(), event.occurredAt()));
+                });
+    }
+
+    private void copyEventAttribute(ExecutionObservation event, Map<String, Object> target,
+                                    String name) {
+        Object value = event.attributes().get(name);
+        if (value != null) target.put(name, value);
     }
 
     public record Participant(String agentId, String agentLabel) {
@@ -843,6 +919,7 @@ public class AiChangeApprovalCoordinator {
     private record Waiter(
             ScoreUser requester,
             String requestId,
+            long generation,
             String sourceConversationId,
             AiChangeApprovalScope scope,
             List<AiPendingChangeApproval> approvals,
@@ -860,6 +937,7 @@ public class AiChangeApprovalCoordinator {
             String appUserId,
             String rootConversationId,
             String requestId,
+            long generation,
             boolean parallel,
             Instant expiresAt,
             Instant decisionDeadline,

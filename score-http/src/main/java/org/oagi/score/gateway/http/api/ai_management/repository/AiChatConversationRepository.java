@@ -56,6 +56,9 @@ public interface AiChatConversationRepository {
      */
     AiChatStoredStep append(String conversationId, AiChatTrajectoryStep step);
 
+    /** Completes a model-call row whose sequence was reserved when the provider call began. */
+    void updateModelCall(String conversationId, long stepId, AiChatTrajectoryStep step);
+
     /**
      * Updates the observation associated with an owned trajectory step.
      */

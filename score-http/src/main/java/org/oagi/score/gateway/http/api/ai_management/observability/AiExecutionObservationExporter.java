@@ -5,9 +5,11 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.context.Context;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
-import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventListener;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
 import org.springframework.stereotype.Component;
+import org.springframework.core.annotation.Order;
 
 import java.time.Duration;
 import java.util.Map;
@@ -16,7 +18,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Exports content-free Agent and Guardrail lifecycle facts from the execution boundary. */
 @Component
-final class AiExecutionObservationExporter implements ExecutionObserver {
+@Order(100)
+final class AiExecutionObservationExporter implements ExecutionEventListener {
 
     private final ScoreAiObservability observability;
     private final AiLifecycleOperationRegistry<RunKey, AgentRun> runs =
@@ -28,17 +31,22 @@ final class AiExecutionObservationExporter implements ExecutionObserver {
     }
 
     @Override
-    public void observe(ExecutionObservation observation) {
+    public void onEvent(ExecutionObservation observation) {
         if (AiExecutionLifecycle.OBSERVATION_TYPE.equals(observation.type())) {
             AiExecutionLifecycle.from(observation).ifPresent(event ->
                     observability.observe(observation.scope().requestId(), event));
         } else if (observation.type().startsWith("agent.run.")) {
-            observability.whileActive(observation.scope().requestId(),
+            observability.whileCausallyActive(observation.scope().requestId(),
                     () -> observeAgent(observation));
         } else if (observation.type().equals("guardrail.tool.decision")) {
-            observability.whileActive(observation.scope().requestId(),
+            observability.whileCausallyActive(observation.scope().requestId(),
                     () -> observeGuardrail(observation));
         }
+    }
+
+    /** Package-local compatibility entry used by focused observability tests. */
+    void observe(ExecutionObservation observation) {
+        onEvent(observation);
     }
 
     private void observeAgent(ExecutionObservation observation) {
@@ -72,9 +80,11 @@ final class AiExecutionObservationExporter implements ExecutionObserver {
                                     observation.scope().purpose().name().toLowerCase());
                 GenAiSemanticConventions.putIfKnown(builder,
                         "gen_ai.conversation.id", observation.scope().conversationId());
+                eventIdentity(builder, observation);
                 Span span = builder.startSpan();
                 Context context = ScoreAiObservability.privateContext(parent, span);
-                observability.registerAgentContext(requestId, runId, agent, context);
+                observability.registerAgentContext(
+                        requestId, runId, agent, workflowNodeId, context);
                 return new AgentRun(span, System.nanoTime(), agent, model, requestId, runId);
             });
             return;
@@ -95,6 +105,7 @@ final class AiExecutionObservationExporter implements ExecutionObserver {
                     .setAttribute("score.ai.workflow.parent_node_id", workflowParentNodeId);
             GenAiSemanticConventions.putIfKnown(builder,
                     "gen_ai.conversation.id", observation.scope().conversationId());
+            eventIdentity(builder, observation);
             Span span = builder.startSpan();
             return new AgentRun(span, System.nanoTime(), agent, model, requestId, runId);
         });
@@ -107,6 +118,7 @@ final class AiExecutionObservationExporter implements ExecutionObserver {
             run.errorType = failure.toString();
             run.span.setAttribute("error.type", run.errorType);
         }
+        terminalEventIdentity(run.span, observation);
         run.finish(outcome);
     }
 
@@ -124,20 +136,52 @@ final class AiExecutionObservationExporter implements ExecutionObserver {
                 .put("score.ai.guardrail.action", action)
                 .build();
         observability.instruments().guardrailDecisions.add(1, labels);
-        Span.fromContext(observability.parentContext(observation.scope().requestId()))
-                .addEvent("score.ai.guardrail.decision", Attributes.builder()
-                        .putAll(labels)
+        var eventAttributes = Attributes.builder().putAll(labels)
                         .put("score.ai.guardrail.decision_id",
                                 ScoreAiObservability.value(Objects.toString(source.get("decision_id"), null)))
                         .put("score.ai.guardrail.policy_id",
                                 ScoreAiObservability.value(Objects.toString(source.get("policy_id"), null)))
-                        .put("gen_ai.tool.name", tool)
-                        .build());
+                        .put("gen_ai.tool.name", tool);
+        Object eventId = source.get(ExecutionEventPublisher.EVENT_ID);
+        Object sequence = source.get(ExecutionEventPublisher.EVENT_SEQUENCE);
+        if (eventId != null) {
+            eventAttributes.put(ExecutionEventPublisher.EVENT_ID, eventId.toString());
+        }
+        if (sequence instanceof Number number) {
+            eventAttributes.put(ExecutionEventPublisher.EVENT_SEQUENCE, number.longValue());
+        }
+        eventAttributes.put(ExecutionEventPublisher.EVENT_OCCURRED_AT,
+                observation.occurredAt().toString());
+        Span.fromContext(observability.parentContext(observation.scope().requestId()))
+                .addEvent("score.ai.guardrail.decision", eventAttributes.build());
     }
 
     private static double elapsedMillis(long startedNanos) {
         return Duration.ofNanos(Math.max(0L, System.nanoTime() - startedNanos)).toNanos()
                 / 1_000_000.0;
+    }
+
+    private static void eventIdentity(io.opentelemetry.api.trace.SpanBuilder builder,
+                                      ExecutionObservation observation) {
+        builder.setStartTimestamp(observation.occurredAt());
+        Object eventId = observation.attributes().get(ExecutionEventPublisher.EVENT_ID);
+        if (eventId != null) builder.setAttribute(ExecutionEventPublisher.EVENT_ID, eventId.toString());
+        Object sequence = observation.attributes().get(ExecutionEventPublisher.EVENT_SEQUENCE);
+        if (sequence instanceof Number number) {
+            builder.setAttribute(ExecutionEventPublisher.EVENT_SEQUENCE, number.longValue());
+        }
+        builder.setAttribute(ExecutionEventPublisher.EVENT_OCCURRED_AT,
+                observation.occurredAt().toString());
+    }
+
+    private static void terminalEventIdentity(Span span, ExecutionObservation observation) {
+        Object eventId = observation.attributes().get(ExecutionEventPublisher.EVENT_ID);
+        if (eventId != null) span.setAttribute("score.event.end.id", eventId.toString());
+        Object sequence = observation.attributes().get(ExecutionEventPublisher.EVENT_SEQUENCE);
+        if (sequence instanceof Number number) {
+            span.setAttribute("score.event.end.sequence", number.longValue());
+        }
+        span.setAttribute("score.event.end.occurred_at", observation.occurredAt().toString());
     }
 
     private record RunKey(String requestId, String runId) { }

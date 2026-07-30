@@ -10,7 +10,14 @@ public record AiElicitationDecisionRequest(
         String conversationId,
         String elicitationId,
         String action,
-        Map<String, Object> content) {
+        Map<String, Object> content,
+        Long generation) {
+
+    public AiElicitationDecisionRequest(String requestId, String conversationId,
+                                        String elicitationId, String action,
+                                        Map<String, Object> content) {
+        this(requestId, conversationId, elicitationId, action, content, null);
+    }
 
     public AiElicitationDecisionRequest {
         content = content != null

@@ -201,6 +201,7 @@ export interface AiChangeApprovalBatchDecision {
 export interface AiElicitationNotice {
   elicitationId: string;
   requestId: string;
+  generation: number;
   conversationId: string;
   expiresAt: string;
   message: string;
