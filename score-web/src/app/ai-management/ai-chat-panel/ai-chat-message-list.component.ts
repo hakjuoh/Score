@@ -18,6 +18,7 @@ import {
   AiChatAttachment,
   AiChatMessage,
   AiChatModelInfo,
+  AiMcpStatus,
   AiElicitationNotice,
   AiElicitationResponse,
   AiChangeApprovalBatchDecision,
@@ -26,7 +27,10 @@ import {
   AiChangePermissionMode,
   AiChatToolStatus,
   AiReasoningEffortInfo,
-  aiModelSessionLabel
+  aiMcpStatusHasWarning,
+  aiMcpStatusLabel,
+  aiModelSessionLabel,
+  checkingAiMcpStatus
 } from './domain/ai-chat-panel.model';
 
 type AiChatMessageDisplayItem =
@@ -69,6 +73,7 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
   @Input() modelDraftReasoningEffort = '';
   @Input() selectedModelName = '';
   @Input() selectedReasoningEffort = '';
+  @Input() mcpStatus: AiMcpStatus = checkingAiMcpStatus();
   @Input() permissionMode: AiChangePermissionMode = 'ask';
   @Input() permissionDraft: AiChangePermissionMode = 'ask';
   @Input() agentFocus?: AiAgentActivity;
@@ -321,6 +326,14 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
   get permissionDisplayName(): string {
     return this.permissionOptions.find(option => option.value === this.permissionMode)?.name
       || this.permissionMode;
+  }
+
+  get mcpStatusLabel(): string {
+    return aiMcpStatusLabel(this.mcpStatus);
+  }
+
+  get mcpStatusWarning(): boolean {
+    return aiMcpStatusHasWarning(this.mcpStatus);
   }
 
   agentGroupSummary(message: AiChatMessage): string {

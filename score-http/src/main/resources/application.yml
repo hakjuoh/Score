@@ -63,6 +63,8 @@ spring:
         # ConnectCenterMcpClientFactory creates a requester-scoped client per chat turn.
         request-timeout: ${SCORE_AI_MCP_REQUEST_TIMEOUT:60s}
         initialization-timeout: ${SCORE_AI_MCP_INITIALIZATION_TIMEOUT:20s}
+        # Status probes must fail quickly and never inherit the long chat/elicitation timeout.
+        status-timeout: ${SCORE_AI_MCP_STATUS_TIMEOUT:5s}
         streamable-http:
           connections:
             connect-center-mcp:

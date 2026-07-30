@@ -4,6 +4,7 @@ export const AI_CHAT_COMMANDS: AiChatCommand[] = [
   {name: '/clear', description: 'Start a new session with empty context.', kind: 'local'},
   {name: '/model', description: 'Change the model and reasoning effort for this session.', kind: 'local'},
   {name: '/permissions', description: 'Control approval for assistant changes.', kind: 'local'},
+  {name: '/mcp', description: 'Check configured MCP servers and available tools.', kind: 'local'},
   {name: '/cancel', description: 'Cancel the active request.', kind: 'local'},
   {name: '/debug', description: 'Toggle detailed progress events for this chat.', kind: 'local'},
   {name: '/compact', description: 'Ask the backend to summarize the conversation context.', kind: 'backend'}

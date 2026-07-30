@@ -330,6 +330,11 @@ describe('AiChatMessageListComponent', () => {
     fixture.componentInstance.selectedModelName = 'gpt-5_6-sol';
     fixture.componentInstance.selectedReasoningEffort = 'high';
     fixture.componentInstance.permissionMode = 'full_access';
+    fixture.componentInstance.mcpStatus = {
+      state: 'READY', servers: [
+        {name: 'connect-center-mcp', status: 'CONNECTED', toolCount: 12}
+      ]
+    };
     fixture.detectChanges();
 
     const flow = fixture.nativeElement.querySelector('.terminal-flow') as HTMLElement;
@@ -340,14 +345,107 @@ describe('AiChatMessageListComponent', () => {
     expect(flow.firstElementChild).toBe(summary);
     expect(summary.getAttribute('aria-label')).toBe('Current assistant session settings');
     expect(Array.from(terms, term => term.textContent?.trim())).toEqual([
-      'model', 'permissions'
+      'model', 'permissions', 'mcp servers'
     ]);
     expect(Array.from(values, value => value.textContent?.trim())).toEqual([
-      'GPT-5.6 SOL with high reasoning effort', 'Full access'
+      'GPT-5.6 SOL with high reasoning effort', 'Full access',
+      '1 connected · 12 tools'
     ]);
     expect(summary.textContent).toContain('/model');
     expect(summary.textContent).not.toContain('/runtime');
     expect(summary.textContent).toContain('/permissions');
+    expect(summary.textContent).toContain('/mcp');
+    expect(summary.querySelector('.session-summary-mcp-status.warning')).toBeNull();
+  });
+
+  it('warns when a configured MCP server is unavailable', () => {
+    fixture.componentInstance.availableModels = [{
+      name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
+      provider: 'azure-openai', defaultModel: true,
+      defaultReasoningEffort: 'high', reasoningEfforts: [
+        {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
+      ]
+    }];
+    fixture.componentInstance.selectedModelName = 'gpt-5_6-sol';
+    fixture.componentInstance.mcpStatus = {
+      state: 'READY', servers: [
+        {name: 'connect-center-mcp', status: 'UNAVAILABLE', toolCount: 0}
+      ]
+    };
+
+    fixture.detectChanges();
+
+    const status = fixture.nativeElement.querySelector(
+      '.session-summary-mcp-status.warning') as HTMLElement;
+    expect(status.textContent?.trim()).toBe('0/1 connected · 0 tools');
+    expect(status.getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('warns when MCP connects without advertising any tools', () => {
+    fixture.componentInstance.availableModels = [{
+      name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
+      provider: 'azure-openai', defaultModel: true,
+      defaultReasoningEffort: 'high', reasoningEfforts: [
+        {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
+      ]
+    }];
+    fixture.componentInstance.selectedModelName = 'gpt-5_6-sol';
+    fixture.componentInstance.mcpStatus = {
+      state: 'READY', servers: [
+        {name: 'connect-center-mcp', status: 'CONNECTED', toolCount: 0}
+      ]
+    };
+    fixture.detectChanges();
+
+    const status = fixture.nativeElement.querySelector(
+      '.session-summary-mcp-status.warning') as HTMLElement;
+    expect(status.textContent?.trim()).toBe(
+      '1 connected · 0 tools'
+    );
+    expect(status.classList.contains('warning')).toBe(true);
+  });
+
+  it('summarizes partial availability across multiple MCP servers', () => {
+    fixture.componentInstance.availableModels = [{
+      name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
+      provider: 'azure-openai', defaultModel: true,
+      defaultReasoningEffort: 'high', reasoningEfforts: [
+        {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
+      ]
+    }];
+    fixture.componentInstance.selectedModelName = 'gpt-5_6-sol';
+    fixture.componentInstance.mcpStatus = {
+      state: 'READY',
+      servers: [
+        {name: 'connect-center-mcp', status: 'CONNECTED', toolCount: 127},
+        {name: 'reference-mcp', status: 'UNAVAILABLE', toolCount: 0},
+        {name: 'draft-mcp', status: 'NOT_CONFIGURED', toolCount: 0}
+      ]
+    };
+
+    fixture.detectChanges();
+
+    const status = fixture.nativeElement.querySelector(
+      '.session-summary-mcp-status.warning') as HTMLElement;
+    expect(status.textContent?.trim()).toBe('1/3 connected · 127 tools');
+  });
+
+  it('warns when no MCP server entries are configured', () => {
+    fixture.componentInstance.availableModels = [{
+      name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
+      provider: 'azure-openai', defaultModel: true,
+      defaultReasoningEffort: 'high', reasoningEfforts: [
+        {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
+      ]
+    }];
+    fixture.componentInstance.selectedModelName = 'gpt-5_6-sol';
+    fixture.componentInstance.mcpStatus = {state: 'READY', servers: []};
+
+    fixture.detectChanges();
+
+    const status = fixture.nativeElement.querySelector(
+      '.session-summary-mcp-status.warning') as HTMLElement;
+    expect(status.textContent?.trim()).toBe('No servers configured');
   });
 
   it('shows without reasoning when the selected model disables reasoning', () => {

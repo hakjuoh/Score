@@ -7,6 +7,7 @@ import {
   AiChatConversationSummary,
   AiChatConversationDetails,
   AiChatModelInfo,
+  AiMcpStatusResponse,
   AiReasoningEffortInfo,
   AiCancellationCommand,
   AiCancellationResponse,
@@ -121,6 +122,12 @@ export class AiChatApiService {
         autoCompactThresholdTokens: this.positiveIntegerOrNull(model.autoCompactThresholdTokens),
         emergencyHeadroomTokens: this.nonNegativeIntegerOrNull(model.emergencyHeadroomTokens)
       })))
+    );
+  }
+
+  getMcpStatus(): Observable<AiMcpStatusResponse> {
+    return this.http.get<AiMcpStatusResponse>(
+      '/api/ai/chat/mcp', this.localErrorHandling()
     );
   }
 
