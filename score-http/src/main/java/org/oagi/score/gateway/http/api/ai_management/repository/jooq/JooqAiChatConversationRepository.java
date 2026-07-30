@@ -239,6 +239,27 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
     }
 
     @Override
+    @Transactional
+    public void updateModelCall(String conversationId, long stepId, AiChatTrajectoryStep step) {
+        ULong internalConversationId = lockOwned(conversationId);
+        int updated = dslContext().update(AI_CHAT_STEP)
+                .set(AI_CHAT_STEP.MODEL_NAME, blankToNull(step.modelName()))
+                .set(AI_CHAT_STEP.REASONING_EFFORT, blankToNull(step.reasoningEffort()))
+                .set(AI_CHAT_STEP.TOOL_CALLS_JSON, serializer.serialize(step.toolCalls()))
+                .set(AI_CHAT_STEP.OBSERVATION_JSON, serializer.serialize(step.observation()))
+                .set(AI_CHAT_STEP.METRICS_JSON, serializer.serialize(step.metrics()))
+                .set(AI_CHAT_STEP.EXTRA_JSON, serializer.serialize(step.extra()))
+                .set(AI_CHAT_STEP.LLM_CALL_COUNT, step.llmCallCount())
+                .where(AI_CHAT_STEP.AI_CHAT_STEP_ID.eq(ULong.valueOf(stepId))
+                        .and(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
+                        .and(AI_CHAT_STEP.MESSAGE_KIND.eq("model_call")))
+                .execute();
+        if (updated != 1) {
+            throw new IllegalArgumentException("The model-call trajectory step no longer exists.");
+        }
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<ChatConversationSummary> list() {
         var messageCount = count(AI_CHAT_STEP.AI_CHAT_STEP_ID)

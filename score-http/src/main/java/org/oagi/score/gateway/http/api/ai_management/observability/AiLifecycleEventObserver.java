@@ -9,12 +9,14 @@ import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiContextUsageInfo;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
+import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.BiFunction;
 
 /** Converts existing trajectory lifecycle events into content-free spans and metrics. */
 final class AiLifecycleEventObserver {
@@ -22,6 +24,7 @@ final class AiLifecycleEventObserver {
     private final Tracer tracer;
     private final AiObservationInstruments instruments;
     private final Function<String, Context> parents;
+    private final BiFunction<String, String, Context> explicitParents;
     private final Function<String, String> agents;
     private final AiLifecycleOperationRegistry<OperationKey, TimedSpan> workflows =
             new AiLifecycleOperationRegistry<>();
@@ -34,11 +37,13 @@ final class AiLifecycleEventObserver {
 
     AiLifecycleEventObserver(Tracer tracer, AiObservationInstruments instruments,
                              Function<String, Context> parents,
-                             Function<String, String> agents) {
+                             Function<String, String> agents,
+                             BiFunction<String, String, Context> explicitParents) {
         this.tracer = tracer;
         this.instruments = instruments;
         this.parents = parents;
         this.agents = agents;
+        this.explicitParents = explicitParents;
     }
 
     void observe(String requestId, AiExecutionLifecycle event) {
@@ -201,6 +206,7 @@ final class AiLifecycleEventObserver {
         String selectedWorkflow = ScoreAiObservability.value(Objects.toString(
                 metadata.getOrDefault("workflow", workflowPrefix(subtype)), null));
         String workflowKind = workflowPrefix(subtype);
+        String semanticWorkflow = workflowMetricName(selectedWorkflow);
         String operationId = ScoreAiObservability.value(Objects.toString(
                 metadata.getOrDefault("node_id", metadata.get("fanout_id")), workflowPrefix(subtype)));
         Context parent = workflowParent(requestId, metadata);
@@ -209,16 +215,18 @@ final class AiLifecycleEventObserver {
                 || "synthesizing".equals(lifecycle)) {
             workflows.start(key, () -> {
                 var builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
-                                GenAiSemanticConventions.INVOKE_WORKFLOW, selectedWorkflow))
+                                GenAiSemanticConventions.INVOKE_WORKFLOW, semanticWorkflow))
                         .setParent(parent)
                         .setSpanKind(SpanKind.INTERNAL)
                         .setAttribute("gen_ai.operation.name",
                                 GenAiSemanticConventions.INVOKE_WORKFLOW)
-                        .setAttribute("gen_ai.workflow.name", selectedWorkflow)
+                        .setAttribute("gen_ai.workflow.name", semanticWorkflow)
                         .setAttribute(GenAiSemanticConventions.WORKFLOW_NESTED, true)
                         .setAttribute("score.ai.workflow.name", selectedWorkflow)
                         .setAttribute("score.ai.workflow.run_id", operationId)
+                        .setAttribute("score.ai.workflow.id", selectedWorkflow)
                         .setAttribute("score.ai.workflow.kind", workflowKind);
+                setEventIdentity(builder, metadata);
                 setWorkflowShapeAttributes(builder, metadata);
                 Span span = builder.startSpan();
                 recordWorkflowShape(selectedWorkflow, metadata);
@@ -229,16 +237,18 @@ final class AiLifecycleEventObserver {
         }
         TimedSpan operation = workflows.terminate(key, () -> {
             var builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
-                            GenAiSemanticConventions.INVOKE_WORKFLOW, selectedWorkflow))
+                            GenAiSemanticConventions.INVOKE_WORKFLOW, semanticWorkflow))
                     .setParent(parent)
                     .setSpanKind(SpanKind.INTERNAL)
                     .setAttribute("gen_ai.operation.name",
                             GenAiSemanticConventions.INVOKE_WORKFLOW)
-                    .setAttribute("gen_ai.workflow.name", selectedWorkflow)
+                    .setAttribute("gen_ai.workflow.name", semanticWorkflow)
                     .setAttribute(GenAiSemanticConventions.WORKFLOW_NESTED, true)
                     .setAttribute("score.ai.workflow.name", selectedWorkflow)
                     .setAttribute("score.ai.workflow.run_id", operationId)
+                    .setAttribute("score.ai.workflow.id", selectedWorkflow)
                     .setAttribute("score.ai.workflow.kind", workflowKind);
+            setEventIdentity(builder, metadata);
             setWorkflowShapeAttributes(builder, metadata);
             Span span = builder.startSpan();
             return new TimedSpan(span, parent, System.nanoTime(),
@@ -247,6 +257,7 @@ final class AiLifecycleEventObserver {
         if (operation == null) return;
         String result = outcome(lifecycle);
         boolean partial = "success".equals(result) && hasFailures(metadata);
+        setTerminalEventIdentity(operation.span, metadata);
         setTerminalWorkflowCounts(operation.span, metadata);
         operation.span.setAttribute("score.ai.workflow.partial_failure", partial);
         operation.finish(partial ? "partial_failure" : result, false);
@@ -285,17 +296,21 @@ final class AiLifecycleEventObserver {
         String tool = ScoreAiObservability.value(event.toolName());
         boolean mcp = Boolean.TRUE.equals(event.metadata().get("mcp"));
         String agent = agents.apply(requestId);
+        String explicitParentId = Objects.toString(
+                event.metadata().getOrDefault("agent_run_id", event.metadata().get("node_id")), null);
+        Context explicitParent = explicitParents.apply(requestId, explicitParentId);
+        Context parent = explicitParent != null ? explicitParent : parents.apply(requestId);
         OperationKey key = new OperationKey(requestId, callId);
         if ("started".equals(subtype)) {
             tools.start(key, () -> new TimedSpan(
-                    startToolSpan(requestId, tool, callId, agent, mcp, event.metadata()),
-                    parents.apply(requestId), System.nanoTime(), mcp ? "mcp" : "local",
+                    startToolSpan(parent, tool, callId, agent, mcp, event.metadata()),
+                    parent, System.nanoTime(), mcp ? "mcp" : "local",
                     tool, agent, false));
             return;
         }
         TimedSpan operation = tools.terminate(key, () ->
-                new TimedSpan(startToolSpan(requestId, tool, callId, agent, mcp, event.metadata()),
-                    parents.apply(requestId), System.nanoTime(), mcp ? "mcp" : "local",
+                new TimedSpan(startToolSpan(parent, tool, callId, agent, mcp, event.metadata()),
+                    parent, System.nanoTime(), mcp ? "mcp" : "local",
                     tool, agent, false));
         if (operation == null) return;
         if (Boolean.TRUE.equals(event.metadata().get("result_truncated"))) {
@@ -306,15 +321,16 @@ final class AiLifecycleEventObserver {
             operation.errorType = boundedType(failure);
             operation.span.setAttribute("error.type", operation.errorType);
         }
+        setTerminalEventIdentity(operation.span, event.metadata());
         operation.finish(outcome(subtype), false);
     }
 
-    private Span startToolSpan(String requestId, String tool, String callId, String agent,
+    private Span startToolSpan(Context parent, String tool, String callId, String agent,
                                boolean mcp,
                                Map<String, Object> metadata) {
         var builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
                         GenAiSemanticConventions.EXECUTE_TOOL, tool))
-                .setParent(parents.apply(requestId))
+                .setParent(parent)
                 // This is the existing outer GenAI tool-execution span. MCP instrumentation
                 // enriches it instead of creating a separate transport CLIENT span.
                 .setSpanKind(SpanKind.INTERNAL)
@@ -322,6 +338,7 @@ final class AiLifecycleEventObserver {
                 .setAttribute("gen_ai.tool.name", tool)
                 .setAttribute("gen_ai.tool.type", "function")
                 .setAttribute("gen_ai.tool.call.id", callId);
+        setEventIdentity(builder, metadata);
         setStringAttribute(builder, "gen_ai.agent.name", agent);
         if (mcp) {
             builder.setAttribute("mcp.method.name", "tools/call");
@@ -344,12 +361,43 @@ final class AiLifecycleEventObserver {
         }
     }
 
+    private static void setEventIdentity(io.opentelemetry.api.trace.SpanBuilder builder,
+                                         Map<String, Object> metadata) {
+        setStringAttribute(builder, ExecutionEventPublisher.EVENT_ID,
+                metadata.get(ExecutionEventPublisher.EVENT_ID));
+        Object sequence = metadata.get(ExecutionEventPublisher.EVENT_SEQUENCE);
+        if (sequence instanceof Number number && number.longValue() > 0) {
+            builder.setAttribute(ExecutionEventPublisher.EVENT_SEQUENCE, number.longValue());
+        }
+        setStringAttribute(builder, ExecutionEventPublisher.EVENT_OCCURRED_AT,
+                metadata.get(ExecutionEventPublisher.EVENT_OCCURRED_AT));
+        Object occurredAt = metadata.get(ExecutionEventPublisher.EVENT_OCCURRED_AT);
+        if (occurredAt != null) {
+            try {
+                builder.setStartTimestamp(java.time.Instant.parse(occurredAt.toString()));
+            } catch (java.time.format.DateTimeParseException ignored) {
+                // Canonical publisher validation normally makes this unreachable.
+            }
+        }
+    }
+
+    private static void setTerminalEventIdentity(Span span, Map<String, Object> metadata) {
+        Object id = metadata.get(ExecutionEventPublisher.EVENT_ID);
+        if (id != null) span.setAttribute("score.event.end.id", id.toString());
+        Object sequence = metadata.get(ExecutionEventPublisher.EVENT_SEQUENCE);
+        if (sequence instanceof Number number) {
+            span.setAttribute("score.event.end.sequence", number.longValue());
+        }
+        Object occurredAt = metadata.get(ExecutionEventPublisher.EVENT_OCCURRED_AT);
+        if (occurredAt != null) span.setAttribute("score.event.end.occurred_at", occurredAt.toString());
+    }
+
     /**
      * The depth-zero queue every turn runs is the turn itself, and the turn's entrypoint span
      * already reports it as {@code invoke_workflow}. Emitting a second span here would duplicate
      * the entrypoint, so the implicit root stays out of the trace and its Agent calls line up as
      * siblings under the entrypoint until a Workflow is actually planned. Planned Workflows nest
-     * inside that entrypoint and therefore carry {@code gen_ai.workflow.nested}.
+     * inside that entrypoint and therefore carry {@code score.ai.workflow.nested}.
      */
     private static boolean implicitRootQueue(Map<String, Object> metadata) {
         return metadata.get("parent_node_id") == null && number(metadata.get("depth")) == 0;
@@ -388,7 +436,7 @@ final class AiLifecycleEventObserver {
 
     private Context workflowParent(String requestId, Map<String, Object> metadata) {
         String parentId = Objects.toString(metadata.get("parent_node_id"), null);
-        Context parent = workflowContext(requestId, parentId);
+        Context parent = explicitParents.apply(requestId, parentId);
         return parent != null ? parent : parents.apply(requestId);
     }
 
