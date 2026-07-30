@@ -2,7 +2,10 @@ import {HttpErrorResponse} from '@angular/common/http';
 import {forkJoin, map, of, tap} from 'rxjs';
 import {take} from 'rxjs/operators';
 import {AiChatPanelCommandController} from './ai-chat-panel-command.controller';
-import {pendingChangeApprovalBatches} from './domain/ai-change-approval-batch';
+import {
+  changeApprovalBatchStatus,
+  pendingChangeApprovalBatches
+} from './domain/ai-change-approval-batch';
 import {
   AiActiveRequestIdentity,
   AiChatConversationDetails,
@@ -246,9 +249,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
     this.sessionPersistence.rememberLastConversation(details.conversationId);
     this.state.restoreConversationSettings(details);
     this.state.currentStatus = this.state.changeApprovalBatch
-      ? (this.state.changeApprovalBatch.items.length === 1
-        ? 'Approval required'
-        : `${this.state.changeApprovalBatch.items.length} approvals required`)
+      ? changeApprovalBatchStatus(this.state.changeApprovalBatch)
       : this.isTerminalExecutionStatus(status.status)
         ? status.status : 'Request in progress';
     if (this.restoreChatScrollPending) {

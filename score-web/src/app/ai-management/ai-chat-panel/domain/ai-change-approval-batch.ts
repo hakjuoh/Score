@@ -95,6 +95,15 @@ export function isUnexpiredChangeApprovalBatch(
   return Number.isFinite(expires) && expires > now;
 }
 
+/** User-facing status for the currently displayed approval barrier. */
+export function changeApprovalBatchStatus(
+  notice: Pick<AiChangeApprovalBatchNotice, 'items'>
+): string {
+  return notice.items.length === 1
+    ? 'Approval required'
+    : `${notice.items.length} approvals required`;
+}
+
 function text(value: unknown, maximum: number, allowEmpty = false): string | undefined {
   if (typeof value !== 'string' || value.length > maximum
     || value.trim() !== value || (!allowEmpty && !value)) {
