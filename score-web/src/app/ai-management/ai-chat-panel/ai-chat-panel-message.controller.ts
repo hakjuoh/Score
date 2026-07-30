@@ -7,6 +7,7 @@ import {
   AiTerminalRequestErrorStatus,
   contextUsageValue,
   isReconciliationRequired,
+  primaryContent,
   providerRetrySemantics,
   terminalRequestErrorStatus,
   toolCallEventSemantics
@@ -37,7 +38,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   private pendingProviderError?: {requestId: string; content: string};
 
   protected handleSystemEvent(event: AiChatSocketEvent): void {
-    const content = this.primaryContent(event);
+    const content = primaryContent(event);
     if (event.subtype === 'workflow_started') {
       this.applyWorkflowStarted(event, content);
       return;
@@ -187,7 +188,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
 
   /** Renders a recoverable provider failure without terminating the active request. */
   protected handleProviderErrorEvent(event: AiChatSocketEvent): boolean {
-    const content = this.primaryContent(event).trim();
+    const content = primaryContent(event).trim();
     if (!content) return false;
     if (this.state.cancellation.phase !== 'idle') return true;
     if (isSpecialistActivityEvent(event) && !this.liveExecution.isPlainEvent(event)) {
@@ -318,7 +319,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     if (this.messageTracker.removeStreamedSegment(this.state, event.requestId)) {
       this.assistantMessageIndexesByRequestId.delete(event.requestId);
     }
-    const retryMessage = this.primaryContent(event).trim()
+    const retryMessage = primaryContent(event).trim()
       || `The model provider request failed; retrying (attempt ${retry.attempt} of ${retry.maxAttempts}).`;
     const reason = pendingReason || (typeof event.metadata?.['reason'] === 'string'
       ? event.metadata['reason'].trim() : '');
@@ -378,11 +379,11 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
 
   protected isRecognizedRequestEvent(event: AiChatSocketEvent): boolean {
     if (event.type === 'assistant_update') {
-      return !!this.primaryContent(event);
+      return !!primaryContent(event);
     }
     if (event.type === 'assistant_final') {
       return typeof event.conversationId === 'string' && !!event.conversationId.trim()
-        && !!this.primaryContent(event).trim();
+        && !!primaryContent(event).trim();
     }
     if (event.type === 'tool_call') {
       return !!toolCallEventSemantics(event);
@@ -426,10 +427,6 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
 
   protected hasActiveStructuredToolRows(): boolean {
     return this.messageTracker.hasStructuredToolRows();
-  }
-
-  protected primaryContent(event: AiChatSocketEvent): string {
-    return event.content || event.response || event.message || '';
   }
 
   private applyAgentActivity(event: AiChatSocketEvent): void {

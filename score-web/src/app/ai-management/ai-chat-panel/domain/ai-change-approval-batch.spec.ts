@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {AiChatSocketEvent} from './ai-chat-panel.model';
 import {
+  changeApprovalBatchStatus,
   changeApprovalBatchNotice,
   pendingChangeApprovalBatches
 } from './ai-change-approval-batch';
@@ -71,5 +72,12 @@ describe('changeApprovalBatchNotice', () => {
     expect(pendingChangeApprovalBatches(
       messages, 'request-1', 'conversation-1'
     )).toEqual([expect.objectContaining({batchId: 'pending'})]);
+  });
+
+  it('uses one canonical status for single and parallel approval barriers', () => {
+    const notice = changeApprovalBatchNotice(valid, 'request-1', 'conversation-1')!;
+    expect(changeApprovalBatchStatus(notice)).toBe('2 approvals required');
+    expect(changeApprovalBatchStatus({...notice, items: notice.items.slice(0, 1)}))
+      .toBe('Approval required');
   });
 });
