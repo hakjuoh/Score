@@ -22,7 +22,7 @@ import {
 } from './domain/ai-chat-cancellation.service';
 import {AiChatCommandService, AiLocalCommand} from './domain/ai-chat-command.service';
 import {AiChatContextService} from './domain/ai-chat-context.service';
-import {AiConfirmedMutationRequestCoordinator} from './domain/ai-confirmed-mutation-request-coordinator';
+import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
 import {
   AiConversationRestoreCallbacks,
   AiConversationRestoreService
@@ -42,11 +42,11 @@ import {
   settleAgentConversation
 } from './domain/ai-agent-activity';
 import {
-  AiMutationInteractionCallbacks,
-  AiMutationInteractionService,
-  MutationRepeatDraft,
-  MutationRepeatOpportunity
-} from './domain/ai-mutation-interaction.service';
+  AiChangeInteractionCallbacks,
+  AiChangeInteractionService,
+  ChangeRepeatDraft,
+  ChangeRepeatOpportunity
+} from './domain/ai-change-interaction.service';
 import {AiTerminalRequestErrorStatus} from './domain/ai-chat-event-semantics';
 import {
   AiActiveRequestIdentity,
@@ -62,16 +62,16 @@ import {
   AiChatSocketEvent,
   AiElicitationResponse,
   AiExecutionStatus,
-  AiMutationConfirmationAuthorization,
-  AiMutationConfirmationNotice,
-  AiMutationInteraction,
+  AiChangeConfirmationAuthorization,
+  AiChangeConfirmationNotice,
+  AiChangeInteraction,
   AiPublicExecutionRequestStatus,
   ResizeState
 } from './domain/ai-chat-panel.model';
 
-export interface BoundMutationConfirmationNotice {
+export interface BoundChangeConfirmationNotice {
   conversationId: string;
-  notice: AiMutationConfirmationNotice;
+  notice: AiChangeConfirmationNotice;
 }
 
 @Directive()
@@ -83,14 +83,14 @@ export abstract class AiChatPanelControllerBase {
   protected attachmentService = inject(AiChatAttachmentService);
   protected cancellationService = inject(AiChatCancellationService);
   protected commandService = inject(AiChatCommandService);
-  protected confirmedMutationRequests = inject(AiConfirmedMutationRequestCoordinator);
+  protected confirmedChangeRequests = inject(AiConfirmedChangeRequestCoordinator);
   protected readonly destroyRef = inject(DestroyRef);
   protected contextService = inject(AiChatContextService);
   protected conversationRestoreService = inject(AiConversationRestoreService);
   protected navigationService = inject(AiChatNavigationService);
   protected layoutService = inject(AiChatPanelLayoutService);
   protected messageTracker = inject(AiChatMessageTrackerService);
-  protected mutationInteractions = inject(AiMutationInteractionService);
+  protected changeInteractions = inject(AiChangeInteractionService);
   protected viewport = inject(AiChatPanelViewportService);
   protected sessionPersistence = inject(AiChatSessionPersistenceService);
   protected settingsService = inject(AiChatSettingsService);
@@ -115,16 +115,16 @@ export abstract class AiChatPanelControllerBase {
   protected deferredNewChatTab?: AiChatPanelTab;
   protected responseTimeout?: number;
   protected acknowledgementTimeout?: number;
-  protected mutationApprovalExpiryTimeout?: number;
-  protected mutationApprovalAcknowledgementTimeout?: number;
+  protected changeApprovalExpiryTimeout?: number;
+  protected changeApprovalAcknowledgementTimeout?: number;
   protected resizeState?: ResizeState;
   protected activeRequestPublished = false;
   protected activeRestoreRequestId?: string;
   protected restoreAttemptSequence = 0;
   protected assistantMessageIndexesByRequestId = new Map<string, number>();
-  protected mutationRepeatDraft?: MutationRepeatDraft;
-  protected pendingMutationConfirmation?: BoundMutationConfirmationNotice;
-  protected rejectedMutationConfirmationRequestId?: string;
+  protected changeRepeatDraft?: ChangeRepeatDraft;
+  protected pendingChangeConfirmation?: BoundChangeConfirmationNotice;
+  protected rejectedChangeConfirmationRequestId?: string;
   protected destroyed = false;
   protected readonly destroyed$ = new Subject<void>();
   private workspacePersistenceReady = false;
@@ -165,16 +165,16 @@ export abstract class AiChatPanelControllerBase {
     }
   }
 
-  protected get mutationDecisionOpen(): boolean {
-    return this.mutationInteractions.decisionOpen;
+  protected get changeDecisionOpen(): boolean {
+    return this.changeInteractions.decisionOpen;
   }
 
-  protected get mutationDecisionInFlight(): boolean {
-    return this.mutationInteractions.decisionInFlight;
+  protected get changeDecisionInFlight(): boolean {
+    return this.changeInteractions.decisionInFlight;
   }
 
-  protected get mutationInteractionMode(): AiMutationInteraction['mode'] {
-    return this.mutationInteractions.interactionMode;
+  protected get changeInteractionMode(): AiChangeInteraction['mode'] {
+    return this.changeInteractions.interactionMode;
   }
 
   get commandSuggestions(): AiChatCommand[] {
@@ -191,41 +191,41 @@ export abstract class AiChatPanelControllerBase {
       || this.state.modelChangePending || this.state.modelSettingsOpen
       || this.state.permissionSettingsOpen
       || !!this.state.elicitation
-      || !!this.state.mutationApprovalBatch
-      || this.mutationDecisionInFlight
-      || (this.mutationDecisionOpen && this.mutationInteractionMode !== 'confirm');
+      || !!this.state.changeApprovalBatch
+      || this.changeDecisionInFlight
+      || (this.changeDecisionOpen && this.changeInteractionMode !== 'confirm');
   }
 
   get composerPlaceholder(): string {
-    return this.mutationDecisionOpen && this.mutationInteractionMode === 'confirm'
-      ? 'Describe changes to this action' : 'Ask a question';
+    return this.changeDecisionOpen && this.changeInteractionMode === 'confirm'
+      ? 'Describe how to revise this change' : 'Ask a question';
   }
 
-  get mutationInteraction(): AiMutationInteraction | undefined {
-    return this.mutationInteractions.interaction;
+  get changeInteraction(): AiChangeInteraction | undefined {
+    return this.changeInteractions.interaction;
   }
 
   get interactionBlocked(): boolean {
     return this.state.pending || this.commandInputBlocked;
   }
 
-  get mutationApprovalControlsBusy(): boolean {
-    return this.state.mutationApprovalBatchBusy
+  get changeApprovalControlsBusy(): boolean {
+    return this.state.changeApprovalBatchBusy
       || this.state.cancellation.phase !== 'idle';
   }
 
-  protected clearMutationApprovalBatch(): void {
-    if (this.mutationApprovalExpiryTimeout !== undefined) {
-      window.clearTimeout(this.mutationApprovalExpiryTimeout);
-      this.mutationApprovalExpiryTimeout = undefined;
+  protected clearChangeApprovalBatch(): void {
+    if (this.changeApprovalExpiryTimeout !== undefined) {
+      window.clearTimeout(this.changeApprovalExpiryTimeout);
+      this.changeApprovalExpiryTimeout = undefined;
     }
-    if (this.mutationApprovalAcknowledgementTimeout !== undefined) {
-      window.clearTimeout(this.mutationApprovalAcknowledgementTimeout);
-      this.mutationApprovalAcknowledgementTimeout = undefined;
+    if (this.changeApprovalAcknowledgementTimeout !== undefined) {
+      window.clearTimeout(this.changeApprovalAcknowledgementTimeout);
+      this.changeApprovalAcknowledgementTimeout = undefined;
     }
-    this.state.mutationApprovalBatch = undefined;
-    this.state.mutationApprovalBatchQueue = [];
-    this.state.mutationApprovalBatchBusy = false;
+    this.state.changeApprovalBatch = undefined;
+    this.state.changeApprovalBatchQueue = [];
+    this.state.changeApprovalBatchBusy = false;
   }
 
   protected settleAgentActivity(status: Extract<AiAgentExecutionStatus,
@@ -370,16 +370,16 @@ export abstract class AiChatPanelControllerBase {
   abstract send(): void;
   protected abstract startChatRequest(prompt: string, attachments: AiChatAttachment[]): void;
   protected abstract sendHttpChat(prompt: string, attachments: AiChatAttachment[],
-                                  mutationConfirmation?: AiMutationConfirmationAuthorization): void;
+                                  changeConfirmation?: AiChangeConfirmationAuthorization): void;
   protected abstract attachmentFailureMessage(error: unknown): string;
   protected abstract completeUnknownConfirmedRequest(requestId: string): void;
   protected abstract connectAndPublishWhenReady(requestId: string, prompt: string,
                                                 attachments: AiChatAttachment[],
-                                                mutationConfirmation?: AiMutationConfirmationAuthorization): void;
+                                                changeConfirmation?: AiChangeConfirmationAuthorization): void;
   protected abstract failStompReconnect(): void;
   protected abstract publishChatRequest(requestId: string, prompt: string,
                                         attachments: AiChatAttachment[],
-                                        mutationConfirmation?: AiMutationConfirmationAuthorization): void;
+                                        changeConfirmation?: AiChangeConfirmationAuthorization): void;
   protected abstract failChatPublish(): void;
   abstract openFilePicker(input: HTMLInputElement): void;
   abstract onFileInputChange(event: Event): void;
@@ -406,31 +406,31 @@ export abstract class AiChatPanelControllerBase {
   abstract respondToElicitation(response: AiElicitationResponse): void;
   protected abstract completeFinalEvent(event: AiChatSocketEvent): void;
   protected abstract commitAssistantMessage(requestId: string, content: string,
-                                            artifacts?: import('./domain/ai-chat-panel.model').AiChatArtifact[]): number;
-  protected abstract beginMutationRepeatDraft(requestId: string, prompt: string,
+                                            files?: import('./domain/ai-chat-panel.model').AiChatFile[]): number;
+  protected abstract beginChangeRepeatDraft(requestId: string, prompt: string,
                                               attachments: AiChatAttachment[]): void;
-  protected abstract handleMutationConfirmationNotice(event: AiChatSocketEvent): void;
-  protected abstract completeConflictingMutationConfirmationFinal(
+  protected abstract handleChangeConfirmationNotice(event: AiChatSocketEvent): void;
+  protected abstract completeConflictingChangeConfirmationFinal(
     requestId: string, confirmationConversationId: string
   ): void;
-  protected abstract finishMutationRepeatOpportunity(
+  protected abstract finishChangeRepeatOpportunity(
     requestId: string, terminalConversationId: string | undefined
   ): void;
-  protected abstract showMutationRepeatInteraction(opportunity: MutationRepeatOpportunity): void;
-  abstract approveMutationInteraction(): void;
-  abstract denyMutationInteraction(): void;
-  abstract requestMutationChange(): void;
-  abstract revokeMutationInteraction(): void;
-  abstract dismissMutationInteraction(): void;
-  protected abstract canRequestMutationChange(): boolean;
-  protected abstract sendMutationChangeRequest(prompt: string, attachments: AiChatAttachment[]): void;
-  protected abstract showLostGrantInteraction(opportunity: MutationRepeatOpportunity): void;
-  protected abstract mutationInteractionCallbacks(): AiMutationInteractionCallbacks;
-  protected abstract sendConfirmedMutationRepeat(
-    opportunity: MutationRepeatOpportunity, confirmationGrant: string,
+  protected abstract showChangeRepeatInteraction(opportunity: ChangeRepeatOpportunity): void;
+  abstract approveChangeInteraction(): void;
+  abstract denyChangeInteraction(): void;
+  abstract requestChangeRevision(): void;
+  abstract revokeChangeInteraction(): void;
+  abstract dismissChangeInteraction(): void;
+  protected abstract canRequestChangeRevision(): boolean;
+  protected abstract sendChangeRevisionRequest(prompt: string, attachments: AiChatAttachment[]): void;
+  protected abstract showLostGrantInteraction(opportunity: ChangeRepeatOpportunity): void;
+  protected abstract changeInteractionCallbacks(): AiChangeInteractionCallbacks;
+  protected abstract sendConfirmedChangeRepeat(
+    opportunity: ChangeRepeatOpportunity, confirmationGrant: string,
     revision?: {prompt: string; attachments: AiChatAttachment[]}
   ): boolean;
-  protected abstract clearMutationRepeatDraft(requestId?: string): void;
+  protected abstract clearChangeRepeatDraft(requestId?: string): void;
   protected abstract handleSystemEvent(event: AiChatSocketEvent): void;
   protected abstract handleProviderRetryEvent(event: AiChatSocketEvent): boolean;
   protected abstract clearProviderRecoveryState(): void;

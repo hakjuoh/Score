@@ -1,6 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.controller.payload;
 
-import org.oagi.score.gateway.http.api.ai_management.artifact.AiArtifactDescriptor;
+import org.oagi.score.gateway.http.api.ai_management.file.AiFileDescriptor;
 import java.util.List;
 import java.util.Map;
 
@@ -8,11 +8,11 @@ public record ChatHistoryMessage(int index, String role, String content,
                                  String requestId, String turnId, String groupId,
                                  String toolCallId, Long toolCallSequence,
                                  String subtype, String visibility,
-                                 List<AiArtifactDescriptor> artifacts,
+                                 List<AiFileDescriptor> files,
                                  Map<String, Object> metadata) {
 
     public ChatHistoryMessage {
-        artifacts = artifacts != null ? List.copyOf(artifacts) : List.of();
+        files = files != null ? List.copyOf(files) : List.of();
         metadata = metadata != null ? Map.copyOf(metadata) : Map.of();
     }
 

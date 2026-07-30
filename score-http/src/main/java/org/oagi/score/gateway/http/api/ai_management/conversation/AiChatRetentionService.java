@@ -1,6 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.conversation;
 
-import org.oagi.score.gateway.http.api.ai_management.artifact.AiArtifactService;
+import org.oagi.score.gateway.http.api.ai_management.file.AiFileService;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMaintenanceRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
@@ -24,31 +24,31 @@ public class AiChatRetentionService {
     private final Supplier<ScoreUser> systemRequester;
     private final ScoreAiProperties properties;
     private final Clock clock;
-    private final AiArtifactService artifacts;
+    private final AiFileService files;
 
     @Autowired
     public AiChatRetentionService(RepositoryFactory repositoryFactory,
                                   SessionService sessionService,
                                   ScoreAiProperties properties,
-                                  AiArtifactService artifacts) {
+                                  AiFileService files) {
         this(repositoryFactory::aiChatMaintenanceRepository,
-                sessionService::getScoreSystemUser, properties, Clock.systemUTC(), artifacts);
+                sessionService::getScoreSystemUser, properties, Clock.systemUTC(), files);
     }
 
     AiChatRetentionService(AiChatMaintenanceRepository repository, ScoreAiProperties properties,
-                           Clock clock, AiArtifactService artifacts) {
-        this(ignored -> repository, () -> null, properties, clock, artifacts);
+                           Clock clock, AiFileService files) {
+        this(ignored -> repository, () -> null, properties, clock, files);
     }
 
     private AiChatRetentionService(
             Function<ScoreUser, AiChatMaintenanceRepository> repositories,
             Supplier<ScoreUser> systemRequester,
-            ScoreAiProperties properties, Clock clock, AiArtifactService artifacts) {
+            ScoreAiProperties properties, Clock clock, AiFileService files) {
         this.repositories = repositories;
         this.systemRequester = systemRequester;
         this.properties = properties;
         this.clock = clock;
-        this.artifacts = artifacts;
+        this.files = files;
     }
 
     @Scheduled(fixedDelayString = "${score.ai.memory.cleanup-interval:24h}")
@@ -61,16 +61,16 @@ public class AiChatRetentionService {
         Instant cutoff = Instant.now(clock).minus(properties.getMemory().getRetention());
         AiChatMaintenanceRepository repository = repository();
         for (String conversationId : repository.findExpiredConversationGuids(cutoff)) {
-            artifacts.deleteConversationArtifactsForRetention(conversationId);
+            files.deleteConversationFilesForRetention(conversationId);
         }
         repository.deleteExpiredConversations(cutoff);
     }
 
     /** Clears expired one-time grant digests close to their ten-minute validity window. */
-    @Scheduled(fixedDelayString = "${score.ai.mutation-confirmation.cleanup-interval:10m}")
+    @Scheduled(fixedDelayString = "${score.ai.change-confirmation.cleanup-interval:10m}")
     @Transactional
-    public void expireMutationConfirmations() {
-        repository().expireMutationConfirmations(Instant.now(clock));
+    public void expireChangeConfirmations() {
+        repository().expireChangeConfirmations(Instant.now(clock));
     }
 
     private AiChatMaintenanceRepository repository() {

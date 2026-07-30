@@ -11,10 +11,10 @@ import {AiChatComposerComponent} from './ai-chat-composer.component';
 import {AiChatPanelLifecycleController} from './ai-chat-panel-lifecycle.controller';
 import {AiChatAttachmentQueueService} from './domain/ai-chat-attachment-queue.service';
 import {AiActiveRequestRecoveryService} from './domain/ai-active-request-recovery.service';
-import {AiConfirmedMutationRequestCoordinator} from './domain/ai-confirmed-mutation-request-coordinator';
+import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
 import {AiConversationRestoreService} from './domain/ai-conversation-restore.service';
 import {AiChatMessageTrackerService} from './domain/ai-chat-message-tracker.service';
-import {AiMutationInteractionService} from './domain/ai-mutation-interaction.service';
+import {AiChangeInteractionService} from './domain/ai-change-interaction.service';
 import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.service';
 import {AiChatSettingsService} from './domain/ai-chat-settings.service';
 import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
@@ -43,9 +43,9 @@ export {
     AiActiveRequestRecoveryService,
     AiChatAttachmentQueueService,
     AiConversationRestoreService,
-    AiConfirmedMutationRequestCoordinator,
+    AiConfirmedChangeRequestCoordinator,
     AiChatMessageTrackerService,
-    AiMutationInteractionService,
+    AiChangeInteractionService,
     AiChatPanelViewportService,
     AiChatSettingsService,
     AiChatWindowCoordinatorService

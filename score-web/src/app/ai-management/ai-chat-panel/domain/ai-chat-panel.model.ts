@@ -12,7 +12,7 @@ export interface AiChatStatusOptions {
 }
 export type AiChatToolStatus = 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled';
 export type AiChatPanelTab = 'chat' | 'history';
-export type AiMutationPermissionMode = 'ask' | 'auto' | 'full_access';
+export type AiChangePermissionMode = 'ask' | 'auto' | 'full_access';
 export type AiAgentExecutionStatus =
   'planned' | 'started' | 'completed' | 'failed' | 'cancelled' | 'synthesizing';
 
@@ -39,7 +39,7 @@ export interface AiChatMessage {
   toolStatus?: AiChatToolStatus;
   recoverable?: boolean;
   retryable?: boolean;
-  mutationSafe?: boolean;
+  changeSafe?: boolean;
   /**
    * Per-execution snapshot held BY REFERENCE on an agent/workflow group anchor.
    * Request starts replace (never mutate) the live state array, so settled
@@ -52,11 +52,11 @@ export interface AiChatMessage {
   workflowNodeId?: string;
   workflowParentNodeId?: string;
   workflowStatus?: AiAgentExecutionStatus;
-  artifacts?: AiChatArtifact[];
+  files?: AiChatFile[];
 }
 
-export interface AiChatArtifact {
-  artifactId: string;
+export interface AiChatFile {
+  fileId: string;
   format: string;
   filename: string;
   mediaType: string;
@@ -80,11 +80,11 @@ export interface AiChatRequest {
   conversationId?: string;
   modelName?: string;
   reasoningEffort?: string;
-  permissionMode?: AiMutationPermissionMode;
+  permissionMode?: AiChangePermissionMode;
   pageContext?: string;
   routeManifest?: AiUiRouteManifest;
   attachments: AiChatAttachment[];
-  mutationConfirmation?: AiMutationConfirmationAuthorization;
+  changeConfirmation?: AiChangeConfirmationAuthorization;
 }
 
 export interface AiChatModelInfo {
@@ -138,7 +138,7 @@ export interface AiConversationModelResponse {
   contextUsage?: AiContextUsage;
 }
 
-export interface AiMutationConfirmationAuthorization {
+export interface AiChangeConfirmationAuthorization {
   confirmationRequestId: string;
   confirmationGrant: string;
   toolName: string;
@@ -147,15 +147,15 @@ export interface AiMutationConfirmationAuthorization {
   revisionPrompt?: string;
 }
 
-export type AiMutationConfirmationStatus =
+export type AiChangeConfirmationStatus =
   'REQUESTED' | 'APPROVED' | 'CONSUMED' | 'DENIED' | 'EXPIRED';
 
-export type AiMutationConfirmationDisposition =
+export type AiChangeConfirmationDisposition =
   'CREATED' | 'EXISTING' | 'APPROVED' | 'ALREADY_APPROVED'
   | 'DENIED' | 'ALREADY_DENIED' | 'EXPIRED' | 'CONSUMED'
   | 'CONFLICT' | 'NOT_FOUND';
 
-export interface AiMutationConfirmationNotice {
+export interface AiChangeConfirmationNotice {
   confirmationRequestId: string;
   status: 'REQUESTED' | 'APPROVED';
   expiresAt: string;
@@ -163,11 +163,11 @@ export interface AiMutationConfirmationNotice {
   argumentsSummary: string;
 }
 
-export interface AiMutationConfirmationDecisionResponse {
+export interface AiChangeConfirmationDecisionResponse {
   confirmationRequestId: string;
   conversationId: string;
-  status?: AiMutationConfirmationStatus;
-  disposition: AiMutationConfirmationDisposition;
+  status?: AiChangeConfirmationStatus;
+  disposition: AiChangeConfirmationDisposition;
   expiresAt?: string;
   approvedAt?: string;
   deniedAt?: string;
@@ -176,7 +176,7 @@ export interface AiMutationConfirmationDecisionResponse {
   confirmationGrant?: string;
 }
 
-export interface AiMutationApprovalBatchItem {
+export interface AiChangeApprovalBatchItem {
   confirmationRequestId: string;
   toolName: string;
   argumentsSummary: string;
@@ -184,16 +184,16 @@ export interface AiMutationApprovalBatchItem {
   agentLabel?: string;
 }
 
-export interface AiMutationApprovalBatchNotice {
+export interface AiChangeApprovalBatchNotice {
   batchId: string;
   requestId: string;
   conversationId: string;
   parallel: boolean;
   expiresAt: string;
-  items: AiMutationApprovalBatchItem[];
+  items: AiChangeApprovalBatchItem[];
 }
 
-export interface AiMutationApprovalBatchDecision {
+export interface AiChangeApprovalBatchDecision {
   confirmationRequestId: string;
   decision: 'APPROVE' | 'DENY';
 }
@@ -214,7 +214,7 @@ export interface AiElicitationResponse {
   content: Record<string, unknown>;
 }
 
-export interface AiMutationInteraction {
+export interface AiChangeInteraction {
   toolName: string;
   argumentsSummary: string;
   mode: 'confirm' | 'lost_grant';
@@ -243,7 +243,7 @@ export interface AiChatSocketEvent {
   targetPath?: string;
   ids?: string[];
   index?: number;
-  artifacts?: AiChatArtifact[];
+  files?: AiChatFile[];
 }
 
 export interface AiChatRestResponse {
@@ -253,7 +253,7 @@ export interface AiChatRestResponse {
   continuationRequired?: boolean;
   progress?: string[];
   events?: AiChatSocketEvent[];
-  artifacts?: AiChatArtifact[];
+  files?: AiChatFile[];
 }
 
 export type AiExecutionStatus =
@@ -364,7 +364,7 @@ export interface AiChatHistoryMessage {
   subtype?: string;
   visibility?: string;
   metadata?: {[key: string]: unknown};
-  artifacts?: AiChatArtifact[];
+  files?: AiChatFile[];
 }
 
 export interface AiChatConversationDetails {
@@ -372,7 +372,7 @@ export interface AiChatConversationDetails {
   title: string;
   modelName?: string;
   reasoningEffort?: string;
-  permissionMode?: AiMutationPermissionMode;
+  permissionMode?: AiChangePermissionMode;
   activeWorkflow?: string;
   contextUsage?: AiContextUsage;
   updatedAt?: string | number;

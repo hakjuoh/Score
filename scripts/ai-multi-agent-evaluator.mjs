@@ -29,7 +29,7 @@ function registeredAgentIds() {
 export function stepIsReadOnly(step) {
   return step?.extra?.read_only === true;
 }
-function stepIsSafeNonMutation(step) {
+function stepIsSafeNonChange(step) {
   return stepIsReadOnly(step) || step?.extra?.tool_name === 'toolSearchTool';
 }
 const LEAD_NAME = 'lead';
@@ -37,7 +37,7 @@ const LEAD_ROLE = 'workflow orchestrator';
 const REGISTERED_AGENT_IDS = registeredAgentIds();
 // Keep the evaluator's expected wire values independent from the runtime so a
 // coordinated but breaking runtime change is caught instead of self-approved.
-const MUTATION_CONFIRMATION_MARKER = 'MUTATION_CONFIRMATION_REQUIRED';
+const CHANGE_CONFIRMATION_MARKER = 'CHANGE_CONFIRMATION_REQUIRED';
 const REQUEST_STOPPING_MARKER = 'REQUEST_STOPPING';
 const USAGE_STEP_KIND = 'fanout_usage';
 // Request-scoped orchestration — the required-tool recovery path and the
@@ -117,7 +117,7 @@ export function parseToolResult(step) {
 
 function containsError(value, seen = new Set()) {
   if (typeof value === 'string') {
-    return value.includes(MUTATION_CONFIRMATION_MARKER)
+    return value.includes(CHANGE_CONFIRMATION_MARKER)
       || value.includes(REQUEST_STOPPING_MARKER);
   }
   if (!value || typeof value !== 'object' || seen.has(value)) return false;
@@ -573,7 +573,7 @@ function inspectGraph(testCase, maxAgents, lifecycle, tools, allSteps, evidenceS
 
 function confirmationMatchesTask(evidence, task, conversationId) {
   if (!evidence || evidence.conversationId !== conversationId
-    || evidence.toolName !== task.expectedMutation || !evidence.confirmationRequestId) return false;
+    || evidence.toolName !== task.expectedChange || !evidence.confirmationRequestId) return false;
   const argumentsValue = jsonValue(String(evidence.argumentsSummary || ''));
   const record = expectedRecord(task);
   return exactObjectKeys(argumentsValue, {name: record.name, description: record.description});
@@ -624,15 +624,15 @@ function inspectTools(task, tools, approvals, confirmationRequests, response, pe
                       allSteps, confirmationEvidence, approvalDecisions,
                       allowLegacyApprovalInference, conversationId, evidenceSchemaVersion) {
   const names = tools.map(step => step?.extra?.tool_name);
-  const specialistMutationAttempts = tools.filter(step => Number(step?.extra?.depth) === 1
+  const specialistChangeAttempts = tools.filter(step => Number(step?.extra?.depth) === 1
     && !stepIsReadOnly(step));
-  const unexpectedMutationCalls = tools.filter(step =>
-    !stepIsSafeNonMutation(step)
-      && (!task.expectedMutation || step?.extra?.tool_name !== task.expectedMutation));
+  const unexpectedChangeCalls = tools.filter(step =>
+    !stepIsSafeNonChange(step)
+      && (!task.expectedChange || step?.extra?.tool_name !== task.expectedChange));
   const confirmation = confirmationEvidence.length === 1 ? confirmationEvidence[0] : null;
   const decision = approvalDecisions.length === 1 ? approvalDecisions[0] : null;
   const confirmationValid = confirmationMatchesTask(confirmation, task, conversationId);
-  if (!task.expectedMutation) {
+  if (!task.expectedChange) {
     const readGroups = requiredReadGroups(task, evidenceSchemaVersion)
       .map(([name, expectedTools, identifierKeys]) => {
         const steps = tools.filter(step => expectedTools.has(step?.extra?.tool_name)
@@ -654,16 +654,16 @@ function inspectTools(task, tools, approvals, confirmationRequests, response, pe
     const responseStructure = inspectResponseStructure(
       task, evidenceSchemaVersion, response?.response, identifiers);
     const valid = readBack && grounded && responseStructure.valid
-      && specialistMutationAttempts.length === 0
-      && unexpectedMutationCalls.length === 0;
+      && specialistChangeAttempts.length === 0
+      && unexpectedChangeCalls.length === 0;
     return {
       valid,
       names,
-      mutation: true,
-      executedMutations: 0,
-      rejectedMutationCalls: 0,
-      specialistMutationAttempts: specialistMutationAttempts.length,
-      unexpectedMutationCalls: unexpectedMutationCalls.map(step => step.extra.tool_name),
+      change: true,
+      executedChanges: 0,
+      rejectedChangeCalls: 0,
+      specialistChangeAttempts: specialistChangeAttempts.length,
+      unexpectedChangeCalls: unexpectedChangeCalls.map(step => step.extra.tool_name),
       approvalValid: true,
       readBack,
       grounded,
@@ -676,65 +676,65 @@ function inspectTools(task, tools, approvals, confirmationRequests, response, pe
     };
   }
 
-  const mutationSteps = tools.filter(step => step?.extra?.tool_name === task.expectedMutation);
-  const executedMutations = mutationSteps.filter(toolResultSucceeded);
-  const rejectedMutationSteps = mutationSteps.filter(step => !toolResultSucceeded(step));
-  const confirmationRequiredSteps = rejectedMutationSteps.filter(step =>
-    parseToolResult(step).raw.includes(MUTATION_CONFIRMATION_MARKER));
+  const changeSteps = tools.filter(step => step?.extra?.tool_name === task.expectedChange);
+  const executedChanges = changeSteps.filter(toolResultSucceeded);
+  const rejectedChangeSteps = changeSteps.filter(step => !toolResultSucceeded(step));
+  const confirmationRequiredSteps = rejectedChangeSteps.filter(step =>
+    parseToolResult(step).raw.includes(CHANGE_CONFIRMATION_MARKER));
   const record = expectedRecord(task);
   const expectedArguments = {name: record.name, description: record.description};
-  const mutationArgumentsValid = mutationSteps.length > 0
-    && mutationSteps.every(step => exactObjectKeys(step?.extra?.arguments, expectedArguments));
-  const ids = executedMutations.length === 1 ? createdIds(executedMutations[0], record.idKey) : [];
+  const changeArgumentsValid = changeSteps.length > 0
+    && changeSteps.every(step => exactObjectKeys(step?.extra?.arguments, expectedArguments));
+  const ids = executedChanges.length === 1 ? createdIds(executedChanges[0], record.idKey) : [];
   const createdId = ids.length === 1 ? ids[0] : null;
-  const mutationIndex = createdId ? tools.indexOf(executedMutations[0]) : -1;
-  const mutationRequestId = mutationIndex >= 0
-    ? executedMutations[0]?.extra?.request_id : null;
+  const changeIndex = createdId ? tools.indexOf(executedChanges[0]) : -1;
+  const changeRequestId = changeIndex >= 0
+    ? executedChanges[0]?.extra?.request_id : null;
   const confirmationStep = confirmationRequiredSteps.length === 1
     ? confirmationRequiredSteps[0] : null;
   const confirmationStepIndex = confirmationStep ? tools.indexOf(confirmationStep) : -1;
   const approvalTraceValid = permissionMode !== 'ask'
-    || mutationSteps.length === 2 && executedMutations.length === 1
-      && rejectedMutationSteps.length === 1 && confirmationRequiredSteps.length === 1
-      && confirmationStepIndex >= 0 && confirmationStepIndex < mutationIndex
-      && confirmationStep?.extra?.request_id !== mutationRequestId
+    || changeSteps.length === 2 && executedChanges.length === 1
+      && rejectedChangeSteps.length === 1 && confirmationRequiredSteps.length === 1
+      && confirmationStepIndex >= 0 && confirmationStepIndex < changeIndex
+      && confirmationStep?.extra?.request_id !== changeRequestId
       && (evidenceSchemaVersion < 2
         || Number(confirmationStep?.extra?.depth) === 0
           && confirmationStep?.extra?.agent_name === LEAD_NAME);
   const decisionValid = confirmationValid && decisionMatches(
-    decision, confirmation, conversationId, mutationRequestId, evidenceSchemaVersion);
+    decision, confirmation, conversationId, changeRequestId, evidenceSchemaVersion);
   const sourceApprovalValid = confirmationValid && decisionValid;
   const approvalValid = permissionMode !== 'ask'
     || approvals === 1 && confirmationRequests === 1
       && confirmationValid && (decisionValid || allowLegacyApprovalInference);
-  const readBackSteps = tools.slice(mutationIndex + 1).filter(step =>
+  const readBackSteps = tools.slice(changeIndex + 1).filter(step =>
     task.expectedReads.includes(step?.extra?.tool_name)
       && toolResultSucceeded(step)
-      && step?.extra?.request_id === mutationRequestId
+      && step?.extra?.request_id === changeRequestId
       && canonicalId(step?.extra?.arguments?.[record.idKey]) === createdId
       && exactRecord(step, record, createdId));
   const reportsId = responseReportsId(response, createdId);
-  const mutation = executedMutations.length === 1 && ids.length === 1;
-  const readBack = mutationIndex >= 0 && readBackSteps.length > 0;
+  const change = executedChanges.length === 1 && ids.length === 1;
+  const readBack = changeIndex >= 0 && readBackSteps.length > 0;
   const readBackIndex = readBack ? allSteps.indexOf(readBackSteps[0]) : -1;
   const continuationFinals = readBack ? allSteps.filter((step, index) =>
     index > readBackIndex && step?.extra?.message_kind === 'assistant'
       && step?.extra?.visibility === 'visible'
-      && step?.extra?.request_id === mutationRequestId) : [];
+      && step?.extra?.request_id === changeRequestId) : [];
   const continuationFinal = continuationFinals.length === 1
     && responseReportsId({response: continuationFinals[0].message}, createdId);
   return {
-    valid: mutation && mutationArgumentsValid && approvalTraceValid && readBack
+    valid: change && changeArgumentsValid && approvalTraceValid && readBack
       && continuationFinal && approvalValid && reportsId
-      && specialistMutationAttempts.length === 0 && unexpectedMutationCalls.length === 0,
+      && specialistChangeAttempts.length === 0 && unexpectedChangeCalls.length === 0,
     names,
-    mutation,
-    mutationArgumentsValid,
+    change,
+    changeArgumentsValid,
     approvalTraceValid,
-    executedMutations: executedMutations.length,
-    rejectedMutationCalls: rejectedMutationSteps.length,
-    specialistMutationAttempts: specialistMutationAttempts.length,
-    unexpectedMutationCalls: unexpectedMutationCalls.map(step => step.extra.tool_name),
+    executedChanges: executedChanges.length,
+    rejectedChangeCalls: rejectedChangeSteps.length,
+    specialistChangeAttempts: specialistChangeAttempts.length,
+    unexpectedChangeCalls: unexpectedChangeCalls.map(step => step.extra.tool_name),
     approvalValid,
     approvalEvidence: sourceApprovalValid ? 'decision_artifact'
       : allowLegacyApprovalInference ? 'legacy_inferred' : 'missing',

@@ -17,15 +17,15 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentSession;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiModel;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalResolution;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
-import org.oagi.score.gateway.http.api.ai_management.model.AiPendingMutationApproval;
-import org.oagi.score.gateway.http.api.ai_management.model.AiResolvedMutation;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalResolution;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationNotice;
+import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApproval;
+import org.oagi.score.gateway.http.api.ai_management.model.AiResolvedChange;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
-import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
-import org.oagi.score.gateway.http.api.ai_management.service.AiMutationConfirmationService;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChangeConfirmationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiCallbackToolSetAdapter;
@@ -39,7 +39,7 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolGuardrailRegi
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolInputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.provider.AiProviderRetryExecutor;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeToolGuard;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolExecutionGateway;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolSet;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -197,9 +197,9 @@ class AiChatExecutorTest {
                         request.prompt()), null, null, false, false,
                 org.oagi.score.gateway.http.api.ai_management.agent.AgentToolPolicy.NONE, 0);
         assertThat(execution.instructionParameters())
-                .containsEntry("mutationConfirmationRequired",
-                        AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED)
-                .containsEntry("requestStopping", AiMutationToolGuard.REQUEST_STOPPING)
+                .containsEntry("changeConfirmationRequired",
+                        AiChangeToolGuard.CHANGE_CONFIRMATION_REQUIRED)
+                .containsEntry("requestStopping", AiChangeToolGuard.REQUEST_STOPPING)
                 .containsEntry("pageContext",
                         "Supplied separately in the request-scoped user-context block.");
         assertThat(AiChatExecutor.requestScopedInput(request))
@@ -281,33 +281,33 @@ class AiChatExecutorTest {
     @SuppressWarnings({"unchecked", "rawtypes"})
     void retainsPriorToolResultsAcrossMultipleApprovalWaves() {
         Fixture fixture = new Fixture();
-        AiMutationToolGuard mutationGuard = mock(AiMutationToolGuard.class);
-        AiMutationToolGuard.GuardedToolSession guardedSession =
-                mock(AiMutationToolGuard.GuardedToolSession.class);
-        AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
+        AiChangeToolGuard changeGuard = mock(AiChangeToolGuard.class);
+        AiChangeToolGuard.GuardedToolSession guardedSession =
+                mock(AiChangeToolGuard.GuardedToolSession.class);
+        AiChangeApprovalCoordinator approvals = mock(AiChangeApprovalCoordinator.class);
         org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl runControl =
                 mock(org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.class);
         org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle waitLifecycle =
                 mock(org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle.class);
-        AiPendingMutationApproval first = pending("approval-1", "update_a");
-        AiPendingMutationApproval second = pending("approval-2", "update_b");
+        AiPendingChangeApproval first = pending("approval-1", "update_a");
+        AiPendingChangeApproval second = pending("approval-2", "update_b");
         when(guardedSession.getToolCallbacks()).thenReturn(new ToolCallback[0]);
         when(guardedSession.executeApproved(any())).thenReturn(Optional.empty());
         when(guardedSession.pendingApprovals()).thenReturn(
                 List.of(first), List.of(first), List.of(second), List.of(second), List.of());
         when(guardedSession.resolveApprovals(any(), any()))
-                .thenReturn(List.of(new AiResolvedMutation(
+                .thenReturn(List.of(new AiResolvedChange(
                                 "update_a", "{\"id\":1}", "result-one", true)),
-                        List.of(new AiResolvedMutation(
+                        List.of(new AiResolvedChange(
                                 "update_b", "{\"id\":2}", "result-two", true)));
-        when(mutationGuard.session(any(), any(), any(), any(), any(), any()))
+        when(changeGuard.session(any(), any(), any(), any(), any(), any()))
                 .thenReturn(guardedSession);
         when(approvals.awaitDecisions(
                 any(), anyString(), anyString(), any(), any(), any(), any()))
-                .thenReturn(Map.of("approval-1", new AiMutationApprovalResolution(
-                                "approval-1", AiMutationApprovalResolution.Decision.APPROVE, "grant-1")),
-                        Map.of("approval-2", new AiMutationApprovalResolution(
-                                "approval-2", AiMutationApprovalResolution.Decision.APPROVE, "grant-2")));
+                .thenReturn(Map.of("approval-1", new AiChangeApprovalResolution(
+                                "approval-1", AiChangeApprovalResolution.Decision.APPROVE, "grant-1")),
+                        Map.of("approval-2", new AiChangeApprovalResolution(
+                                "approval-2", AiChangeApprovalResolution.Decision.APPROVE, "grant-2")));
         fixture.responses(Flux.just(response("Waiting for first approval.")),
                 Flux.just(response("Waiting for second approval.")),
                 Flux.just(response("Both updates completed.")));
@@ -315,7 +315,7 @@ class AiChatExecutorTest {
         AiTrajectoryRecorder recorder = fixture.recorder("request-1");
         ChatRequest request = request("Apply both updates");
 
-        AiChatExecutor.Result result = fixture.executor(mutationGuard, approvals).execute(
+        AiChatExecutor.Result result = fixture.executor(changeGuard, approvals).execute(
                 new AiChatExecutor.Context(request, List.of(),
                         new UserMessage(request.prompt()), fixture.requester, recorder,
                         true, false, AiChatExecutor.ToolPolicy.FULL, 1,
@@ -325,8 +325,8 @@ class AiChatExecutorTest {
         assertThat(result.traceMetadata())
                 .containsEntry("approvalBarrierResolved", true)
                 .containsEntry("approvalBarrierCount", 2)
-                .containsEntry("approvedMutationCount", 2)
-                .containsEntry("deniedMutationCount", 0);
+                .containsEntry("approvedChangeCount", 2)
+                .containsEntry("deniedChangeCount", 0);
         assertThat(recorder.pendingApprovalCount()).isZero();
         ArgumentCaptor<List<Message>> messageCalls = ArgumentCaptor.forClass(List.class);
         verify(fixture.requestSpec, times(3)).messages(messageCalls.capture());
@@ -347,36 +347,36 @@ class AiChatExecutorTest {
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
-    void countsAnApprovedButFailedMutationAsFailedRatherThanDenied() {
+    void countsAnApprovedButFailedChangeAsFailedRatherThanDenied() {
         Fixture fixture = new Fixture();
-        AiMutationToolGuard mutationGuard = mock(AiMutationToolGuard.class);
-        AiMutationToolGuard.GuardedToolSession guardedSession =
-                mock(AiMutationToolGuard.GuardedToolSession.class);
-        AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
+        AiChangeToolGuard changeGuard = mock(AiChangeToolGuard.class);
+        AiChangeToolGuard.GuardedToolSession guardedSession =
+                mock(AiChangeToolGuard.GuardedToolSession.class);
+        AiChangeApprovalCoordinator approvals = mock(AiChangeApprovalCoordinator.class);
         org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle waitLifecycle =
                 mock(org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle.class);
-        AiPendingMutationApproval pending = pending("approval-1", "delete_a");
-        String failure = "{\"error\":\"" + AiMutationToolGuard.MUTATION_FAILED
+        AiPendingChangeApproval pending = pending("approval-1", "delete_a");
+        String failure = "{\"error\":\"" + AiChangeToolGuard.CHANGE_FAILED
                 + "\",\"message\":\"It is still referenced by context scheme records.\"}";
         when(guardedSession.getToolCallbacks()).thenReturn(new ToolCallback[0]);
         when(guardedSession.executeApproved(any())).thenReturn(Optional.empty());
         when(guardedSession.pendingApprovals()).thenReturn(
                 List.of(pending), List.of(pending), List.of());
         when(guardedSession.resolveApprovals(any(), any())).thenReturn(List.of(
-                new AiResolvedMutation("delete_a", "{\"id\":1}", failure, false)));
-        when(mutationGuard.session(any(), any(), any(), any(), any(), any()))
+                new AiResolvedChange("delete_a", "{\"id\":1}", failure, false)));
+        when(changeGuard.session(any(), any(), any(), any(), any(), any()))
                 .thenReturn(guardedSession);
         when(approvals.awaitDecisions(
                 any(), anyString(), anyString(), any(), any(), any(), any()))
-                .thenReturn(Map.of("approval-1", new AiMutationApprovalResolution(
-                        "approval-1", AiMutationApprovalResolution.Decision.APPROVE, "grant-1")));
+                .thenReturn(Map.of("approval-1", new AiChangeApprovalResolution(
+                        "approval-1", AiChangeApprovalResolution.Decision.APPROVE, "grant-1")));
         fixture.responses(Flux.just(response("Waiting for approval.")),
                 Flux.just(response("The deletion did not go through.")));
         fixture.mcp(new ToolCallback[0], Set.of());
         AiTrajectoryRecorder recorder = fixture.recorder("request-1");
         ChatRequest request = request("Delete it");
 
-        AiChatExecutor.Result result = execute(fixture.executor(mutationGuard, approvals),
+        AiChatExecutor.Result result = execute(fixture.executor(changeGuard, approvals),
                 new AiChatExecutor.Context(request, List.of(),
                         new UserMessage(request.prompt()), fixture.requester, recorder,
                         true, false, AiChatExecutor.ToolPolicy.FULL, 1,
@@ -384,9 +384,9 @@ class AiChatExecutorTest {
 
         assertThat(result.answer()).isEqualTo("The deletion did not go through.");
         assertThat(result.traceMetadata())
-                .containsEntry("approvedMutationCount", 0)
-                .containsEntry("deniedMutationCount", 0)
-                .containsEntry("failedMutationCount", 1);
+                .containsEntry("approvedChangeCount", 0)
+                .containsEntry("deniedChangeCount", 0)
+                .containsEntry("failedChangeCount", 1);
         ArgumentCaptor<List<Message>> messageCalls = ArgumentCaptor.forClass(List.class);
         verify(fixture.requestSpec, times(2)).messages(messageCalls.capture());
         assertThat(messageCalls.getAllValues().getLast().stream()
@@ -400,22 +400,22 @@ class AiChatExecutorTest {
     @Test
     void clearsSharedPendingApprovalEvidenceWhenWorkerResumeFails() {
         Fixture fixture = new Fixture();
-        AiMutationToolGuard mutationGuard = mock(AiMutationToolGuard.class);
-        AiMutationToolGuard.GuardedToolSession guardedSession =
-                mock(AiMutationToolGuard.GuardedToolSession.class);
-        AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
+        AiChangeToolGuard changeGuard = mock(AiChangeToolGuard.class);
+        AiChangeToolGuard.GuardedToolSession guardedSession =
+                mock(AiChangeToolGuard.GuardedToolSession.class);
+        AiChangeApprovalCoordinator approvals = mock(AiChangeApprovalCoordinator.class);
         org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle waitLifecycle =
                 mock(org.oagi.score.gateway.http.api.ai_management.agent.AgentApprovalWaitLifecycle.class);
-        AiPendingMutationApproval pending = pending("approval-1", "update_a");
+        AiPendingChangeApproval pending = pending("approval-1", "update_a");
         when(guardedSession.getToolCallbacks()).thenReturn(new ToolCallback[0]);
         when(guardedSession.executeApproved(any())).thenReturn(Optional.empty());
         when(guardedSession.pendingApprovals()).thenReturn(List.of(pending), List.of(pending));
-        when(mutationGuard.session(any(), any(), any(), any(), any(), any()))
+        when(changeGuard.session(any(), any(), any(), any(), any(), any()))
                 .thenReturn(guardedSession);
         when(approvals.awaitDecisions(
                 any(), anyString(), anyString(), any(), any(), any(), any()))
-                .thenReturn(Map.of("approval-1", new AiMutationApprovalResolution(
-                        "approval-1", AiMutationApprovalResolution.Decision.APPROVE, "grant-1")));
+                .thenReturn(Map.of("approval-1", new AiChangeApprovalResolution(
+                        "approval-1", AiChangeApprovalResolution.Decision.APPROVE, "grant-1")));
         doThrow(new CancellationException("resume failed"))
                 .when(waitLifecycle).resumeAfterApproval();
         fixture.responses(Flux.just(response("Waiting for approval.")));
@@ -423,7 +423,7 @@ class AiChatExecutorTest {
         AiTrajectoryRecorder recorder = spy(fixture.recorder("request-1"));
         ChatRequest request = request("Apply update");
 
-        assertThatThrownBy(() -> execute(fixture.executor(mutationGuard, approvals),
+        assertThatThrownBy(() -> execute(fixture.executor(changeGuard, approvals),
                 new AiChatExecutor.Context(request, List.of(),
                         new UserMessage(request.prompt()), fixture.requester, recorder,
                         true, false, AiChatExecutor.ToolPolicy.FULL, 1,
@@ -431,7 +431,7 @@ class AiChatExecutorTest {
                 .isInstanceOf(CancellationException.class)
                 .hasMessageContaining("resume failed");
 
-        verify(recorder).mutationApprovalsResolved(List.of(pending));
+        verify(recorder).changeApprovalsResolved(List.of(pending));
         verify(guardedSession, never()).resolveApprovals(any(), any());
     }
 
@@ -444,11 +444,11 @@ class AiChatExecutorTest {
         ToolCallback create = tool("create_business_context", "must not execute");
         ToolCallback read = tool("get_business_context", "{\"id\":101}");
         McpSyncClient mcpClient = fixture.mcp(create, read, Set.of("get_business_context"));
-        AiMutationToolGuard mutationGuard = new AiMutationToolGuard(
-                mock(AiMutationConfirmationService.class), mock(AiRequestRegistry.class));
+        AiChangeToolGuard changeGuard = new AiChangeToolGuard(
+                mock(AiChangeConfirmationService.class), mock(AiRequestRegistry.class));
         AiTrajectoryRecorder recorder = fixture.recorder("request-1");
 
-        AiChatExecutor.Result result = execute(fixture.executorWithPolicies(mutationGuard,
+        AiChatExecutor.Result result = execute(fixture.executorWithPolicies(changeGuard,
                 toolPolicies(request -> new ToolOutputGuardrail.Result.Allow(
                         request.output(), GuardrailDecision.of("tool-output", "1",
                                 GuardrailDecision.Action.ALLOW))), allowModelInput()),
@@ -522,15 +522,15 @@ class AiChatExecutorTest {
                                 "{\"id\":7,\"name\":\"safe\"}"),
                         GuardrailDecision.of("tool-output", "1",
                                 GuardrailDecision.Action.REWRITE)));
-        AiMutationToolGuard mutationGuard = new AiMutationToolGuard(
-                mock(AiMutationConfirmationService.class), mock(AiRequestRegistry.class));
+        AiChangeToolGuard changeGuard = new AiChangeToolGuard(
+                mock(AiChangeConfirmationService.class), mock(AiRequestRegistry.class));
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository,
                 new com.fasterxml.jackson.databind.ObjectMapper(), fixture.requester,
                 "conversation-1", "request-1", ignored -> { });
 
         AiChatExecutor.Result result = execute(fixture.executorWithPolicies(
-                mutationGuard, policies, allowModelInput()),
+                changeGuard, policies, allowModelInput()),
                 new AiChatExecutor.Context(request("Inspect it"), List.of(),
                         new UserMessage("Inspect it"), fixture.requester, recorder));
 
@@ -728,9 +728,9 @@ class AiChatExecutorTest {
             when(requestSpec.stream()).thenReturn(responseSpec);
         }
 
-        private AiChatExecutor executor(AiMutationToolGuard mutationGuard) {
+        private AiChatExecutor executor(AiChangeToolGuard changeGuard) {
             return new AiChatExecutor(models, mcpClients, toolSearchAdvisor,
-                    mutationGuard, null, null, optionsFactory);
+                    changeGuard, null, null, optionsFactory);
         }
 
         private AiChatExecutor executorWithProviderRetry(AiProviderRetryExecutor retry) {
@@ -739,18 +739,18 @@ class AiChatExecutorTest {
         }
 
         private AiChatExecutor executor(
-                AiMutationToolGuard mutationGuard,
-                AiMutationApprovalCoordinator approvalCoordinator) {
+                AiChangeToolGuard changeGuard,
+                AiChangeApprovalCoordinator approvalCoordinator) {
             return new AiChatExecutor(models, mcpClients, toolSearchAdvisor,
-                    mutationGuard, null, null, optionsFactory, approvalCoordinator);
+                    changeGuard, null, null, optionsFactory, approvalCoordinator);
         }
 
         private AiChatExecutor executorWithPolicies(
-                AiMutationToolGuard mutationGuard,
+                AiChangeToolGuard changeGuard,
                 ToolGuardrailRegistry toolGuardrails,
                 AgentInputGuardrailChain modelInputGuardrails) {
             return new AiChatExecutor(models, mcpClients, toolSearchAdvisor,
-                    mutationGuard, null, null, optionsFactory, null, toolGuardrails,
+                    changeGuard, null, null, optionsFactory, null, toolGuardrails,
                     new SpringAiCallbackToolSetAdapter(), new SpringAiToolAdapter(),
                     modelInputGuardrails, null, null);
         }
@@ -794,8 +794,8 @@ class AiChatExecutorTest {
         }
     }
 
-    private AiPendingMutationApproval pending(String id, String toolName) {
-        return new AiPendingMutationApproval(new AiMutationConfirmationNotice(
+    private AiPendingChangeApproval pending(String id, String toolName) {
+        return new AiPendingChangeApproval(new AiChangeConfirmationNotice(
                 id, "REQUESTED", Instant.now().plusSeconds(60), toolName, "{\"id\":1}"),
                 toolName, "{\"id\":1}");
     }

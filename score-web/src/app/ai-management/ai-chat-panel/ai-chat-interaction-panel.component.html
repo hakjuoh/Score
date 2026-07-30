@@ -1,20 +1,20 @@
-@if (mutationApprovalBatch) {
+@if (changeApprovalBatch) {
   <div class="model-command-panel interaction-command-panel"
        role="region" aria-live="assertive" aria-atomic="true"
        aria-label="Data change approvals">
     <div class="model-command-title">
-      {{ mutationApprovalBatch.items.length === 1
-        ? 'Approve this action?'
-        : 'Approve ' + mutationApprovalBatch.items.length + ' actions?' }}
+      {{ changeApprovalBatch.items.length === 1
+        ? 'Approve this change?'
+        : 'Approve ' + changeApprovalBatch.items.length + ' changes?' }}
     </div>
     <div class="interaction-command-message">
-      @if (mutationApprovalBatch.parallel && mutationApprovalBatch.items.length > 1) {
+      @if (changeApprovalBatch.parallel && changeApprovalBatch.items.length > 1) {
         Parallel assistants have reached one shared approval barrier. Your decision resumes each waiting assistant.
       } @else {
         The active assistant is waiting for your decision before it continues.
       }
     </div>
-    @for (item of mutationApprovalBatch.items; track item.confirmationRequestId; let i = $index) {
+    @for (item of changeApprovalBatch.items; track item.confirmationRequestId; let i = $index) {
       <section class="model-command-section" [attr.aria-label]="'Approval item ' + (i + 1)">
         <h4>{{ i + 1 }}. {{ item.agentLabel || 'Assistant' }}</h4>
         <dl class="interaction-command-details">
@@ -24,20 +24,20 @@
         <div class="model-command-options" role="group"
              [attr.aria-label]="'Decision for ' + item.toolName">
           <button type="button" class="model-command-option"
-                  [class.selected]="mutationDecisionSelected(item.confirmationRequestId, 'APPROVE')"
-                  [attr.aria-pressed]="mutationDecisionSelected(item.confirmationRequestId, 'APPROVE')"
-                  [disabled]="mutationApprovalBatchBusy"
-                  (click)="chooseMutationDecision(item.confirmationRequestId, 'APPROVE')">
+                  [class.selected]="changeDecisionSelected(item.confirmationRequestId, 'APPROVE')"
+                  [attr.aria-pressed]="changeDecisionSelected(item.confirmationRequestId, 'APPROVE')"
+                  [disabled]="changeApprovalBatchBusy"
+                  (click)="chooseChangeDecision(item.confirmationRequestId, 'APPROVE')">
             <span class="model-command-caret" aria-hidden="true">›</span>
             <span class="model-command-option-content">
               <span class="model-command-option-name">Approve</span>
             </span>
           </button>
           <button type="button" class="model-command-option"
-                  [class.selected]="mutationDecisionSelected(item.confirmationRequestId, 'DENY')"
-                  [attr.aria-pressed]="mutationDecisionSelected(item.confirmationRequestId, 'DENY')"
-                  [disabled]="mutationApprovalBatchBusy"
-                  (click)="chooseMutationDecision(item.confirmationRequestId, 'DENY')">
+                  [class.selected]="changeDecisionSelected(item.confirmationRequestId, 'DENY')"
+                  [attr.aria-pressed]="changeDecisionSelected(item.confirmationRequestId, 'DENY')"
+                  [disabled]="changeApprovalBatchBusy"
+                  (click)="chooseChangeDecision(item.confirmationRequestId, 'DENY')">
             <span class="model-command-caret" aria-hidden="true">›</span>
             <span class="model-command-option-content">
               <span class="model-command-option-name">Deny</span>
@@ -47,51 +47,51 @@
       </section>
     }
     <div class="model-command-actions">
-      <button type="button" [disabled]="mutationApprovalBatchBusy"
-              (click)="mutationBatchDenied.emit()">
-        {{ mutationApprovalBatchBusy ? 'Sending...' : 'Deny all' }}
+      <button type="button" [disabled]="changeApprovalBatchBusy"
+              (click)="changeBatchDenied.emit()">
+        {{ changeApprovalBatchBusy ? 'Sending...' : 'Deny all' }}
       </button>
-      <button type="button" class="primary" [disabled]="mutationApprovalBatchBusy"
-              (click)="mutationBatchApproved.emit()">
-        {{ mutationApprovalBatchBusy ? 'Sending...' : 'Approve all' }}
+      <button type="button" class="primary" [disabled]="changeApprovalBatchBusy"
+              (click)="changeBatchApproved.emit()">
+        {{ changeApprovalBatchBusy ? 'Sending...' : 'Approve all' }}
       </button>
-      <button type="button" [disabled]="mutationApprovalBatchBusy || !mutationBatchDecisionComplete()"
-              (click)="submitMutationBatchDecision()">
+      <button type="button" [disabled]="changeApprovalBatchBusy || !changeBatchDecisionComplete()"
+              (click)="submitChangeBatchDecision()">
         Submit selected decisions
       </button>
     </div>
   </div>
 }
 
-@if (mutation) {
+@if (change) {
   <div class="model-command-panel interaction-command-panel"
-       role="group" aria-label="Mutation approval">
+       role="group" aria-label="Change approval">
     <div class="model-command-title">
-      {{ mutation.mode === 'confirm' ? 'Approve this action?' : 'Action approval unavailable' }}
+      {{ change.mode === 'confirm' ? 'Approve this change?' : 'Change approval unavailable' }}
     </div>
     <div class="interaction-command-message">
-      @if (mutation.mode === 'confirm') {
-        The assistant is requesting permission to perform a data-changing action.
+      @if (change.mode === 'confirm') {
+        The assistant is requesting permission to make this change.
       } @else {
-        This action was approved previously, but its one-time grant is no longer available.
+        This change was approved previously, but its one-time grant is no longer available.
       }
     </div>
     <dl class="interaction-command-details">
-      <dt>Tool</dt><dd>{{ mutation.toolName }}</dd>
-      <dt>Proposed arguments</dt><dd>{{ mutation.argumentsSummary }}</dd>
+      <dt>Tool</dt><dd>{{ change.toolName }}</dd>
+      <dt>Proposed arguments</dt><dd>{{ change.argumentsSummary }}</dd>
     </dl>
-    @if (mutation.mode === 'confirm') {
+    @if (change.mode === 'confirm') {
       <div class="model-command-options" aria-label="Approval choices">
         <button type="button" class="model-command-option"
-                [disabled]="mutation.busy" (click)="mutationApproved.emit()">
+                [disabled]="change.busy" (click)="changeApproved.emit()">
           <span class="model-command-caret visible" aria-hidden="true">›</span>
           <span class="model-command-option-content">
-            <span class="model-command-option-name">1. Approve action</span>
+            <span class="model-command-option-name">1. Approve change</span>
             <span class="model-command-option-description">Apply this exact data change and continue the task.</span>
           </span>
         </button>
         <button type="button" class="model-command-option"
-                [disabled]="mutation.busy" (click)="mutationDenied.emit()">
+                [disabled]="change.busy" (click)="changeDenied.emit()">
           <span class="model-command-caret visible" aria-hidden="true">›</span>
           <span class="model-command-option-content">
             <span class="model-command-option-name">2. Deny</span>
@@ -99,23 +99,23 @@
           </span>
         </button>
         <button type="button" class="model-command-option"
-                [disabled]="mutation.busy" (click)="mutationChangeRequested.emit()">
+                [disabled]="change.busy" (click)="changeRevisionRequested.emit()">
           <span class="model-command-caret visible" aria-hidden="true">›</span>
           <span class="model-command-option-content">
-            <span class="model-command-option-name">3. Modify action</span>
+            <span class="model-command-option-name">3. Revise change</span>
             <span class="model-command-option-description">
-              Describe what to change in Chat. The modified action will run without another confirmation.
+              Describe what to change in Chat. The revised change will run without another confirmation.
             </span>
           </span>
         </button>
       </div>
     } @else {
       <div class="model-command-actions">
-        <button type="button" [disabled]="mutation.busy" (click)="mutationDismissed.emit()">
+        <button type="button" [disabled]="change.busy" (click)="changeDismissed.emit()">
           Leave unused
         </button>
-        <button type="button" [disabled]="mutation.busy" (click)="mutationRevoked.emit()">
-          {{ mutation.busy ? 'Revoking...' : 'Revoke unused approval' }}
+        <button type="button" [disabled]="change.busy" (click)="changeRevoked.emit()">
+          {{ change.busy ? 'Revoking...' : 'Revoke unused approval' }}
         </button>
       </div>
     }

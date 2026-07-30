@@ -360,7 +360,7 @@ describe('AiChatPanelComponent request cancellation', () => {
 
     expect(component.state.reconciliationRequired).toBe(true);
     expect(component.state.currentStatus).toBe('Review needed');
-    expect((component as any).pendingMutationConfirmation).toBeUndefined();
+    expect((component as any).pendingChangeConfirmation).toBeUndefined();
     expect(component.state.messages).toContainEqual(expect.objectContaining({
       role: 'error',
       content: expect.stringContaining('requires reconciliation')

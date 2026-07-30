@@ -40,7 +40,7 @@ function parseArgs(argv) {
       process.stdout.write(
         'Usage: node scripts/ai-multi-agent-matrix.mjs ' +
         '[--mode single|parallel|both] [--strategy balanced|creative|verification|all] ' +
-        '[--task landscape|creative|mutation] [--model NAME] [--effort NAME] ' +
+        '[--task landscape|creative|change] [--model NAME] [--effort NAME] ' +
         '[--runtime NAME] [--max-agents 2..4] [--limit N] ' +
         '[--permission-mode ask|auto|full_access]\n'
       );
@@ -55,7 +55,7 @@ function parseArgs(argv) {
   if (![...STRATEGIES, 'all'].includes(args.strategy)) {
     throw new Error(`Unsupported strategy: ${args.strategy}`);
   }
-  if (!['landscape', 'creative', 'mutation'].includes(args.task)) {
+  if (!['landscape', 'creative', 'change'].includes(args.task)) {
     throw new Error(`Unsupported task: ${args.task}`);
   }
   if (!['ask', 'auto', 'full_access'].includes(args.permissionMode)) {
@@ -175,12 +175,12 @@ function taskFor(runId, ordinal) {
         'and representative core components. Explain the most important relationships with exact',
         'IDs from tool evidence. Do not change data. Separate observed facts from inference.'
       ].join(' '),
-      expectedMutation: null,
+      expectedChange: null,
       expectedReads: ['get_libraries', 'get_library', 'get_releases', 'get_working_release',
         'get_core_components', 'get_acc']
     };
   }
-  if (args.task === 'mutation') {
+  if (args.task === 'change') {
     const description = `multi-agent matrix ${tag}`;
     return {
       label: categoryName,
@@ -189,7 +189,7 @@ function taskFor(runId, ordinal) {
         `'${description}'. Then use get_context_category or get_context_categories`,
         'to read the stored record back. Report its exact ID. Do not claim success without read-back.'
       ].join(' '),
-      expectedMutation: 'create_context_category',
+      expectedChange: 'create_context_category',
       expectedReads: ['get_context_category', 'get_context_categories'],
       expectedRecord: {
         idKey: 'ctx_category_id',
@@ -210,24 +210,24 @@ function taskFor(runId, ordinal) {
       'component_id or manifest_id, using those exact ID labels in the answer.',
       'Include one skeptical counterargument per proposal. Do not change data.'
     ].join(' '),
-    expectedMutation: null,
+    expectedChange: null,
     expectedReads: ['get_libraries', 'get_library', 'get_releases', 'get_working_release',
       'get_data_types', 'get_data_type', 'get_core_components', 'get_acc']
   };
 }
 
-function chatPayload(testCase, task, conversationId, mutationConfirmation, requestId = randomUUID()) {
-  const parallel = testCase.mode === 'parallel' && !mutationConfirmation;
+function chatPayload(testCase, task, conversationId, changeConfirmation, requestId = randomUUID()) {
+  const parallel = testCase.mode === 'parallel' && !changeConfirmation;
   return {
-    prompt: mutationConfirmation
-      ? `Execute the exactly approved ${mutationConfirmation.toolName} call, then read the record back and finish the original request.`
+    prompt: changeConfirmation
+      ? `Execute the exactly approved ${changeConfirmation.toolName} call, then read the record back and finish the original request.`
       : task.prompt,
     requestId,
     agent: 'connectcenter-assistant',
     conversationId: conversationId || null,
     pageContext: `Multi-agent matrix; task=${args.task}; case=${task.label}`,
     attachments: [],
-    mutationConfirmation: mutationConfirmation || null,
+    changeConfirmation: changeConfirmation || null,
     modelName: testCase.combo.modelName,
     reasoningEffort: testCase.combo.reasoningEffort,
     runtime: testCase.combo.runtime,
@@ -282,7 +282,7 @@ async function postChat(payload) {
 
 function confirmation(response) {
   return (response?.events || []).find(event =>
-    event?.subtype === 'mutation_confirmation_required'
+    event?.subtype === 'change_confirmation_required'
       && event?.metadata?.confirmationRequestId
   );
 }
@@ -314,7 +314,7 @@ async function runCase(testCase, task, caseDir) {
         argumentsSummary: pending.metadata.argumentsSummary
       });
       const decision = await request(
-        `/api/ai/chat/conversations/${conversationId}/mutation-confirmations/` +
+        `/api/ai/chat/conversations/${conversationId}/change-confirmations/` +
         `${pending.metadata.confirmationRequestId}/decision`,
         {
           method: 'POST',

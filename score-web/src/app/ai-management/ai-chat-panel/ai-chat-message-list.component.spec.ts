@@ -46,22 +46,22 @@ describe('AiChatMessageListComponent', () => {
     expect(markdown.querySelectorAll('li')).toHaveLength(2);
   });
 
-  it('renders generated artifacts as accessible download links', () => {
+  it('renders generated files as accessible download links', () => {
     fixture.componentInstance.messages = [{
       role: 'assistant',
       content: 'The report is ready.',
-      artifacts: [{
-        artifactId: 'artifact-1', format: 'pdf', filename: 'work-report.pdf',
+      files: [{
+        fileId: 'file-1', format: 'pdf', filename: 'work-report.pdf',
         mediaType: 'application/pdf', size: 1536, sha256: 'abc',
-        downloadUrl: '/api/ai/chat/conversations/c1/artifacts/artifact-1'
+        downloadUrl: '/api/ai/chat/conversations/c1/files/file-1'
       }]
     }];
     fixture.detectChanges();
 
-    const group = fixture.nativeElement.querySelector('.message-artifacts') as HTMLElement;
-    const link = group.querySelector('.message-artifact') as HTMLAnchorElement;
+    const group = fixture.nativeElement.querySelector('.message-files') as HTMLElement;
+    const link = group.querySelector('.message-file') as HTMLAnchorElement;
     expect(group.getAttribute('aria-label')).toBe('Generated files');
-    expect(link.getAttribute('href')).toBe('/api/ai/chat/conversations/c1/artifacts/artifact-1');
+    expect(link.getAttribute('href')).toBe('/api/ai/chat/conversations/c1/files/file-1');
     expect(link.hasAttribute('download')).toBe(true);
     expect(link.textContent).toContain('work-report.pdf');
     expect(link.textContent).toContain('1.5 KB');
@@ -484,7 +484,7 @@ describe('AiChatMessageListComponent', () => {
     ) as NodeListOf<HTMLButtonElement>;
     expect(options).toHaveLength(3);
     expect(options[0].textContent).toContain('Ask for approval');
-    expect(options[1].textContent).toContain('Ask only for risky actions');
+    expect(options[1].textContent).toContain('Ask only for risky changes');
     expect(options[2].textContent).toContain('Full access');
     expect(options[0].textContent).toContain('(current)');
 
@@ -1041,14 +1041,14 @@ describe('AiChatMessageListComponent', () => {
     expect(row.querySelector('.agent-focus-tool-icon')?.textContent).toContain('build');
   });
 
-  it('keeps the mutation decision panel visible while an agent focus is open', () => {
+  it('keeps the change decision panel visible while an agent focus is open', () => {
     fixture.componentInstance.agentFocus = {
       agentId: 'request-1:agent:1', agentName: 'Verifier', status: 'started',
       content: 'Checking independent evidence.', inProgress: true, isLead: false,
       firstSeenAt: 0, lastUpdateAt: 0,
       events: [{status: 'started', content: 'Checking independent evidence.'}]
     };
-    fixture.componentInstance.mutationInteraction = {
+    fixture.componentInstance.changeInteraction = {
       toolName: 'create_business_context',
       argumentsSummary: '{"name":"Example"}',
       mode: 'confirm',

@@ -367,8 +367,8 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
     api.getRequestStatus.mockReturnValue(of(status));
     api.getConversation.mockReturnValue(of({
       conversationId: 'conversation-1', title: 'Running request', messages: [{
-        index: 1, role: 'guide', content: 'Approval requested for one data-changing action.',
-        requestId: 'request-running', subtype: 'mutation_approval_batch_requested',
+        index: 1, role: 'guide', content: 'Approval requested for one change.',
+        requestId: 'request-running', subtype: 'change_approval_batch_requested',
         metadata: {
           batchId: 'batch-recovered', parallel: false,
           expiresAt: '2099-07-15T00:00:00Z', items: [{
@@ -383,14 +383,14 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
     component.open();
 
     expect(transport.watch).toHaveBeenCalledWith('/user/queue/ai/chat/request-running');
-    expect(component.state.mutationApprovalBatch).toMatchObject({
+    expect(component.state.changeApprovalBatch).toMatchObject({
       batchId: 'batch-recovered', requestId: 'request-running'
     });
     expect(component.state.currentStatus).toBe('Approval required');
     const subscription = (component as any).requestSubscription as Subscription;
     expect(subscription.closed).toBe(false);
-    component.decideMutationApprovalBatch('APPROVE');
-    expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/mutation-approval', {
+    component.decideChangeApprovalBatch('APPROVE');
+    expect(transport.publish).toHaveBeenLastCalledWith('/app/ai/chat/change-approval', {
       requestId: 'request-running', conversationId: 'conversation-1',
       batchId: 'batch-recovered', decisions: [{
         confirmationRequestId: 'confirmation-recovered', decision: 'APPROVE'
@@ -399,17 +399,17 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
 
     live.next({body: JSON.stringify({
       requestId: 'request-running', conversationId: 'conversation-1', type: 'system',
-      subtype: 'mutation_approval_decision_rejected', content: 'Please decide again.',
+      subtype: 'change_approval_decision_rejected', content: 'Please decide again.',
       metadata: {batchId: 'batch-recovered'}
     })});
-    expect(component.state.mutationApprovalBatchBusy).toBe(false);
-    component.decideMutationApprovalBatch('DENY');
+    expect(component.state.changeApprovalBatchBusy).toBe(false);
+    component.decideChangeApprovalBatch('DENY');
     expect(transport.publish).toHaveBeenCalledTimes(2);
 
     (component as any).finishRecoveredRequest({...status, status: 'COMPLETED'});
     expect(subscription.closed).toBe(true);
     expect((component as any).requestSubscription).toBeUndefined();
-    expect(component.state.mutationApprovalBatch).toBeUndefined();
+    expect(component.state.changeApprovalBatch).toBeUndefined();
     expect(component.state.pending).toBe(false);
   });
 
