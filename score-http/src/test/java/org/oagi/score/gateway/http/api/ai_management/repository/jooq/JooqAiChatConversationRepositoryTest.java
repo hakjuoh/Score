@@ -38,14 +38,24 @@ import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.A
 class JooqAiChatConversationRepositoryTest {
 
     @Test
-    void removesOnlyTheFinalAnswersIdenticalWorkflowPreview() {
+    void restoresOnlyTheCanonicalFinalAnswerAcrossWorkflowIterations() {
         ChatHistoryMessage firstIteration = history(0, "workflow_result", "First answer.");
         ChatHistoryMessage finalPreview = history(1, "workflow_result", "Final answer.");
         ChatHistoryMessage finalAnswer = history(2, null, "Final answer.");
 
         assertThat(JooqAiChatConversationRepository.coalesceFinalWorkflowResult(List.of(
                 firstIteration, finalPreview, finalAnswer)))
-                .containsExactly(firstIteration, finalAnswer);
+                .containsExactly(finalAnswer);
+    }
+
+    @Test
+    void retainsOnlyTheLatestWorkflowResultWhenNoCanonicalAnswerWasPersisted() {
+        ChatHistoryMessage firstIteration = history(0, "workflow_result", "First answer.");
+        ChatHistoryMessage lastSafePreview = history(1, "workflow_result", "Last safe answer.");
+
+        assertThat(JooqAiChatConversationRepository.coalesceFinalWorkflowResult(List.of(
+                firstIteration, lastSafePreview)))
+                .containsExactly(lastSafePreview);
     }
 
     private static ChatHistoryMessage history(int index, String subtype, String content) {

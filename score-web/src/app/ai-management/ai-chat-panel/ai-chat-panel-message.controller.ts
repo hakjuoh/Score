@@ -14,29 +14,37 @@ import {
 import {FORMATTER_META_RESPONSE_PATTERN} from './domain/ai-chat-panel-display.constants';
 import {
   AiAgentActivity,
-  AiAgentActivityGroupResolver,
-  agentActivityOwnerId,
-  agentActivityUpdate,
   isExecutionActivityEvent,
   isSpecialistActivityEvent,
   isSpecialistToolEvent,
-  upsertAgentActivity,
   upsertAgentGuideEvent,
   upsertAgentProviderErrorEvent,
   upsertAgentRetryEvent,
   upsertAgentToolEvent
 } from './domain/ai-agent-activity';
+import {
+  AiExecutionComposite,
+  appendWorkflowConversation,
+  workflowTerminalStatus
+} from './domain/ai-execution-composite';
 import {AiChatSocketEvent} from './domain/ai-chat-panel.model';
 
 export abstract class AiChatPanelMessageController extends AiChatPanelEventController {
-  private readonly liveAgentGroupResolver = new AiAgentActivityGroupResolver();
-  private readonly liveAgentGroups = new Map<string, AiAgentActivity[]>();
-  private liveAgentGroupOwner?: string;
-  private activeLiveAgentGroupId?: string;
+  private readonly liveExecution = new AiExecutionComposite();
   private pendingProviderError?: {requestId: string; content: string};
 
   protected handleSystemEvent(event: AiChatSocketEvent): void {
     const content = this.primaryContent(event);
+    if (event.subtype === 'workflow_started') {
+      this.applyWorkflowStarted(event, content);
+      return;
+    }
+    if (workflowTerminalStatus(event.subtype)) {
+      if (this.liveExecution.finishWorkflow(event) && this.state.agentActivities.length > 0) {
+        this.state.currentStatus = this.aggregateAgentStatus();
+      }
+      return;
+    }
     if (isExecutionActivityEvent(event)) {
       if (this.state.currentStatus === 'Retrying') {
         this.clearProviderRecoveryState();
@@ -133,6 +141,13 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     }
     if (event.subtype === 'workflow_result' && content) {
       this.clearProviderRecoveryState();
+      for (let index = this.state.messages.length - 1; index >= 0; index--) {
+        const message = this.state.messages[index];
+        if (message.eventType === 'workflow_result'
+          && (message.requestId || '') === (event.requestId || '')) {
+          this.state.messages.splice(index, 1);
+        }
+      }
       this.state.messages.push({
         role: 'assistant', content, eventType: 'workflow_result', requestId: event.requestId
       });
@@ -151,11 +166,11 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       }
       return;
     }
-    if (event.subtype === 'accepted' && content) {
+    if (event.subtype === 'accepted') {
       if (this.hasActiveStructuredToolRows()) {
         return;
       }
-      this.showStatus(content, true);
+      this.showStatus('Working...', true);
       return;
     }
     if (content && event.metadata?.['inProgress'] === true) {
@@ -394,6 +409,8 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         || event.subtype === 'context_usage'
         || event.subtype === 'context_compacted'
         || event.subtype === 'guide'
+        || event.subtype === 'workflow_started'
+        || !!workflowTerminalStatus(event.subtype)
         || isExecutionActivityEvent(event)
         || event.visibility === 'debug'
         || event.metadata?.['inProgress'] === true;
@@ -410,70 +427,42 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   }
 
   private applyAgentActivity(event: AiChatSocketEvent): void {
-    const update = agentActivityUpdate(event);
-    if (!update) return;
-    this.prepareLiveAgentOwner(event);
-    const groupId = this.liveAgentGroupResolver.resolve(event);
-    let activities = this.attachedLiveAgentGroup(groupId);
-    const firstActivity = !activities;
-    if (!activities) {
-      activities = [];
-      this.liveAgentGroups.set(groupId, activities);
-      this.activeLiveAgentGroupId = groupId;
-      this.state.agentActivities = activities;
-    }
-    if (!upsertAgentActivity(activities, update)) {
-      return;
-    }
-    if (firstActivity) {
+    const placement = this.liveExecution.placeAgent(event, this.state.messages);
+    if (!placement) return;
+    const {activities, anchor, createdRootAnchor, rootGroup} = placement;
+    if (createdRootAnchor && anchor) {
       // One anchor row per fan-out. The anchor keeps a REFERENCE to this
       // fan-out's activity array; request starts replace (never mutate) the
       // state array, so settled anchors keep their own final statuses.
-      this.state.messages.push({
-        role: update.executionKind === 'parallel' ? 'workflow_group' : 'agent_group',
-        content: update.executionKind === 'parallel' ? 'Parallel workflow' : 'Delegated workflow',
-        groupId,
-        activities
-      });
+      this.state.messages.push(anchor);
     }
-    if (groupId === this.activeLiveAgentGroupId) {
+    if (rootGroup) {
+      this.state.agentActivities = activities;
       this.state.currentStatus = this.aggregateAgentStatus();
     }
   }
 
   private agentActivitiesFor(event: AiChatSocketEvent): AiAgentActivity[] {
-    this.prepareLiveAgentOwner(event);
-    const groupId = this.liveAgentGroupResolver.resolve(event);
-    return this.attachedLiveAgentGroup(groupId) || this.state.agentActivities;
+    return this.liveExecution.activitiesFor(event) || this.state.agentActivities;
   }
 
-  /** Drops stale arrays after recovery/restore replaces the transcript in place. */
-  private attachedLiveAgentGroup(groupId: string): AiAgentActivity[] | undefined {
-    const activities = this.liveAgentGroups.get(groupId);
-    if (activities) {
-      const attached = activities === this.state.agentActivities
-        || this.state.messages.some(message => message.activities === activities);
-      if (attached) return activities;
-      this.liveAgentGroups.delete(groupId);
-      if (this.activeLiveAgentGroupId === groupId) this.activeLiveAgentGroupId = undefined;
+  private applyWorkflowStarted(event: AiChatSocketEvent, content: string): boolean {
+    const placement = this.liveExecution.startWorkflow(event, this.state.messages);
+    if (!placement) return false;
+    if (!placement.created) return true;
+    if (placement.root) {
+      this.clearStatusMessage();
+      if (content.trim()) this.state.messages.push({role: 'guide', content: content.trim()});
+      this.state.messages.push(placement.anchor);
+      this.showStatus('Working...', true);
+      this.state.agentActivities = placement.anchor.activities || [];
+      return true;
     }
-    const restored = this.state.messages.find(message =>
-      message.groupId === groupId && !!message.activities)?.activities;
-    if (restored) {
-      this.liveAgentGroups.set(groupId, restored);
-      this.activeLiveAgentGroupId = groupId;
-      this.state.agentActivities = restored;
+    appendWorkflowConversation(placement.container, content, placement.anchor, true);
+    if (this.state.agentActivities.length > 0) {
+      this.state.currentStatus = this.aggregateAgentStatus();
     }
-    return restored;
-  }
-
-  private prepareLiveAgentOwner(event: AiChatSocketEvent): void {
-    const owner = agentActivityOwnerId(event);
-    if (this.liveAgentGroupOwner === owner) return;
-    this.liveAgentGroupOwner = owner;
-    this.liveAgentGroups.clear();
-    this.activeLiveAgentGroupId = undefined;
-    this.liveAgentGroupResolver.clear();
+    return true;
   }
 
   private aggregateAgentStatus(): string {

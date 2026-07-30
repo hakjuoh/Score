@@ -78,6 +78,67 @@ describe('AiConversationRestoreService', () => {
     expect(finished).toHaveBeenCalledOnce();
   });
 
+  it('restores only the canonical answer after legacy Workflow iterations', async () => {
+    handle({requestId: 'restore', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
+    handle({
+      requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'assistant',
+      subtype: 'workflow_result', response: 'First synthesis.', index: 0
+    }, callbacks);
+    handle({
+      requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'assistant',
+      subtype: 'workflow_result', response: 'Revised synthesis.', index: 1
+    }, callbacks);
+    handle({
+      requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'assistant',
+      response: 'Canonical answer.', index: 2
+    }, callbacks);
+    handle({requestId: 'restore', type: 'HISTORY_FINAL', conversationId: 'c1'}, callbacks);
+
+    await vi.runAllTimersAsync();
+
+    expect(messages).toEqual([{role: 'assistant', content: 'Canonical answer.'}]);
+  });
+
+  it('restores only the latest Workflow result when no canonical answer exists', async () => {
+    handle({requestId: 'restore', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
+    handle({
+      requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'assistant',
+      subtype: 'workflow_result', response: 'First synthesis.', index: 0
+    }, callbacks);
+    handle({
+      requestId: 'r1', type: 'HISTORY_MESSAGE', message: 'assistant',
+      subtype: 'workflow_result', response: 'Revised synthesis.', index: 1
+    }, callbacks);
+    handle({requestId: 'restore', type: 'HISTORY_FINAL', conversationId: 'c1'}, callbacks);
+
+    await vi.runAllTimersAsync();
+
+    expect(messages).toEqual([{
+      role: 'assistant', content: 'Revised synthesis.',
+      eventType: 'workflow_result', requestId: 'r1'
+    }]);
+  });
+
+  it('coalesces legacy Workflow results in synchronous history projection', () => {
+    const projected = service.projectStoredMessages([
+      {index: 0, role: 'user', content: 'Run the checks.', requestId: 'r1'},
+      {
+        index: 1, role: 'assistant', content: 'First synthesis.',
+        subtype: 'workflow_result', requestId: 'r1'
+      },
+      {
+        index: 2, role: 'assistant', content: 'Revised synthesis.',
+        subtype: 'workflow_result', requestId: 'r1'
+      },
+      {index: 3, role: 'assistant', content: 'Canonical answer.', requestId: 'r1'}
+    ]);
+
+    expect(projected).toEqual([
+      {role: 'user', content: 'Run the checks.'},
+      {role: 'assistant', content: 'Canonical answer.'}
+    ]);
+  });
+
   it('isolates reused workflow node ids by historical turn during WebSocket restore', async () => {
     const rootMetadata = {
       node_id: 'main:1:planned-workflow', parent_node_id: 'main',
@@ -118,7 +179,7 @@ describe('AiConversationRestoreService', () => {
 
     await vi.runAllTimersAsync();
 
-    const groups = messages.filter(message => message.role === 'agent_group');
+    const groups = messages.filter(message => message.role === 'workflow_group');
     expect(groups).toHaveLength(2);
     expect(groups[0].activities?.flatMap(activity => activity.events))
       .not.toContainEqual(expect.objectContaining({content: 'Turn two overloaded.'}));
@@ -841,19 +902,88 @@ describe('AiConversationRestoreService', () => {
       }
     ]);
 
-    expect(projected).toHaveLength(3);
-    expect(projected.map(message => message.activities?.map(activity => activity.agentId)))
+    const rootWorkflows = projected.filter(message => message.role === 'workflow_group');
+    expect(projected.filter(message => message.role === 'guide')).toHaveLength(3);
+    expect(rootWorkflows).toHaveLength(3);
+    expect(rootWorkflows.map(message => message.activities?.map(activity => activity.agentId)))
       .toEqual([
-        ['main:1:planned-workflow:agent:count-accs', 'workflow:opaque-worker-node'],
+        ['main:1:planned-workflow:agent:count-accs'],
         ['main:2:root-work:agent:count-accs'],
         ['main:1:planned-workflow:agent:count-accs']
       ]);
-    expect(projected[0].activities?.flatMap(activity => activity.events))
+    const nested = rootWorkflows[0].children
+      ?.find(message => message.role === 'workflow_group');
+    expect(nested?.activities?.map(activity => activity.agentId))
+      .toEqual(['workflow:opaque-worker-node']);
+    expect(rootWorkflows[0].activities?.flatMap(activity => activity.events))
       .not.toContainEqual(expect.objectContaining({content: 'Request two overloaded.'}));
-    expect(projected[2].activities?.flatMap(activity => activity.events))
+    expect(rootWorkflows[2].activities?.flatMap(activity => activity.events))
       .toContainEqual(expect.objectContaining({
         status: 'provider_error', content: 'Request two overloaded.'
       }));
+  });
+
+  it.each([
+    ['workflow_completed', 'completed'],
+    ['workflow_cancelled', 'cancelled'],
+    ['workflow_output_retry_handoff', 'cancelled'],
+    ['workflow_failed', 'failed'],
+    ['workflow_stalled', 'failed'],
+    ['workflow_refused', 'failed']
+  ] as const)('restores %s as a terminal Workflow', (subtype, expectedStatus) => {
+    const projected = service.projectStoredMessages([{
+      index: 0, role: 'agent_event', requestId: 'request-1',
+      subtype: 'workflow_started', content: 'I’m checking the request.', metadata: {
+        node_id: 'main:1:workflow', parent_node_id: 'main', depth: 1
+      }
+    }, {
+      index: 1, role: 'agent_event', requestId: 'request-1',
+      subtype, content: 'Workflow settled.', metadata: {
+        node_id: 'main:1:workflow', parent_node_id: 'main', depth: 1
+      }
+    }]);
+
+    expect(projected.find(message => message.role === 'workflow_group')?.workflowStatus)
+      .toBe(expectedStatus);
+  });
+
+  it('restores a nested workflow failure as the owning Agent final error', () => {
+    const root = 'main:1:root';
+    const parent = root + ':agent:parent';
+    const nested = parent + ':delegated';
+    const projected = service.projectStoredMessages([
+      {
+        index: 0, role: 'agent_event', requestId: 'request-1',
+        subtype: 'workflow_started', content: 'Starting root.', metadata: {
+          node_id: root, parent_node_id: 'main', depth: 1
+        }
+      },
+      {
+        index: 1, role: 'agent_event', requestId: 'request-1',
+        subtype: 'subagent_started', content: 'Starting parent.', metadata: {
+          node_id: parent, parent_node_id: root, depth: 2,
+          agent_id: 'parent', agent_name: 'Parent'
+        }
+      },
+      {
+        index: 2, role: 'agent_event', requestId: 'request-1',
+        subtype: 'workflow_started', content: 'Starting nested.', metadata: {
+          node_id: nested, parent_node_id: parent, depth: 3
+        }
+      },
+      {
+        index: 3, role: 'agent_event', requestId: 'request-1',
+        subtype: 'workflow_failed', content: 'Nested workflow failed.', metadata: {
+          node_id: nested, parent_node_id: parent, depth: 3
+        }
+      }
+    ]);
+
+    const owner = projected.find(message => message.role === 'workflow_group')
+      ?.activities?.find(activity => activity.agentId === parent);
+    expect(owner?.messages?.at(-1)).toMatchObject({
+      role: 'error', content: 'Nested workflow failed.', eventType: 'workflow_failed'
+    });
   });
 
   it('restores durable cancellation as terminal instead of running', () => {

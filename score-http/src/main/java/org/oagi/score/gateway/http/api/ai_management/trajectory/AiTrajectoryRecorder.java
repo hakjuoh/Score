@@ -122,8 +122,6 @@ public final class AiTrajectoryRecorder {
     private volatile boolean sealed;
     private volatile boolean usageAccountingSealed;
     private volatile String lastGuideContent;
-    private volatile AiToolRetryMessage.Language retryMessageLanguage =
-            AiToolRetryMessage.Language.ENGLISH;
 
     public AiTrajectoryRecorder(AiChatConversationRepository repository, ObjectMapper objectMapper,
                                 ScoreUser requester, String conversationId, String requestId,
@@ -236,7 +234,6 @@ public final class AiTrajectoryRecorder {
                 estimatedInputFloor.get(), promptTokenAccounting, eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovalIds, childContext,
                 executionScope, observer, observationContext, true, conversationKind);
-        child.retryMessageLanguage = retryMessageLanguage;
         return child;
     }
 
@@ -269,7 +266,6 @@ public final class AiTrajectoryRecorder {
                 requestExecutedDomainToolCalls, requestPendingApprovalIds,
                 traceMetadata(childNamespace), executionScope, observer, observationContext,
                 true, kind);
-        child.retryMessageLanguage = retryMessageLanguage;
         repository.append(childConversationId, new AiChatTrajectoryStep(
                 requestId, "system", "settings_change", "debug",
                 "Child execution settings initialized.", null, modelName, reasoningEffort,
@@ -503,11 +499,6 @@ public final class AiTrajectoryRecorder {
                 null, null, null, extra, 0, null, Instant.now()));
         emit(AiExecutionEvent.detail("guide", stripped, extra));
         return true;
-    }
-
-    /** Selects the deterministic retry fallback language from the current user turn. */
-    public synchronized void usePromptLanguage(String prompt) {
-        retryMessageLanguage = AiToolRetryMessage.languageOf(prompt);
     }
 
     /** A new planner iteration legitimately re-narrates identical objectives. */
@@ -1042,7 +1033,7 @@ public final class AiTrajectoryRecorder {
                 || delegatedWorkerScope();
         toolRetryTracker.retry(pending, retryAlreadyNarrated)
                 .ifPresent(notice -> appendGuide(
-                        AiToolRetryMessage.format(notice, retryMessageLanguage),
+                        AiToolRetryMessage.format(notice),
                         Map.of("phase", "assistant", "tool_retry", true,
                                 "tool_name", pending.name()),
                         false));

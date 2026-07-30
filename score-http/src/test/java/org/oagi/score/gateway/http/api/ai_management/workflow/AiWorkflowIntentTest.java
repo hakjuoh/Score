@@ -19,7 +19,7 @@ class AiWorkflowIntentTest {
         ChatRequest resolved = AiWorkflowIntent.applyExplicitDelegation(request);
 
         assertThat(resolved.activeWorkflow()).isEqualTo("agents");
-        assertThat(resolved.multiAgent()).isEqualTo(new AiMultiAgentOptions(true, 2, "balanced"));
+        assertThat(resolved.multiAgent()).isEqualTo(new AiMultiAgentOptions(true, 4, "balanced"));
     }
 
     @Test
@@ -27,14 +27,39 @@ class AiWorkflowIntentTest {
         ChatRequest three = AiWorkflowIntent.applyExplicitDelegation(request(
                 "Spawn three subagents and delegate these checks in parallel.",
                 AiMultiAgentOptions.single()));
-        assertThat(three.multiAgent().maxAgents()).isEqualTo(3);
+        assertThat(three.multiAgent().maxAgents()).isEqualTo(4);
 
         ChatRequest configured = request("Spawn two agents in parallel.",
                 new AiMultiAgentOptions(true, 4, "verification"));
         ChatRequest resolved = AiWorkflowIntent.applyExplicitDelegation(configured);
         assertThat(resolved.multiAgent())
-                .isEqualTo(new AiMultiAgentOptions(true, 2, "verification"));
+                .isEqualTo(new AiMultiAgentOptions(true, 4, "verification"));
         assertThat(resolved.activeWorkflow()).isEqualTo("agents");
+    }
+
+    @Test
+    void currentExplicitDelegationOverridesAStoredAssistantPreference() {
+        ChatRequest storedAssistant = request(
+                "Spawn exactly 3 sub-agents in parallel.", AiMultiAgentOptions.single())
+                .withActiveWorkflow("assistant");
+
+        ChatRequest resolved = AiWorkflowIntent.applyExplicitDelegation(storedAssistant);
+
+        assertThat(resolved.activeWorkflow()).isEqualTo("agents");
+        assertThat(resolved.multiAgent())
+                .isEqualTo(new AiMultiAgentOptions(true, 4, "balanced"));
+    }
+
+    @Test
+    void currentNegationOverridesAStoredAgentPreference() {
+        ChatRequest storedAgents = request(
+                "Do not use sub-agents for this request.", AiMultiAgentOptions.single())
+                .withActiveWorkflow("agents");
+
+        ChatRequest resolved = AiWorkflowIntent.applyExplicitDelegation(storedAgents);
+
+        assertThat(resolved.activeWorkflow()).isEqualTo("assistant");
+        assertThat(resolved.multiAgent()).isEqualTo(AiMultiAgentOptions.single());
     }
 
     @Test

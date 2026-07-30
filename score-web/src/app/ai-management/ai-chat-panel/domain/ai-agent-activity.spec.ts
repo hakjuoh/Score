@@ -10,7 +10,9 @@ import {
   specialistActivityAgentId,
   specialistToolAgentId,
   upsertAgentActivity,
-  upsertAgentGuideEvent
+  upsertAgentGuideEvent,
+  upsertAgentProviderErrorEvent,
+  upsertAgentToolEvent
 } from './ai-agent-activity';
 import {AiChatSocketEvent} from './ai-chat-panel.model';
 
@@ -130,6 +132,57 @@ describe('AI agent activity semantics', () => {
     });
   });
 
+  it('uses the root-chat message flow inside each Agent conversation', () => {
+    const activities: AiAgentActivity[] = [];
+    const specialist = {
+      nodeId: 'request-1:worker:1', agentName: 'Verifier',
+      executionScope: 'worker', conversationKind: 'SUBAGENT',
+      assignment: 'Verify the current release record.'
+    };
+    upsertAgentActivity(activities, agentActivityUpdate({
+      ...event('subagent_planned', specialist), content: 'Queued verification.'
+    })!);
+    expect(activities[0].messages).toEqual([
+      {role: 'user', content: 'Verify the current release record.'}
+    ]);
+
+    upsertAgentActivity(activities, agentActivityUpdate({
+      ...event('subagent_started', specialist),
+      content: 'I’ll verify the current release data.'
+    })!);
+    expect(activities[0].messages).toEqual([
+      {role: 'user', content: 'Verify the current release record.'},
+      {role: 'guide', content: 'I’ll verify the current release data.'},
+      {role: 'progress', content: 'Working...', inProgress: true, eventType: 'agent_status'}
+    ]);
+
+    const tool = (subtype: string): AiChatSocketEvent => ({
+      requestId: 'request-1', type: 'tool_call', subtype,
+      groupId: 'request-1', toolCallId: 'call-1',
+      metadata: {...specialist, toolName: 'get_release'}
+    });
+    upsertAgentToolEvent(activities, tool('started'));
+    expect(activities[0].messages.at(-1)).toMatchObject({
+      role: 'progress', content: 'Calling get_release.'
+    });
+    upsertAgentToolEvent(activities, tool('completed'));
+    expect(activities[0].messages.slice(-2)).toEqual([
+      expect.objectContaining({
+        role: 'tool_call', content: 'get_release completed.', toolStatus: 'completed'
+      }),
+      {role: 'progress', content: 'Working...', inProgress: true, eventType: 'agent_status'}
+    ]);
+
+    upsertAgentActivity(activities, agentActivityUpdate({
+      ...event('subagent_completed', {...specialist, result: 'The release record is verified.'}),
+      content: 'Verified.'
+    })!);
+    expect(activities[0].messages.map(message => message.role))
+      .toEqual(['user', 'guide', 'tool_call', 'assistant']);
+    expect(activities[0].messages.at(-1)?.content)
+      .toBe('The release record is verified.');
+  });
+
   it('never regresses a terminal status to a stale live update', () => {
     const activities: AiAgentActivity[] = [];
     const specialist = {agentId: 'request-1:agent:1', agentName: 'Verifier'};
@@ -141,6 +194,60 @@ describe('AI agent activity semantics', () => {
 
     expect(activities[0]).toEqual(expect.objectContaining({status: 'completed', inProgress: false}));
     expect(activities[0].events).toHaveLength(1);
+  });
+
+  it('ignores late guide, provider, and tool frames after a terminal result', () => {
+    const activities: AiAgentActivity[] = [];
+    const specialist = {
+      agentId: 'request-1:agent:1', agentName: 'Verifier',
+      executionScope: 'worker', conversationKind: 'SUBAGENT'
+    };
+    upsertAgentActivity(activities, agentActivityUpdate(
+      event('subagent_completed', {...specialist, result: 'Done.'})
+    )!);
+    const messages = activities[0].messages?.map(message => ({...message}));
+    const late = {
+      requestId: 'request-1', type: 'system', content: 'Late update.',
+      metadata: specialist
+    } as AiChatSocketEvent;
+
+    expect(upsertAgentGuideEvent(activities, {...late, subtype: 'guide'})).toBe(true);
+    expect(upsertAgentProviderErrorEvent(
+      activities, {...late, subtype: 'provider_error'}
+    )).toBe(true);
+    expect(upsertAgentToolEvent(activities, {
+      ...late, type: 'tool_call', subtype: 'started',
+      groupId: 'late', toolCallId: 'call-1'
+    })).toBe(true);
+
+    expect(activities[0].messages).toEqual(messages);
+    expect(activities[0]).toEqual(expect.objectContaining({
+      status: 'completed', inProgress: false
+    }));
+  });
+
+  it('keeps equal provider tool ids separate across tool groups', () => {
+    const activities: AiAgentActivity[] = [];
+    const specialist = {
+      agentId: 'request-1:agent:1', agentName: 'Verifier',
+      executionScope: 'worker', conversationKind: 'SUBAGENT'
+    };
+    upsertAgentActivity(activities, agentActivityUpdate(
+      event('subagent_started', specialist)
+    )!);
+    for (const groupId of ['first-group', 'second-group']) {
+      upsertAgentToolEvent(activities, {
+        requestId: 'request-1', type: 'tool_call', subtype: 'completed',
+        groupId, toolCallId: 'call-1',
+        metadata: {...specialist, toolName: groupId}
+      });
+    }
+
+    expect(activities[0].messages?.filter(message => message.role === 'tool_call'))
+      .toEqual([
+        expect.objectContaining({groupId: 'first-group', toolCallId: 'call-1'}),
+        expect.objectContaining({groupId: 'second-group', toolCallId: 'call-1'})
+      ]);
   });
 
   it('deduplicates a replayed identical terminal event', () => {

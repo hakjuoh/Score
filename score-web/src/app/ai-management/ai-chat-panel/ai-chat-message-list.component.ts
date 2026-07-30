@@ -1,4 +1,13 @@
-import {Component, EventEmitter, Input, OnChanges, Output, SimpleChanges} from '@angular/core';
+import {
+  AfterViewChecked,
+  Component,
+  ElementRef,
+  EventEmitter,
+  Input,
+  OnChanges,
+  Output,
+  SimpleChanges
+} from '@angular/core';
 import {
   AiAgentActivity,
   AiAgentActivityEvent,
@@ -48,7 +57,7 @@ type AiChatMessageDisplayItem =
     './ai-chat-panel-composer.css'
   ]
 })
-export class AiChatMessageListComponent implements OnChanges {
+export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
 
   @Input() messages: AiChatMessage[] = [];
   @Input() attachments: AiChatAttachment[] = [];
@@ -63,6 +72,7 @@ export class AiChatMessageListComponent implements OnChanges {
   @Input() permissionMode: AiMutationPermissionMode = 'ask';
   @Input() permissionDraft: AiMutationPermissionMode = 'ask';
   @Input() agentFocus?: AiAgentActivity;
+  @Input() agentFocusBackLabel = 'Back to conversation';
   @Input() modelChangePending = false;
   @Input() mutationInteraction?: AiMutationInteraction;
   @Input() mutationApprovalBatch?: AiMutationApprovalBatchNotice;
@@ -131,11 +141,53 @@ export class AiChatMessageListComponent implements OnChanges {
   ];
 
   private expandedHistoryUserIndexes = new Set<number>();
+  private focusAgentBackButton = false;
+  private focusAgentRowId?: string;
+
+  constructor(private readonly host: ElementRef<HTMLElement>) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['messages']) {
       this.expandedHistoryUserIndexes.clear();
     }
+    const focusChange = changes['agentFocus'];
+    if (focusChange) {
+      const current = focusChange.currentValue as AiAgentActivity | undefined;
+      const previous = focusChange.previousValue as AiAgentActivity | undefined;
+      if (current) {
+        if (previous && this.activityContains(current, previous.agentId)) {
+          this.focusAgentRowId = previous.agentId;
+        } else {
+          this.focusAgentBackButton = true;
+        }
+      } else if (previous) {
+        this.focusAgentRowId = previous.agentId;
+      }
+    }
+  }
+
+  ngAfterViewChecked(): void {
+    if (this.focusAgentBackButton) {
+      this.focusAgentBackButton = false;
+      this.host.nativeElement.querySelector<HTMLButtonElement>('.agent-focus-back')?.focus();
+      return;
+    }
+    if (this.focusAgentRowId) {
+      const agentId = this.focusAgentRowId;
+      this.focusAgentRowId = undefined;
+      const rows = this.host.nativeElement.querySelectorAll<HTMLButtonElement>(
+        '.agent-group-row[data-agent-id]'
+      );
+      Array.from(rows).find(row => row.dataset['agentId'] === agentId)?.focus();
+    }
+  }
+
+  private activityContains(activity: AiAgentActivity, agentId: string): boolean {
+    const visit = (messages: AiChatMessage[]): boolean => messages.some(message =>
+      (message.activities || []).some(candidate => candidate.agentId === agentId
+        || this.activityContains(candidate, agentId))
+      || visit(message.children || []));
+    return visit(activity.messages || []);
   }
 
   get displayItems(): AiChatMessageDisplayItem[] {
@@ -232,6 +284,16 @@ export class AiChatMessageListComponent implements OnChanges {
     return {role: 'guide', content: event.content};
   }
 
+  agentConversationMessages(activity: AiAgentActivity): AiChatMessage[] {
+    // An empty array is meaningful in the composite contract (for example,
+    // planned lifecycle chatter is intentionally hidden). Only legacy
+    // activities that predate `messages` should fall back to raw events.
+    if (activity.messages !== undefined) return activity.messages;
+    return activity.events.map(event => event.status === 'tool'
+      ? this.agentToolMessage(event, activity.inProgress)
+      : this.agentConversationMessage(event, activity.inProgress));
+  }
+
   get modelDraftReasoningEfforts(): AiReasoningEffortInfo[] {
     return (this.availableModels.find(model => model.name === this.modelDraftName)?.reasoningEfforts || [])
       .filter(effort => effort.name !== 'default');
@@ -255,10 +317,17 @@ export class AiChatMessageListComponent implements OnChanges {
   }
 
   agentGroupSummary(message: AiChatMessage): string {
+    if (!(message.activities?.length) && message.workflowStatus) {
+      return message.workflowStatus === 'completed' ? 'completed'
+        : message.workflowStatus === 'cancelled' ? 'stopped' : 'failed';
+    }
     return agentActivitySummary(message.activities || []);
   }
 
   agentGroupPhase(message: AiChatMessage): string {
+    if (message.workflowStatus === 'completed') return 'Completed';
+    if (message.workflowStatus === 'cancelled') return 'Workflow stopped';
+    if (message.workflowStatus === 'failed') return 'Workflow failed';
     const activities = message.activities || [];
     const lead = activities.find(activity => activity.isLead);
     if (lead?.status === 'synthesizing') return this.activePhase(lead.activeVerb);
@@ -282,7 +351,9 @@ export class AiChatMessageListComponent implements OnChanges {
   agentGroupPlan(message: AiChatMessage): string {
     return message.activities?.find(activity => activity.isLead)?.content
       || (message.role === 'workflow_group'
-        ? 'Running independent workflow tasks before synthesizing their results.'
+        ? this.agentGroupExecutionKind(message) === 'parallel'
+          ? 'Running independent workflow tasks before synthesizing their results.'
+          : 'Running workflow tasks before synthesizing their results.'
         : this.agentGroupCount(message) === 1
           ? 'A specialist is gathering evidence for the lead.'
           : 'Specialists are gathering evidence for the lead.');
@@ -312,7 +383,10 @@ export class AiChatMessageListComponent implements OnChanges {
   }
 
   agentGroupWorkflowLabel(message: AiChatMessage): string | undefined {
-    if (message.role === 'workflow_group') return 'Parallel workflow';
+    if (message.role === 'workflow_group') {
+      return this.agentGroupExecutionKind(message) === 'parallel'
+        ? 'Parallel workflow' : 'Workflow';
+    }
     const workflow = this.agentGroupWorkflow(message);
     if (workflow === 'chain') return 'Chain workflow';
     if (workflow === 'routing') return 'Routing workflow';

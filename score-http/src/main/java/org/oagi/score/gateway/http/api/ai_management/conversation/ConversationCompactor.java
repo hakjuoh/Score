@@ -61,7 +61,7 @@ public final class ConversationCompactor {
         AgentWorkflowContext workflow = AgentWorkflowContext.root(execution,
                 new AgentWorkflowContext.Request(scope.requestId(), scope.conversationId(),
                         scope.requesterId(), modelId, request.content(), false, false,
-                        1, "balanced", null, false, false), 1);
+                        1, "balanced", null, false, false, false), 1);
         Agent agent = new DefinedAgent(new AgentDefinition(baseDefinition.id(),
                 baseDefinition.name(), baseDefinition.description(), baseDefinition.instruction(),
                 requestHandler(modelId, history, request, scope),

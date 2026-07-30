@@ -238,7 +238,7 @@ public class AiModelQueryService {
             AgentWorkflowContext workflow = AgentWorkflowContext.root(execution,
                     new AgentWorkflowContext.Request(scope.requestId(), scope.conversationId(),
                             requesterId, modelId, prompt, false, false, 1, "balanced",
-                            null, false, false), 1);
+                            null, false, false, false), 1);
             AgentDecision decision = runner.run(new DefinedAgent(runDefinition), workflow);
             if (!(decision instanceof AgentDecision.Complete complete)) {
                 throw new IllegalStateException("Standalone Agent did not return a completed result.");

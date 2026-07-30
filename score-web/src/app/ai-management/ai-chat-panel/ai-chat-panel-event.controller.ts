@@ -504,24 +504,22 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
    * row at the chronological end of the turn.
    */
   protected commitAssistantMessage(requestId: string, content: string): number {
-    let workflowResultIndex = -1;
+    const workflowResultIndexes: number[] = [];
     let streamedIndex = -1;
     for (let index = this.state.messages.length - 1; index >= 0; index--) {
       const message = this.state.messages[index];
-      if (workflowResultIndex < 0 && message.role === 'assistant'
-        && message.eventType === 'workflow_result' && message.requestId === requestId
-        && message.content === content) {
-        workflowResultIndex = index;
+      if (message.role === 'assistant' && message.eventType === 'workflow_result'
+        && message.requestId === requestId) {
+        workflowResultIndexes.push(index);
       }
       if (streamedIndex < 0 && message.role === 'progress'
         && message.eventType === 'assistant_update' && message.requestId === requestId) {
         streamedIndex = index;
       }
-      if (workflowResultIndex >= 0 && streamedIndex >= 0) break;
     }
 
-    if (workflowResultIndex >= 0) {
-      for (const index of [workflowResultIndex, streamedIndex]
+    if (workflowResultIndexes.length > 0) {
+      for (const index of [...workflowResultIndexes, streamedIndex]
         .filter(candidate => candidate >= 0)
         .sort((left, right) => right - left)) {
         this.state.messages.splice(index, 1);

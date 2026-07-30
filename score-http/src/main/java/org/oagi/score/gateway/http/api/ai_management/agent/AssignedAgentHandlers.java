@@ -36,6 +36,10 @@ public final class AssignedAgentHandlers {
     private AgentRunRequest prepare(Agent agent, AgentWorkflowContext context) {
         AiWorkflowPlan.AgentTask task = Objects.requireNonNull(
                 context.assignment(), "Agent assignment");
+        if (task.delegation() == AiWorkflowPlan.Delegation.FAN_OUT) {
+            return new AgentRunRequest.Skip(
+                    new AgentDecision.Handoff(AssistantAgent.PLANNER_ID));
+        }
         AgentExecutionContext parent = context.execution();
         AgentToolPolicy policy = toolPolicy(parent, task.toolAccess());
         Map<String, Object> namespace = AgentAssignmentLifecycle.namespace(agent, context, task);

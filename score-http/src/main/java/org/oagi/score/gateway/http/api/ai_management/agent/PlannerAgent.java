@@ -11,9 +11,10 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CancellationException;
+import java.util.function.Predicate;
 
 /** Definition for the Agent that selects workers and recursive Workflows. */
 @Component("workflow-planner")
@@ -57,7 +58,7 @@ public final class PlannerAgent implements Agent {
             public AgentDecision handle(AgentResponseContext response) {
                 try {
                     AiWorkflowPlan parsed = normalize(parse(response.result().response().content()));
-                    validator.validate(parsed, response.workflow().request().maximumAgents(), id -> {
+                    validate(parsed, response.workflow(), id -> {
                         agents.requireWorker(id);
                         return true;
                     });
@@ -87,12 +88,17 @@ public final class PlannerAgent implements Agent {
 
     private Map<String, Object> planningParameters(AgentWorkflowContext context) {
         var request = context.request();
+        String planningPrompt = planningPrompt(context);
         Map<String, Object> parameters = new LinkedHashMap<>();
-        parameters.put("userRequest", request.prompt());
+        parameters.put("userRequest", planningPrompt);
         parameters.put("recentConversation", recentConversation(context));
         parameters.put("hasAttachments", request.hasAttachments());
         parameters.put("hasPageContext", request.hasPageContext());
         parameters.put("maximumAgents", request.maximumAgents());
+        Optional<Integer> requiredAgentCount = requiredAgentCount(context);
+        if (requiredAgentCount.isPresent()) {
+            parameters.put("requiredAgentCount", requiredAgentCount.get());
+        }
         parameters.put("strategyPreference", request.strategy());
         parameters.put("workflowPreference", request.workflowPreference() != null
                 ? request.workflowPreference() : "automatic");
@@ -115,13 +121,25 @@ public final class PlannerAgent implements Agent {
         }
     }
 
+    private void validate(AiWorkflowPlan plan, AgentWorkflowContext context,
+                          Predicate<String> assignableAgent) {
+        Optional<Integer> requiredAgentCount = requiredAgentCount(context);
+        if (requiredAgentCount.isPresent()) {
+            validator.validateExactAgentCalls(plan, requiredAgentCount.get(),
+                    assignableAgent);
+        } else {
+            validator.validate(plan, context.request().maximumAgents(), assignableAgent);
+        }
+    }
+
     private AiWorkflowPlan normalize(AiWorkflowPlan plan) {
         if (plan == null || plan.root() == null) {
             throw new IllegalArgumentException("The Planner Agent returned no root Workflow.");
         }
         AiWorkflowPlan.WorkflowDefinition root = normalizeWorkflow(plan.root());
-        return new AiWorkflowPlan(root, bounded(plan.guideMessage(), 180),
-                bounded(plan.synthesisGuideMessage(), 180));
+        return new AiWorkflowPlan(root,
+                requiredGuide(plan.guideMessage(), "workflow guideMessage", 180),
+                requiredGuide(plan.synthesisGuideMessage(), "synthesisGuideMessage", 180));
     }
 
     private AiWorkflowPlan.WorkflowDefinition normalizeWorkflow(
@@ -144,29 +162,62 @@ public final class PlannerAgent implements Agent {
         AiAgentDefinition definition = agents.requireWorker(task.agentId());
         return new AiWorkflowPlan.AgentTask(definition.id(), bounded(task.label(), 100),
                 bounded(task.instruction(), MAX_INSTRUCTION_LENGTH),
-                bounded(task.guideMessage(), 180), bounded(task.activeVerb(), 32),
-                bounded(task.completedVerb(), 32), task.toolAccess());
+                requiredGuide(task.guideMessage(), "agent guideMessage", 180),
+                bounded(task.activeVerb(), 32),
+                bounded(task.completedVerb(), 32), task.toolAccess(), task.delegation());
     }
 
     private AiWorkflowPlan fallback(AgentWorkflowContext context) {
         AiAgentDefinition agent = agents.defaultAgent();
-        int requested = context.request().delegationRequested()
-                ? context.request().maximumAgents() : 1;
+        int requested = requiredAgentCount(context).orElseGet(() ->
+                context.request().delegationRequested()
+                        ? context.request().maximumAgents() : 1);
         List<AiWorkflowPlan.Member> members = new ArrayList<>();
+        String scope = context.assignment() != null
+                ? "the assigned task: " + context.assignment().instruction()
+                : "the user's request";
         for (int ordinal = 1; ordinal <= requested; ordinal++) {
             String id = "agent-" + ordinal;
             String instruction = ordinal == 1
-                    ? "Complete the user's request with current connectCenter evidence."
-                    : "Independently verify the user's request and the other Agent findings.";
+                    ? "Complete " + scope + " with current connectCenter evidence."
+                    : "Independently verify " + scope + " and the other Agent findings.";
             members.add(new AiWorkflowPlan.Member(id,
                     new AiWorkflowPlan.AgentTask(agent.id(), "Agent " + ordinal,
-                            instruction, null, "Working", "Completed",
+                            instruction,
+                            "I’m independently checking the evidence for your request.",
+                            "Working",
+                            "Completed",
                             AiWorkflowPlan.ToolAccess.READ_ONLY), null));
         }
         return new AiWorkflowPlan(new AiWorkflowPlan.WorkflowDefinition(
                 "planned-workflow", members, List.of()),
-                "Delegating the request to the selected Agents.",
-                "Combining the Agent results.");
+                "I’m checking the request from the necessary perspectives.",
+                "I’m combining the findings into one answer.");
+    }
+
+    private String planningPrompt(AgentWorkflowContext context) {
+        return context.assignment() != null
+                ? context.assignment().instruction() : context.request().prompt();
+    }
+
+    private Optional<Integer> requiredAgentCount(AgentWorkflowContext context) {
+        String prompt = planningPrompt(context);
+        if (!DelegationIntent.explicitlyRequestsAgents(prompt)) return Optional.empty();
+        int requested = DelegationIntent.requestedAgentCount(prompt)
+                .orElse(2);
+        if (requested > context.request().maximumAgents()) {
+            throw new IllegalArgumentException(
+                    "Requested Agent count exceeds the current request limit.");
+        }
+        return Optional.of(requested);
+    }
+
+    private String requiredGuide(String value, String label, int maximumLength) {
+        String bounded = bounded(value, maximumLength);
+        if (!StringUtils.hasText(bounded)) {
+            throw new IllegalArgumentException(label + " is required");
+        }
+        return bounded;
     }
 
     private ExecutionScope scope(AgentWorkflowContext context) {

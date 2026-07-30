@@ -36,7 +36,11 @@ import {AiChatSessionPersistenceService} from './domain/ai-chat-session-persiste
 import {AiChatSettingsService} from './domain/ai-chat-settings.service';
 import {AiChatTransportService} from './domain/ai-chat-transport.service';
 import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
-import {isTerminalAgentStatus} from './domain/ai-agent-activity';
+import {
+  AiAgentActivity,
+  isTerminalAgentStatus,
+  settleAgentConversation
+} from './domain/ai-agent-activity';
 import {
   AiMutationInteractionCallbacks,
   AiMutationInteractionService,
@@ -53,6 +57,7 @@ import {
   AiChatContextUpdate,
   AiChatConversationDetails,
   AiChatDock,
+  AiChatMessage,
   AiChatPanelTab,
   AiChatSocketEvent,
   AiElicitationResponse,
@@ -226,22 +231,47 @@ export abstract class AiChatPanelControllerBase {
   protected settleAgentActivity(status: Extract<AiAgentExecutionStatus,
     'completed' | 'failed' | 'cancelled'>): void {
     const now = Date.now();
-    for (const activity of this.state.agentActivities) {
-      if (isTerminalAgentStatus(activity.status)) {
-        continue;
+    const visited = new Set<AiAgentActivity>();
+    const settleMessages = (messages: AiChatMessage[]): void => {
+      for (let index = messages.length - 1; index >= 0; index--) {
+        const message = messages[index];
+        if (message.role === 'progress'
+          && (message.eventType === 'agent_status'
+            || message.eventType === 'composite_status')) {
+          messages.splice(index, 1);
+          continue;
+        }
+        if ((message.role === 'workflow_group' || message.role === 'agent_group')
+          && message.workflowStatus === 'started') {
+          message.workflowStatus = status;
+        }
+        settleActivities(message.activities || []);
+        settleMessages(message.children || []);
       }
-      const name = activity.agentName || 'Agent';
-      const content = status === 'completed'
-        ? `${name} finished.`
-        : status === 'cancelled'
-          ? `${name} stopped when the request was cancelled.`
-          : `${name} stopped before completing.`;
-      activity.status = status;
-      activity.content = content;
-      activity.inProgress = false;
-      activity.lastUpdateAt = now;
-      activity.events.push({status, content});
-    }
+    };
+    const settleActivities = (activities: AiAgentActivity[]): void => {
+      for (const activity of activities) {
+        if (visited.has(activity)) continue;
+        visited.add(activity);
+        if (!isTerminalAgentStatus(activity.status)) {
+          const name = activity.agentName || 'Agent';
+          const content = status === 'completed'
+            ? `${name} finished.`
+            : status === 'cancelled'
+              ? `${name} stopped when the request was cancelled.`
+              : `${name} stopped before completing.`;
+          activity.status = status;
+          activity.content = content;
+          activity.inProgress = false;
+          activity.lastUpdateAt = now;
+          activity.events.push({status, content});
+          settleAgentConversation(activity, status, content);
+        }
+        settleMessages(activity.messages || []);
+      }
+    };
+    settleActivities(this.state.agentActivities);
+    settleMessages(this.state.messages);
   }
 
   get cancellationInProgress(): boolean {

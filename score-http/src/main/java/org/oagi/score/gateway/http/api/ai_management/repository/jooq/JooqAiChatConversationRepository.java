@@ -452,21 +452,22 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
                 message.subtype(), message.visibility(), message.metadata());
     }
 
-    /** Keeps interim iteration results while removing the final answer's identical preview. */
+    /** Restores at most one final synthesis per request and prefers its canonical answer. */
     static List<ChatHistoryMessage> coalesceFinalWorkflowResult(
             List<ChatHistoryMessage> messages) {
         List<ChatHistoryMessage> projected = new ArrayList<>(messages.size());
-        Set<WorkflowResultKey> finalAnswers = new HashSet<>();
+        Set<String> finalAnswerRequests = new HashSet<>();
+        Set<String> retainedWorkflowResultRequests = new HashSet<>();
         for (int index = messages.size() - 1; index >= 0; index--) {
             ChatHistoryMessage message = messages.get(index);
-            WorkflowResultKey key = new WorkflowResultKey(
-                    message.requestId(), message.content());
-            if ("workflow_result".equals(message.subtype()) && finalAnswers.contains(key)) {
-                continue;
-            }
             if ("assistant".equals(message.role())
                     && !"workflow_result".equals(message.subtype())) {
-                finalAnswers.add(key);
+                finalAnswerRequests.add(message.requestId());
+            }
+            if ("workflow_result".equals(message.subtype())
+                    && (finalAnswerRequests.contains(message.requestId())
+                    || !retainedWorkflowResultRequests.add(message.requestId()))) {
+                continue;
             }
             projected.add(message);
         }
@@ -626,8 +627,6 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
 
     private record ChildTrajectoryHeader(ULong internalId, String guid, String conversationKind,
                                          String agentId, String parentRequestId) {}
-
-    private record WorkflowResultKey(String requestId, String content) {}
 
     private record TrajectoryRow(ULong conversationId, long sequence,
                                  String requestId, String source, String messageKind,

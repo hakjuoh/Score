@@ -284,7 +284,6 @@ public class ChatService {
                 prepared.reasoningEffort(), progress,
                 budget.orElse(null), projectedInputTokens, traceContext, turnScope,
                 observer, observability);
-        recorder.usePromptLanguage(prepared.prompt());
         budget.ifPresent(value -> recorder.contextUsage(value.usage(
                 initialProjectedInputTokens, true, "preflight_estimate")));
         Consumer<String> collectingProgress = message -> {

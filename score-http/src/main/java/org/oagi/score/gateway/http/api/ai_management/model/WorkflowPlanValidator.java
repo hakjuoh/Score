@@ -11,6 +11,21 @@ public final class WorkflowPlanValidator {
 
     public void validate(AiWorkflowPlan plan, int maximumAgents,
                          Predicate<String> assignableAgent) {
+        validateBounds(plan, maximumAgents, assignableAgent);
+    }
+
+    /** Validates a turn whose current request makes the Agent count an exact contract. */
+    public void validateExactAgentCalls(AiWorkflowPlan plan, int requiredAgents,
+                                        Predicate<String> assignableAgent) {
+        Bounds bounds = validateBounds(plan, requiredAgents, assignableAgent);
+        if (bounds.agentCalls != requiredAgents) {
+            throw new IllegalArgumentException(
+                    "Workflow must contain exactly " + requiredAgents + " Agent calls.");
+        }
+    }
+
+    private Bounds validateBounds(AiWorkflowPlan plan, int maximumAgents,
+                                  Predicate<String> assignableAgent) {
         Objects.requireNonNull(plan, "workflow");
         if (maximumAgents < 1) {
             throw new IllegalArgumentException("Maximum Agent calls must be positive.");
@@ -18,6 +33,7 @@ public final class WorkflowPlanValidator {
         Objects.requireNonNull(assignableAgent, "assignableAgent");
         Bounds bounds = new Bounds();
         validate(plan.root(), 1, maximumAgents, assignableAgent, bounds);
+        return bounds;
     }
 
     private void validate(AiWorkflowPlan.WorkflowDefinition workflow, int depth,
