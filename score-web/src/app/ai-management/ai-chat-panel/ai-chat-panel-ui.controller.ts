@@ -89,6 +89,7 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     event?.stopPropagation();
     this.refreshBranding();
     this.state.isOpen = true;
+    if (this.state.mcpStatus.state === 'CHECKING') this.refreshMcpStatus();
     this.sessionPersistence.persistPanelVisibility(true);
     this.loadConversationHistory();
     this.recoverActiveRequest(() => this.restoreLastConversation());

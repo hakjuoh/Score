@@ -10,6 +10,7 @@ describe('AiChatCommandService', () => {
     expect(service.decide('/debug')).toEqual({kind: 'local', command: 'debug'});
     expect(service.decide('/debug on')).toEqual({kind: 'none'});
     expect(service.decide('/debug off')).toEqual({kind: 'none'});
+    expect(service.decide('/mcp')).toEqual({kind: 'local', command: 'mcp'});
     expect(service.decide('/model')).toEqual({kind: 'local', command: 'model'});
     expect(service.decide('/runtime')).toEqual({kind: 'none'});
     expect(service.decide('/permissions')).toEqual({kind: 'local', command: 'permissions'});
@@ -29,6 +30,7 @@ describe('AiChatCommandService', () => {
     expect(service.suggestions('/').map(command => command.name)).toContain('/model');
     expect(service.suggestions('/').map(command => command.name)).not.toContain('/runtime');
     expect(service.suggestions('/').map(command => command.name)).toContain('/permissions');
+    expect(service.suggestions('/').map(command => command.name)).toContain('/mcp');
     expect(service.suggestions('/').map(command => command.name)).not.toContain('/agents');
     expect(service.suggestions('/').map(command => command.name)).not.toContain('/cancel');
     expect(service.suggestions('/', true).map(command => command.name)).toEqual(['/cancel']);

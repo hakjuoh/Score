@@ -101,6 +101,77 @@ export interface AiChatModelInfo {
   emergencyHeadroomTokens?: number | null;
 }
 
+export type AiMcpServerStatusCode = 'CONNECTED' | 'NOT_CONFIGURED' | 'UNAVAILABLE';
+
+export interface AiMcpServerStatus {
+  name: string;
+  status: AiMcpServerStatusCode;
+  toolCount: number;
+}
+
+/** Exact payload returned by GET /api/ai/chat/mcp. */
+export interface AiMcpStatusResponse {
+  servers: AiMcpServerStatus[];
+}
+
+/** Browser state for the complete set of configured MCP servers. */
+export interface AiMcpStatus {
+  state: 'CHECKING' | 'READY' | 'CHECK_FAILED';
+  servers: AiMcpServerStatus[];
+}
+
+export function checkingAiMcpStatus(): AiMcpStatus {
+  return {state: 'CHECKING', servers: []};
+}
+
+export function readyAiMcpStatus(response: AiMcpStatusResponse): AiMcpStatus {
+  return {state: 'READY', servers: response.servers || []};
+}
+
+export function failedAiMcpStatusCheck(): AiMcpStatus {
+  return {state: 'CHECK_FAILED', servers: []};
+}
+
+export function aiMcpStatusLabel(status: AiMcpStatus): string {
+  if (status.state === 'CHECKING') return 'Checking servers...';
+  if (status.state === 'CHECK_FAILED') return 'Server status check failed';
+  if (status.servers.length === 0) return 'No servers configured';
+  const connected = connectedMcpServers(status);
+  const toolCount = connected.reduce((total, server) => total + server.toolCount, 0);
+  const connectionLabel = connected.length === status.servers.length
+    ? `${connected.length} connected`
+    : `${connected.length}/${status.servers.length} connected`;
+  return `${connectionLabel} · ${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}`;
+}
+
+export function aiMcpStatusMessage(status: AiMcpStatus): string {
+  if (status.state === 'CHECKING') return 'Checking configured MCP servers...';
+  if (status.state === 'CHECK_FAILED') {
+    return 'Could not check MCP server status. Verify that score-http is reachable and try /mcp again.';
+  }
+  if (status.servers.length === 0) {
+    return 'No MCP servers are configured.';
+  }
+  const serverLines = status.servers.map(server => {
+    const name = server.name?.trim() || 'Unnamed server';
+    if (server.status === 'NOT_CONFIGURED') return `- ${name}: not configured`;
+    if (server.status === 'UNAVAILABLE') return `- ${name}: unavailable`;
+    if (server.toolCount === 0) return `- ${name}: connected · no tools available`;
+    return `- ${name}: connected · ${server.toolCount} ${server.toolCount === 1 ? 'tool' : 'tools'}`;
+  });
+  return `MCP servers:\n${serverLines.join('\n')}`;
+}
+
+export function aiMcpStatusHasWarning(status: AiMcpStatus): boolean {
+  return status.state !== 'CHECKING' && (status.state === 'CHECK_FAILED'
+    || status.servers.length === 0
+    || status.servers.some(server => server.status !== 'CONNECTED' || server.toolCount === 0));
+}
+
+function connectedMcpServers(status: AiMcpStatus): AiMcpServerStatus[] {
+  return status.servers.filter(server => server.status === 'CONNECTED');
+}
+
 export interface AiContextUsage {
   modelName: string;
   currentInputTokens: number;

@@ -333,6 +333,7 @@ class ScoreAiConfigurationTest {
                 .orElseThrow(() -> new IllegalStateException("MCP client configuration was not bound"));
         assertEquals(Duration.ofSeconds(60), mcpProperties.getRequestTimeout());
         assertEquals(Duration.ofSeconds(20), mcpProperties.getInitializationTimeout());
+        assertEquals(Duration.ofSeconds(5), mcpProperties.getStatusTimeout());
         assertTrue(mcpProperties.connection("connect-center-mcp").getUrl().isEmpty());
         assertTrue(mcpProperties.connection("connect-center-mcp").getAuth().getIssuerUrl()
                 .isEmpty());

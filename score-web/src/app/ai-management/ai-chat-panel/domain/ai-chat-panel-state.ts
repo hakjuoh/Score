@@ -9,11 +9,13 @@ import {
   AiChatDock,
   AiChatModelInfo,
   AiChatMessage,
+  AiMcpStatus,
   AiContextUsage,
   AiElicitationNotice,
   AiChangeApprovalBatchNotice,
   AiChangePermissionMode,
   AiChatPanelTab,
+  checkingAiMcpStatus,
   normalizeAiReasoningEffort
 } from './ai-chat-panel.model';
 
@@ -34,6 +36,7 @@ export class AiChatPanelState {
   dragActive = false;
   conversationId?: string;
   availableModels: AiChatModelInfo[] = [];
+  mcpStatus: AiMcpStatus = checkingAiMcpStatus();
   selectedModelName = '';
   defaultModelName = '';
   selectedReasoningEffort = '';

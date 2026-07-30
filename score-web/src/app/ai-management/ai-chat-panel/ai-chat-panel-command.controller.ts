@@ -6,7 +6,11 @@ import {
   isTerminalAgentStatus
 } from './domain/ai-agent-activity';
 import {AiLocalCommand} from './domain/ai-chat-command.service';
-import {AiChatMessage, AiChatSocketEvent} from './domain/ai-chat-panel.model';
+import {
+  AiChatMessage,
+  AiChatSocketEvent,
+  aiMcpStatusMessage
+} from './domain/ai-chat-panel.model';
 
 export abstract class AiChatPanelCommandController extends AiChatPanelMessageController {
   protected handleLocalCommand(localCommand: AiLocalCommand, commandText: string): void {
@@ -28,6 +32,10 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
       this.openPermissionSettings(commandText);
       return;
     }
+    if (localCommand === 'mcp') {
+      this.reportMcpStatus(commandText);
+      return;
+    }
     if (localCommand === 'debug') {
       this.state.prompt = '';
       this.state.debugEnabled = !this.state.debugEnabled;
@@ -39,6 +47,19 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
       this.scrollToBottom(true);
       this.focusPrompt();
     }
+  }
+
+  private reportMcpStatus(commandText: string): void {
+    this.state.prompt = '';
+    this.resizePromptInput();
+    this.state.messages.push({role: 'user', content: commandText});
+    this.refreshMcpStatus(status => {
+      this.state.messages.push({role: 'debug', content: aiMcpStatusMessage(status)});
+      this.scrollToBottom(true);
+      this.focusPrompt();
+    });
+    this.scrollToBottom(true);
+    this.focusPrompt();
   }
 
   protected openModelSettings(commandText: string): void {

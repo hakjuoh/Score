@@ -7,12 +7,31 @@ import {
   setupAiChatPanelSpec,
   Subject,
   teardownAiChatPanelSpec,
+  throwError,
   transport
 } from './ai-chat-panel.component.spec-support';
 
 describe('AiChatPanelComponent settings and active recovery', () => {
   beforeEach(setupAiChatPanelSpec);
   afterEach(teardownAiChatPanelSpec);
+
+  it('checks MCP status only when the assistant panel is opened', () => {
+    api.getMcpStatus.mockReturnValueOnce(of({
+      servers: [{name: 'connect-center-mcp', status: 'NOT_CONFIGURED', toolCount: 0}]
+    }));
+
+    component.ngOnInit();
+
+    expect(api.getMcpStatus).not.toHaveBeenCalled();
+
+    component.open();
+
+    expect(api.getMcpStatus).toHaveBeenCalledOnce();
+    expect(component.state.mcpStatus).toEqual({
+      state: 'READY',
+      servers: [{name: 'connect-center-mcp', status: 'NOT_CONFIGURED', toolCount: 0}]
+    });
+  });
 
   it('restores a versioned model preference after model discovery', () => {
     localStorage.setItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY, JSON.stringify({
@@ -389,6 +408,128 @@ describe('AiChatPanelComponent settings and active recovery', () => {
 
     expect(component.state.debugEnabled).toBe(false);
     expect(component.state.messages.at(-1)?.content).toContain('disabled');
+  });
+
+  it('refreshes and reports the configured MCP servers through the mcp command', () => {
+    (component as any).commandService = new AiChatCommandService();
+    api.getMcpStatus.mockReturnValueOnce(of({
+      servers: [{name: 'connect-center-mcp', status: 'CONNECTED', toolCount: 12}]
+    }));
+    component.state.prompt = '/mcp';
+
+    component.send();
+
+    expect(api.getMcpStatus).toHaveBeenCalledOnce();
+    expect(component.state.prompt).toBe('');
+    expect(component.state.mcpStatus).toEqual({
+      state: 'READY',
+      servers: [{name: 'connect-center-mcp', status: 'CONNECTED', toolCount: 12}]
+    });
+    expect(component.state.messages).toEqual([
+      {role: 'user', content: '/mcp'},
+      {role: 'debug', content: 'MCP servers:\n- connect-center-mcp: connected · 12 tools'}
+    ]);
+  });
+
+  it('surfaces a failed MCP server check without sending a chat request', () => {
+    (component as any).commandService = new AiChatCommandService();
+    api.getMcpStatus.mockReturnValueOnce(of({
+      servers: [{name: 'connect-center-mcp', status: 'UNAVAILABLE', toolCount: 0}]
+    }));
+    component.state.prompt = '/mcp';
+
+    component.send();
+
+    expect(transport.publish).not.toHaveBeenCalled();
+    expect(component.state.messages.at(-1)?.content)
+      .toContain('connect-center-mcp: unavailable');
+  });
+
+  it('lists every configured MCP server and its individual status', () => {
+    (component as any).commandService = new AiChatCommandService();
+    api.getMcpStatus.mockReturnValueOnce(of({servers: [
+      {name: 'connect-center-mcp', status: 'CONNECTED', toolCount: 127},
+      {name: 'reference-mcp', status: 'UNAVAILABLE', toolCount: 0},
+      {name: 'draft-mcp', status: 'NOT_CONFIGURED', toolCount: 0}
+    ]}));
+    component.state.prompt = '/mcp';
+
+    component.send();
+
+    expect(component.state.messages.at(-1)?.content).toBe([
+      'MCP servers:',
+      '- connect-center-mcp: connected · 127 tools',
+      '- reference-mcp: unavailable',
+      '- draft-mcp: not configured'
+    ].join('\n'));
+  });
+
+  it('reports when no MCP server entries are configured', () => {
+    (component as any).commandService = new AiChatCommandService();
+    api.getMcpStatus.mockReturnValueOnce(of({servers: []}));
+    component.state.prompt = '/mcp';
+
+    component.send();
+
+    expect(component.state.messages.at(-1)?.content)
+      .toBe('No MCP servers are configured.');
+  });
+
+  it.each([
+    [
+      {name: 'connect-center-mcp', status: 'NOT_CONFIGURED' as const, toolCount: 0},
+      'connect-center-mcp: not configured'
+    ],
+    [
+      {name: 'connect-center-mcp', status: 'CONNECTED' as const, toolCount: 0},
+      'connect-center-mcp: connected · no tools available'
+    ]
+  ])('reports the MCP edge state %# through the command', (status, expected) => {
+    (component as any).commandService = new AiChatCommandService();
+    api.getMcpStatus.mockReturnValueOnce(of({servers: [status]}));
+    component.state.prompt = '/mcp';
+
+    component.send();
+
+    expect(component.state.messages.at(-1)?.content).toContain(expected);
+  });
+
+  it('reports a browser-to-backend MCP status check failure', () => {
+    (component as any).commandService = new AiChatCommandService();
+    api.getMcpStatus.mockReturnValueOnce(throwError(() => new Error('HTTP failed')));
+    component.state.prompt = '/mcp';
+
+    component.send();
+
+    expect(component.state.mcpStatus.state).toBe('CHECK_FAILED');
+    expect(component.state.messages.at(-1)?.content)
+      .toContain('Could not check MCP server status');
+  });
+
+  it('shares an in-flight MCP probe and answers every command invocation', () => {
+    (component as any).commandService = new AiChatCommandService();
+    const status = new Subject<{
+      servers: Array<{
+        name: string;
+        status: 'CONNECTED';
+        toolCount: number;
+      }>;
+    }>();
+    api.getMcpStatus.mockReturnValueOnce(status);
+
+    component.state.prompt = '/mcp';
+    component.send();
+    component.state.prompt = '/mcp';
+    component.send();
+
+    expect(api.getMcpStatus).toHaveBeenCalledOnce();
+    status.next({
+      servers: [{name: 'connect-center-mcp', status: 'CONNECTED', toolCount: 12}]
+    });
+    status.complete();
+
+    expect(component.state.messages.filter(message => message.role === 'user')).toHaveLength(2);
+    expect(component.state.messages.filter(message => message.role === 'debug')).toHaveLength(2);
   });
 
 });

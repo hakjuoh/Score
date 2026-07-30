@@ -15,9 +15,16 @@
             <dt>permissions</dt>
             <dd>{{ permissionDisplayName }}</dd>
           </div>
+          <div>
+            <dt>mcp servers</dt>
+            <dd class="session-summary-mcp-status"
+                [class.warning]="mcpStatusWarning"
+                aria-live="polite">{{ mcpStatusLabel }}</dd>
+          </div>
         </dl>
         <p class="session-summary-tip">
           Change with <code>/model</code> or <code>/permissions</code>.
+          Check MCP with <code>/mcp</code>.
         </p>
       </section>
     }

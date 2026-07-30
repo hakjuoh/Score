@@ -4,6 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** MCP client settings consumed by the requester-scoped MCP client factory. */
@@ -12,6 +13,7 @@ public class ScoreMcpClientProperties {
 
     private Duration requestTimeout = Duration.ofSeconds(20);
     private Duration initializationTimeout = Duration.ofSeconds(20);
+    private Duration statusTimeout = Duration.ofSeconds(5);
     private StreamableHttp streamableHttp = new StreamableHttp();
 
     public Duration getRequestTimeout() { return requestTimeout; }
@@ -23,6 +25,10 @@ public class ScoreMcpClientProperties {
         this.initializationTimeout = initializationTimeout != null
                 ? initializationTimeout : Duration.ofSeconds(20);
     }
+    public Duration getStatusTimeout() { return statusTimeout; }
+    public void setStatusTimeout(Duration statusTimeout) {
+        this.statusTimeout = statusTimeout != null ? statusTimeout : Duration.ofSeconds(5);
+    }
     public StreamableHttp getStreamableHttp() { return streamableHttp; }
     public void setStreamableHttp(StreamableHttp streamableHttp) {
         this.streamableHttp = streamableHttp != null ? streamableHttp : new StreamableHttp();
@@ -30,6 +36,10 @@ public class ScoreMcpClientProperties {
 
     public Connection connection(String name) {
         return name != null ? streamableHttp.getConnections().get(name) : null;
+    }
+
+    public List<String> connectionNames() {
+        return List.copyOf(streamableHttp.getConnections().keySet());
     }
 
     public static class StreamableHttp {

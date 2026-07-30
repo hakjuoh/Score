@@ -77,6 +77,7 @@ export interface AiChatPanelApiMock {
   getActiveRequest: ReturnType<typeof vi.fn>;
   getConversationHistory: ReturnType<typeof vi.fn>;
   getAvailableModels: ReturnType<typeof vi.fn>;
+  getMcpStatus: ReturnType<typeof vi.fn>;
   updateConversationModel: ReturnType<typeof vi.fn>;
   getConversation: ReturnType<typeof vi.fn>;
   deleteConversation: ReturnType<typeof vi.fn>;
@@ -151,6 +152,9 @@ export function setupAiChatPanelSpec(): void {
           {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
         ]}
     ])),
+    getMcpStatus: vi.fn(() => of({
+      servers: [{name: 'connect-center-mcp', status: 'CONNECTED', toolCount: 12}]
+    })),
     updateConversationModel: vi.fn(() => NEVER),
     getConversation: vi.fn(() => NEVER),
     deleteConversation: vi.fn(() => of({deleted: true})),

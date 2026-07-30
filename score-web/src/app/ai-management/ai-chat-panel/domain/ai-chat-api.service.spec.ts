@@ -136,6 +136,18 @@ describe('AiChatApiService cancellation contract', () => {
     ]);
   });
 
+  it('checks the requester-scoped MCP servers', () => {
+    service.getMcpStatus().subscribe();
+
+    const request = httpTesting.expectOne('/api/ai/chat/mcp');
+    expect(request.request.method).toBe('GET');
+    expect(request.request.context.get(HANDLE_HTTP_ERROR_LOCALLY)).toBe(true);
+    request.flush({servers: [
+      {name: 'connect-center-mcp', status: 'CONNECTED', toolCount: 12},
+      {name: 'reference-mcp', status: 'UNAVAILABLE', toolCount: 0}
+    ]});
+  });
+
   it('normalizes legacy reasoning effort names for display', () => {
     let models: AiChatModelInfo[] = [];
     service.getAvailableModels().subscribe(response => models = response);
