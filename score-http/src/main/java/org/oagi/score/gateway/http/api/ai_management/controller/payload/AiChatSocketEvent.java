@@ -1,7 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.controller.payload;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import org.oagi.score.gateway.http.api.ai_management.file.AiFileDescriptor;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.AiFileDescriptor;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;

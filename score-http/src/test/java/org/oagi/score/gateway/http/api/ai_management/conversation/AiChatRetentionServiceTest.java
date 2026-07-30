@@ -1,7 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.conversation;
 
 import org.junit.jupiter.api.Test;
-import org.oagi.score.gateway.http.api.ai_management.file.AiFileService;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.AiFileService;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMaintenanceRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;

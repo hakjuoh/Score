@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.file;
+package org.oagi.score.gateway.http.api.ai_management.tool.file;
 
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.openhtmltopdf.outputdevice.helper.ExternalResourceType;
@@ -7,6 +7,9 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.AiFileRendererRegistry;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.MarkdownFileRenderer;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.PdfFileRenderer;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 
 import java.io.ByteArrayInputStream;
