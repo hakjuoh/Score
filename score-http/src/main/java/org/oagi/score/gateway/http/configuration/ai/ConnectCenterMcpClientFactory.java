@@ -19,7 +19,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -48,13 +47,14 @@ public class ConnectCenterMcpClientFactory {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final ScoreAiProperties properties;
-    private final Environment environment;
+    private final ScoreMcpClientProperties mcpProperties;
     private final BrokerJwtService brokerJwtService;
 
-    public ConnectCenterMcpClientFactory(ScoreAiProperties properties, Environment environment,
+    public ConnectCenterMcpClientFactory(ScoreAiProperties properties,
+                                         ScoreMcpClientProperties mcpProperties,
                                          BrokerJwtService brokerJwtService) {
         this.properties = properties;
-        this.environment = environment;
+        this.mcpProperties = mcpProperties;
         this.brokerJwtService = brokerJwtService;
     }
 
@@ -94,9 +94,9 @@ public class ConnectCenterMcpClientFactory {
                 .openConnectionOnStartup(false);
 
         var clientBuilder = McpClient.sync(transport.build())
-                .requestTimeout(longer(properties.getMcp().getRequestTimeout(),
+                .requestTimeout(longer(mcpProperties.getRequestTimeout(),
                         properties.getElicitationTimeout()))
-                .initializationTimeout(properties.getMcp().getInitializationTimeout())
+                .initializationTimeout(mcpProperties.getInitializationTimeout())
                 .progressConsumer(notification -> progress.run());
         if (elicitationHandler != null) {
             clientBuilder.elicitation(elicitationHandler).applyElicitationDefaults(true);
@@ -186,23 +186,24 @@ public class ConnectCenterMcpClientFactory {
     }
 
     public McpConnection connection(ScoreUser requester) {
-        String name = properties.getMcp().getConnectionName();
-        String prefix = "spring.ai.mcp.client.streamable-http.connections." + name;
-        String baseUrl = environment.getProperty(prefix + ".url");
-        if (!StringUtils.hasText(baseUrl)) {
+        ScoreMcpClientProperties.Connection configured = configuredConnection();
+        if (configured == null || !StringUtils.hasText(configured.getUrl())) {
             return null;
         }
-        String endpoint = environment.getProperty(prefix + ".endpoint", "/mcp");
+        String endpoint = StringUtils.hasText(configured.getEndpoint())
+                ? configured.getEndpoint() : "/mcp";
         String token = bearerToken(requester);
-        return new McpConnection(baseUrl.strip(), endpoint, token);
+        return new McpConnection(configured.getUrl().strip(), endpoint, token);
     }
 
     public String connectionName() {
-        return properties.getMcp().getConnectionName();
+        return properties.getTools().getConnectCenterMcp().getConnectionName();
     }
 
     private String bearerToken(ScoreUser requester) {
-        ScoreAiProperties.Auth auth = properties.getMcp().getAuth();
+        ScoreMcpClientProperties.Connection connection = configuredConnection();
+        if (connection == null) return null;
+        ScoreMcpClientProperties.Auth auth = connection.getAuth();
         if (StringUtils.hasText(auth.getBearerToken())) {
             return auth.getBearerToken();
         }
@@ -213,6 +214,10 @@ public class ConnectCenterMcpClientFactory {
                 properties.getElicitationTimeout().plusSeconds(60).toSeconds());
         return brokerJwtService.issueToken(requester, auth.getIssuerUrl(), auth.getAudience(),
                 auth.getAlgorithm(), Math.max(auth.getTokenTtlSeconds(), minimumTtl));
+    }
+
+    private ScoreMcpClientProperties.Connection configuredConnection() {
+        return mcpProperties.connection(connectionName());
     }
 
     void authorizeRequest(ScoreUser requester, HttpRequest.Builder request) {

@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.controller.payload;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import org.oagi.score.gateway.http.api.ai_management.artifact.AiArtifactDescriptor;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -29,12 +30,25 @@ public record AiChatSocketEvent(
         String content,
         String groupId,
         String toolCallId,
+        List<AiArtifactDescriptor> artifacts,
         Map<String, Object> metadata) {
 
     public AiChatSocketEvent {
         progress = progress != null ? List.copyOf(progress) : List.of();
         ids = ids != null ? List.copyOf(ids) : List.of();
+        artifacts = artifacts != null ? List.copyOf(artifacts) : List.of();
         metadata = metadata != null ? Map.copyOf(metadata) : Map.of();
+    }
+
+    public AiChatSocketEvent(String requestId, String conversationId, String type, String message,
+                             String agent, String response, boolean continuationRequired,
+                             List<String> progress, String resource, String action, String targetPath,
+                             List<String> ids, Integer index, String turnId, Long sequence,
+                             String subtype, String visibility, String content, String groupId,
+                             String toolCallId, Map<String, Object> metadata) {
+        this(requestId, conversationId, type, message, agent, response, continuationRequired,
+                progress, resource, action, targetPath, ids, index, turnId, sequence, subtype,
+                visibility, content, groupId, toolCallId, List.of(), metadata);
     }
 
     public static AiChatSocketEvent accepted(String requestId, String conversationId,
@@ -61,7 +75,8 @@ public record AiChatSocketEvent(
         return new AiChatSocketEvent(requestId, response.conversationId(), "assistant_final", "Completed.",
                 response.agent(), response.response(), response.continuationRequired(), response.progress(),
                 null, null, null, List.of(), null, requestId, null, null, "visible",
-                response.response(), null, null, Map.of("continuationRequired", response.continuationRequired()));
+                response.response(), null, null, response.artifacts(),
+                Map.of("continuationRequired", response.continuationRequired()));
     }
 
     public static AiChatSocketEvent error(String requestId, String conversationId, String message) {
@@ -119,7 +134,7 @@ public record AiChatSocketEvent(
         return new AiChatSocketEvent(requestId, conversationId, "HISTORY_MESSAGE", message.role(), null,
                 message.content(), false, List.of(), null, null, null, List.of(), message.index(),
                 message.turnId(), null, message.subtype(), message.visibility(), message.content(),
-                message.groupId(), message.toolCallId(), eventMetadata);
+                message.groupId(), message.toolCallId(), message.artifacts(), eventMetadata);
     }
 
     public static AiChatSocketEvent detail(String requestId, String conversationId, long sequence,

@@ -405,7 +405,8 @@ export abstract class AiChatPanelControllerBase {
   protected abstract handleElicitationDecisionEvent(event: AiChatSocketEvent): void;
   abstract respondToElicitation(response: AiElicitationResponse): void;
   protected abstract completeFinalEvent(event: AiChatSocketEvent): void;
-  protected abstract commitAssistantMessage(requestId: string, content: string): number;
+  protected abstract commitAssistantMessage(requestId: string, content: string,
+                                            artifacts?: import('./domain/ai-chat-panel.model').AiChatArtifact[]): number;
   protected abstract beginMutationRepeatDraft(requestId: string, prompt: string,
                                               attachments: AiChatAttachment[]): void;
   protected abstract handleMutationConfirmationNotice(event: AiChatSocketEvent): void;

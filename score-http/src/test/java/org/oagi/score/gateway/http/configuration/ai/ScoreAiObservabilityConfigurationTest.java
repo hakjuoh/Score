@@ -28,18 +28,19 @@ class ScoreAiObservabilityConfigurationTest {
             .withUserConfiguration(ScoreAiObservabilityConfiguration.class);
 
     @Test
-    void devProfileUsesOtelEnvironmentNamesForSharedManagementSettings() throws IOException {
-        try (var stream = Objects.requireNonNull(getClass().getResourceAsStream("/application-dev.yml"))) {
+    void baseConfigurationUsesOtelEnvironmentNamesForSharedManagementSettings() throws IOException {
+        try (var stream = Objects.requireNonNull(getClass().getResourceAsStream("/application.yml"))) {
             String yaml = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
             assertThat(yaml)
                     .doesNotContain("SCORE_OTEL_")
                     .contains("${OTEL_TRACES_SAMPLER_ARG:1.0}")
-                    .contains("${OTEL_TRACES_EXPORT_ENABLED:true}")
+                    .contains("${OTEL_TRACES_EXPORT_ENABLED:false}")
                     .contains("${OTEL_TRACES_SAMPLER:parentbased_traceidratio}")
                     .contains("${OTEL_BSP_SCHEDULE_DELAY:5s}")
                     .contains("${OTEL_BSP_EXPORT_TIMEOUT:10s}")
+                    .contains("${OTEL_METRICS_EXPORT_ENABLED:false}")
                     .contains("${OTEL_METRIC_EXPORT_INTERVAL:10s}")
-                    .contains("${SCORE_AI_OBSERVABILITY_ENABLED:true}")
+                    .contains("${SCORE_AI_OBSERVABILITY_ENABLED:false}")
                     .contains("${SCORE_AI_OBSERVABILITY_SERVICE_NAME:score-ai}");
         }
     }

@@ -109,3 +109,42 @@ CREATE TABLE `ai_chat_mutation_confirmation`
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci
   ROW_FORMAT = DYNAMIC COMMENT ='One-time server-authoritative grants for AI mutation tool calls.';
+
+CREATE TABLE `ai_chat_artifact`
+(
+    `ai_chat_artifact_id`     bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'The primary key of the generated AI artifact.',
+    `guid`                    char(36) COLLATE utf8mb4_bin NOT NULL COMMENT 'Public artifact identifier.',
+    `ai_chat_conversation_id` bigint(20) unsigned NOT NULL COMMENT 'Owning AI chat conversation.',
+    `request_id`              varchar(128) COLLATE utf8mb4_bin NOT NULL COMMENT 'Request that created the artifact.',
+    `format`                  varchar(64) NOT NULL COMMENT 'Renderer format identifier.',
+    `filename`                varchar(240) NOT NULL COMMENT 'Safe download filename.',
+    `media_type`              varchar(160) NOT NULL COMMENT 'Artifact media type.',
+    `byte_size`               bigint unsigned NOT NULL COMMENT 'Stored content size in bytes.',
+    `sha256`                  char(64) COLLATE ascii_bin NOT NULL COMMENT 'SHA-256 digest of stored content.',
+    `storage_provider`        varchar(64) NOT NULL COMMENT 'Configured artifact storage provider identifier.',
+    `storage_location`        varchar(1024) COLLATE utf8mb4_bin NOT NULL COMMENT 'Provider-owned opaque object location.',
+    `created_at`              datetime(6) NOT NULL COMMENT 'Artifact creation timestamp.',
+    `expires_at`              datetime(6) NOT NULL COMMENT 'Artifact retention deadline.',
+    PRIMARY KEY (`ai_chat_artifact_id`),
+    UNIQUE KEY `ai_chat_artifact_guid_uk` (`guid`),
+    UNIQUE KEY `ai_chat_artifact_request_digest_uk`
+        (`ai_chat_conversation_id`, `request_id`, `filename`, `sha256`),
+    KEY `ai_chat_artifact_request_idx` (`ai_chat_conversation_id`, `request_id`, `created_at`),
+    KEY `ai_chat_artifact_expiry_idx` (`expires_at`),
+    CONSTRAINT `ai_chat_artifact_conversation_fk`
+        FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_general_ci
+  ROW_FORMAT = DYNAMIC COMMENT ='Generated Assistant artifact metadata and provider location history.';
+
+CREATE TABLE `ai_chat_artifact_object`
+(
+    `storage_location` varchar(512) COLLATE utf8mb4_bin NOT NULL COMMENT 'Opaque database-storage object key.',
+    `content`          longblob NOT NULL COMMENT 'Artifact bytes for the database storage provider.',
+    `created_at`       datetime(6) NOT NULL COMMENT 'Object creation timestamp.',
+    PRIMARY KEY (`storage_location`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_general_ci
+  ROW_FORMAT = DYNAMIC COMMENT ='Binary objects used only when score.ai.tools.artifacts.storage.provider is db.';
