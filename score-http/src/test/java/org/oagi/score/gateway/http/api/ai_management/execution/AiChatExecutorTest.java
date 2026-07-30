@@ -24,15 +24,11 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApprov
 import org.oagi.score.gateway.http.api.ai_management.model.AiResolvedChange;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
-import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
 import org.oagi.score.gateway.http.api.ai_management.service.AiChangeConfirmationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
-import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiCallbackToolSetAdapter;
-import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiToolAdapter;
-import org.oagi.score.gateway.http.api.ai_management.execution.AgentInputRefusedException;
-import org.oagi.score.gateway.http.api.ai_management.file.AiPlatformToolProvider;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.AiPlatformToolProvider;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentInputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentInputGuardrailChain;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;

@@ -1,9 +1,13 @@
-package org.oagi.score.gateway.http.api.ai_management.file;
+package org.oagi.score.gateway.http.api.ai_management.tool.file;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiTool;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.AiFileDescriptor;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.AiFileService;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.CreateFileTool;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 
 import java.time.Instant;
@@ -38,5 +42,29 @@ class CreateFileToolTest {
                 .contains("\"fileId\"", "\"format\"", "\"filename\"", "\"mediaType\"",
                         "\"size\"", "\"sha256\"");
         assertThat(result.json()).contains("file-1", "report.md").doesNotContain("/download");
+    }
+
+    @Test
+    void generatesInputAndOutputSchemasFromTheirRecordProperties() throws Exception {
+        CreateFileTool tool = new CreateFileTool(mock(ScoreUser.class),
+                mock(AiFileService.class), new ObjectMapper());
+
+        var inputSchema = new ObjectMapper().readTree(tool.specification().inputSchema());
+        assertThat(inputSchema.path("properties").propertyStream()
+                .map(java.util.Map.Entry::getKey)).containsExactlyInAnyOrder(
+                        "format", "filename", "content", "options");
+        assertThat(inputSchema.path("required").valueStream()
+                .map(JsonNode::asText)).containsExactlyInAnyOrder("format", "content");
+        assertThat(inputSchema.path("additionalProperties").asBoolean()).isFalse();
+
+        var outputSchema = new ObjectMapper().readTree(tool.specification().outputSchema());
+        assertThat(outputSchema.path("required").valueStream()
+                .map(JsonNode::asText)).containsExactlyInAnyOrder(
+                        "fileId", "format", "filename", "mediaType", "size", "sha256");
+        assertThat(outputSchema.at("/properties/size/type").asText()).isEqualTo("integer");
+        assertThat(outputSchema.at("/properties/size/minimum").asLong()).isZero();
+        assertThat(outputSchema.at("/properties/sha256/pattern").asText())
+                .isEqualTo("^[a-fA-F0-9]{64}$");
+        assertThat(outputSchema.path("additionalProperties").asBoolean()).isFalse();
     }
 }

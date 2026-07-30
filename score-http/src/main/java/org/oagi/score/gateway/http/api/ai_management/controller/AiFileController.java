@@ -1,6 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.controller;
 
-import org.oagi.score.gateway.http.api.ai_management.file.AiFileService;
+import org.oagi.score.gateway.http.api.ai_management.tool.file.AiFileService;
 import org.oagi.score.gateway.http.configuration.security.SessionService;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.ContentDisposition;

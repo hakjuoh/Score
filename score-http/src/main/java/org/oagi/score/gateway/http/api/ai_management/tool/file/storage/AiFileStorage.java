@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.file.storage;
+package org.oagi.score.gateway.http.api.ai_management.tool.file.storage;
 
 /** Provider-neutral byte storage; locations are opaque outside the selected provider. */
 public interface AiFileStorage {

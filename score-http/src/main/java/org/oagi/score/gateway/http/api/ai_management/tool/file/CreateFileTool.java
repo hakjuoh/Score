@@ -1,10 +1,14 @@
-package org.oagi.score.gateway.http.api.ai_management.file;
+package org.oagi.score.gateway.http.api.ai_management.tool.file;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.media.Schema;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiTool;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
+import org.springframework.ai.util.json.schema.JsonSchemaGenerator;
 import org.springframework.util.StringUtils;
 
 import java.util.Map;
@@ -13,34 +17,10 @@ import java.util.Map;
 final class CreateFileTool implements AiTool {
 
     static final String NAME = "create_file";
-    private static final String INPUT_SCHEMA = """
-            {
-              "type":"object",
-              "properties":{
-                "format":{"type":"string","description":"Registered output format such as markdown or pdf."},
-                "filename":{"type":"string","description":"Suggested download filename."},
-                "content":{"description":"Renderer-specific content. Markdown and PDF accept a Markdown string."},
-                "options":{"type":"object","description":"Optional renderer-specific settings."}
-              },
-              "required":["format","content"],
-              "additionalProperties":false
-            }
-            """;
-    private static final String OUTPUT_SCHEMA = """
-            {
-              "type":"object",
-              "properties":{
-                "fileId":{"type":"string","description":"Stable identifier of the retained file."},
-                "format":{"type":"string","description":"Registered renderer format."},
-                "filename":{"type":"string","description":"Download filename."},
-                "mediaType":{"type":"string","description":"File media type."},
-                "size":{"type":"integer","format":"int64","minimum":0,"description":"File size in bytes."},
-                "sha256":{"type":"string","pattern":"^[a-fA-F0-9]{64}$","description":"SHA-256 content digest."}
-              },
-              "required":["fileId","format","filename","mediaType","size","sha256"],
-              "additionalProperties":false
-            }
-            """;
+    private static final String INPUT_SCHEMA =
+            JsonSchemaGenerator.generateForType(CreateFileInput.class);
+    private static final String OUTPUT_SCHEMA =
+            JsonSchemaGenerator.generateForType(CreateFileOutput.class);
     private final ScoreUser requester;
     private final AiFileService files;
     private final ObjectMapper objectMapper;
@@ -92,5 +72,44 @@ final class CreateFileTool implements AiTool {
             throw new IllegalArgumentException("File " + field + " is required.");
         }
         return value;
+    }
+
+    private record CreateFileInput(
+            @JsonProperty(required = true)
+            @JsonPropertyDescription("Registered output format such as markdown or pdf.")
+            String format,
+            @JsonProperty(required = false)
+            @JsonPropertyDescription("Suggested download filename.")
+            String filename,
+            @JsonProperty(required = true)
+            @JsonPropertyDescription(
+                    "Renderer-specific content. Markdown and PDF accept a Markdown string.")
+            Object content,
+            @JsonProperty(required = false)
+            @JsonPropertyDescription("Optional renderer-specific settings.")
+            Map<String, Object> options) {
+    }
+
+    private record CreateFileOutput(
+            @JsonProperty(required = true)
+            @JsonPropertyDescription("Stable identifier of the retained file.")
+            String fileId,
+            @JsonProperty(required = true)
+            @JsonPropertyDescription("Registered renderer format.")
+            String format,
+            @JsonProperty(required = true)
+            @JsonPropertyDescription("Download filename.")
+            String filename,
+            @JsonProperty(required = true)
+            @JsonPropertyDescription("File media type.")
+            String mediaType,
+            @JsonProperty(required = true)
+            @JsonPropertyDescription("File size in bytes.")
+            @Schema(minimum = "0")
+            long size,
+            @JsonProperty(required = true)
+            @JsonPropertyDescription("SHA-256 content digest.")
+            @Schema(pattern = "^[a-fA-F0-9]{64}$")
+            String sha256) {
     }
 }
