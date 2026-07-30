@@ -49,7 +49,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     });
 
     expect(component.state.messages.at(-1)).toMatchObject({
-      role: 'progress', content: 'Working...', inProgress: true
+      role: 'progress', content: 'Working', inProgress: true
     });
     expect(component.state.messages.some(message => message.content === 'Request received.'))
       .toBe(false);
@@ -68,7 +68,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       [message.role, message.content])).toEqual([
       ['guide', 'I’ll check the three component counts independently.'],
       ['workflow_group', 'I’ll check the three component counts independently.'],
-      ['progress', 'Working...']
+      ['progress', 'Working']
     ]);
   });
 

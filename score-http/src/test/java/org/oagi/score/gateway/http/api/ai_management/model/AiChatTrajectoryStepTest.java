@@ -14,7 +14,7 @@ class AiChatTrajectoryStepTest {
     void normalizesUnknownSourceAndVisibilityToSafeApplicationDefaults() {
         AiChatTrajectoryStep step = new AiChatTrajectoryStep(
                 "request-1", "future-source", "progress", "future-visibility",
-                "Working", null, null, null,
+                "In progress", null, null, null,
                 null, Map.of(), null, Map.of(), 0, null, Instant.EPOCH);
 
         assertThat(step.source()).isEqualTo("system");

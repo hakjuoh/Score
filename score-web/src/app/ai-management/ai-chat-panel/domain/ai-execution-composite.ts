@@ -6,6 +6,7 @@ import {
   upsertAgentActivity
 } from './ai-agent-activity';
 import {AiChatMessage, AiChatSocketEvent} from './ai-chat-panel.model';
+import {WORKING_STATUS_LABEL} from './ai-chat-panel-display.constants';
 import {
   AiWorkflowPresentation,
   workflowPresentation,
@@ -64,7 +65,8 @@ export function appendWorkflowConversation(container: AiChatMessage[], content: 
   container.push(anchor);
   if (live) {
     container.push({
-      role: 'progress', content: 'Working...', inProgress: true,
+      role: 'progress', content: WORKING_STATUS_LABEL, inProgress: true,
+      statusStartedAt: Date.now(),
       eventType: 'composite_status'
     });
   }
@@ -129,7 +131,7 @@ export class AiExecutionComposite {
       return {container, root, created: true, presentation};
     }
 
-    const content = event.content || event.message || 'Working...';
+    const content = event.content || event.message || WORKING_STATUS_LABEL;
     const itemCount = metadataPositiveInteger(event, 'member_count', 'memberCount');
     const anchor: AiChatMessage = presentation === 'box' ? {
       role: 'workflow_group', content, eventType: 'workflow_lifecycle',
@@ -139,14 +141,16 @@ export class AiExecutionComposite {
       ...(parentNodeId ? {workflowParentNodeId: parentNodeId} : {}),
       workflowType: type,
       ...(itemCount !== undefined ? {workflowItemCount: itemCount} : {}),
-      workflowStatus: 'started'
+      workflowStatus: 'started',
+      statusStartedAt: Date.now()
     } : {
       role: 'guide', content, eventType: 'workflow_lifecycle',
       requestId: event.requestId,
       workflowNodeId: nodeId,
       ...(parentNodeId ? {workflowParentNodeId: parentNodeId} : {}),
       ...(declaredType ? {workflowType: declaredType} : {}),
-      workflowStatus: 'started'
+      workflowStatus: 'started',
+      statusStartedAt: Date.now()
     };
     if (presentation === 'box') {
       this.workflows.set(key, anchor);
