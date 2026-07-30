@@ -6,7 +6,7 @@ import {
   AiChatAttachment,
   AiChatDock,
   AiChatPanelTab,
-  AiMutationPermissionMode,
+  AiChangePermissionMode,
   normalizeAiReasoningEffort
 } from './ai-chat-panel.model';
 
@@ -35,7 +35,7 @@ interface AiChatSelectionPreference {
   version: number;
   modelName: string;
   reasoningEffort: string;
-  permissionMode: AiMutationPermissionMode;
+  permissionMode: AiChangePermissionMode;
 }
 
 @Injectable({providedIn: 'root'})

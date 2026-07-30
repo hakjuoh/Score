@@ -957,7 +957,7 @@ class WorkflowTest {
     @Test
     void knownInFlightOperationSurvivesMultipleSpecialistInactivityWindows() {
         java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong();
-        AgentInvocationLease lease = new AgentInvocationLease("mutation-worker", 10L,
+        AgentInvocationLease lease = new AgentInvocationLease("change-worker", 10L,
                 clock::get,
                 org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP);
 
@@ -992,7 +992,7 @@ class WorkflowTest {
     }
 
     @Test
-    void explicitStopStillFencesAnAdmittedMutation() {
+    void explicitStopStillFencesAnAdmittedChange() {
         AgentInvocationLease lease = new AgentInvocationLease("cancelled-worker", 10L,
                 System::nanoTime,
                 org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP);
@@ -1567,20 +1567,20 @@ class WorkflowTest {
         Agent gateway = agent("gateway-agent", new ArrayList<>(),
                 ignored -> new AgentDecision.Delegate(plan));
         Agent successful = agent("successful-worker", new ArrayList<>(),
-                ignored -> complete("mutation committed"));
+                ignored -> complete("change committed"));
         Agent failed = agent("failed-worker", new ArrayList<>(), ignored -> {
             throw new IllegalStateException("follow-up failed");
         });
         Agent synthesizer = agent("workflow-synthesizer", new ArrayList<>(), context -> {
             assertThat(context.inputs()).extracting(WorkflowResult::successful)
                     .containsExactly(true, false);
-            return complete("mutation committed");
+            return complete("change committed");
         });
 
         AgentOutput result = workflow(
                 gateway, successful, failed, synthesizer).execute(workflowContext(context()));
 
-        assertThat(result.content()).contains("mutation committed",
+        assertThat(result.content()).contains("change committed",
                 "Some requested steps could not be completed",
                 "may already have taken effect");
         assertThat(result.metadata())

@@ -112,13 +112,13 @@ describe('AiChatComposerComponent cancellation actions', () => {
     expect(requested).toHaveBeenCalledWith(input);
   });
 
-  it('shows a contextual placeholder while requesting mutation changes', async () => {
-    component.placeholder = 'Describe changes to this action';
+  it('shows a contextual placeholder while requesting a change revision', async () => {
+    component.placeholder = 'Describe how to revise this change';
     fixture.detectChanges();
     await fixture.whenStable();
 
     const prompt = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
-    expect(prompt.placeholder).toBe('Describe changes to this action');
+    expect(prompt.placeholder).toBe('Describe how to revise this change');
   });
 
   it('gives the message composer a persistent accessible name', () => {

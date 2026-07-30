@@ -1,6 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.controller;
 
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationDecision;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeDecision;
 
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancelRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancellationResponse;
@@ -11,9 +11,9 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiConver
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiConversationModelUpdateRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiConversationRestoreRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiPublicExecutionRequestStatus;
-import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMutationConfirmationDecisionRequest;
-import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMutationApprovalDecisionRequest;
-import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMutationConfirmationDecisionResponse;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChangeConfirmationDecisionRequest;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChangeApprovalDecisionRequest;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChangeConfirmationDecisionResponse;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiElicitationDecisionRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationDetails;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationSummary;
@@ -26,8 +26,8 @@ import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.service.ChatService;
-import org.oagi.score.gateway.http.api.ai_management.service.AiMutationConfirmationService;
-import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChangeConfirmationService;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.configuration.security.SessionService;
@@ -96,9 +96,9 @@ public class AiChatController {
     private final WebSocketSessionUserResolver webSocketUsers;
     private final AiRequestRegistry requests;
     private final Executor executor;
-    private final AiMutationConfirmationService mutationConfirmations;
+    private final AiChangeConfirmationService changeConfirmations;
     private final AiElicitationService elicitations;
-    private final AiMutationApprovalCoordinator mutationApprovals;
+    private final AiChangeApprovalCoordinator changeApprovals;
     private final Duration requestInactivityTimeout;
     private final ScoreAiObservability observability;
     private final ExecutionObserver observer;
@@ -108,15 +108,15 @@ public class AiChatController {
                             SimpMessagingTemplate messagingTemplate,
                             WebSocketSessionUserResolver webSocketUsers,
                             AiRequestRegistry requests,
-                            AiMutationConfirmationService mutationConfirmations,
+                            AiChangeConfirmationService changeConfirmations,
                             AiElicitationService elicitations,
-                            AiMutationApprovalCoordinator mutationApprovals,
+                            AiChangeApprovalCoordinator changeApprovals,
                             ScoreAiProperties aiProperties,
                             ScoreAiObservability observability,
                             ObjectProvider<ExecutionObserver> executionObservers,
                             @Qualifier("scoreAiChatExecutor") Executor executor) {
         this(chatService, sessionService, messagingTemplate, webSocketUsers, requests,
-                mutationConfirmations, elicitations, mutationApprovals, aiProperties,
+                changeConfirmations, elicitations, changeApprovals, aiProperties,
                 observability, ExecutionObserver.composite(
                         executionObservers.orderedStream().toList()), executor);
     }
@@ -125,14 +125,14 @@ public class AiChatController {
                      SimpMessagingTemplate messagingTemplate,
                      WebSocketSessionUserResolver webSocketUsers,
                      AiRequestRegistry requests,
-                     AiMutationConfirmationService mutationConfirmations,
+                     AiChangeConfirmationService changeConfirmations,
                      AiElicitationService elicitations,
-                     AiMutationApprovalCoordinator mutationApprovals,
+                     AiChangeApprovalCoordinator changeApprovals,
                      ScoreAiProperties aiProperties,
                      ScoreAiObservability observability,
                      Executor executor) {
         this(chatService, sessionService, messagingTemplate, webSocketUsers, requests,
-                mutationConfirmations, elicitations, mutationApprovals, aiProperties,
+                changeConfirmations, elicitations, changeApprovals, aiProperties,
                 observability, ExecutionObserver.noop(), executor);
     }
 
@@ -140,9 +140,9 @@ public class AiChatController {
                      SimpMessagingTemplate messagingTemplate,
                      WebSocketSessionUserResolver webSocketUsers,
                      AiRequestRegistry requests,
-                     AiMutationConfirmationService mutationConfirmations,
+                     AiChangeConfirmationService changeConfirmations,
                      AiElicitationService elicitations,
-                     AiMutationApprovalCoordinator mutationApprovals,
+                     AiChangeApprovalCoordinator changeApprovals,
                      ScoreAiProperties aiProperties,
                      ScoreAiObservability observability,
                      ExecutionObserver observer,
@@ -152,9 +152,9 @@ public class AiChatController {
         this.messagingTemplate = messagingTemplate;
         this.webSocketUsers = webSocketUsers;
         this.requests = requests;
-        this.mutationConfirmations = mutationConfirmations;
+        this.changeConfirmations = changeConfirmations;
         this.elicitations = elicitations;
-        this.mutationApprovals = mutationApprovals;
+        this.changeApprovals = changeApprovals;
         this.requestInactivityTimeout = aiProperties.getRequestInactivityTimeout();
         this.observability = observability;
         this.observer = observer != null ? observer : ExecutionObserver.noop();
@@ -165,11 +165,11 @@ public class AiChatController {
                      SimpMessagingTemplate messagingTemplate,
                      WebSocketSessionUserResolver webSocketUsers,
                      AiRequestRegistry requests,
-                     AiMutationConfirmationService mutationConfirmations,
+                     AiChangeConfirmationService changeConfirmations,
                      ScoreAiProperties aiProperties,
                      Executor executor) {
         this(chatService, sessionService, messagingTemplate, webSocketUsers, requests,
-                mutationConfirmations, new AiElicitationService(aiProperties, requests), null,
+                changeConfirmations, new AiElicitationService(aiProperties, requests), null,
                 aiProperties, ScoreAiObservability.noop(), executor);
     }
 
@@ -177,13 +177,13 @@ public class AiChatController {
                      SimpMessagingTemplate messagingTemplate,
                      WebSocketSessionUserResolver webSocketUsers,
                      AiRequestRegistry requests,
-                     AiMutationConfirmationService mutationConfirmations,
+                     AiChangeConfirmationService changeConfirmations,
                      AiElicitationService elicitations,
-                     AiMutationApprovalCoordinator mutationApprovals,
+                     AiChangeApprovalCoordinator changeApprovals,
                      ScoreAiProperties aiProperties,
                      Executor executor) {
         this(chatService, sessionService, messagingTemplate, webSocketUsers, requests,
-                mutationConfirmations, elicitations, mutationApprovals, aiProperties,
+                changeConfirmations, elicitations, changeApprovals, aiProperties,
                 ScoreAiObservability.noop(), executor);
     }
 
@@ -240,7 +240,7 @@ public class AiChatController {
                 throw finishFailure;
             }
             try {
-                clearMutationApprovalState(prepared.requestId());
+                clearChangeApprovalState(prepared.requestId());
                 if ("FAILED".equals(status) || "TIMED_OUT".equals(status)) {
                     chatService.recordFailure(prepared, requester,
                             terminalMessage(status, throwable), failureClass(throwable));
@@ -306,29 +306,29 @@ public class AiChatController {
                 chatService.deleteConversation(sessionService.asScoreUser(principal), conversationId)));
     }
 
-    @PostMapping("/conversations/{conversationId}/mutation-confirmations/{confirmationRequestId}/decision")
-    public ResponseEntity<AiMutationConfirmationDecisionResponse> decideMutationConfirmation(
+    @PostMapping("/conversations/{conversationId}/change-confirmations/{confirmationRequestId}/decision")
+    public ResponseEntity<AiChangeConfirmationDecisionResponse> decideChangeConfirmation(
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
             @PathVariable String conversationId,
             @PathVariable String confirmationRequestId,
-            @RequestBody AiMutationConfirmationDecisionRequest request) {
+            @RequestBody AiChangeConfirmationDecisionRequest request) {
         ScoreUser requester = sessionService.asScoreUser(principal);
-        String sourceRequestId = mutationConfirmations.sourceRequestId(
+        String sourceRequestId = changeConfirmations.sourceRequestId(
                 requester, conversationId, confirmationRequestId);
-        Supplier<ResponseEntity<AiMutationConfirmationDecisionResponse>> decision =
+        Supplier<ResponseEntity<AiChangeConfirmationDecisionResponse>> decision =
                 () -> requests.whileRequestAndConversationIdle(
                         sourceRequestId, conversationId, () -> {
-                            AiMutationDecision result = mutationConfirmations.decide(
+                            AiChangeDecision result = changeConfirmations.decide(
                                     requester, conversationId,
                                     confirmationRequestId,
                                     request != null ? request.decision() : null,
                                     request != null ? request.revisionPrompt() : null);
                             return ResponseEntity.status(result.status()).body(
-                                    mutationConfirmations.bindConversation(
+                                    changeConfirmations.bindConversation(
                                             result.response(), conversationId));
                         });
-        return mutationApprovals != null
-                ? mutationApprovals.whileConfirmationUnreserved(confirmationRequestId, decision)
+        return changeApprovals != null
+                ? changeApprovals.whileConfirmationUnreserved(confirmationRequestId, decision)
                 : decision.get();
     }
 
@@ -349,8 +349,8 @@ public class AiChatController {
                 command.conversationId(), command.expectedGeneration(), requester);
         if (response.acknowledged()) {
             elicitations.cancelRequest(requestId);
-            if (mutationApprovals != null) {
-                mutationApprovals.cancelRequest(requestId);
+            if (changeApprovals != null) {
+                changeApprovals.cancelRequest(requestId);
             }
         }
         return ResponseEntity.ok(response);
@@ -447,7 +447,7 @@ public class AiChatController {
                         prepared.requestId(), finishFailure);
             }
             try {
-                clearMutationApprovalState(prepared.requestId());
+                clearChangeApprovalState(prepared.requestId());
                 if ("COMPLETED".equals(status)) {
                     send(requester, destination, AiChatSocketEvent.finalResponse(prepared.requestId(), response));
                 } else if ("CANCELLED".equals(status)) {
@@ -485,7 +485,7 @@ public class AiChatController {
             throw finishFailure;
         }
         try {
-            clearMutationApprovalState(request.requestId());
+            clearChangeApprovalState(request.requestId());
             observation.admissionRejected(reason);
             chatService.recordFailure(request, requester,
                     terminalMessage(status, failure), failureClass(failure));
@@ -537,8 +537,8 @@ public class AiChatController {
                 command.conversationId(), command.expectedGeneration(), requester);
         if (response.acknowledged()) {
             elicitations.cancelRequest(command.requestId());
-            if (mutationApprovals != null) {
-                mutationApprovals.cancelRequest(command.requestId());
+            if (changeApprovals != null) {
+                changeApprovals.cancelRequest(command.requestId());
             }
         }
         AiChatSocketEvent event = "CANCELLING".equals(response.status())
@@ -580,24 +580,24 @@ public class AiChatController {
         }
     }
 
-    @MessageMapping("/ai/chat/mutation-approval")
-    public void decideMutationApproval(AiMutationApprovalDecisionRequest command,
+    @MessageMapping("/ai/chat/change-approval")
+    public void decideChangeApproval(AiChangeApprovalDecisionRequest command,
                                        Principal principal,
                                        SimpMessageHeaderAccessor headers) {
         ScoreUser requester = webSocketUsers.resolve(principal, headers.getSessionAttributes());
-        if (mutationApprovals == null) {
-            throw new IllegalStateException("Mutation approval coordination is not available.");
+        if (changeApprovals == null) {
+            throw new IllegalStateException("Change approval coordination is not available.");
         }
         try {
-            AiMutationApprovalCoordinator.DecisionAcknowledgement replay =
-                    mutationApprovals.decide(requester, command);
+            AiChangeApprovalCoordinator.DecisionAcknowledgement replay =
+                    changeApprovals.decide(requester, command);
             if (replay != null) {
                 long approved = replay.approved();
                 long denied = replay.denied();
                 send(requester, queue(command.requestId()), AiChatSocketEvent.system(
                         command.requestId(), command.conversationId(), null,
-                        "mutation_approval_decision_accepted",
-                        "Approved " + approved + " action" + (approved == 1 ? "" : "s")
+                        "change_approval_decision_accepted",
+                        "Approved " + approved + " change" + (approved == 1 ? "" : "s")
                                 + " and denied " + denied
                                 + ". Continuing the active request.",
                         Map.of("batchId", replay.batchId(), "replayed", true)));
@@ -610,7 +610,7 @@ public class AiChatController {
             }
             send(requester, queue(command.requestId()), AiChatSocketEvent.system(
                     command.requestId(), command.conversationId(), null,
-                    "mutation_approval_decision_rejected",
+                    "change_approval_decision_rejected",
                     "The assistant could not accept that approval decision. Please try again.",
                     Map.of("batchId", command.batchId())));
         }
@@ -625,7 +625,7 @@ public class AiChatController {
                 ? request.requestId() : UUID.randomUUID().toString();
         ChatRequest correlated = new ChatRequest(request.prompt(), requestId, request.agent(),
                 request.conversationId(), request.pageContext(), request.attachments(),
-                request.mutationConfirmation(), request.modelName(), request.reasoningEffort(),
+                request.changeConfirmation(), request.modelName(), request.reasoningEffort(),
                 request.permissionMode(), request.multiAgent(), request.activeWorkflow(),
                 request.routeManifest());
         Instant deadline = Instant.now().plus(requestInactivityTimeout);
@@ -652,9 +652,9 @@ public class AiChatController {
         }
     }
 
-    private void clearMutationApprovalState(String requestId) {
-        if (mutationApprovals != null) {
-            mutationApprovals.cancelRequest(requestId);
+    private void clearChangeApprovalState(String requestId) {
+        if (changeApprovals != null) {
+            changeApprovals.cancelRequest(requestId);
         }
     }
 
@@ -830,12 +830,12 @@ public class AiChatController {
                     event.metadata());
         }
         if ("detail".equals(event.type())) {
-            if ("mutation_approval_batch_required".equals(event.subtype())) {
+            if ("change_approval_batch_required".equals(event.subtype())) {
                 return AiChatSocketEvent.system(request.requestId(), request.conversationId(), sequence,
                         event.subtype(), event.content(), event.metadata());
             }
-            if ("mutation_confirmation_required".equals(event.subtype())) {
-                return AiChatSocketEvent.mutationConfirmationRequired(request.requestId(),
+            if ("change_confirmation_required".equals(event.subtype())) {
+                return AiChatSocketEvent.changeConfirmationRequired(request.requestId(),
                         request.conversationId(), sequence, event.content(), event.metadata());
             }
             if ("elicitation_required".equals(event.subtype())) {
@@ -862,9 +862,9 @@ public class AiChatController {
 
     private static boolean isRestResponseEvent(AiExecutionEvent event) {
         return "tool_call".equals(event.type()) || "detail".equals(event.type())
-                && ("mutation_confirmation_required".equals(event.subtype())
-                || "mutation_approval_batch_required".equals(event.subtype())
-                || "mutation_approval_decision_accepted".equals(event.subtype())
+                && ("change_confirmation_required".equals(event.subtype())
+                || "change_approval_batch_required".equals(event.subtype())
+                || "change_approval_decision_accepted".equals(event.subtype())
                 || "elicitation_required".equals(event.subtype())
                 || "context_usage".equals(event.subtype())
                 || "context_compacted".equals(event.subtype())
@@ -878,8 +878,8 @@ public class AiChatController {
     private static boolean isRestLiveEvent(AiExecutionEvent event) {
         return "tool_call".equals(event.type())
                 || "guide".equals(event.subtype())
-                || "mutation_approval_batch_required".equals(event.subtype())
-                || "mutation_approval_decision_accepted".equals(event.subtype())
+                || "change_approval_batch_required".equals(event.subtype())
+                || "change_approval_decision_accepted".equals(event.subtype())
                 || "elicitation_required".equals(event.subtype())
                 || "provider_error".equals(event.subtype())
                 || "provider_retry".equals(event.subtype())

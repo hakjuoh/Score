@@ -7,7 +7,7 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiA
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationDetails;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatAttachment;
-import org.oagi.score.gateway.http.api.ai_management.controller.payload.MutationConfirmation;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChangeConfirmation;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
@@ -874,7 +874,7 @@ class ChatServiceTest {
     }
 
     @Test
-    void rejectsUnknownMutationPermissionModes() {
+    void rejectsUnknownChangePermissionModes() {
         ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
         when(models.isAvailable()).thenReturn(true);
         ChatService service = service(models, identity(), null,
@@ -893,7 +893,7 @@ class ChatServiceTest {
         when(models.isAvailable()).thenReturn(true);
         ChatService service = service(models, identity(), null,
                 mock(ChatMemory.class), mock(AiChatConversationRepository.class), new ObjectMapper());
-        MutationConfirmation revision = new MutationConfirmation(
+        ChangeConfirmation revision = new ChangeConfirmation(
                 "confirmation-1", "grant", "create_business_context", null,
                 "REVISED", "Use the name Approved");
         ChatRequest request = new ChatRequest(
@@ -902,16 +902,16 @@ class ChatServiceTest {
 
         assertThatThrownBy(() -> service.prepare(request, mock(ScoreUser.class)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Approved mutation tool details are invalid.");
+                .hasMessage("Approved change tool details are invalid.");
     }
 
     @Test
-    void rejectsUnknownMutationApprovalModes() {
+    void rejectsUnknownChangeApprovalModes() {
         ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
         when(models.isAvailable()).thenReturn(true);
         ChatService service = service(models, identity(), null,
                 mock(ChatMemory.class), mock(AiChatConversationRepository.class), new ObjectMapper());
-        MutationConfirmation invalid = new MutationConfirmation(
+        ChangeConfirmation invalid = new ChangeConfirmation(
                 "confirmation-1", "grant", "create_business_context",
                 "{\"name\":\"Example\"}", "UNBOUNDED", null);
         ChatRequest request = new ChatRequest(
@@ -920,11 +920,11 @@ class ChatServiceTest {
 
         assertThatThrownBy(() -> service.prepare(request, mock(ScoreUser.class)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Approved mutation tool details are invalid.");
+                .hasMessage("Approved change tool details are invalid.");
     }
 
     @Test
-    void forcesApprovedMutationContinuationsToSingleAgentOnTheServer() {
+    void forcesApprovedChangeContinuationsToSingleAgentOnTheServer() {
         ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
         when(models.isAvailable()).thenReturn(true);
         when(models.resolveModelName("model")).thenReturn("model");
@@ -934,7 +934,7 @@ class ChatServiceTest {
         when(repository.open(eq(null), eq("Execute it"))).thenReturn("conversation-1");
         ChatService service = service(models, identity(), null,
                 mock(ChatMemory.class), repository, new ObjectMapper());
-        MutationConfirmation confirmation = new MutationConfirmation(
+        ChangeConfirmation confirmation = new ChangeConfirmation(
                 "confirmation-1", "grant", "create_business_context", "{}");
         ChatRequest request = new ChatRequest("Execute it", "request-1", null, null,
                 null, List.of(), confirmation, "model", "high", "ask",

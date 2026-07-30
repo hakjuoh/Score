@@ -11,8 +11,8 @@ import {
   AiChatMessage,
   AiContextUsage,
   AiElicitationNotice,
-  AiMutationApprovalBatchNotice,
-  AiMutationPermissionMode,
+  AiChangeApprovalBatchNotice,
+  AiChangePermissionMode,
   AiChatPanelTab,
   normalizeAiReasoningEffort
 } from './ai-chat-panel.model';
@@ -40,9 +40,9 @@ export class AiChatPanelState {
   modelSettingsOpen = false;
   modelDraftName = '';
   modelDraftReasoningEffort = '';
-  permissionMode: AiMutationPermissionMode = 'ask';
+  permissionMode: AiChangePermissionMode = 'ask';
   permissionSettingsOpen = false;
-  permissionDraft: AiMutationPermissionMode = 'ask';
+  permissionDraft: AiChangePermissionMode = 'ask';
   /** Persistent per-conversation workflow preference; empty means automatic selection. */
   activeWorkflow = '';
   agentActivities: AiAgentActivity[] = [];
@@ -51,9 +51,9 @@ export class AiChatPanelState {
   agentFocusHistory: string[] = [];
   elicitation?: AiElicitationNotice;
   elicitationBusy = false;
-  mutationApprovalBatch?: AiMutationApprovalBatchNotice;
-  mutationApprovalBatchQueue: AiMutationApprovalBatchNotice[] = [];
-  mutationApprovalBatchBusy = false;
+  changeApprovalBatch?: AiChangeApprovalBatchNotice;
+  changeApprovalBatchQueue: AiChangeApprovalBatchNotice[] = [];
+  changeApprovalBatchBusy = false;
   modelChangePending = false;
   contextUsage?: AiContextUsage;
   currentStatus = 'Ready';
@@ -90,9 +90,9 @@ export class AiChatPanelState {
     this.resetAgentActivity();
     this.elicitation = undefined;
     this.elicitationBusy = false;
-    this.mutationApprovalBatch = undefined;
-    this.mutationApprovalBatchQueue = [];
-    this.mutationApprovalBatchBusy = false;
+    this.changeApprovalBatch = undefined;
+    this.changeApprovalBatchQueue = [];
+    this.changeApprovalBatchBusy = false;
     this.modelChangePending = false;
     this.contextUsage = undefined;
     this.currentStatus = 'Ready';
@@ -222,9 +222,9 @@ export class AiChatPanelState {
     this.resetAgentActivity();
     this.elicitation = undefined;
     this.elicitationBusy = false;
-    this.mutationApprovalBatch = undefined;
-    this.mutationApprovalBatchQueue = [];
-    this.mutationApprovalBatchBusy = false;
+    this.changeApprovalBatch = undefined;
+    this.changeApprovalBatchQueue = [];
+    this.changeApprovalBatchBusy = false;
     this.modelChangePending = false;
     this.contextUsage = undefined;
     this.activePanelTab = activePanelTab;

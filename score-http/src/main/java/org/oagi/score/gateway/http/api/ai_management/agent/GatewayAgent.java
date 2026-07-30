@@ -55,7 +55,7 @@ public final class GatewayAgent implements Agent {
     }
 
     private AgentRunRequest prepare(Agent agent, AgentWorkflowContext context) {
-        if (context.request().mutationConfirmation()
+        if (context.request().changeConfirmation()
                 || !enabled()
                 || context.request().hasAttachments()
                 || context.request().prompt().length() > configuration.getMaximumInputCharacters()) {

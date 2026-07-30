@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Objects;
 
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_CONVERSATION;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_MUTATION_CONFIRMATION;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_CHANGE_CONFIRMATION;
 
 /** Unscoped scheduled maintenance for AI chat persistence. */
 public class JooqAiChatMaintenanceRepository extends JooqBaseRepository
@@ -45,14 +45,14 @@ public class JooqAiChatMaintenanceRepository extends JooqBaseRepository
     }
 
     @Override
-    public int expireMutationConfirmations(Instant now) {
-        return dslContext().update(AI_CHAT_MUTATION_CONFIRMATION)
-                .set(AI_CHAT_MUTATION_CONFIRMATION.STATUS, "EXPIRED")
-                .set(AI_CHAT_MUTATION_CONFIRMATION.EXPIRED_AT,
-                        AI_CHAT_MUTATION_CONFIRMATION.EXPIRES_AT)
-                .setNull(AI_CHAT_MUTATION_CONFIRMATION.GRANT_DIGEST)
-                .where(AI_CHAT_MUTATION_CONFIRMATION.STATUS.in("REQUESTED", "APPROVED")
-                        .and(AI_CHAT_MUTATION_CONFIRMATION.EXPIRES_AT.le(localDateTime(now))))
+    public int expireChangeConfirmations(Instant now) {
+        return dslContext().update(AI_CHAT_CHANGE_CONFIRMATION)
+                .set(AI_CHAT_CHANGE_CONFIRMATION.STATUS, "EXPIRED")
+                .set(AI_CHAT_CHANGE_CONFIRMATION.EXPIRED_AT,
+                        AI_CHAT_CHANGE_CONFIRMATION.EXPIRES_AT)
+                .setNull(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST)
+                .where(AI_CHAT_CHANGE_CONFIRMATION.STATUS.in("REQUESTED", "APPROVED")
+                        .and(AI_CHAT_CHANGE_CONFIRMATION.EXPIRES_AT.le(localDateTime(now))))
                 .execute();
     }
 

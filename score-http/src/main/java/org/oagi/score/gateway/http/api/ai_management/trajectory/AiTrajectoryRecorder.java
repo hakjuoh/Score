@@ -19,15 +19,15 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
 import org.oagi.score.gateway.http.api.ai_management.model.AiElicitationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMetricsSnapshot;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalBatchNotice;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationNotice;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalBatchNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiObservationAccumulator;
-import org.oagi.score.gateway.http.api.ai_management.model.AiPendingMutationApproval;
+import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApproval;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingTool;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
-import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeToolGuard;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiToolFailureMessage;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiToolRetryMessage;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiToolRetryTracker;
@@ -117,7 +117,7 @@ public final class AiTrajectoryRecorder {
     private volatile long mcpServerPort = -1;
     private volatile String mcpNetworkProtocolName;
     private volatile String mcpNetworkTransport;
-    private final AtomicLong executedMutationToolCalls = new AtomicLong();
+    private final AtomicLong executedChangeToolCalls = new AtomicLong();
     private volatile Set<String> readOnlyToolNames = Set.of();
     private volatile boolean sealed;
     private volatile boolean usageAccountingSealed;
@@ -564,12 +564,12 @@ public final class AiTrajectoryRecorder {
         }
     }
 
-    public synchronized void mutationConfirmationRequired(AiMutationConfirmationNotice notice) {
+    public synchronized void changeConfirmationRequired(AiChangeConfirmationNotice notice) {
         if (sealed || notice == null) {
             return;
         }
-        emit(AiExecutionEvent.detail("mutation_confirmation_required",
-                "A data-changing action requires explicit approval.", Map.of(
+        emit(AiExecutionEvent.detail("change_confirmation_required",
+                "A change requires explicit approval.", Map.of(
                         "confirmationRequestId", notice.confirmationRequestId(),
                         "status", notice.status(),
                         "expiresAt", notice.expiresAt().toString(),
@@ -578,7 +578,7 @@ public final class AiTrajectoryRecorder {
     }
 
     /** Emits one root-facing interaction for all approvals at the current execution barrier. */
-    public synchronized void mutationApprovalBatchRequired(AiMutationApprovalBatchNotice notice) {
+    public synchronized void changeApprovalBatchRequired(AiChangeApprovalBatchNotice notice) {
         if (sealed || notice == null) {
             return;
         }
@@ -593,10 +593,10 @@ public final class AiTrajectoryRecorder {
                     return Map.copyOf(metadata);
                 })
                 .toList();
-        emit(AiExecutionEvent.detail("mutation_approval_batch_required",
+        emit(AiExecutionEvent.detail("change_approval_batch_required",
                 items.size() == 1
-                        ? "A data-changing action requires explicit approval."
-                        : items.size() + " data-changing actions require explicit approval.",
+                        ? "A change requires explicit approval."
+                        : items.size() + " changes require explicit approval.",
                 Map.of("batchId", notice.batchId(),
                         "expiresAt", notice.expiresAt().toString(),
                         "parallel", notice.parallel(),
@@ -604,15 +604,15 @@ public final class AiTrajectoryRecorder {
     }
 
     /** Emits the committed user decision before any retained worker can resume. */
-    public synchronized void mutationApprovalDecisionAccepted(
-            AiMutationApprovalCoordinator.DecisionAcknowledgement acknowledgement) {
+    public synchronized void changeApprovalDecisionAccepted(
+            AiChangeApprovalCoordinator.DecisionAcknowledgement acknowledgement) {
         if (sealed || acknowledgement == null) {
             return;
         }
         long approved = acknowledgement.approved();
         long denied = acknowledgement.denied();
-        emit(AiExecutionEvent.detail("mutation_approval_decision_accepted",
-                "Approved " + approved + " action" + (approved == 1 ? "" : "s")
+        emit(AiExecutionEvent.detail("change_approval_decision_accepted",
+                "Approved " + approved + " change" + (approved == 1 ? "" : "s")
                         + " and denied " + denied + ". Continuing the active request.",
                 Map.of("batchId", acknowledgement.batchId(),
                         "approved", approved, "denied", denied)));
@@ -779,7 +779,7 @@ public final class AiTrajectoryRecorder {
     }
 
     /** Removes the exact intercepted approvals from request-wide evaluator evidence. */
-    public void mutationApprovalsResolved(List<AiPendingMutationApproval> approvals) {
+    public void changeApprovalsResolved(List<AiPendingChangeApproval> approvals) {
         if (approvals == null || approvals.isEmpty()) {
             return;
         }
@@ -795,8 +795,8 @@ public final class AiTrajectoryRecorder {
      * A model attempt whose count moved must never be replayed by the provider
      * retry loop: re-running it could repeat the data change.
      */
-    public long executedMutationToolCallCount() {
-        return executedMutationToolCalls.get();
+    public long executedChangeToolCallCount() {
+        return executedChangeToolCalls.get();
     }
 
     /**
@@ -1092,7 +1092,7 @@ public final class AiTrajectoryRecorder {
         if (("completed".equals(status) || "failed".equals(status))
                 && !"toolSearchTool".equals(pending.name())
                 && !readOnlyToolNames.contains(pending.name())) {
-            executedMutationToolCalls.incrementAndGet();
+            executedChangeToolCalls.incrementAndGet();
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("source_call_id", pending.id());
@@ -1145,7 +1145,7 @@ public final class AiTrajectoryRecorder {
                 pending.id(), pending.name(), pending.sequence(), Map.copyOf(eventMetadata)));
     }
 
-    /** Returns the stable confirmation identity embedded by the mutation guard. */
+    /** Returns the stable confirmation identity embedded by the change guard. */
     private String pendingApprovalIdentity(String output, AiPendingTool pending) {
         if (!StringUtils.hasText(output)) {
             return null;
@@ -1154,7 +1154,7 @@ public final class AiTrajectoryRecorder {
             var root = objectMapper.readTree(output);
             var error = root != null && root.isObject() ? root.get("error") : null;
             if (error == null || !error.isTextual()
-                    || !AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED.equals(
+                    || !AiChangeToolGuard.CHANGE_CONFIRMATION_REQUIRED.equals(
                     error.textValue())) {
                 return null;
             }
@@ -1174,12 +1174,12 @@ public final class AiTrajectoryRecorder {
 
     /** The guard declines new data changes while the user is stopping the request. */
     private boolean stoppedBeforeExecution(String output) {
-        return hasTopLevelError(output, AiMutationToolGuard.REQUEST_STOPPING);
+        return hasTopLevelError(output, AiChangeToolGuard.REQUEST_STOPPING);
     }
 
-    /** The guard returns a stable cached result when an exact mutation was denied. */
+    /** The guard returns a stable cached result when an exact change was denied. */
     private boolean deniedBeforeExecution(String output) {
-        return hasTopLevelError(output, AiMutationToolGuard.MUTATION_CONFIRMATION_DENIED);
+        return hasTopLevelError(output, AiChangeToolGuard.CHANGE_CONFIRMATION_DENIED);
     }
 
     private boolean hasTopLevelError(String output, String expected) {

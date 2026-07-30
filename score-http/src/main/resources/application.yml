@@ -447,7 +447,7 @@ score:
     model-name: claude-opus-5
     request-inactivity-timeout: ${SCORE_AI_REQUEST_INACTIVITY_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
     elicitation-timeout: ${SCORE_AI_ELICITATION_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
-    mutation-approval-timeout: ${SCORE_AI_MUTATION_APPROVAL_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
+    change-approval-timeout: ${SCORE_AI_CHANGE_APPROVAL_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
     assistant:
       # For Docker, mount a file and set this to e.g. file:/config/system-prompt-connect-center-assistant.md.
       system-prompt-resource: ${SCORE_AI_ASSISTANT_SYSTEM_PROMPT_RESOURCE:classpath:ai/system/system-prompt-connect-center-assistant.md}
@@ -456,30 +456,30 @@ score:
       retention: ${SCORE_AI_CONVERSATION_RETENTION:90d}
       cleanup-interval: ${SCORE_AI_CONVERSATION_CLEANUP_INTERVAL:24h}
     tools:
-      artifacts:
-        enabled: ${SCORE_AI_ARTIFACTS_ENABLED:true}
-        retention: ${SCORE_AI_ARTIFACT_RETENTION:7d}
-        max-bytes: ${SCORE_AI_ARTIFACT_MAX_BYTES:20MB}
+      files:
+        enabled: ${SCORE_AI_FILES_ENABLED:true}
+        retention: ${SCORE_AI_FILE_RETENTION:7d}
+        max-bytes: ${SCORE_AI_FILE_MAX_BYTES:20MB}
         storage:
-          provider: ${SCORE_AI_ARTIFACT_STORAGE_PROVIDER:local}
+          provider: ${SCORE_AI_FILE_STORAGE_PROVIDER:local}
           local:
-            root-directory: ${SCORE_AI_ARTIFACT_LOCAL_ROOT:./data/ai-artifacts}
+            root-directory: ${SCORE_AI_FILE_LOCAL_ROOT:./data/ai-files}
           s3:
-            bucket: ${SCORE_AI_ARTIFACT_S3_BUCKET:}
-            prefix: ${SCORE_AI_ARTIFACT_S3_PREFIX:ai-artifacts}
-            region: ${SCORE_AI_ARTIFACT_S3_REGION:us-east-1}
-            endpoint: ${SCORE_AI_ARTIFACT_S3_ENDPOINT:}
-            access-key: ${SCORE_AI_ARTIFACT_S3_ACCESS_KEY:}
-            secret-key: ${SCORE_AI_ARTIFACT_S3_SECRET_KEY:}
-            path-style-access: ${SCORE_AI_ARTIFACT_S3_PATH_STYLE:false}
+            bucket: ${SCORE_AI_FILE_S3_BUCKET:}
+            prefix: ${SCORE_AI_FILE_S3_PREFIX:ai-files}
+            region: ${SCORE_AI_FILE_S3_REGION:us-east-1}
+            endpoint: ${SCORE_AI_FILE_S3_ENDPOINT:}
+            access-key: ${SCORE_AI_FILE_S3_ACCESS_KEY:}
+            secret-key: ${SCORE_AI_FILE_S3_SECRET_KEY:}
+            path-style-access: ${SCORE_AI_FILE_S3_PATH_STYLE:false}
           google-drive:
-            access-token: ${SCORE_AI_ARTIFACT_GOOGLE_DRIVE_ACCESS_TOKEN:}
-            folder-id: ${SCORE_AI_ARTIFACT_GOOGLE_DRIVE_FOLDER_ID:}
-            api-base-url: ${SCORE_AI_ARTIFACT_GOOGLE_DRIVE_API_BASE_URL:https://www.googleapis.com}
+            access-token: ${SCORE_AI_FILE_GOOGLE_DRIVE_ACCESS_TOKEN:}
+            folder-id: ${SCORE_AI_FILE_GOOGLE_DRIVE_FOLDER_ID:}
+            api-base-url: ${SCORE_AI_FILE_GOOGLE_DRIVE_API_BASE_URL:https://www.googleapis.com}
         rendering:
-          asset-base-uri: ${SCORE_AI_ARTIFACT_ASSET_BASE_URI:}
-          font-files: ${SCORE_AI_ARTIFACT_FONT_FILES:}
-          max-external-asset-bytes: ${SCORE_AI_ARTIFACT_MAX_EXTERNAL_ASSET_BYTES:5MB}
+          asset-base-uri: ${SCORE_AI_FILE_ASSET_BASE_URI:}
+          font-files: ${SCORE_AI_FILE_FONT_FILES:}
+          max-external-asset-bytes: ${SCORE_AI_FILE_MAX_EXTERNAL_ASSET_BYTES:5MB}
       connect-center-mcp:
         connection-name: connect-center-mcp
     middleware:

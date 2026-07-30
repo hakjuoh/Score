@@ -19,11 +19,11 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyId
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValueManifest;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatArtifact;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatArtifactObject;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatFile;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatFileObject;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMutationConfirmation;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatChangeConfirmation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatStep;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppOauth2User;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser;
@@ -229,15 +229,15 @@ public class Oagi extends SchemaImpl {
     public final AgencyIdListValueManifest AGENCY_ID_LIST_VALUE_MANIFEST = AgencyIdListValueManifest.AGENCY_ID_LIST_VALUE_MANIFEST;
 
     /**
-     * Generated Assistant artifact metadata and provider location history.
+     * Generated Assistant file metadata and provider location history.
      */
-    public final AiChatArtifact AI_CHAT_ARTIFACT = AiChatArtifact.AI_CHAT_ARTIFACT;
+    public final AiChatFile AI_CHAT_FILE = AiChatFile.AI_CHAT_FILE;
 
     /**
-     * Binary objects used only when score.ai.tools.artifacts.storage.provider
+     * Binary objects used only when score.ai.tools.files.storage.provider
      * is db.
      */
-    public final AiChatArtifactObject AI_CHAT_ARTIFACT_OBJECT = AiChatArtifactObject.AI_CHAT_ARTIFACT_OBJECT;
+    public final AiChatFileObject AI_CHAT_FILE_OBJECT = AiChatFileObject.AI_CHAT_FILE_OBJECT;
 
     /**
      * User-owned AI chat conversation metadata.
@@ -250,9 +250,9 @@ public class Oagi extends SchemaImpl {
     public final AiChatMemory AI_CHAT_MEMORY = AiChatMemory.AI_CHAT_MEMORY;
 
     /**
-     * One-time server-authoritative grants for AI mutation tool calls.
+     * One-time server-authoritative grants for AI change tool calls.
      */
-    public final AiChatMutationConfirmation AI_CHAT_MUTATION_CONFIRMATION = AiChatMutationConfirmation.AI_CHAT_MUTATION_CONFIRMATION;
+    public final AiChatChangeConfirmation AI_CHAT_CHANGE_CONFIRMATION = AiChatChangeConfirmation.AI_CHAT_CHANGE_CONFIRMATION;
 
     /**
      * Complete connectCenter assistant trajectory in ATIF-reconstructable
@@ -1125,11 +1125,11 @@ public class Oagi extends SchemaImpl {
             AgencyIdListManifest.AGENCY_ID_LIST_MANIFEST,
             AgencyIdListValue.AGENCY_ID_LIST_VALUE,
             AgencyIdListValueManifest.AGENCY_ID_LIST_VALUE_MANIFEST,
-            AiChatArtifact.AI_CHAT_ARTIFACT,
-            AiChatArtifactObject.AI_CHAT_ARTIFACT_OBJECT,
+            AiChatFile.AI_CHAT_FILE,
+            AiChatFileObject.AI_CHAT_FILE_OBJECT,
             AiChatConversation.AI_CHAT_CONVERSATION,
             AiChatMemory.AI_CHAT_MEMORY,
-            AiChatMutationConfirmation.AI_CHAT_MUTATION_CONFIRMATION,
+            AiChatChangeConfirmation.AI_CHAT_CHANGE_CONFIRMATION,
             AiChatStep.AI_CHAT_STEP,
             AppOauth2User.APP_OAUTH2_USER,
             AppUser.APP_USER,

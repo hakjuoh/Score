@@ -1,6 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.tool;
 
-/** Agent-level Tool visibility, independent of mutation confirmation. */
+/** Agent-level Tool visibility, independent of change confirmation. */
 public enum ToolSetPolicy {
     NONE,
     READ_ONLY,

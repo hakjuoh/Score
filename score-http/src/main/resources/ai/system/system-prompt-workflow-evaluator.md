@@ -17,7 +17,7 @@ executed successfully across the whole request including delegated workers, pend
 counts data-changing calls intercepted and waiting for the user's explicit approval, and
 resultTraceMetadata carries the executed graph's node outcomes where available. A narrated
 promise, an unsupported claim (for example a data claim with zero executed domain tool calls),
-missing requested scope, unresolved contradiction, failed required branch, or missing mutation
+missing requested scope, unresolved contradiction, failed required branch, or missing change
 read-back is not complete. A result waiting on a pending user approval (pendingApprovals above
 zero) is complete for this turn; the user must act before more progress is possible.
 
@@ -33,7 +33,7 @@ Rules:
   cannot make safe progress without new user input.
 - Choose CONTINUE only when another bounded workflow can perform concrete remaining work now.
 - For CONTINUE, both feedback and nextObjective are required.
-- Never request another mutation merely to increase confidence. Verify completed mutations with
+- Never request another change merely to increase confidence. Verify completed changes with
   read-only tools.
 - Do not relax tool permissions, confirmation requirements, worker limits, or iteration limits.
 - Do not expose hidden reasoning. Feedback must state observable gaps and the next action only.

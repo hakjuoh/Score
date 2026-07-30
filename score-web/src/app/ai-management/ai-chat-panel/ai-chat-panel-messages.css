@@ -176,7 +176,7 @@
   line-height: 18px;
 }
 
-.message-artifacts {
+.message-files {
   display: grid;
   grid-column: 2 / -1;
   gap: 6px;
@@ -185,7 +185,7 @@
   justify-items: start;
 }
 
-.message-artifact {
+.message-file {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -200,31 +200,31 @@
   background: rgba(245, 247, 249, 0.78);
 }
 
-.message-artifact:hover,
-.message-artifact:focus-visible {
+.message-file:hover,
+.message-file:focus-visible {
   border-color: #3978b8;
   background: #edf5fc;
   outline: none;
 }
 
-.message-artifact mat-icon {
+.message-file mat-icon {
   flex: 0 0 auto;
   color: #3978b8;
 }
 
-.message-artifact-details {
+.message-file-details {
   display: grid;
   min-width: 0;
 }
 
-.message-artifact-name {
+.message-file-name {
   overflow: hidden;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.message-artifact-meta {
+.message-file-meta {
   color: #66717d;
   font-size: 11px;
 }

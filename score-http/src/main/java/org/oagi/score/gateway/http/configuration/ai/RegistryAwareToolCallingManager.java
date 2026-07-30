@@ -19,7 +19,7 @@ import java.util.Map;
  * to the model by tool search.
  *
  * <p>A model can legitimately call an exact tool name that is already present in the
- * conversation (for example, an approved mutation or an explicit read-back request).
+ * conversation (for example, an approved change or an explicit read-back request).
  * Spring AI's tool-search advisor otherwise resolves that call only against the tools
  * selected by a preceding search iteration. This manager falls back to the full,
  * request-scoped callback registry without exposing every tool definition to the model.</p>

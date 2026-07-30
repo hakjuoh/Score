@@ -21,7 +21,7 @@ class AiModularArchitectureTest {
 
     private static final Set<String> COMPATIBILITY_ADAPTERS = Set.of(
             "org.oagi.score.gateway.http.api.ai_management.conversation.AiChatRetentionService",
-            "org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard",
+            "org.oagi.score.gateway.http.api.ai_management.tool.AiChangeToolGuard",
             "org.oagi.score.gateway.http.api.ai_management.tool.AiToolFailureMessage",
             "org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowIntent");
 

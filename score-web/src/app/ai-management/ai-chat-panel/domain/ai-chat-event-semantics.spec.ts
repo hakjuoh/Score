@@ -34,7 +34,7 @@ describe('AI chat event semantics', () => {
         terminal: false,
         recoverable: true,
         retryable: true,
-        mutationSafe: true
+        changeSafe: true
       }
     });
 
@@ -49,7 +49,7 @@ describe('AI chat event semantics', () => {
       status: 'failed',
       recoverable: true,
       retryable: true,
-      mutationSafe: true
+      changeSafe: true
     });
   });
 
@@ -78,7 +78,7 @@ describe('AI chat event semantics', () => {
     }));
   });
 
-  it('classifies a denied mutation retry as terminal and non-executed', () => {
+  it('classifies a denied change retry as terminal and non-executed', () => {
     expect(toolCallEventSemantics({
       requestId: 'request-1', type: 'tool_call', subtype: 'denied',
       groupId: 'mcp', toolCallId: 'call-1',

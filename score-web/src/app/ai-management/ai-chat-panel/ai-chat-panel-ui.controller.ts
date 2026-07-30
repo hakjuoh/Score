@@ -64,11 +64,11 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     this.destroyed = true;
     this.destroyed$.next();
     this.destroyed$.complete();
-    this.clearMutationRepeatDraft();
-    this.mutationInteractions.destroy(this.state);
+    this.clearChangeRepeatDraft();
+    this.changeInteractions.destroy(this.state);
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.clearMutationApprovalBatch();
+    this.clearChangeApprovalBatch();
     this.invalidateAttachmentReads();
     this.requestSubscription?.unsubscribe();
     this.conversationHistorySubscription?.unsubscribe();
@@ -118,7 +118,7 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
   openPopout(event?: Event): void {
     event?.stopPropagation();
     if (this.popoutMode || this.state.popoutActive) return;
-    if (this.state.pending || this.mutationDecisionOpen || this.mutationDecisionInFlight
+    if (this.state.pending || this.changeDecisionOpen || this.changeDecisionInFlight
       || !!this.state.elicitation) {
       this.snackBar.open(
         'Finish the active assistant interaction before opening a separate window.',
@@ -202,8 +202,8 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
         this.handleLocalCommand(commandDecision.command, prompt);
         return;
       }
-      if (commandDecision.kind !== 'local' && this.canRequestMutationChange()) {
-        this.sendMutationChangeRequest(prompt, attachments);
+      if (commandDecision.kind !== 'local' && this.canRequestChangeRevision()) {
+        this.sendChangeRevisionRequest(prompt, attachments);
         return;
       }
       if (this.interactionBlocked) {
@@ -215,7 +215,7 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
       }
     }
 
-    if (this.canRequestMutationChange()) {
+    if (this.canRequestChangeRevision()) {
       this.snackBar.open('Describe the change to approve in Chat.', 'Dismiss', {duration: 3000});
       return;
     }
@@ -389,9 +389,9 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
 
   startNewChat(event?: Event, activePanelTab: AiChatPanelTab = 'chat'): void {
     event?.stopPropagation();
-    if (this.mutationDecisionOpen || this.mutationDecisionInFlight) {
+    if (this.changeDecisionOpen || this.changeDecisionInFlight) {
       this.snackBar.open(
-        'Finish the action approval decision before starting another chat.',
+        'Finish the change approval decision before starting another chat.',
         'Dismiss', {duration: 3500}
       );
       return;
@@ -414,7 +414,7 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     this.clearCompletedPayloadRecovery();
     this.invalidateAttachmentReads();
     this.invalidateDraftAttachmentRestore();
-    this.clearMutationRepeatDraft();
+    this.clearChangeRepeatDraft();
     this.cancellationService.reset();
     this.clearTimers();
     this.cancelConversationRestore();

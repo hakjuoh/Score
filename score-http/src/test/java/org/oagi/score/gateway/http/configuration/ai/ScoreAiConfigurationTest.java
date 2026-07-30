@@ -6,7 +6,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AssistantAgent;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiTool;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeToolGuard;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.toolsearch.ToolIndex;
@@ -55,7 +55,7 @@ class ScoreAiConfigurationTest {
                 .orElseThrow(() -> new IllegalStateException("MCP client configuration was not bound"));
 
         assertThat(properties.getModels()).hasSize(7).containsKey("claude-opus-5");
-        assertThat(properties.getTools().getArtifacts().getStorage().getProvider()).isEqualTo("local");
+        assertThat(properties.getTools().getFiles().getStorage().getProvider()).isEqualTo("local");
         assertThat(properties.getTools().getConnectCenterMcp().getConnectionName())
                 .isEqualTo("connect-center-mcp");
         assertThat(mcpProperties.connection("connect-center-mcp").getUrl()).isEmpty();
@@ -126,7 +126,7 @@ class ScoreAiConfigurationTest {
                 "score.ai.middleware.profiles.compactor[0]", "secret-redactor",
                 "score.ai.middleware.policies.secret-redactor.mode", "shadow",
                 "score.ai.middleware.policies.secret-redactor.purposes[0]", "user-response",
-                "score.ai.middleware.policies.secret-redactor.tool-effects[0]", "mutation",
+                "score.ai.middleware.policies.secret-redactor.tool-effects[0]", "change",
                 "score.ai.middleware.policies.secret-redactor.settings.strategy", "redact")));
 
         ScoreAiProperties properties = Binder.get(environment)
@@ -141,7 +141,7 @@ class ScoreAiConfigurationTest {
                 .getPolicies().get("secret-redactor");
         assertThat(policy.getMode()).isEqualTo(ScoreAiProperties.MiddlewareMode.SHADOW);
         assertThat(policy.getPurposes()).containsExactly(ExecutionScope.Purpose.USER_RESPONSE);
-        assertThat(policy.getToolEffects()).containsExactly(AiTool.ToolEffect.MUTATION);
+        assertThat(policy.getToolEffects()).containsExactly(AiTool.ToolEffect.CHANGE);
         assertThat(policy.getSettings()).containsEntry("strategy", "redact");
     }
 
@@ -160,8 +160,8 @@ class ScoreAiConfigurationTest {
         for (Resource resource : prompts) {
             String text = resource.getContentAsString(StandardCharsets.UTF_8);
             assertThat(text).as(resource.getDescription())
-                    .doesNotContain(AiMutationToolGuard.MUTATION_CONFIRMATION_REQUIRED,
-                            AiMutationToolGuard.REQUEST_STOPPING);
+                    .doesNotContain(AiChangeToolGuard.CHANGE_CONFIRMATION_REQUIRED,
+                            AiChangeToolGuard.REQUEST_STOPPING);
         }
         String assistant = new ClassPathResource(
                 "ai/system/system-prompt-connect-center-assistant.md")
@@ -170,9 +170,9 @@ class ScoreAiConfigurationTest {
                 .contains("## Input", "Input interpretation rules:",
                         "## Output", "Workflow execution rules:", "Tool-use rules:",
                         "Capability disclosure rules:",
-                        "Evidence and identity rules:", "Mutation and interruption rules:",
+                        "Evidence and identity rules:", "Change and interruption rules:",
                         "Safety rules:", "separate request-scoped user-context block",
-                        "${mutationConfirmationRequired}", "${mutationApprovalPolicy}",
+                        "${changeConfirmationRequired}", "${changeApprovalPolicy}",
                         "${requestStopping}", "Never retry silently",
                         "Never announce or imply that approval is required before making a tool call");
         assertThat(assistant).doesNotContain("${pageContext}", "## Request-scoped input");
@@ -320,10 +320,10 @@ class ScoreAiConfigurationTest {
                 properties.getAssistant().getSystemPromptResource());
         assertEquals(Duration.ofMinutes(2),
                 properties.getMultiAgent().getSpecialistInactivityTimeout());
-        assertEquals("local", properties.getTools().getArtifacts().getStorage().getProvider());
-        assertEquals("./data/ai-artifacts", properties.getTools().getArtifacts()
+        assertEquals("local", properties.getTools().getFiles().getStorage().getProvider());
+        assertEquals("./data/ai-files", properties.getTools().getFiles()
                 .getStorage().getLocal().getRootDirectory());
-        assertEquals(Duration.ofDays(7), properties.getTools().getArtifacts().getRetention());
+        assertEquals(Duration.ofDays(7), properties.getTools().getFiles().getRetention());
         assertEquals("connect-center-mcp",
                 properties.getTools().getConnectCenterMcp().getConnectionName());
         ScoreMcpClientProperties mcpProperties = Binder.get(environment)
@@ -334,7 +334,7 @@ class ScoreAiConfigurationTest {
         assertTrue(mcpProperties.connection("connect-center-mcp").getUrl().isEmpty());
         assertTrue(mcpProperties.connection("connect-center-mcp").getAuth().getIssuerUrl()
                 .isEmpty());
-        assertNull(environment.getProperty("score.ai.artifacts.storage.provider"));
+        assertNull(environment.getProperty("score.ai.files.storage.provider"));
         assertNull(environment.getProperty("score.ai.mcp.connection-name"));
         assertNull(environment.getProperty("score.ai.gateway.model-name"));
         Map.of(
@@ -369,28 +369,28 @@ class ScoreAiConfigurationTest {
         ScoreAiProperties defaults = bindAi(Map.of());
         assertThat(defaults.getRequestInactivityTimeout()).isEqualTo(Duration.ofMinutes(10));
         assertThat(defaults.getElicitationTimeout()).isEqualTo(Duration.ofMinutes(10));
-        assertThat(defaults.getMutationApprovalTimeout()).isEqualTo(Duration.ofMinutes(10));
+        assertThat(defaults.getChangeApprovalTimeout()).isEqualTo(Duration.ofMinutes(10));
 
         ScoreAiProperties legacy = bindAi(Map.of("SCORE_AI_REQUEST_TIMEOUT", "17s"));
         assertThat(legacy.getRequestInactivityTimeout()).isEqualTo(Duration.ofSeconds(17));
         assertThat(legacy.getElicitationTimeout()).isEqualTo(Duration.ofSeconds(17));
-        assertThat(legacy.getMutationApprovalTimeout()).isEqualTo(Duration.ofSeconds(17));
+        assertThat(legacy.getChangeApprovalTimeout()).isEqualTo(Duration.ofSeconds(17));
 
         ScoreAiProperties canonicalLegacy = bindAi(Map.of(
                 "score.ai.request-timeout", "23s"));
         assertThat(canonicalLegacy.getRequestTimeout()).isEqualTo(Duration.ofSeconds(23));
         assertThat(canonicalLegacy.getRequestInactivityTimeout()).isEqualTo(Duration.ofSeconds(23));
         assertThat(canonicalLegacy.getElicitationTimeout()).isEqualTo(Duration.ofSeconds(23));
-        assertThat(canonicalLegacy.getMutationApprovalTimeout()).isEqualTo(Duration.ofSeconds(23));
+        assertThat(canonicalLegacy.getChangeApprovalTimeout()).isEqualTo(Duration.ofSeconds(23));
 
         ScoreAiProperties separated = bindAi(Map.of(
                 "SCORE_AI_REQUEST_TIMEOUT", "17s",
                 "SCORE_AI_REQUEST_INACTIVITY_TIMEOUT", "31s",
                 "SCORE_AI_ELICITATION_TIMEOUT", "51s",
-                "SCORE_AI_MUTATION_APPROVAL_TIMEOUT", "61s"));
+                "SCORE_AI_CHANGE_APPROVAL_TIMEOUT", "61s"));
         assertThat(separated.getRequestInactivityTimeout()).isEqualTo(Duration.ofSeconds(31));
         assertThat(separated.getElicitationTimeout()).isEqualTo(Duration.ofSeconds(51));
-        assertThat(separated.getMutationApprovalTimeout()).isEqualTo(Duration.ofSeconds(61));
+        assertThat(separated.getChangeApprovalTimeout()).isEqualTo(Duration.ofSeconds(61));
     }
 
     @Test

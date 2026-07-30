@@ -61,7 +61,7 @@ class AiAgentCatalogTest {
                 "execution-approval-continuation",
                 "execution-read-back-continuation",
                 "execution-request-scoped-input",
-                "execution-revised-mutation-continuation",
+                "execution-revised-change-continuation",
                 "execution-textual-tool-call-recovery",
                 "execution-ui-route-manifest-context");
         assertThat(catalog.workflowInstruction("workflow-worker-assignment").value())

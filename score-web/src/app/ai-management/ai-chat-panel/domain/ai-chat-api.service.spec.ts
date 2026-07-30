@@ -208,14 +208,14 @@ describe('AiChatApiService cancellation contract', () => {
   });
 
   it.each(['APPROVE', 'DENY'] as const)(
-    'posts one %s mutation decision to the encoded owner endpoint', decision => {
-      service.decideMutationConfirmation(
+    'posts one %s change decision to the encoded owner endpoint', decision => {
+      service.decideChangeConfirmation(
         'conversation/one', 'confirmation/one', decision
       ).subscribe();
 
       const request = httpTesting.expectOne(
         '/api/ai/chat/conversations/conversation%2Fone'
-        + '/mutation-confirmations/confirmation%2Fone/decision'
+        + '/change-confirmations/confirmation%2Fone/decision'
       );
       expect(request.request.method).toBe('POST');
       expect(request.request.body).toEqual({decision});
@@ -229,14 +229,14 @@ describe('AiChatApiService cancellation contract', () => {
   );
 
   it('binds a revised approval to the user revision prompt', () => {
-    service.decideMutationConfirmation(
+    service.decideChangeConfirmation(
       'conversation/one', 'confirmation/one', 'APPROVE',
       'Use the name Revised Business Context'
     ).subscribe();
 
     const request = httpTesting.expectOne(
       '/api/ai/chat/conversations/conversation%2Fone'
-      + '/mutation-confirmations/confirmation%2Fone/decision'
+      + '/change-confirmations/confirmation%2Fone/decision'
     );
     expect(request.request.body).toEqual({
       decision: 'APPROVE', revisionPrompt: 'Use the name Revised Business Context'
@@ -248,13 +248,13 @@ describe('AiChatApiService cancellation contract', () => {
     });
   });
 
-  it('rejects a blank mutation decision identity before transport', () => {
-    expect(() => service.decideMutationConfirmation(
+  it('rejects a blank change decision identity before transport', () => {
+    expect(() => service.decideChangeConfirmation(
       '', 'confirmation-1', 'APPROVE'
     )).toThrowError(/conversationId/);
-    expect(() => service.decideMutationConfirmation(
+    expect(() => service.decideChangeConfirmation(
       'conversation-1', ' ', 'DENY'
     )).toThrowError(/confirmationRequestId/);
-    httpTesting.expectNone(request => request.url.includes('mutation-confirmations'));
+    httpTesting.expectNone(request => request.url.includes('change-confirmations'));
   });
 });

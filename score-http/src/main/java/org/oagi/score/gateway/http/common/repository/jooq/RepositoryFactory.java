@@ -19,15 +19,15 @@ import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversati
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMaintenanceRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMemoryStorageRepository;
-import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationConfirmationCommandRepository;
-import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationConfirmationQueryRepository;
-import org.oagi.score.gateway.http.api.ai_management.repository.AiMutationOwnershipQueryRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChangeConfirmationCommandRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChangeConfirmationQueryRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChangeOwnershipQueryRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChatMaintenanceRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChatMemoryStorageRepository;
-import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiMutationConfirmationCommandRepository;
-import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiMutationConfirmationQueryRepository;
-import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiMutationOwnershipQueryRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChangeConfirmationCommandRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChangeConfirmationQueryRepository;
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.JooqAiChangeOwnershipQueryRepository;
 import org.oagi.score.gateway.http.api.bie_management.repository.*;
 import org.oagi.score.gateway.http.api.bie_management.repository.jooq.*;
 import org.oagi.score.gateway.http.api.business_term_management.repository.BusinessTermCommandRepository;
@@ -124,19 +124,19 @@ public class RepositoryFactory {
         return new JooqAiChatMaintenanceRepository(dslContext, requester, this);
     }
 
-    public AiMutationConfirmationQueryRepository aiMutationConfirmationQueryRepository(
+    public AiChangeConfirmationQueryRepository aiChangeConfirmationQueryRepository(
             ScoreUser requester) {
-        return new JooqAiMutationConfirmationQueryRepository(dslContext, requester, this);
+        return new JooqAiChangeConfirmationQueryRepository(dslContext, requester, this);
     }
 
-    public AiMutationConfirmationCommandRepository aiMutationConfirmationCommandRepository(
+    public AiChangeConfirmationCommandRepository aiChangeConfirmationCommandRepository(
             ScoreUser requester) {
-        return new JooqAiMutationConfirmationCommandRepository(dslContext, requester, this);
+        return new JooqAiChangeConfirmationCommandRepository(dslContext, requester, this);
     }
 
-    public AiMutationOwnershipQueryRepository aiMutationOwnershipQueryRepository(
+    public AiChangeOwnershipQueryRepository aiChangeOwnershipQueryRepository(
             ScoreUser requester) {
-        return new JooqAiMutationOwnershipQueryRepository(dslContext, requester, this);
+        return new JooqAiChangeOwnershipQueryRepository(dslContext, requester, this);
     }
 
     public ScoreUserQueryRepository scoreUserQueryRepository() {

@@ -21,7 +21,7 @@ export interface AiToolCallEventSemantics {
   status?: AiChatToolStatus;
   recoverable?: boolean;
   retryable?: boolean;
-  mutationSafe?: boolean;
+  changeSafe?: boolean;
 }
 
 /**
@@ -71,7 +71,7 @@ export function toolCallEventSemantics(event: AiChatSocketEvent): AiToolCallEven
     status: active ? undefined : subtype,
     recoverable: subtype === 'failed' ? true : undefined,
     retryable: booleanValue(event.metadata?.['retryable']),
-    mutationSafe: booleanValue(event.metadata?.['mutationSafe'])
+    changeSafe: booleanValue(event.metadata?.['changeSafe'])
   };
 }
 

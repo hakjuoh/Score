@@ -11,18 +11,18 @@ public final class AiProviderException extends RuntimeException {
 
     private final AiProviderFailure failure;
     private final int attempts;
-    private final boolean mutationApplied;
+    private final boolean changeApplied;
 
     public AiProviderException(AiProviderFailure failure, int attempts, Throwable cause) {
         this(failure, attempts, false, cause);
     }
 
     public AiProviderException(AiProviderFailure failure, int attempts,
-                               boolean mutationApplied, Throwable cause) {
-        super(userMessage(failure, attempts, mutationApplied), cause);
+                               boolean changeApplied, Throwable cause) {
+        super(userMessage(failure, attempts, changeApplied), cause);
         this.failure = failure;
         this.attempts = attempts;
-        this.mutationApplied = mutationApplied;
+        this.changeApplied = changeApplied;
     }
 
     public AiProviderFailure failure() {
@@ -34,12 +34,12 @@ public final class AiProviderException extends RuntimeException {
     }
 
     /** Whether the failed attempt had already executed a data-changing tool. */
-    public boolean mutationApplied() {
-        return mutationApplied;
+    public boolean changeApplied() {
+        return changeApplied;
     }
 
     private static String userMessage(AiProviderFailure failure, int attempts,
-                                      boolean mutationApplied) {
+                                      boolean changeApplied) {
         String detail = StringUtils.hasText(failure.message())
                 ? failure.message()
                 : "The model provider could not complete the request.";
@@ -48,7 +48,7 @@ public final class AiProviderException extends RuntimeException {
         }
         // Without this caveat a transient-looking failure invites a resend that
         // would repeat the data change the retry fence refused to replay.
-        return mutationApplied
+        return changeApplied
                 ? detail + " Data changes that already completed remain applied."
                 : detail;
     }

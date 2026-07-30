@@ -140,7 +140,7 @@ public class ConnectCenterMcpClientFactory {
         if (toolCount > 0 && names.isEmpty()) {
             LOGGER.warn("connect-center-mcp declared none of its {} tools read-only;"
                     + " the server likely predates readOnlyHint annotations, so every tool"
-                    + " will require mutation approval and specialists get no tools.", toolCount);
+                    + " will require change approval and specialists get no tools.", toolCount);
         }
         return Set.copyOf(names);
     }

@@ -25,10 +25,10 @@ class AiChatSocketEventTest {
     }
 
     @Test
-    void mutationNoticeSerializesOnlyItsStableSecurityEnvelope() throws Exception {
-        AiChatSocketEvent event = AiChatSocketEvent.mutationConfirmationRequired(
+    void changeNoticeSerializesOnlyItsStableSecurityEnvelope() throws Exception {
+        AiChatSocketEvent event = AiChatSocketEvent.changeConfirmationRequired(
                 "request-1", "conversation-1", 4L,
-                "A data-changing action requires explicit approval.", Map.of(
+                "A change requires explicit approval.", Map.of(
                         "confirmationRequestId", "confirmation-1",
                         "status", "REQUESTED",
                         "expiresAt", "2099-07-15T00:00:00Z",
