@@ -8,6 +8,7 @@ import org.oagi.score.gateway.http.api.ai_management.execution.ChatExecutionCont
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
 import org.oagi.score.gateway.http.api.ai_management.model.AiAgentDefinition;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowType;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.api.ai_management.workflow.AgentRunner;
 import org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowIntent;
@@ -279,7 +280,7 @@ class PlannerAgentTest {
                         new AiWorkflowPlan.Member("owner", assignment, null))), null, null);
         AgentWorkflowContext nested = fixture.context
                 .inWorkflow(outer, new AgentWorkflowContext.Location(
-                        "outer", "main:1:outer", "main", 1))
+                        "outer", "main:1:outer", "main", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(outer, "owner", assignment, List.of());
 
         AiWorkflowPlan plan = ((AgentDecision.Delegate)
@@ -307,7 +308,7 @@ class PlannerAgentTest {
                         new AiWorkflowPlan.Member("owner", assignment, null))), null, null);
         AgentWorkflowContext nested = fixture.context
                 .inWorkflow(outer, new AgentWorkflowContext.Location(
-                        "outer", "main:1:outer", "main", 1))
+                        "outer", "main:1:outer", "main", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(outer, "owner", assignment, List.of());
 
         assertThatThrownBy(() -> fixture.runner.run(fixture.planner.callId(), nested))

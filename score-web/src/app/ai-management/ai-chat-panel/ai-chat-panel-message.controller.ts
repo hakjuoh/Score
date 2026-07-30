@@ -63,7 +63,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       // A rolling-upgrade worker may emit its guide immediately before its
       // lifecycle row creates the activity. The lifecycle carries the same
       // status text, so never leak that worker-owned guide into the main chat.
-      if (isSpecialistActivityEvent(event)) return;
+      if (isSpecialistActivityEvent(event) && !this.liveExecution.isPlainEvent(event)) return;
       // A guide is the first substantive assistant message for this stage. It
       // replaces only the generic connection/wait placeholder; later tool
       // status updates are then appended below it in event order.
@@ -187,7 +187,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     const content = this.primaryContent(event).trim();
     if (!content) return false;
     if (this.state.cancellation.phase !== 'idle') return true;
-    if (isSpecialistActivityEvent(event)) {
+    if (isSpecialistActivityEvent(event) && !this.liveExecution.isPlainEvent(event)) {
       upsertAgentProviderErrorEvent(this.agentActivitiesFor(event), event);
       return true;
     }
@@ -305,7 +305,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     if (this.state.cancellation.phase !== 'idle') {
       return true;
     }
-    if (isSpecialistActivityEvent(event)) {
+    if (isSpecialistActivityEvent(event) && !this.liveExecution.isPlainEvent(event)) {
       upsertAgentRetryEvent(this.agentActivitiesFor(event), event);
       return true;
     }
@@ -356,6 +356,9 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
    */
   protected divertSpecialistToolEvent(event: AiChatSocketEvent): boolean {
     if (!isSpecialistToolEvent(event)) {
+      return false;
+    }
+    if (this.liveExecution.isPlainEvent(event)) {
       return false;
     }
     upsertAgentToolEvent(this.agentActivitiesFor(event), event);
@@ -428,7 +431,11 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
 
   private applyAgentActivity(event: AiChatSocketEvent): void {
     const placement = this.liveExecution.placeAgent(event, this.state.messages);
-    if (!placement) return;
+    if (!placement) {
+      const plain = this.liveExecution.upsertPlainActivity(event, this.state.messages);
+      if (plain?.created) plain.container.push(plain.message);
+      return;
+    }
     const {activities, anchor, createdRootAnchor, rootGroup} = placement;
     if (createdRootAnchor && anchor) {
       // One anchor row per fan-out. The anchor keeps a REFERENCE to this
@@ -450,6 +457,12 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     const placement = this.liveExecution.startWorkflow(event, this.state.messages);
     if (!placement) return false;
     if (!placement.created) return true;
+    if (placement.presentation === 'hidden') return true;
+    if (placement.presentation === 'message') {
+      if (placement.anchor) placement.container.push(placement.anchor);
+      return true;
+    }
+    if (!placement.anchor) return false;
     if (placement.root) {
       this.clearStatusMessage();
       if (content.trim()) this.state.messages.push({role: 'guide', content: content.trim()});
@@ -468,17 +481,17 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   private aggregateAgentStatus(): string {
     const activities = this.state.agentActivities;
     if (activities.some(activity => activity.inProgress)) {
-      const parallel = activities.some(activity => activity.executionKind === 'parallel');
+      const parallel = activities.some(activity => activity.workflowType === 'parallel');
       return activities.some(activity => activity.isLead && activity.status === 'synthesizing')
-        ? parallel ? 'Synthesizing parallel results' : 'Synthesizing agent results'
-        : parallel ? 'Parallel tasks working' : 'Agents working';
+        ? parallel ? 'Synthesizing task results' : 'Synthesizing agent results'
+        : parallel ? 'Tasks working' : 'Agents working';
     }
-    const parallel = activities.some(activity => activity.executionKind === 'parallel');
+    const parallel = activities.some(activity => activity.workflowType === 'parallel');
     return activities.some(activity => activity.status === 'failed')
-      ? parallel ? 'Parallel workflow completed with errors' : 'Agent completed with errors'
+      ? parallel ? 'Tasks completed with errors' : 'Agent completed with errors'
       : activities.some(activity => activity.status === 'cancelled')
-        ? parallel ? 'Parallel workflow stopped' : 'Agent workflow stopped'
-        : parallel ? 'Parallel tasks finished' : 'Agents finished';
+        ? parallel ? 'Tasks stopped' : 'Agent workflow stopped'
+        : parallel ? 'Tasks finished' : 'Agents finished';
   }
 
   protected handleConversationRestoreEvent(event: AiChatSocketEvent): void {

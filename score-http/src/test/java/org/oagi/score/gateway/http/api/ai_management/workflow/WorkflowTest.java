@@ -31,6 +31,7 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowType;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
@@ -197,12 +198,17 @@ class WorkflowTest {
         org.mockito.ArgumentCaptor<Map<String, Object>> namespaces =
                 org.mockito.ArgumentCaptor.forClass(Map.class);
         verify(execution.recorder(), times(3)).fork(namespaces.capture());
+        assertThat(namespaces.getAllValues().getFirst())
+                .containsEntry("node_id", "main")
+                .containsEntry("workflow_type", "direct");
         assertThat(namespaces.getAllValues().get(1))
                 .containsEntry("node_id", "main:1:root-work")
-                .containsEntry("parent_node_id", "main");
+                .containsEntry("parent_node_id", "main")
+                .containsEntry("workflow_type", "sequential");
         assertThat(namespaces.getAllValues().getLast())
                 .containsEntry("node_id", "main:1:root-work:nested-member")
-                .containsEntry("parent_node_id", "main:1:root-work");
+                .containsEntry("parent_node_id", "main:1:root-work")
+                .containsEntry("workflow_type", "sequential");
     }
 
     @Test
@@ -525,8 +531,12 @@ class WorkflowTest {
             return complete("joined");
         });
 
+        AgentExecutionContext execution = context();
         AgentOutput result = workflow(gateway, first, second, join)
-                .execute(workflowContext(context()));
+                .execute(workflowContext(execution));
+
+        verify(execution.recorder()).fork(org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(
+                namespace -> "parallel".equals(namespace.get("workflow_type"))));
 
         assertThat(result.content()).isEqualTo("joined");
         assertThat(calls.indexOf("join-agent"))
@@ -1280,7 +1290,7 @@ class WorkflowTest {
                 null, null);
         AgentWorkflowContext context = workflowContext(context()).withRunControl(budget)
                 .inWorkflow(plan, new AgentWorkflowContext.Location(
-                        "chat-boundary", "main:chat-boundary", "main", 1))
+                        "chat-boundary", "main:chat-boundary", "main", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(plan, "member", task, List.of());
 
         assertThatThrownBy(() -> budget.invoke(

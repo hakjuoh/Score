@@ -51,14 +51,44 @@
   white-space: nowrap;
 }
 
-.agent-group-workflow {
-  color: #71717a;
-  white-space: nowrap;
-}
-
 .agent-group-plan {
+  display: flex;
+  gap: 5px;
   margin: 2px 2px 3px 19px;
   color: #71717a;
+}
+
+.workflow-branch,
+.workflow-checkbox {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.workflow-checkbox {
+  font-size: 14px;
+  line-height: 14px;
+}
+
+.nested-workflow-item {
+  margin: 4px 0 0 18px;
+}
+
+.nested-workflow-item > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  color: #52525b;
+  cursor: pointer;
+  list-style: none;
+}
+
+.nested-workflow-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nested-workflow-item > .message-row {
+  width: 100%;
+  margin-left: 0;
 }
 
 /* A Workflow is a conversation composite: nested Workflow messages use the
