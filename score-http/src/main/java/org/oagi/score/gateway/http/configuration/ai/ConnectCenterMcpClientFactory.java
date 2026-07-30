@@ -37,7 +37,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
-/** Creates requester-scoped MCP tools for connect-center-mcp. */
+/** Creates requester-scoped sessions for configured MCP servers. */
 @Component
 public class ConnectCenterMcpClientFactory {
 
@@ -61,21 +61,43 @@ public class ConnectCenterMcpClientFactory {
     }
 
     public McpSession open(ScoreUser requester) {
-        return open(requester, null, () -> { });
+        return open(connectionName(), requester, null, () -> { },
+                longer(mcpProperties.getRequestTimeout(), properties.getElicitationTimeout()),
+                mcpProperties.getInitializationTimeout());
+    }
+
+    /** Opens a short-lived session whose initialization and tool discovery are tightly bounded. */
+    public McpSession openForStatus(String connectionName, ScoreUser requester) {
+        Duration statusTimeout = mcpProperties.getStatusTimeout();
+        return open(connectionName, requester, null, () -> { }, statusTimeout, statusTimeout);
     }
 
     public McpSession open(
             ScoreUser requester,
             Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler) {
-        return open(requester, elicitationHandler, () -> { });
+        return open(connectionName(), requester, elicitationHandler, () -> { },
+                longer(mcpProperties.getRequestTimeout(), properties.getElicitationTimeout()),
+                mcpProperties.getInitializationTimeout());
     }
 
     public McpSession open(
             ScoreUser requester,
             Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler,
             Runnable progress) {
+        return open(connectionName(), requester, elicitationHandler, progress,
+                longer(mcpProperties.getRequestTimeout(), properties.getElicitationTimeout()),
+                mcpProperties.getInitializationTimeout());
+    }
+
+    private McpSession open(
+            String connectionName,
+            ScoreUser requester,
+            Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler,
+            Runnable progress,
+            Duration requestTimeout,
+            Duration initializationTimeout) {
         Objects.requireNonNull(progress, "progress");
-        McpConnection connection = connection(requester);
+        McpConnection connection = connection(connectionName, requester);
         if (connection == null) {
             return new McpSession(null, NO_TOOLS, Set.of(), McpTelemetry.EMPTY);
         }
@@ -86,7 +108,7 @@ public class ConnectCenterMcpClientFactory {
                 .builder(baseUrl)
                 .endpoint(endpoint)
                 .httpRequestCustomizer((builder, method, uri, body, transportContext) -> {
-                    authorizeRequest(requester, builder);
+                    authorizeRequest(connectionName, requester, builder);
                     injectCurrentTrace(builder);
                     String enrichedBody = injectTraceIntoMcpBody(body);
                     if (enrichedBody != null && !enrichedBody.equals(body)) {
@@ -96,9 +118,8 @@ public class ConnectCenterMcpClientFactory {
                 .openConnectionOnStartup(false);
 
         var clientBuilder = McpClient.sync(transport.build())
-                .requestTimeout(longer(mcpProperties.getRequestTimeout(),
-                        properties.getElicitationTimeout()))
-                .initializationTimeout(mcpProperties.getInitializationTimeout())
+                .requestTimeout(requestTimeout)
+                .initializationTimeout(initializationTimeout)
                 .progressConsumer(notification -> progress.run());
         if (elicitationHandler != null) {
             clientBuilder.elicitation(elicitationHandler).applyElicitationDefaults(true);
@@ -109,7 +130,7 @@ public class ConnectCenterMcpClientFactory {
             DiscoveredTools discovered = discoverTools(client);
             return new McpSession(client, discovered.callbacks(), discovered.readOnlyNames(),
                     discovered.catalog(),
-                    McpTelemetry.from(connectionName(), connection, initialized));
+                    McpTelemetry.from(connectionName, connection, initialized));
         } catch (RuntimeException exception) {
             client.closeGracefully();
             throw exception;
@@ -151,7 +172,7 @@ public class ConnectCenterMcpClientFactory {
             cursor = page.nextCursor();
         } while (StringUtils.hasText(cursor) && visitedCursors.add(cursor));
         if (!catalog.isEmpty() && names.isEmpty()) {
-            LOGGER.warn("connect-center-mcp declared none of its {} tools read-only;"
+            LOGGER.warn("MCP server declared none of its {} tools read-only;"
                     + " the server likely predates readOnlyHint annotations, so every tool"
                     + " will require change approval and specialists get no tools.", catalog.size());
         }
@@ -206,14 +227,22 @@ public class ConnectCenterMcpClientFactory {
     }
 
     public McpConnection connection(ScoreUser requester) {
-        ScoreMcpClientProperties.Connection configured = configuredConnection();
+        return connection(connectionName(), requester);
+    }
+
+    McpConnection connection(String connectionName, ScoreUser requester) {
+        ScoreMcpClientProperties.Connection configured = configuredConnection(connectionName);
         if (configured == null || !StringUtils.hasText(configured.getUrl())) {
             return null;
         }
         String endpoint = StringUtils.hasText(configured.getEndpoint())
                 ? configured.getEndpoint() : "/mcp";
-        String token = bearerToken(requester);
+        String token = bearerToken(connectionName, requester);
         return new McpConnection(configured.getUrl().strip(), endpoint, token);
+    }
+
+    public List<String> connectionNames() {
+        return mcpProperties.connectionNames();
     }
 
     public String connectionName() {
@@ -221,7 +250,11 @@ public class ConnectCenterMcpClientFactory {
     }
 
     private String bearerToken(ScoreUser requester) {
-        ScoreMcpClientProperties.Connection connection = configuredConnection();
+        return bearerToken(connectionName(), requester);
+    }
+
+    private String bearerToken(String connectionName, ScoreUser requester) {
+        ScoreMcpClientProperties.Connection connection = configuredConnection(connectionName);
         if (connection == null) return null;
         ScoreMcpClientProperties.Auth auth = connection.getAuth();
         if (StringUtils.hasText(auth.getBearerToken())) {
@@ -236,12 +269,17 @@ public class ConnectCenterMcpClientFactory {
                 auth.getAlgorithm(), Math.max(auth.getTokenTtlSeconds(), minimumTtl));
     }
 
-    private ScoreMcpClientProperties.Connection configuredConnection() {
-        return mcpProperties.connection(connectionName());
+    private ScoreMcpClientProperties.Connection configuredConnection(String connectionName) {
+        return mcpProperties.connection(connectionName);
     }
 
     void authorizeRequest(ScoreUser requester, HttpRequest.Builder request) {
-        String token = bearerToken(requester);
+        authorizeRequest(connectionName(), requester, request);
+    }
+
+    private void authorizeRequest(String connectionName, ScoreUser requester,
+                                  HttpRequest.Builder request) {
+        String token = bearerToken(connectionName, requester);
         if (StringUtils.hasText(token)) {
             request.setHeader("Authorization", "Bearer " + token);
         }

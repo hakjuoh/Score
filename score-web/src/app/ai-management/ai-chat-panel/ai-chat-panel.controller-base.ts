@@ -3,7 +3,8 @@ import {ConnectedPosition} from '@angular/cdk/overlay';
 import {DomSanitizer} from '@angular/platform-browser';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import {Subject, Subscription} from 'rxjs';
+import {Observable, Subject, Subscription, of} from 'rxjs';
+import {catchError, finalize, map, shareReplay, take, takeUntil} from 'rxjs/operators';
 import {AuthService} from '../../authentication/auth.service';
 import {WebPageInfoService} from '../../basis/basis.service';
 import {ConfirmDialogService} from '../../common/confirm-dialog/confirm-dialog.service';
@@ -58,6 +59,7 @@ import {
   AiChatConversationDetails,
   AiChatDock,
   AiChatMessage,
+  AiMcpStatus,
   AiChatPanelTab,
   AiChatSocketEvent,
   AiElicitationResponse,
@@ -66,7 +68,10 @@ import {
   AiChangeConfirmationNotice,
   AiChangeInteraction,
   AiPublicExecutionRequestStatus,
-  ResizeState
+  ResizeState,
+  checkingAiMcpStatus,
+  failedAiMcpStatusCheck,
+  readyAiMcpStatus
 } from './domain/ai-chat-panel.model';
 
 export interface BoundChangeConfirmationNotice {
@@ -127,6 +132,7 @@ export abstract class AiChatPanelControllerBase {
   protected rejectedChangeConfirmationRequestId?: string;
   protected destroyed = false;
   protected readonly destroyed$ = new Subject<void>();
+  private mcpStatusCheck?: Observable<AiMcpStatus>;
   private workspacePersistenceReady = false;
   private workspacePersistenceSignature = '';
   private attachmentPersistenceSignature = '';
@@ -163,6 +169,28 @@ export abstract class AiChatPanelControllerBase {
     if (this.state.activeRequest?.requestId !== requestId) {
       this.state.activeRequest = {requestId};
     }
+  }
+
+  protected refreshMcpStatus(onComplete?: (status: AiMcpStatus) => void): void {
+    let check = this.mcpStatusCheck;
+    if (!check) {
+      this.state.mcpStatus = checkingAiMcpStatus();
+      const created: Observable<AiMcpStatus> = this.api.getMcpStatus().pipe(
+        map(readyAiMcpStatus),
+        catchError(() => of(failedAiMcpStatusCheck())),
+        take(1),
+        finalize(() => {
+          if (this.mcpStatusCheck === created) this.mcpStatusCheck = undefined;
+        }),
+        shareReplay({bufferSize: 1, refCount: true})
+      );
+      this.mcpStatusCheck = created;
+      check = created;
+    }
+    check.pipe(takeUntil(this.destroyed$)).subscribe(status => {
+      this.state.mcpStatus = status;
+      onComplete?.(status);
+    });
   }
 
   protected get changeDecisionOpen(): boolean {

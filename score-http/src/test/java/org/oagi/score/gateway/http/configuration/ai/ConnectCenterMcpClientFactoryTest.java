@@ -138,6 +138,27 @@ class ConnectCenterMcpClientFactoryTest {
                 "connect-center-mcp", "ES256", 660);
     }
 
+    @Test
+    void resolvesEveryDeclaredServerByItsOwnNameAndConfiguration() {
+        ScoreAiProperties properties = new ScoreAiProperties();
+        ScoreMcpClientProperties mcpProperties = mcpProperties("https://primary.example");
+        ScoreMcpClientProperties.Connection reference = new ScoreMcpClientProperties.Connection();
+        reference.setUrl("https://reference.example");
+        reference.setEndpoint("/custom-mcp");
+        reference.getAuth().setBearerToken("reference-token");
+        mcpProperties.getStreamableHttp().getConnections().put("reference-mcp", reference);
+        ConnectCenterMcpClientFactory factory = new ConnectCenterMcpClientFactory(
+                properties, mcpProperties, mock(BrokerJwtService.class));
+
+        ConnectCenterMcpClientFactory.McpConnection connection =
+                factory.connection("reference-mcp", mock(ScoreUser.class));
+
+        assertThat(factory.connectionNames())
+                .containsExactly("connect-center-mcp", "reference-mcp");
+        assertThat(connection.url()).isEqualTo("https://reference.example/custom-mcp");
+        assertThat(connection.bearerToken()).isEqualTo("reference-token");
+    }
+
     private ScoreMcpClientProperties mcpProperties(String url) {
         ScoreMcpClientProperties properties = new ScoreMcpClientProperties();
         ScoreMcpClientProperties.Connection connection = new ScoreMcpClientProperties.Connection();
