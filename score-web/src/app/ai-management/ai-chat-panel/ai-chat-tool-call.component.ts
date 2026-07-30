@@ -1,5 +1,6 @@
 import {Component, Input} from '@angular/core';
 import {AiChatToolStatus} from './domain/ai-chat-panel.model';
+import {displayToolText} from './domain/ai-tool-presentation';
 
 /**
  * Shared tool-call presentation for both the lead conversation and a focused
@@ -37,5 +38,13 @@ export class AiChatToolCallComponent {
 
   get hasDetail(): boolean {
     return typeof this.detail === 'string' && this.detail.trim().length > 0;
+  }
+
+  get visibleContent(): string {
+    return displayToolText(this.content) || this.content;
+  }
+
+  get visibleDetail(): string | undefined {
+    return displayToolText(this.detail);
   }
 }

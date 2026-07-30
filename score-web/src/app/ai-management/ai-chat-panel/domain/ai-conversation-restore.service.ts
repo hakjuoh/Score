@@ -19,6 +19,7 @@ import {
   upsertAgentRetryEvent,
   upsertAgentToolEvent
 } from './ai-agent-activity';
+import {displayToolName, displayToolText} from './ai-tool-presentation';
 import {
   AiExecutionComposite,
   appendWorkflowConversation,
@@ -324,7 +325,7 @@ export class AiConversationRestoreService {
     const toolDetail = this.restoredToolDetail(event, content);
     return {
       role,
-      content: this.restoredToolContent(toolStatus, toolName),
+      content: this.restoredToolContent(toolStatus, displayToolName(toolName) || toolName),
       ...(turnId ? {turnId} : {}),
       groupId,
       toolCallId,
@@ -392,8 +393,9 @@ export class AiConversationRestoreService {
   }
 
   private restoredToolDetail(event: AiChatSocketEvent, content: string): string | undefined {
-    return this.nonBlankText(event.metadata?.['toolDetail'])
+    const detail = this.nonBlankText(event.metadata?.['toolDetail'])
       || (/\nArguments:\s*/.test(content) ? content : undefined);
+    return displayToolText(detail);
   }
 
   private nonBlankText(value: unknown): string | undefined {

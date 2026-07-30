@@ -4,6 +4,7 @@ import {
   AiChatSocketEvent,
   AiChatStatusTone
 } from './ai-chat-panel.model';
+import {displayToolName, displayToolText} from './ai-tool-presentation';
 
 const EXECUTION_ACTIVITY_SUBTYPES = new Set([
   'multi_agent_started',
@@ -412,7 +413,7 @@ export function upsertAgentGuideEvent(activities: AiAgentActivity[],
 export function agentToolEventContent(event: AiChatSocketEvent): string {
   const subtype = text(event.subtype) || 'update';
   const metadata = event.metadata || {};
-  const toolName = text(metadata['toolName']) || text(metadata['tool_name']);
+  const toolName = displayToolName(text(metadata['toolName']) || text(metadata['tool_name']));
   if (subtype === 'started' || subtype === 'progress') {
     return toolName ? `Calling ${toolName}.` : 'Executing...';
   }
@@ -463,11 +464,11 @@ export function agentToolEventStatus(
 export function agentToolEventDetail(event: AiChatSocketEvent): string | undefined {
   const detail = event.metadata?.['toolDetail'];
   if (typeof detail === 'string' && detail.trim()) {
-    return detail;
+    return displayToolText(detail);
   }
   const content = event.content || event.response || event.message;
   return typeof content === 'string' && /\nArguments:\s*/.test(content)
-    ? content.trim() : undefined;
+    ? displayToolText(content.trim()) : undefined;
 }
 
 /** Applies a specialist tool frame to the timeline shared by live and restored chat. */
