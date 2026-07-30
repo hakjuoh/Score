@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.agent;
 
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowType;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 
 import java.util.LinkedHashMap;
@@ -159,6 +160,7 @@ public record AgentWorkflowContext(
         if (location == null) return Map.of();
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("workflow", location.workflowId());
+        metadata.put("workflow_type", location.workflowType().wireName());
         metadata.put("node_id", location.nodeId());
         if (location.parentNodeId() != null) {
             metadata.put("parent_node_id", location.parentNodeId());
@@ -169,12 +171,14 @@ public record AgentWorkflowContext(
 
     /** Server-authored execution identity used to nest Agent spans under Workflow spans. */
     public record Location(String workflowId, String nodeId,
-                           String parentNodeId, int depth) {
+                           String parentNodeId, int depth,
+                           AiWorkflowType workflowType) {
         public Location {
             workflowId = required(workflowId, "workflowId");
             nodeId = required(nodeId, "nodeId");
             if (parentNodeId != null) parentNodeId = required(parentNodeId, "parentNodeId");
             if (depth < 0) throw new IllegalArgumentException("depth must not be negative");
+            workflowType = Objects.requireNonNull(workflowType, "workflowType");
         }
     }
 

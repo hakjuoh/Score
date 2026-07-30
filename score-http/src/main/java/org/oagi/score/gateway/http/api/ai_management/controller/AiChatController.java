@@ -80,15 +80,10 @@ public class AiChatController {
     private static final Logger LOGGER = LoggerFactory.getLogger(AiChatController.class);
     private static final Set<String> WORKFLOW_LIFECYCLE_EVENT_TYPES = Set.of(
             "workflow_started", "workflow_completed", "workflow_failed", "workflow_cancelled",
-            "workflow_refused",
-            "multi_agent_started", "multi_agent_synthesizing", "multi_agent_completed",
-            "multi_agent_failed", "multi_agent_cancelled",
-            "subagent_planned", "subagent_started", "subagent_completed",
-            "subagent_failed", "subagent_cancelled", "subagent_refused",
-            "parallel_workflow_started", "parallel_workflow_synthesizing",
-            "parallel_workflow_completed", "parallel_workflow_failed",
-            "parallel_workflow_cancelled", "parallel_task_planned", "parallel_task_started",
-            "parallel_task_completed", "parallel_task_failed", "parallel_task_cancelled");
+            "workflow_refused", "workflow_stalled", "workflow_output_retry_handoff",
+            "subagent_preparing", "subagent_planned", "subagent_started", "subagent_retry",
+            "subagent_output_retry_handoff", "subagent_completed", "subagent_failed",
+            "subagent_cancelled", "subagent_refused");
 
     private final ChatService chatService;
     private final SessionService sessionService;

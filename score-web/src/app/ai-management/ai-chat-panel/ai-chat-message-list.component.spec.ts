@@ -645,13 +645,13 @@ describe('AiChatMessageListComponent', () => {
     fixture.componentInstance.messages = [
       {role: 'user', content: 'Verify this request.'},
       {
-        role: 'workflow_group', content: 'Parallel workflow', activities: [
+        role: 'workflow_group', content: 'Checking independent evidence.',
+        workflowType: 'parallel', activities: [
           {
             agentId: 'request-1:agent:1', agentName: 'Verifier',
             agentRole: 'Evidence and edge cases', taskLabel: 'Sync Purchase Order', status: 'started',
             content: 'Reading Sync Purchase Order.', inProgress: true, isLead: false,
-            workflow: 'parallel',
-            executionKind: 'parallel',
+            workflowType: 'parallel',
             firstSeenAt: Date.now(), lastUpdateAt: Date.now(),
             events: [{status: 'started', content: 'Reading Sync Purchase Order.'}]
           },
@@ -659,8 +659,7 @@ describe('AiChatMessageListComponent', () => {
             agentId: 'request-1:lead', agentName: 'Lead agent',
             status: 'synthesizing', content: 'Analyzing specialist findings.', inProgress: true,
             isLead: true, firstSeenAt: 1000, lastUpdateAt: 13000,
-            workflow: 'parallel',
-            executionKind: 'parallel',
+            workflowType: 'parallel',
             plannedAgentCount: 3, activeVerb: 'Analyzing', completedVerb: 'Analyzed',
             events: [{status: 'synthesizing', content: 'Analyzing specialist findings.'}]
           }
@@ -674,11 +673,11 @@ describe('AiChatMessageListComponent', () => {
     const block = blocks[0];
     expect(block.getAttribute('role')).toBe('status');
     expect(block.getAttribute('aria-live')).toBe('polite');
-    expect(block.getAttribute('aria-label')).toContain('Parallel workflow');
-    expect(block.dataset['workflow']).toBe('parallel');
-    expect(block.dataset['executionKind']).toBe('parallel');
+    expect(block.getAttribute('aria-label')).toBe('Execution: synthesizing');
+    expect(block.dataset['workflowType']).toBe('parallel');
+    expect(block.classList).toContain('workflow-parallel');
     expect(block.textContent).toContain('Analyzing...');
-    expect(block.querySelector('.agent-group-workflow')?.textContent).toContain('Parallel workflow');
+    expect(block.querySelector('.agent-group-workflow')).toBeNull();
     expect(block.textContent).toContain('· 3 tasks');
     expect(block.textContent).toContain('synthesizing');
     expect(block.textContent).toContain('Analyzing specialist findings.');
@@ -696,14 +695,15 @@ describe('AiChatMessageListComponent', () => {
     expect(focused).toHaveBeenCalledWith('request-1:agent:1');
   });
 
-  it('labels one delegated worker as a specialist instead of a multi-agent workflow', () => {
+  it('renders a one-item sequential workflow without exposing a type label', () => {
     fixture.componentInstance.messages = [
       {role: 'user', content: 'Inspect the current context records.'},
       {
-        role: 'agent_group', content: 'Delegated workflow', activities: [{
+        role: 'workflow_group', content: 'Inspecting the current records.',
+        workflowType: 'sequential', activities: [{
           agentId: 'request-1:worker:1', agentName: 'Evidence researcher',
           status: 'started', content: 'Inspecting current records.', inProgress: true,
-          isLead: false, workflow: 'direct', executionKind: 'multi_agent',
+          isLead: false, workflowType: 'sequential',
           firstSeenAt: 1000, lastUpdateAt: 2000,
           events: [{status: 'started', content: 'Inspecting current records.'}]
         }]
@@ -713,22 +713,72 @@ describe('AiChatMessageListComponent', () => {
     fixture.detectChanges();
 
     const block = fixture.nativeElement.querySelector('.agent-group-block') as HTMLElement;
-    expect(block.getAttribute('aria-label')).toContain('Specialist workflow');
-    expect(block.querySelector('.agent-group-workflow')?.textContent)
-      .toContain('Specialist workflow');
-    expect(block.textContent).toContain('· 1 specialist');
-    expect(block.textContent).toContain('A specialist is gathering evidence for the lead.');
-    expect(block.textContent).not.toContain('Multi-agent workflow');
+    expect(block.getAttribute('aria-label')).toBe('Execution: 1 running');
+    expect(block.querySelector('.agent-group-workflow')).toBeNull();
+    expect(block.textContent).toContain('· 1 task');
+    expect(block.textContent).toContain('Inspecting the current records.');
+    expect(block.textContent).not.toContain('workflow');
+  });
+
+  it('shows sequential task state with spinner and checkbox characters', () => {
+    fixture.componentInstance.messages = [{
+      role: 'workflow_group', content: 'Checking in order.', workflowType: 'sequential',
+      activities: [
+        {
+          agentId: 'done', agentName: 'First task', status: 'completed',
+          content: 'First task complete.', inProgress: false, isLead: false,
+          firstSeenAt: 1000, lastUpdateAt: 2000, events: []
+        },
+        {
+          agentId: 'running', agentName: 'Second task', status: 'started',
+          content: 'Second task running.', inProgress: true, isLead: false,
+          firstSeenAt: 2000, lastUpdateAt: 3000, events: []
+        },
+        {
+          agentId: 'queued', agentName: 'Third task', status: 'planned',
+          content: 'Third task queued.', inProgress: false, isLead: false,
+          firstSeenAt: 2000, lastUpdateAt: 2000, events: []
+        }
+      ]
+    }];
+
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll(
+      '.agent-group-row'
+    ) as NodeListOf<HTMLElement>;
+    expect(rows).toHaveLength(3);
+    expect(rows[0].textContent).toContain('☑');
+    expect(rows[1].querySelector('mat-progress-spinner')).not.toBeNull();
+    expect(rows[2].textContent).toContain('☐');
+  });
+
+  it('shows every running parallel task with its own spinner', () => {
+    fixture.componentInstance.messages = [{
+      role: 'workflow_group', content: 'Checking concurrently.', workflowType: 'parallel',
+      activities: ['First task', 'Second task'].map((agentName, index) => ({
+        agentId: `parallel-${index}`, agentName, status: 'started' as const,
+        content: `${agentName} running.`, inProgress: true, isLead: false,
+        firstSeenAt: 1000, lastUpdateAt: 2000, events: []
+      }))
+    }];
+
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll(
+      '.agent-group-row mat-progress-spinner'
+    )).toHaveLength(2);
   });
 
   it('keeps the composed plan count and lead completion label stable across a worker chain', () => {
     fixture.componentInstance.messages = [{
-      role: 'agent_group', content: 'Delegated workflow', activities: [
+      role: 'workflow_group', content: 'Checking both stages.',
+      workflowType: 'sequential', activities: [
         {
           agentId: 'request-1:composed:lead', agentName: 'Lead agent',
           status: 'completed', content: 'Checked.', inProgress: false, isLead: true,
           plannedAgentCount: 2, activeVerb: 'Checking', completedVerb: 'Checked',
-          workflow: 'chain', executionKind: 'multi_agent',
+          workflowType: 'sequential',
           firstSeenAt: 1000, lastUpdateAt: 4000,
           events: [{status: 'completed', content: 'Checked.'}]
         },
@@ -751,8 +801,9 @@ describe('AiChatMessageListComponent', () => {
 
     const block = fixture.nativeElement.querySelector('.agent-group-block') as HTMLElement;
     expect(block.textContent).toContain('Checked');
-    expect(block.textContent).toContain('Chain workflow');
-    expect(block.textContent).toContain('· 2 specialists');
+    expect(block.textContent).toContain('· 2 tasks');
+    expect(block.textContent).toContain('☑');
+    expect(block.textContent).not.toContain('workflow');
     expect(block.querySelector('.agent-group-title')?.textContent).not.toContain('Searched');
   });
 
@@ -761,7 +812,7 @@ describe('AiChatMessageListComponent', () => {
       agentId: 'request-1:composed:lead', agentName: 'Lead agent',
       status: 'started', content: 'Checking both stages.', inProgress: true, isLead: true,
       plannedAgentCount: 2, activeVerb: 'Checking', completedVerb: 'Checked',
-      workflow: 'chain', executionKind: 'multi_agent',
+      workflowType: 'sequential',
       firstSeenAt: 1000, lastUpdateAt: 1000, events: []
     };
     const first: AiAgentActivity = {
@@ -775,7 +826,8 @@ describe('AiChatMessageListComponent', () => {
       firstSeenAt: 1000, lastUpdateAt: 1000, events: []
     };
     fixture.componentInstance.messages = [{
-      role: 'agent_group', content: 'Delegated workflow', activities: [lead, first, second]
+      role: 'workflow_group', content: 'Checking both stages.',
+      workflowType: 'sequential', activities: [lead, first, second]
     }];
 
     const phase = () => fixture.componentInstance.agentGroupPhase(
@@ -934,7 +986,8 @@ describe('AiChatMessageListComponent', () => {
       messages: [
         {role: 'guide', content: 'I’ll cross-check this result independently.'},
         {
-          role: 'workflow_group', content: 'Workflow', workflowNodeId: 'nested',
+          role: 'workflow_group', content: 'Cross-checking independently.',
+          workflowNodeId: 'nested', workflowType: 'parallel',
           workflowParentNodeId: 'parent', children: [], activities: [{
             agentId: 'child', agentName: 'Independent reader', status: 'started',
             content: 'Reading the release.', inProgress: true, isLead: false,
@@ -955,29 +1008,39 @@ describe('AiChatMessageListComponent', () => {
       .toContain('Independent reader');
   });
 
-  it('keeps only the leaf Workflow as a polite live region when nested', () => {
+  it('keeps a nested Workflow behind a closed disclosure', () => {
     fixture.componentInstance.messages = [{
       role: 'workflow_group', content: 'Outer', workflowNodeId: 'outer',
+      workflowType: 'sequential',
       workflowStatus: 'started', activities: [], children: [{
         role: 'progress', content: 'Working...', inProgress: true,
         eventType: 'composite_status'
       }, {
         role: 'workflow_group', content: 'Inner', workflowNodeId: 'inner',
-        workflowParentNodeId: 'outer', workflowStatus: 'started',
+        workflowParentNodeId: 'outer', workflowType: 'parallel', workflowStatus: 'started',
         activities: [], children: []
       }]
     }];
 
     fixture.detectChanges();
 
+    const disclosure = fixture.nativeElement.querySelector(
+      '.nested-workflow-item'
+    ) as HTMLDetailsElement;
     const blocks = fixture.nativeElement.querySelectorAll(
       '.agent-group-block'
     ) as NodeListOf<HTMLElement>;
+    expect(disclosure.open).toBe(false);
     expect(blocks).toHaveLength(2);
     expect(blocks[0].getAttribute('role')).toBe('group');
     expect(blocks[0].getAttribute('aria-live')).toBeNull();
+    expect(disclosure.contains(blocks[1])).toBe(true);
     expect(blocks[1].getAttribute('role')).toBe('status');
     expect(blocks[1].getAttribute('aria-live')).toBe('polite');
+
+    (disclosure.querySelector('summary') as HTMLElement).click();
+    fixture.detectChanges();
+    expect(disclosure.open).toBe(true);
   });
 
   it('renders terminal Workflow state even before an Agent appears', () => {

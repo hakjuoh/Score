@@ -206,6 +206,7 @@ final class AiLifecycleEventObserver {
         String selectedWorkflow = ScoreAiObservability.value(Objects.toString(
                 metadata.getOrDefault("workflow", workflowPrefix(subtype)), null));
         String workflowKind = workflowPrefix(subtype);
+        String workflowType = workflowType(metadata);
         String semanticWorkflow = workflowMetricName(selectedWorkflow);
         String operationId = ScoreAiObservability.value(Objects.toString(
                 metadata.getOrDefault("node_id", metadata.get("fanout_id")), workflowPrefix(subtype)));
@@ -225,7 +226,8 @@ final class AiLifecycleEventObserver {
                         .setAttribute("score.ai.workflow.name", selectedWorkflow)
                         .setAttribute("score.ai.workflow.run_id", operationId)
                         .setAttribute("score.ai.workflow.id", selectedWorkflow)
-                        .setAttribute("score.ai.workflow.kind", workflowKind);
+                        .setAttribute("score.ai.workflow.kind", workflowKind)
+                        .setAttribute("score.ai.workflow.type", workflowType);
                 setEventIdentity(builder, metadata);
                 setWorkflowShapeAttributes(builder, metadata);
                 Span span = builder.startSpan();
@@ -247,7 +249,8 @@ final class AiLifecycleEventObserver {
                     .setAttribute("score.ai.workflow.name", selectedWorkflow)
                     .setAttribute("score.ai.workflow.run_id", operationId)
                     .setAttribute("score.ai.workflow.id", selectedWorkflow)
-                    .setAttribute("score.ai.workflow.kind", workflowKind);
+                    .setAttribute("score.ai.workflow.kind", workflowKind)
+                    .setAttribute("score.ai.workflow.type", workflowType);
             setEventIdentity(builder, metadata);
             setWorkflowShapeAttributes(builder, metadata);
             Span span = builder.startSpan();
@@ -404,17 +407,14 @@ final class AiLifecycleEventObserver {
     }
 
     private static boolean workflowEvent(String subtype) {
-        String prefix = workflowPrefix(subtype);
         return !"unknown".equals(terminalSuffix(subtype))
-                && ("workflow".equals(prefix)
-                || "multi_agent".equals(prefix)
-                || "parallel_workflow".equals(prefix));
+                && "workflow".equals(workflowPrefix(subtype));
     }
 
     private static String terminalSuffix(String subtype) {
         for (String suffix : new String[]{
-                "started", "planned", "synthesizing", "completed", "failed", "cancelled",
-                "refused", "stalled"}) {
+                "output_retry_handoff", "started", "planned", "synthesizing", "completed",
+                "failed", "cancelled", "refused", "stalled"}) {
             if (subtype.endsWith("_" + suffix)) return suffix;
         }
         return "unknown";
@@ -429,8 +429,17 @@ final class AiLifecycleEventObserver {
     private static String workflowMetricName(String workflow) {
         String normalized = AiObservationInstruments.normalized(workflow);
         return switch (normalized) {
-            case "main", "direct", "chain", "parallel", "routing", "orchestrator_workers" -> normalized;
+            case "main" -> normalized;
             default -> "recursive";
+        };
+    }
+
+    private static String workflowType(Map<String, Object> metadata) {
+        String normalized = Objects.toString(metadata.get("workflow_type"), "unknown")
+                .strip().toLowerCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "direct", "sequential", "parallel" -> normalized;
+            default -> "unknown";
         };
     }
 
@@ -446,7 +455,7 @@ final class AiLifecycleEventObserver {
             case "completed", "complete", "success" -> "success";
             case "timed_out", "timeout" -> "timeout";
             case "stalled" -> "stalled";
-            case "cancelled", "canceled" -> "cancelled";
+            case "cancelled", "canceled", "output_retry_handoff" -> "cancelled";
             case "denied", "blocked", "refused" -> "refused";
             case "failed", "error", "partial_failure" -> normalized;
             case "admission_rejected" -> "admission_rejected";

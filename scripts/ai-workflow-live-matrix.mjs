@@ -9,7 +9,7 @@ const runId = process.argv[2]
   || `workflow-live-${new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, 'Z')}`;
 const outputDir = resolve('experiments', 'ai-workflow-validation', runId);
 const workflows = (process.env.SCORE_WORKFLOWS
-  || 'direct,chain,parallel,routing,orchestrator_workers')
+  || 'assistant,agents')
   .split(',')
   .map(value => value.trim())
   .filter(Boolean);
@@ -68,10 +68,8 @@ function completedToolCalls(trajectory) {
 async function runWorkflow(workflow, ordinal) {
   const started = performance.now();
   try {
-    const workflowLabel = workflow === 'orchestrator_workers'
-      ? 'orchestrator workers' : workflow;
     const multiAgent = {
-      enabled: workflow !== 'direct',
+      enabled: workflow === 'agents',
       maxAgents: 3,
       strategy: 'verification'
     };
@@ -81,7 +79,9 @@ async function runWorkflow(workflow, ordinal) {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        prompt: `For all following requests, always use the ${workflowLabel} workflow.`,
+        prompt: workflow === 'agents'
+          ? 'For all following requests, always use agents.'
+          : 'For all following requests, never use agents.',
         requestId: randomUUID(),
         agent: 'connectcenter-assistant',
         conversationId: null,

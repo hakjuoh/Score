@@ -227,7 +227,8 @@ public class ChatService {
         if (StringUtils.hasText(request.conversationId())) {
             previousSettings = conversationRepository.settingsForUpdate(request.conversationId());
             Optional<String> stored = conversationRepository.activeWorkflow(request.conversationId());
-            storedActiveWorkflow = stored != null ? stored.orElse(null) : null;
+            storedActiveWorkflow = normalizeWorkflowPreference(
+                    stored != null ? stored.orElse(null) : null);
             if (!StringUtils.hasText(requestedModelName)) {
                 requestedModelName = previousSettings.modelName();
             }
@@ -663,13 +664,22 @@ public class ChatService {
             details = new ChatConversationDetails(details.conversationId(), details.title(),
                     details.modelName(), details.reasoningEffort(), details.updatedAt(), messages,
                     details.contextMessages(), details.contextUsage(), details.permissionMode(),
-                    details.activeWorkflow());
+                    normalizeWorkflowPreference(details.activeWorkflow()));
         }
         AiContextUsageInfo contextUsage = currentContextUsage(requester, conversationId, details.modelName());
         return new ChatConversationDetails(details.conversationId(), details.title(), details.modelName(),
                 details.reasoningEffort(), details.updatedAt(), details.messages(), details.contextMessages(),
                 contextUsage, details.permissionMode(),
-                details.activeWorkflow());
+                normalizeWorkflowPreference(details.activeWorkflow()));
+    }
+
+    private static String normalizeWorkflowPreference(String value) {
+        if (!StringUtils.hasText(value)) return null;
+        return switch (value.strip().toLowerCase(java.util.Locale.ROOT)) {
+            case "agents" -> "agents";
+            case "assistant" -> "assistant";
+            default -> null;
+        };
     }
 
     public List<AiChatModelInfo> availableModels() {

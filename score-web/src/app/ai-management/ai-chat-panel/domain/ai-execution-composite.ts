@@ -1,12 +1,17 @@
 import {
   AiAgentActivity,
-  AiAgentActivityGroupResolver,
   AiAgentActivityUpdate,
   agentActivityOwnerId,
   agentActivityUpdate,
   upsertAgentActivity
 } from './ai-agent-activity';
 import {AiChatMessage, AiChatSocketEvent} from './ai-chat-panel.model';
+import {
+  AiWorkflowPresentation,
+  workflowPresentation,
+  workflowType,
+  workflowTypeValue
+} from './ai-workflow-presentation';
 
 const WORKFLOW_TERMINAL_STATUSES = new Map<string, AiChatMessage['workflowStatus']>([
   ['workflow_completed', 'completed'],
@@ -22,11 +27,17 @@ export function workflowTerminalStatus(subtype: string | undefined):
   return subtype ? WORKFLOW_TERMINAL_STATUSES.get(subtype) : undefined;
 }
 
+export function isWorkflowLifecycleEvent(event: AiChatSocketEvent): boolean {
+  return event.type === 'system'
+    && (event.subtype === 'workflow_started' || !!workflowTerminalStatus(event.subtype));
+}
+
 export interface AiWorkflowPlacement {
-  anchor: AiChatMessage;
+  anchor?: AiChatMessage;
   container: AiChatMessage[];
   root: boolean;
   created: boolean;
+  presentation: AiWorkflowPresentation;
 }
 
 export interface AiAgentPlacement {
@@ -35,6 +46,13 @@ export interface AiAgentPlacement {
   createdRootAnchor: boolean;
   update: AiAgentActivityUpdate;
   rootGroup: boolean;
+}
+
+export interface AiPlainActivityPlacement {
+  message: AiChatMessage;
+  container: AiChatMessage[];
+  root: boolean;
+  created: boolean;
 }
 
 export function appendWorkflowConversation(container: AiChatMessage[], content: string,
@@ -60,12 +78,14 @@ export function appendWorkflowConversation(container: AiChatMessage[], content: 
  */
 export class AiExecutionComposite {
   private readonly workflows = new Map<string, AiChatMessage>();
+  private readonly plainWorkflows = new Map<string, AiChatMessage>();
+  private readonly plainActivities = new Map<string, AiChatMessage>();
+  private readonly plainRootNodes = new Set<string>();
+  private readonly workflowPresentations = new Map<string, AiWorkflowPresentation>();
   private readonly workflowContainers = new Map<string, AiChatMessage[]>();
   private readonly rootWorkflows = new Set<string>();
   private readonly workflowOwners = new Map<string, AiAgentActivity>();
   private readonly agents = new Map<string, AiAgentActivity>();
-  private readonly fallbackGroups = new Map<string, AiAgentActivity[]>();
-  private readonly fallbackResolver = new AiAgentActivityGroupResolver();
   private activeOwnerId?: string;
 
   constructor(private readonly retainMultipleOwners = false) {}
@@ -77,29 +97,64 @@ export class AiExecutionComposite {
     const nodeId = metadataText(event, 'nodeId', 'node_id');
     const parentNodeId = metadataText(event, 'parentNodeId', 'parent_node_id');
     const depth = event.metadata?.['depth'];
-    if (!nodeId || typeof depth !== 'number' || depth < 1) return undefined;
+    if (!nodeId || typeof depth !== 'number' || depth < 0) return undefined;
 
     const key = this.nodeKey(event, nodeId);
-    const existing = this.workflows.get(key);
+    const parentKey = parentNodeId ? this.nodeKey(event, parentNodeId) : undefined;
+    const container = this.parentMessages(event, parentNodeId, rootMessages);
+    const root = container === rootMessages
+      || !!parentKey && this.plainRootNodes.has(parentKey);
+    const existing = this.workflows.get(key) || this.plainWorkflows.get(key);
     if (existing) {
-      const container = this.parentMessages(event, parentNodeId, rootMessages);
-      return {anchor: existing, container, root: container === rootMessages, created: false};
+      return {
+        anchor: existing, container, root, created: false,
+        presentation: this.workflowPresentations.get(key) || 'message'
+      };
+    }
+    const existingPresentation = this.workflowPresentations.get(key);
+    if (existingPresentation) {
+      return {
+        container, root, created: false,
+        presentation: existingPresentation
+      };
     }
 
-    const anchor: AiChatMessage = {
-      role: 'workflow_group',
-      content: 'Workflow',
-      groupId: key,
-      activities: [],
-      children: [],
+    const type = workflowType(event);
+    const declaredType = workflowTypeValue(event);
+    const presentation = workflowPresentation(type);
+    this.workflowPresentations.set(key, presentation);
+    this.workflowContainers.set(key, container);
+    if (presentation === 'hidden') {
+      if (root) this.plainRootNodes.add(key);
+      return {container, root, created: true, presentation};
+    }
+
+    const content = event.content || event.message || 'Working...';
+    const itemCount = metadataPositiveInteger(event, 'member_count', 'memberCount');
+    const anchor: AiChatMessage = presentation === 'box' ? {
+      role: 'workflow_group', content, eventType: 'workflow_lifecycle',
+      requestId: event.requestId,
+      groupId: key, activities: [], children: [],
       workflowNodeId: nodeId,
       ...(parentNodeId ? {workflowParentNodeId: parentNodeId} : {}),
+      workflowType: type,
+      ...(itemCount !== undefined ? {workflowItemCount: itemCount} : {}),
+      workflowStatus: 'started'
+    } : {
+      role: 'guide', content, eventType: 'workflow_lifecycle',
+      requestId: event.requestId,
+      workflowNodeId: nodeId,
+      ...(parentNodeId ? {workflowParentNodeId: parentNodeId} : {}),
+      ...(declaredType ? {workflowType: declaredType} : {}),
       workflowStatus: 'started'
     };
-    this.workflows.set(key, anchor);
-    const container = this.parentMessages(event, parentNodeId, rootMessages);
-    this.workflowContainers.set(key, container);
-    if (container === rootMessages) this.rootWorkflows.add(key);
+    if (presentation === 'box') {
+      this.workflows.set(key, anchor);
+      if (container === rootMessages) this.rootWorkflows.add(key);
+    } else {
+      this.plainWorkflows.set(key, anchor);
+      if (root) this.plainRootNodes.add(key);
+    }
     if (parentNodeId) {
       const owner = this.agents.get(this.nodeKey(event, parentNodeId));
       if (owner) {
@@ -110,7 +165,7 @@ export class AiExecutionComposite {
         owner.lastUpdateAt = Date.now();
       }
     }
-    return {anchor, container, root: container === rootMessages, created: true};
+    return {anchor, container, root, created: true, presentation};
   }
 
   finishWorkflow(event: AiChatSocketEvent): boolean {
@@ -119,10 +174,17 @@ export class AiExecutionComposite {
     if (!terminalStatus) return false;
     this.prepareOwner(event);
     const nodeId = metadataText(event, 'nodeId', 'node_id');
-    const workflow = nodeId ? this.workflows.get(this.nodeKey(event, nodeId)) : undefined;
+    if (!nodeId) return false;
+    const key = this.nodeKey(event, nodeId);
+    const presentation = this.workflowPresentations.get(key);
+    if (presentation === 'hidden') return true;
+    const workflow = this.workflows.get(key) || this.plainWorkflows.get(key);
     if (!workflow) return false;
     workflow.workflowStatus = terminalStatus;
-    const key = this.nodeKey(event, nodeId);
+    workflow.inProgress = false;
+    if (presentation === 'message') {
+      workflow.content = event.content || event.message || workflow.content;
+    }
     if (!this.rootWorkflows.has(key)) {
       const container = this.workflowContainers.get(key);
       if (container) removeConversationStatuses(container);
@@ -155,30 +217,23 @@ export class AiExecutionComposite {
     if (!update) return undefined;
     this.prepareOwner(event);
     const parentNodeId = metadataText(event, 'parentNodeId', 'parent_node_id');
+    const parentKey = parentNodeId ? this.nodeKey(event, parentNodeId) : undefined;
+    const parentPresentation = parentKey
+      ? this.workflowPresentations.get(parentKey) : undefined;
+    if (parentPresentation === 'message' || parentPresentation === 'hidden') {
+      const agentKey = this.nodeKey(event, update.agentId);
+      this.workflowPresentations.set(agentKey, parentPresentation);
+      if (parentKey && this.plainRootNodes.has(parentKey)) this.plainRootNodes.add(agentKey);
+      return undefined;
+    }
     const workflow = parentNodeId
       ? this.workflows.get(this.nodeKey(event, parentNodeId))
         || this.restoreWorkflowReference(event, parentNodeId, rootMessages)
       : undefined;
-    let activities: AiAgentActivity[];
-    let anchor: AiChatMessage | undefined;
-    let createdRootAnchor = false;
-
-    if (workflow) {
-      activities = workflow.activities!;
-      anchor = workflow;
-    } else {
-      const groupId = this.fallbackResolver.resolve(event);
-      activities = this.fallbackGroups.get(groupId) || [];
-      createdRootAnchor = !this.fallbackGroups.has(groupId);
-      if (createdRootAnchor) this.fallbackGroups.set(groupId, activities);
-      anchor = createdRootAnchor ? {
-        role: update.executionKind === 'parallel' ? 'workflow_group' : 'agent_group',
-        content: update.executionKind === 'parallel' ? 'Parallel workflow' : 'Delegated workflow',
-        groupId,
-        activities,
-        children: []
-      } : undefined;
-    }
+    if (!workflow) return undefined;
+    const activities = workflow.activities!;
+    const anchor = workflow;
+    const createdRootAnchor = false;
 
     if (!upsertAgentActivity(activities, update)) return undefined;
     const activity = activities.find(candidate => candidate.agentId === update.agentId);
@@ -200,14 +255,68 @@ export class AiExecutionComposite {
       : undefined;
   }
 
+  /** Unknown future Workflow types remain visible as ordinary chat events. */
+  isPlainEvent(event: AiChatSocketEvent): boolean {
+    this.prepareOwner(event);
+    const nodeId = metadataText(event, 'nodeId', 'node_id', 'agentId');
+    const parentNodeId = metadataText(event, 'parentNodeId', 'parent_node_id');
+    return [nodeId, parentNodeId].some(id => id
+      ? this.workflowPresentations.get(this.nodeKey(event, id)) === 'message' : false);
+  }
+
+  upsertPlainActivity(event: AiChatSocketEvent,
+                      rootMessages: AiChatMessage[]): AiPlainActivityPlacement | undefined {
+    const update = agentActivityUpdate(event);
+    if (!update) return undefined;
+    this.prepareOwner(event);
+    const nodeId = metadataText(event, 'nodeId', 'node_id', 'agentId');
+    const parentNodeId = metadataText(event, 'parentNodeId', 'parent_node_id');
+    const parentKey = parentNodeId ? this.nodeKey(event, parentNodeId) : undefined;
+    if (!nodeId || ![nodeId, parentNodeId].some(id => id
+      ? this.workflowPresentations.get(this.nodeKey(event, id)) === 'message' : false)) {
+      return undefined;
+    }
+    const key = this.nodeKey(event, nodeId);
+    this.workflowPresentations.set(key, 'message');
+    const container = this.parentMessages(event, parentNodeId, rootMessages);
+    // A plain activity can itself own a later nested Workflow. Index its
+    // conversation just like a boxed Agent so descendants stay with the
+    // owning conversation instead of falling back to the root chat.
+    this.workflowContainers.set(key, container);
+    const root = container === rootMessages
+      || !!parentKey && this.plainRootNodes.has(parentKey);
+    if (root) this.plainRootNodes.add(key);
+    const terminal = update.status === 'completed' || update.status === 'failed'
+      || update.status === 'cancelled';
+    const role = update.status === 'failed' || update.status === 'cancelled'
+      ? 'error' as const : terminal ? 'guide' as const : 'progress' as const;
+    const value = {
+      role, content: update.content, requestId: event.requestId,
+      ...(event.turnId ? {turnId: event.turnId} : {}),
+      eventType: 'workflow_activity', workflowNodeId: nodeId,
+      ...(parentNodeId ? {workflowParentNodeId: parentNodeId} : {}),
+      inProgress: !terminal
+    };
+    const existing = this.plainActivities.get(key);
+    if (existing) {
+      Object.assign(existing, value);
+      return {message: existing, container, root, created: false};
+    }
+    const message: AiChatMessage = value;
+    this.plainActivities.set(key, message);
+    return {message, container, root, created: true};
+  }
+
   clear(): void {
     this.workflows.clear();
+    this.plainWorkflows.clear();
+    this.plainActivities.clear();
+    this.plainRootNodes.clear();
+    this.workflowPresentations.clear();
     this.workflowContainers.clear();
     this.rootWorkflows.clear();
     this.workflowOwners.clear();
     this.agents.clear();
-    this.fallbackGroups.clear();
-    this.fallbackResolver.clear();
     this.activeOwnerId = undefined;
   }
 
@@ -218,7 +327,8 @@ export class AiExecutionComposite {
     const agent = this.agents.get(key);
     if (agent) return agent.messages ||= [];
     const workflow = this.workflows.get(key);
-    return workflow?.children || rootMessages;
+    if (workflow) return workflow.children || rootMessages;
+    return this.workflowContainers.get(key) || rootMessages;
   }
 
   private restoreWorkflowReference(event: AiChatSocketEvent, nodeId: string,
@@ -305,6 +415,14 @@ function metadataText(event: AiChatSocketEvent, ...keys: string[]): string | und
   for (const key of keys) {
     const value = event.metadata?.[key];
     if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function metadataPositiveInteger(event: AiChatSocketEvent, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = event.metadata?.[key];
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return value;
   }
   return undefined;
 }
