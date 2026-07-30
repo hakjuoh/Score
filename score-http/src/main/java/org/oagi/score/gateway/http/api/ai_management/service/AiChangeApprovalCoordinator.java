@@ -2,8 +2,6 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChangeApprovalDecisionRequest;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
-import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
-import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalBatchNotice;
@@ -13,6 +11,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiChangeDecision;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApproval;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
+import org.oagi.score.gateway.http.api.ai_management.trajectory.TrajectoryStepAppender;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
@@ -69,6 +68,7 @@ public class AiChangeApprovalCoordinator {
     private final Duration approvalTimeout;
     private final Consumer<String> batchRegisteredHook;
     private final ExecutionObserver observer;
+    private final TrajectoryStepAppender trajectorySteps;
     private final Map<String, ParallelGroup> groups = new ConcurrentHashMap<>();
     private final Map<String, PendingBatch> batches = new ConcurrentHashMap<>();
     private final Map<String, DecidedBatch> decidedBatches = new ConcurrentHashMap<>();
@@ -130,6 +130,7 @@ public class AiChangeApprovalCoordinator {
         this.batchRegisteredHook = Objects.requireNonNull(
                 batchRegisteredHook, "batchRegisteredHook");
         this.observer = observer != null ? observer : ExecutionObserver.noop();
+        this.trajectorySteps = new TrajectoryStepAppender(this.observer);
     }
 
     public Duration decisionTimeout() {
@@ -858,38 +859,9 @@ public class AiChangeApprovalCoordinator {
         AiChatConversationRepository repository =
                 repositoryFactory.aiChatConversationRepository(
                         requester, AiChatJsonSerializer.getInstance());
-        if (!StringUtils.hasText(step.requestId())) {
-            throw new IllegalArgumentException(
-                    "A request ID is required for an AI trajectory event.");
-        }
-        String requesterId = requester != null && requester.userId() != null
-                ? requester.userId().value().toString()
-                : requester != null && StringUtils.hasText(requester.username())
-                ? requester.username() : "unknown";
-        ExecutionScope scope = new ExecutionScope(step.requestId(), conversationId,
-                requesterId, Math.max(0L, generation),
-                ExecutionScope.Purpose.GUARDRAIL_EVALUATION, List.of());
-        observer.publish(ExecutionObservation.of("trajectory." + step.messageKind(), scope,
-                        Map.of("message_kind", step.messageKind(), "source", step.source())),
-                event -> {
-                    Map<String, Object> extra = new LinkedHashMap<>(
-                            step.extra() != null ? step.extra() : Map.of());
-                    copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_ID);
-                    copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_SEQUENCE);
-                    copyEventAttribute(event, extra, ExecutionEventPublisher.EVENT_OCCURRED_AT);
-                    repository.append(conversationId, new AiChatTrajectoryStep(
-                            step.requestId(), step.source(), step.messageKind(), step.visibility(),
-                            step.message(), step.reasoningContent(), step.modelName(),
-                            step.reasoningEffort(), step.toolCalls(), step.observation(),
-                            step.metrics(), Map.copyOf(extra), step.llmCallCount(),
-                            step.isCopiedContext(), event.occurredAt()));
-                });
-    }
-
-    private void copyEventAttribute(ExecutionObservation event, Map<String, Object> target,
-                                    String name) {
-        Object value = event.attributes().get(name);
-        if (value != null) target.put(name, value);
+        trajectorySteps.append(new TrajectoryStepAppender.Command(repository, requester,
+                conversationId, step, ExecutionScope.Purpose.GUARDRAIL_EVALUATION,
+                Map.of(), () -> { }, generation));
     }
 
     public record Participant(String agentId, String agentLabel) {
