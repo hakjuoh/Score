@@ -507,10 +507,10 @@ describe('AiConversationRestoreService', () => {
     expect(messages).toEqual([
       {role: 'user', content: 'How many business contexts are there?'},
       {
-        role: 'tool_call', content: 'toolSearchTool completed.',
+        role: 'tool_call', content: 'tool_search_tool completed.',
         groupId: 'request-1', toolCallId: 'call-1', toolCallSeq: 0,
         toolName: 'toolSearchTool',
-        toolDetail: 'toolSearchTool\nArguments: {"arg0":"list business contexts"}\nResult: ["get_business_contexts"]',
+        toolDetail: 'tool_search_tool\nArguments: {"arg0":"list business contexts"}\nResult: ["get_business_contexts"]',
         toolStatus: 'completed'
       },
       {

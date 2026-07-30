@@ -26,6 +26,21 @@ final class CreateFileTool implements AiTool {
               "additionalProperties":false
             }
             """;
+    private static final String OUTPUT_SCHEMA = """
+            {
+              "type":"object",
+              "properties":{
+                "fileId":{"type":"string","description":"Stable identifier of the retained file."},
+                "format":{"type":"string","description":"Registered renderer format."},
+                "filename":{"type":"string","description":"Download filename."},
+                "mediaType":{"type":"string","description":"File media type."},
+                "size":{"type":"integer","format":"int64","minimum":0,"description":"File size in bytes."},
+                "sha256":{"type":"string","pattern":"^[a-fA-F0-9]{64}$","description":"SHA-256 content digest."}
+              },
+              "required":["fileId","format","filename","mediaType","size","sha256"],
+              "additionalProperties":false
+            }
+            """;
     private final ScoreUser requester;
     private final AiFileService files;
     private final ObjectMapper objectMapper;
@@ -41,7 +56,7 @@ final class CreateFileTool implements AiTool {
         return new ToolSpecification(new ToolId(NAME), NAME,
                 "Create and retain a downloadable Assistant file after its content is complete. "
                         + "Use a registered format; currently markdown and pdf are available.",
-                INPUT_SCHEMA, "{\"type\":\"object\"}", ToolEffect.OUTPUT_WRITE);
+                INPUT_SCHEMA, OUTPUT_SCHEMA, ToolEffect.OUTPUT_WRITE);
     }
 
     @Override

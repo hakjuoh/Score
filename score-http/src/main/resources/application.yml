@@ -80,12 +80,6 @@ spring:
                 algorithm: ${CONNECT_CENTER_MCP_JWT_ALGORITHM:ES256}
                 # Raised to at least the elicitation timeout plus 60 seconds at runtime.
                 token-ttl-seconds: ${CONNECT_CENTER_MCP_TOKEN_TTL_SECONDS:300}
-    chat:
-      client:
-        tool-search-advisor:
-          enabled: true
-          tool-index-type: regex
-          max-results: 10
 logging:
   level:
     org.springframework: ${LOG_LEVEL_SPRING:INFO}
@@ -456,6 +450,8 @@ score:
       retention: ${SCORE_AI_CONVERSATION_RETENTION:90d}
       cleanup-interval: ${SCORE_AI_CONVERSATION_CLEANUP_INTERVAL:24h}
     tools:
+      tool-search:
+        enabled: ${SCORE_AI_TOOL_SEARCH_ENABLED:true}
       files:
         enabled: ${SCORE_AI_FILES_ENABLED:true}
         retention: ${SCORE_AI_FILE_RETENTION:7d}
