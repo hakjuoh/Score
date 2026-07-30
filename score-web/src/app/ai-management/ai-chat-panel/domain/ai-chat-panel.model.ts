@@ -46,6 +46,12 @@ export interface AiChatMessage {
    * anchors keep rendering their own final statuses.
    */
   activities?: AiAgentActivity[];
+  /** Nested workflow messages owned by this workflow composite. */
+  children?: AiChatMessage[];
+  /** Stable execution-graph identity used to rebuild nested workflows. */
+  workflowNodeId?: string;
+  workflowParentNodeId?: string;
+  workflowStatus?: AiAgentExecutionStatus;
 }
 
 export interface AiChatAttachment {

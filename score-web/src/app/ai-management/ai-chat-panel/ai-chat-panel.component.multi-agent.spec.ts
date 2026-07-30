@@ -27,6 +27,173 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     transport.publishWhenConnected.mock.calls[0][0].publish();
   }
 
+  it('renders admission as Working and then opens a guided workflow', () => {
+    startPublishedRequest();
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'accepted', content: '',
+      metadata: {generation: 7, deadline: '2099-07-14T13:05:00Z'}
+    });
+
+    expect(component.state.messages.at(-1)).toMatchObject({
+      role: 'progress', content: 'Working...', inProgress: true
+    });
+    expect(component.state.messages.some(message => message.content === 'Request received.'))
+      .toBe(false);
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'workflow_started',
+      content: 'I’ll check the three component counts independently.',
+      metadata: {
+        nodeId: 'main:1:counts', parentNodeId: 'main', depth: 1,
+        member_count: 3
+      }
+    });
+
+    expect(component.state.messages.slice(-3).map(message =>
+      [message.role, message.content])).toEqual([
+      ['guide', 'I’ll check the three component counts independently.'],
+      ['workflow_group', 'Workflow'],
+      ['progress', 'Working...']
+    ]);
+  });
+
+  it('nests a delegated workflow inside its owning Agent conversation', () => {
+    startPublishedRequest();
+    const root = 'main:1:counts';
+    const parentAgent = `${root}:agent:count-accs`;
+    const nested = `${parentAgent}:count-accs-delegated`;
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'workflow_started', content: 'I’ll verify the counts.',
+      metadata: {nodeId: root, parentNodeId: 'main', depth: 1, member_count: 1}
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'subagent_started',
+      content: 'I’ll count the ACCs in this release.',
+      metadata: {
+        nodeId: parentAgent, parentNodeId: root, depth: 2,
+        agentName: 'Evidence researcher', executionKind: 'parallel',
+        assignment: 'Spawn exactly 2 sub-agents to cross-check the ACC count.'
+      }
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'workflow_started',
+      content: 'I’ll cross-check the result with two independent readers.',
+      metadata: {nodeId: nested, parentNodeId: parentAgent, depth: 3, member_count: 2}
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'subagent_planned', content: 'Queued first check.',
+      metadata: {
+        nodeId: `${nested}:agent:first`, parentNodeId: nested, depth: 4,
+        agentName: 'First reader', executionKind: 'parallel'
+      }
+    });
+
+    const parent = component.state.agentActivities[0];
+    expect(parent.messages.map(message => message.role))
+      .toEqual(['user', 'guide', 'guide', 'workflow_group', 'progress']);
+    expect(parent.messages[0].content)
+      .toBe('Spawn exactly 2 sub-agents to cross-check the ACC count.');
+    const nestedWorkflow = parent.messages.at(-2);
+    expect(nestedWorkflow?.workflowParentNodeId).toBe(parentAgent);
+    expect(nestedWorkflow?.activities?.map(activity => activity.agentName))
+      .toEqual(['First reader']);
+    component.focusAgentActivity(parentAgent);
+    component.focusAgentActivity(`${nested}:agent:first`);
+    expect(component.focusedAgentActivity?.agentName).toBe('First reader');
+    expect(component.agentFocusBackLabel).toBe('Back to Evidence researcher agent activity');
+    component.closeAgentFocus();
+    expect(component.focusedAgentActivity?.agentId).toBe(parentAgent);
+    expect(component.agentFocusBackLabel).toBe('Back to conversation');
+    component.closeAgentFocus();
+    expect(component.focusedAgentActivity).toBeUndefined();
+  });
+
+  it.each([
+    ['workflow_completed', 'completed'],
+    ['workflow_cancelled', 'cancelled'],
+    ['workflow_output_retry_handoff', 'cancelled'],
+    ['workflow_failed', 'failed'],
+    ['workflow_stalled', 'failed'],
+    ['workflow_refused', 'failed']
+  ] as const)('settles nested Working state for %s', (subtype, expectedStatus) => {
+    startPublishedRequest();
+    const root = 'main:1:root';
+    const parentAgent = `${root}:agent:parent`;
+    const nested = `${parentAgent}:delegated`;
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'workflow_started', content: 'I’m checking the request.',
+      metadata: {nodeId: root, parentNodeId: 'main', depth: 1}
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'subagent_started', content: 'I’m checking one part.',
+      metadata: {nodeId: parentAgent, parentNodeId: root, depth: 2, agentName: 'Parent'}
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'workflow_started', content: 'I’m cross-checking it.',
+      metadata: {nodeId: nested, parentNodeId: parentAgent, depth: 3}
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype, content: 'Nested workflow stopped.',
+      metadata: {nodeId: nested, parentNodeId: parentAgent, depth: 3}
+    });
+
+    const parent = component.state.agentActivities[0];
+    const nestedWorkflow = parent.messages?.find(message => message.workflowNodeId === nested);
+    expect(nestedWorkflow?.workflowStatus).toBe(expectedStatus);
+    expect(parent.messages?.some(message => message.eventType === 'composite_status')).toBe(false);
+    expect(parent.inProgress).toBe(false);
+    if (expectedStatus === 'completed') {
+      expect(parent.messages?.some(message => message.role === 'error')).toBe(false);
+    } else {
+      expect(parent.messages?.at(-1)).toMatchObject({
+        role: 'error', content: 'Nested workflow stopped.', eventType: subtype
+      });
+    }
+  });
+
+  it('recursively settles every descendant when the request terminates', () => {
+    startPublishedRequest();
+    const root = 'main:1:root';
+    const parentAgent = `${root}:agent:parent`;
+    const nested = `${parentAgent}:delegated`;
+    const childAgent = `${nested}:agent:child`;
+    for (const event of [
+      {subtype: 'workflow_started', content: 'I’m checking the request.',
+        metadata: {nodeId: root, parentNodeId: 'main', depth: 1}},
+      {subtype: 'subagent_started', content: 'I’m checking one part.',
+        metadata: {nodeId: parentAgent, parentNodeId: root, depth: 2, agentName: 'Parent'}},
+      {subtype: 'workflow_started', content: 'I’m cross-checking it.',
+        metadata: {nodeId: nested, parentNodeId: parentAgent, depth: 3}},
+      {subtype: 'subagent_started', content: 'I’m reading the evidence.',
+        metadata: {nodeId: childAgent, parentNodeId: nested, depth: 4, agentName: 'Child'}}
+    ]) {
+      (component as any).handleSocketEvent({
+        requestId: 'request-1', conversationId: 'conversation-1', type: 'system', ...event
+      });
+    }
+
+    (component as any).settleAgentActivity('cancelled');
+
+    const parent = component.state.agentActivities[0];
+    const nestedWorkflow = parent.messages?.find(message => message.workflowNodeId === nested);
+    const child = nestedWorkflow?.activities?.[0];
+    expect(parent).toMatchObject({status: 'cancelled', inProgress: false});
+    expect(child).toMatchObject({status: 'cancelled', inProgress: false});
+    expect(nestedWorkflow?.workflowStatus).toBe('cancelled');
+    expect(parent.messages?.some(message => message.role === 'progress')).toBe(false);
+    expect(child?.messages?.some(message => message.role === 'progress')).toBe(false);
+  });
+
   it('consolidates lifecycle events into activities behind one group anchor', () => {
     startPublishedRequest();
 
@@ -457,7 +624,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     ]);
   });
 
-  it('separates worker-only Planner iterations and keeps each synthesis in chat', () => {
+  it('separates worker-only Planner iterations and keeps only the latest synthesis', () => {
     startPublishedRequest();
     const worker = (iteration: number, index: number, subtype: string) => ({
       requestId: 'request-1', conversationId: 'conversation-1',
@@ -494,24 +661,27 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     expect(component.state.agentActivities).toBe(groups[1].activities);
     expect(component.state.messages.filter(message => message.eventType === 'workflow_result'))
       .toEqual([
-        expect.objectContaining({role: 'assistant', content: 'First synthesis.'}),
         expect.objectContaining({role: 'assistant', content: 'Revised synthesis.'})
       ]);
 
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
-      type: 'assistant_update', content: 'Revised '
+      type: 'assistant_update', content: 'Canonical '
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
-      type: 'assistant_update', content: 'synthesis.'
+      type: 'assistant_update', content: 'answer.'
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
-      type: 'assistant_final', content: 'Revised synthesis.'
+      type: 'assistant_final', content: 'Canonical answer.'
     });
     expect(component.state.messages.filter(message =>
-      message.role === 'assistant' && message.content === 'Revised synthesis.')).toHaveLength(1);
+      message.role === 'assistant')).toEqual([
+      expect.objectContaining({content: 'Canonical answer.'})
+    ]);
+    expect(component.state.messages.some(message =>
+      message.eventType === 'workflow_result')).toBe(false);
   });
 
   it('coalesces a REST workflow result preview with the canonical response', () => {

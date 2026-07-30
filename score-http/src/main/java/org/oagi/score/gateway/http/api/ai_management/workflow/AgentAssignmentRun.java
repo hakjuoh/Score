@@ -5,9 +5,11 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentAssignmentLifecy
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentExecutionRecorder;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentGuardrailRefusedException;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutputRetryHandoffException;
+import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutput;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentRunRequest;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentRunResult;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentWorkflowContext;
+import org.oagi.score.gateway.http.api.ai_management.agent.WorkflowResult;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 
@@ -15,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /** Owns lifecycle and exact-once usage bookkeeping for one assigned Agent run. */
@@ -24,7 +27,7 @@ final class AgentAssignmentRun {
     }
 
     static void preflightStarted(Agent agent, AgentWorkflowContext context) {
-        if (context.assignment() == null) return;
+        if (!ownsAssignment(agent, context)) return;
         AiWorkflowPlan.AgentTask task = context.assignment();
         Map<String, Object> namespace = AgentAssignmentLifecycle.namespace(agent, context, task);
         context.execution().recorder().lifecycle("subagent_preparing",
@@ -32,9 +35,18 @@ final class AgentAssignmentRun {
                 AgentAssignmentLifecycle.metadata(namespace, "preparing"));
     }
 
+    static void planned(Agent agent, AgentWorkflowContext context) {
+        if (!ownsAssignment(agent, context)) return;
+        AiWorkflowPlan.AgentTask task = context.assignment();
+        Map<String, Object> namespace = AgentAssignmentLifecycle.namespace(agent, context, task);
+        context.execution().recorder().lifecycle(
+                "subagent_planned", "Queued " + task.label() + ".",
+                AgentAssignmentLifecycle.metadata(namespace, "planned"));
+    }
+
     static Lifecycle lifecycle(Agent agent, AgentWorkflowContext context,
                                AgentRunRequest request) {
-        if (context.assignment() == null) return Lifecycle.noop();
+        if (!ownsAssignment(agent, context)) return Lifecycle.noop();
         AiWorkflowPlan.AgentTask task = Objects.requireNonNull(
                 context.assignment(), "Agent assignment");
         AgentExecutionRecorder recorder = executionRecorder(context, request);
@@ -54,6 +66,7 @@ final class AgentAssignmentRun {
 
     static UsageSource registerUsage(Agent agent, AgentWorkflowContext context,
                                      AgentRunRequest request) {
+        if (context.assignment() != null && !ownsAssignment(agent, context)) return null;
         if (!(request instanceof AgentRunRequest.Chat chat)) {
             return null;
         }
@@ -78,23 +91,47 @@ final class AgentAssignmentRun {
             lifecycle.failed().accept(failure);
             return;
         }
-        if (context.assignment() == null) return;
+        if (!ownsAssignment(agent, context)) return;
         AiWorkflowPlan.AgentTask task = context.assignment();
         Map<String, Object> namespace = AgentAssignmentLifecycle.namespace(agent, context, task);
-        context.execution().recorder().lifecycle("subagent_preflight_failed",
+        context.execution().recorder().lifecycle("subagent_failed",
                 "Could not prepare " + task.label() + ".",
                 AgentAssignmentLifecycle.metadata(namespace, "failed", Map.of(
                         "reason", failure.getClass().getSimpleName())));
     }
 
+    static void rejected(Agent agent, AgentWorkflowContext context, RuntimeException failure) {
+        if (!ownsAssignment(agent, context)) return;
+        AiWorkflowPlan.AgentTask task = context.assignment();
+        Map<String, Object> namespace = AgentAssignmentLifecycle.namespace(agent, context, task);
+        failed(context.execution().recorder(), false, task, namespace, failure);
+    }
+
     private static void completed(AgentExecutionRecorder recorder, boolean terminal,
                                   AiWorkflowPlan.AgentTask task,
-                                  Map<String, Object> namespace, AgentRunResult result) {
+                                  Map<String, Object> namespace, AgentOutput result) {
         Map<String, Object> metadata = result != null
-                ? new LinkedHashMap<>(result.metadata().attributes()) : new LinkedHashMap<>();
+                ? new LinkedHashMap<>(result.metadata()) : new LinkedHashMap<>();
+        if (result != null) metadata.put("result", result.content());
         metadata.putAll(AgentAssignmentLifecycle.metadata(namespace, "completed"));
         recordLifecycle(recorder, terminal, "subagent_completed",
                 AgentAssignmentLifecycle.status(task, true), metadata);
+    }
+
+    static void delegatedFinished(Agent agent, AgentWorkflowContext context,
+                                  WorkflowResult result) {
+        if (context.assignment() == null || result == null) return;
+        AiWorkflowPlan.AgentTask task = context.assignment();
+        Map<String, Object> namespace = AgentAssignmentLifecycle.namespace(agent, context, task);
+        if (!result.successful()) {
+            failed(context.execution().recorder(), false, task, namespace, result.failure());
+            return;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>(result.metadata());
+        metadata.put("result", result.output());
+        metadata.putAll(AgentAssignmentLifecycle.metadata(namespace, "completed"));
+        context.execution().recorder().lifecycle("subagent_completed",
+                AgentAssignmentLifecycle.status(task, true), Map.copyOf(metadata));
     }
 
     private static void failed(AgentExecutionRecorder recorder, boolean terminal,
@@ -126,6 +163,11 @@ final class AgentAssignmentRun {
                 ? chat.context().recorder() : context.execution().recorder();
     }
 
+    private static boolean ownsAssignment(Agent agent, AgentWorkflowContext context) {
+        return context.assignment() != null
+                && context.assignment().agentId().equals(agent.id().value());
+    }
+
     private static void recordLifecycle(AgentExecutionRecorder recorder, boolean terminal,
                                         String subtype, String content,
                                         Map<String, Object> metadata) {
@@ -133,9 +175,35 @@ final class AgentAssignmentRun {
         else recorder.lifecycle(subtype, content, metadata);
     }
 
-    record Lifecycle(Runnable started, Consumer<AgentRunResult> completed,
-                     Runnable retried, Consumer<RuntimeException> failed) {
-        private static Lifecycle noop() {
+    static final class Lifecycle {
+        private final Runnable started;
+        private final Consumer<AgentOutput> completed;
+        private final Runnable retried;
+        private final Consumer<RuntimeException> failed;
+        private final AtomicBoolean terminal = new AtomicBoolean();
+
+        private Lifecycle(Runnable started, Consumer<AgentOutput> completed,
+                          Runnable retried, Consumer<RuntimeException> failed) {
+            this.started = started;
+            this.completed = completed;
+            this.retried = retried;
+            this.failed = failed;
+        }
+
+        Runnable started() { return started; }
+        Runnable retried() { return retried; }
+        Consumer<AgentOutput> completed() {
+            return result -> {
+                if (terminal.compareAndSet(false, true)) completed.accept(result);
+            };
+        }
+        Consumer<RuntimeException> failed() {
+            return failure -> {
+                if (terminal.compareAndSet(false, true)) failed.accept(failure);
+            };
+        }
+
+        static Lifecycle noop() {
             return new Lifecycle(() -> { }, result -> { }, () -> { }, failure -> { });
         }
     }

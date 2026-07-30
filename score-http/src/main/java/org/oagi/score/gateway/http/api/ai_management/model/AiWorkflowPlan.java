@@ -29,7 +29,7 @@ public record AiWorkflowPlan(WorkflowDefinition root,
 
         /** Backward-compatible chain: each member depends on its predecessor. */
         public WorkflowDefinition(String id, List<Member> members) {
-            this(id, members, null);
+            this(id, members, chainEdges(members));
         }
 
         public WorkflowDefinition {
@@ -46,7 +46,8 @@ public record AiWorkflowPlan(WorkflowDefinition root,
                             "Duplicate Workflow member id: " + member.id());
                 }
             }
-            edges = edges != null ? List.copyOf(edges) : chainEdges(members);
+            edges = List.copyOf(Objects.requireNonNull(
+                    edges, "Workflow dependency edges are required."));
             validateEdges(members, edges);
         }
 
@@ -133,7 +134,15 @@ public record AiWorkflowPlan(WorkflowDefinition root,
 
     public record AgentTask(String agentId, String label, String instruction,
                             String guideMessage, String activeVerb,
-                            String completedVerb, ToolAccess toolAccess) {
+                            String completedVerb, ToolAccess toolAccess,
+                            Delegation delegation) {
+        public AgentTask(String agentId, String label, String instruction,
+                         String guideMessage, String activeVerb,
+                         String completedVerb, ToolAccess toolAccess) {
+            this(agentId, label, instruction, guideMessage, activeVerb,
+                    completedVerb, toolAccess, Delegation.DIRECT);
+        }
+
         public AgentTask {
             agentId = requiredId(agentId, "agent id");
             label = requiredText(label, "agent task label", 100);
@@ -142,7 +151,14 @@ public record AiWorkflowPlan(WorkflowDefinition root,
             activeVerb = optionalText(activeVerb, "agent activeVerb", 32);
             completedVerb = optionalText(completedVerb, "agent completedVerb", 32);
             toolAccess = toolAccess != null ? toolAccess : ToolAccess.NONE;
+            delegation = delegation != null ? delegation : Delegation.DIRECT;
         }
+    }
+
+    /** Whether this task executes directly or owns another recursively planned Workflow. */
+    public enum Delegation {
+        DIRECT,
+        FAN_OUT
     }
 
     /** Per-call Tool authority. Agent definitions never grant their own authority. */

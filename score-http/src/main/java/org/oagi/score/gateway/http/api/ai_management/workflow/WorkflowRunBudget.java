@@ -38,6 +38,8 @@ final class WorkflowRunBudget implements WorkflowRunControl {
     private final LongSupplier nanoTime;
     private final InvocationStarter invocationStarter;
     private final AtomicInteger calls = new AtomicInteger();
+    private final AtomicInteger assignments = new AtomicInteger();
+    private final int maximumAssignments;
     private final AtomicInteger inFlightInvocations = new AtomicInteger();
     private final AtomicBoolean settlementStarted = new AtomicBoolean();
     private final AtomicBoolean settlementDeadlineScheduled = new AtomicBoolean();
@@ -55,14 +57,21 @@ final class WorkflowRunBudget implements WorkflowRunControl {
                       Duration inactivityTimeout, Runnable cancellationFence,
                       Runnable activitySignal) {
         this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
-                activitySignal, System::nanoTime, Thread::startVirtualThread);
+                activitySignal, MAXIMUM_CALLS, System::nanoTime, Thread::startVirtualThread);
+    }
+
+    WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
+                      Duration inactivityTimeout, Runnable cancellationFence,
+                      Runnable activitySignal, int maximumAssignments) {
+        this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
+                activitySignal, maximumAssignments, System::nanoTime, Thread::startVirtualThread);
     }
 
     WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
                       Duration inactivityTimeout, Runnable cancellationFence,
                       LongSupplier nanoTime) {
         this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
-                () -> { }, nanoTime, Thread::startVirtualThread);
+                () -> { }, MAXIMUM_CALLS, nanoTime, Thread::startVirtualThread);
     }
 
     WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
@@ -70,13 +79,21 @@ final class WorkflowRunBudget implements WorkflowRunControl {
                       LongSupplier nanoTime,
                       InvocationStarter invocationStarter) {
         this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
-                () -> { }, nanoTime, invocationStarter);
+                () -> { }, MAXIMUM_CALLS, nanoTime, invocationStarter);
     }
 
     WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
                       Duration inactivityTimeout, Runnable cancellationFence,
                       Runnable activitySignal, LongSupplier nanoTime,
                       InvocationStarter invocationStarter) {
+        this(requestId, rootRecorder, inactivityTimeout, cancellationFence,
+                activitySignal, MAXIMUM_CALLS, nanoTime, invocationStarter);
+    }
+
+    private WorkflowRunBudget(String requestId, AgentExecutionRecorder rootRecorder,
+                      Duration inactivityTimeout, Runnable cancellationFence,
+                      Runnable activitySignal, int maximumAssignments,
+                      LongSupplier nanoTime, InvocationStarter invocationStarter) {
         this.requestId = requestId;
         this.rootRecorder = rootRecorder;
         this.cancellationFence = cancellationFence;
@@ -85,6 +102,10 @@ final class WorkflowRunBudget implements WorkflowRunControl {
         this.nanoTime = java.util.Objects.requireNonNull(nanoTime, "nanoTime");
         this.invocationStarter = java.util.Objects.requireNonNull(
                 invocationStarter, "invocationStarter");
+        if (maximumAssignments < 1) {
+            throw new IllegalArgumentException("Maximum Agent assignments must be positive.");
+        }
+        this.maximumAssignments = maximumAssignments;
         long resolvedTimeout;
         try {
             resolvedTimeout = inactivityTimeout.toNanos();
@@ -99,6 +120,14 @@ final class WorkflowRunBudget implements WorkflowRunControl {
         if (calls.incrementAndGet() > MAXIMUM_CALLS) {
             throw new IllegalStateException(
                     "The Workflow execution budget was exhausted at " + operation + ".");
+        }
+    }
+
+    void admitAssignment() {
+        checkpoint();
+        if (assignments.incrementAndGet() > maximumAssignments) {
+            throw new IllegalStateException(
+                    "The Workflow exceeded the request Agent assignment limit.");
         }
     }
 

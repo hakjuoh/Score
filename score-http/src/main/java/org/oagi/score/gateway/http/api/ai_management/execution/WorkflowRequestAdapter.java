@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.execution;
 
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentWorkflowContext;
+import org.oagi.score.gateway.http.api.ai_management.agent.DelegationIntent;
 import org.springframework.util.StringUtils;
 
 import java.util.Objects;
@@ -24,6 +25,9 @@ public final class WorkflowRequestAdapter {
                 || StringUtils.hasText(request.activeWorkflow())
                 && !"assistant".equalsIgnoreCase(request.activeWorkflow().strip())
                 && !"direct".equalsIgnoreCase(request.activeWorkflow().strip()));
+        boolean explicitDelegation = request.mutationConfirmation() == null
+                && DelegationIntent.explicitlyRequestsAgents(
+                        accepted != null ? accepted.content() : request.prompt());
         return new AgentWorkflowContext.Request(request.requestId(),
                 request.conversationId(), requesterId,
                 StringUtils.hasText(request.modelName()) ? request.modelName() : "unknown",
@@ -34,6 +38,7 @@ public final class WorkflowRequestAdapter {
                         : request.attachments() != null && !request.attachments().isEmpty(),
                 StringUtils.hasText(request.pageContext()), maximumAgents,
                 strategy, request.activeWorkflow(), delegation,
+                explicitDelegation,
                 request.mutationConfirmation() != null);
     }
 }
