@@ -31,6 +31,8 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentWorkflowContext;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
 import org.oagi.score.gateway.http.api.ai_management.agent.DefinedAgent;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.artifact.AiArtifactDescriptor;
+import org.oagi.score.gateway.http.api.ai_management.artifact.AiArtifactService;
 import org.oagi.score.gateway.http.api.ai_management.agent.ResponseOnlyAgent;
 import org.oagi.score.gateway.http.api.ai_management.conversation.ConversationResultCommitter;
 import org.oagi.score.gateway.http.api.ai_management.conversation.ConversationCompactor;
@@ -118,6 +120,7 @@ public class ChatService {
     private final ScoreAiObservability observability;
     private final ExecutionObserver observer;
     private final PublicOutputDisclosureGate disclosureGate;
+    private final AiArtifactService artifacts;
 
     @Autowired
     public ChatService(ScoreAiModelRegistry models, AgentRunner agentRunner,
@@ -132,6 +135,7 @@ public class ChatService {
                        ConversationResultCommitter resultCommitter,
                        ConversationCompactor compactor,
                        ResponseOnlyAgent responseOnlyAgent,
+                       AiArtifactService artifacts,
                        ScoreAiObservability observability,
                        ObjectProvider<ExecutionObserver> executionObservers) {
         this(models, new Dependencies(agentRunner, toolSearchAdvisor,
@@ -140,7 +144,7 @@ public class ChatService {
                         requester, AiChatJsonSerializer.getInstance()),
                 objectMapper, requests, contextBudgets, workflow, agentRunner,
                 atifTrajectoryService, inputGuardrails, outputGuardrails,
-                resultCommitter, compactor, responseOnlyAgent, observability,
+                resultCommitter, compactor, responseOnlyAgent, artifacts, observability,
                 ExecutionObserver.composite(Objects.nonNull(executionObservers)
                         ? executionObservers.orderedStream().toList() : List.of())));
     }
@@ -163,6 +167,7 @@ public class ChatService {
         this.resultCommitter = value.resultCommitter();
         this.compactor = value.compactor();
         this.responseOnlyAgent = value.responseOnlyAgent();
+        this.artifacts = value.artifacts();
         this.observability = Objects.nonNull(value.observability())
                 ? value.observability() : ScoreAiObservability.noop();
         this.observer = Objects.nonNull(value.observer())
@@ -188,6 +193,7 @@ public class ChatService {
             ConversationResultCommitter resultCommitter,
             ConversationCompactor compactor,
             ResponseOnlyAgent responseOnlyAgent,
+            AiArtifactService artifacts,
             ScoreAiObservability observability,
             ExecutionObserver observer) {
     }
@@ -498,8 +504,12 @@ public class ChatService {
             throw failure;
         }
         recorder.sealAgainstLateCallbacks();
+        List<AiArtifactDescriptor> createdArtifacts = artifacts != null
+                ? artifacts.ensureRequestedArtifacts(requester, executionScope(prepared, requester),
+                        prepared.prompt(), safeAnswer)
+                : List.of();
         return new ChatResponse(responseAgentId, safeAnswer, prepared.conversationId(),
-                false, List.copyOf(progressMessages));
+                false, List.copyOf(progressMessages), createdArtifacts, List.of());
     }
 
     private ExecutionScope executionScope(ChatRequest request, ScoreUser requester) {
@@ -616,6 +626,24 @@ public class ChatService {
     @Transactional(readOnly = true)
     public ChatConversationDetails conversation(ScoreUser requester, String conversationId) {
         ChatConversationDetails details = conversationRepository(requester).get(conversationId);
+        if (artifacts != null) {
+            var messages = details.messages().stream().map(message -> {
+                if (!"assistant".equals(message.role()) || !StringUtils.hasText(message.requestId())) {
+                    return message;
+                }
+                List<AiArtifactDescriptor> attached = artifacts.findByRequest(
+                        requester, conversationId, message.requestId());
+                return new org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatHistoryMessage(
+                        message.index(), message.role(), message.content(), message.requestId(),
+                        message.turnId(), message.groupId(), message.toolCallId(),
+                        message.toolCallSequence(), message.subtype(), message.visibility(),
+                        attached, message.metadata());
+            }).toList();
+            details = new ChatConversationDetails(details.conversationId(), details.title(),
+                    details.modelName(), details.reasoningEffort(), details.updatedAt(), messages,
+                    details.contextMessages(), details.contextUsage(), details.permissionMode(),
+                    details.activeWorkflow());
+        }
         AiContextUsageInfo contextUsage = currentContextUsage(requester, conversationId, details.modelName());
         return new ChatConversationDetails(details.conversationId(), details.title(), details.modelName(),
                 details.reasoningEffort(), details.updatedAt(), details.messages(), details.contextMessages(),
@@ -729,7 +757,9 @@ public class ChatService {
                 repository.modelName(conversationId));
     }
 
+    @Transactional
     public boolean deleteConversation(ScoreUser requester, String conversationId) {
+        if (artifacts != null) artifacts.deleteConversationArtifacts(requester, conversationId);
         boolean deleted = conversationRepository(requester).delete(conversationId);
         if (deleted) {
             chatMemory(requester).clear(conversationId);

@@ -14,6 +14,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
+import org.oagi.score.gateway.http.configuration.ai.ScoreMcpClientProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -30,7 +31,8 @@ public class BrokerJwtService {
     private final ECKey ecKey;
     private final String issuer;
 
-    public BrokerJwtService(ScoreAiProperties properties) {
+    public BrokerJwtService(ScoreAiProperties properties,
+                            ScoreMcpClientProperties mcpProperties) {
         try {
             this.rsaKey = new RSAKeyGenerator(2048)
                     .keyID(UUID.randomUUID().toString())
@@ -40,7 +42,10 @@ public class BrokerJwtService {
                     .keyID(UUID.randomUUID().toString())
                     .algorithm(JWSAlgorithm.ES256)
                     .generate();
-            String configuredIssuer = properties.getMcp().getAuth().getIssuerUrl();
+            String connectionName = properties.getTools().getConnectCenterMcp().getConnectionName();
+            ScoreMcpClientProperties.Connection connection = mcpProperties.connection(connectionName);
+            String configuredIssuer = connection != null
+                    ? connection.getAuth().getIssuerUrl() : null;
             this.issuer = StringUtils.hasText(configuredIssuer)
                     ? configuredIssuer.replaceAll("/+$", "") : "http://localhost:9000/broker";
         } catch (JOSEException e) {

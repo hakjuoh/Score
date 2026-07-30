@@ -209,7 +209,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           response.progress.forEach(progress => this.state.messages.push({role: 'progress', content: progress}));
         }
         if (response.response) {
-          this.commitAssistantMessage(requestId, response.response);
+          this.commitAssistantMessage(requestId, response.response, response.artifacts);
         }
         this.state.pending = false;
         this.state.reconciliationRequired = false;

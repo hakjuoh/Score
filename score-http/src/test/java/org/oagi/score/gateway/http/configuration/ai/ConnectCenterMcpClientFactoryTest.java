@@ -8,8 +8,6 @@ import io.opentelemetry.api.common.AttributeKey;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.application_management.service.BrokerJwtService;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
-import org.springframework.mock.env.MockEnvironment;
-
 import java.time.Duration;
 import java.net.URI;
 import java.net.http.HttpRequest;
@@ -55,19 +53,19 @@ class ConnectCenterMcpClientFactoryTest {
     @Test
     void requesterTokenOutlivesTheLongestSdkRequest() {
         ScoreAiProperties properties = new ScoreAiProperties();
-        properties.getMcp().getAuth().setIssuerUrl("https://issuer.example");
-        properties.getMcp().getAuth().setTokenTtlSeconds(300);
+        ScoreMcpClientProperties mcpProperties = mcpProperties("https://mcp.example");
+        mcpProperties.connection("connect-center-mcp").getAuth()
+                .setIssuerUrl("https://issuer.example");
+        mcpProperties.connection("connect-center-mcp").getAuth().setTokenTtlSeconds(300);
         properties.setElicitationTimeout(Duration.ofMinutes(10));
-        MockEnvironment environment = new MockEnvironment()
-                .withProperty("spring.ai.mcp.client.streamable-http.connections.connect-center-mcp.url",
-                        "https://mcp.example");
         BrokerJwtService broker = mock(BrokerJwtService.class);
         ScoreUser requester = mock(ScoreUser.class);
         when(broker.issueToken(requester, "https://issuer.example", "connect-center-mcp", "ES256", 660))
                 .thenReturn("token");
 
         ConnectCenterMcpClientFactory.McpConnection connection =
-                new ConnectCenterMcpClientFactory(properties, environment, broker).connection(requester);
+                new ConnectCenterMcpClientFactory(properties, mcpProperties, broker)
+                        .connection(requester);
 
         assertThat(connection).isNotNull();
         assertThat(connection.bearerToken()).isEqualTo("token");
@@ -77,13 +75,16 @@ class ConnectCenterMcpClientFactoryTest {
     @Test
     void refreshesRequesterTokenForEveryMcpHttpRequest() {
         ScoreAiProperties properties = new ScoreAiProperties();
-        properties.getMcp().getAuth().setIssuerUrl("https://issuer.example");
+        ScoreMcpClientProperties mcpProperties = mcpProperties(null);
+        mcpProperties.connection("connect-center-mcp").getAuth()
+                .setIssuerUrl("https://issuer.example");
+        properties.setElicitationTimeout(Duration.ofMinutes(10));
         BrokerJwtService broker = mock(BrokerJwtService.class);
         ScoreUser requester = mock(ScoreUser.class);
         when(broker.issueToken(requester, "https://issuer.example", "connect-center-mcp", "ES256", 660))
                 .thenReturn("token-one", "token-two");
         ConnectCenterMcpClientFactory factory = new ConnectCenterMcpClientFactory(
-                properties, new MockEnvironment(), broker);
+                properties, mcpProperties, broker);
         HttpRequest.Builder first = HttpRequest.newBuilder(URI.create("https://mcp.example/mcp"));
         HttpRequest.Builder second = HttpRequest.newBuilder(URI.create("https://mcp.example/mcp"));
 
@@ -96,5 +97,13 @@ class ConnectCenterMcpClientFactoryTest {
                 .contains("Bearer token-two");
         verify(broker, times(2)).issueToken(requester, "https://issuer.example",
                 "connect-center-mcp", "ES256", 660);
+    }
+
+    private ScoreMcpClientProperties mcpProperties(String url) {
+        ScoreMcpClientProperties properties = new ScoreMcpClientProperties();
+        ScoreMcpClientProperties.Connection connection = new ScoreMcpClientProperties.Connection();
+        connection.setUrl(url);
+        properties.getStreamableHttp().getConnections().put("connect-center-mcp", connection);
+        return properties;
     }
 }
