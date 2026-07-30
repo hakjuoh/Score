@@ -45,7 +45,9 @@ public final class AgentAssignmentLifecycle {
     public static String status(AiWorkflowPlan.AgentTask task, boolean completed) {
         String value = completed ? task.completedVerb() : task.guideMessage();
         if (!StringUtils.hasText(value)) value = completed ? "Completed" : task.activeVerb();
-        if (!StringUtils.hasText(value)) value = completed ? "Completed" : "Working";
+        // The lifecycle subtype is authoritative; generic live-state wording belongs to clients.
+        if (!StringUtils.hasText(value) && !completed) return "";
+        if (!StringUtils.hasText(value)) value = "Completed";
         String normalized = value.strip();
         return normalized.matches(".*[.!?。！？]$") ? normalized : normalized + ".";
     }

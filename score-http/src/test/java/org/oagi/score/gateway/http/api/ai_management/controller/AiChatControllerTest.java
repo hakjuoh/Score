@@ -474,7 +474,7 @@ class AiChatControllerTest {
                     "nodeId", "fanout-1-agent-01",
                     "agentName", "requirements-analyst",
                     "agentRole", "requirements analysis")));
-            return new ChatResponse("connectcenter-assistant", "Working.",
+            return new ChatResponse("connectcenter-assistant", "Done.",
                     "conversation-1", false, List.of());
         });
 
@@ -562,6 +562,23 @@ class AiChatControllerTest {
         assertThat(event.subtype()).isEqualTo("workflow_result");
         assertThat(event.content()).isEqualTo("Reconciled answer.");
         assertThat(event.sequence()).isEqualTo(7L);
+    }
+
+    @Test
+    void routesContentlessAgentLifecycleBySubtypeAndMetadata() {
+        ChatRequest request = request("request-1", "conversation-1");
+        AiExecutionEvent started = AiExecutionEvent.detail(
+                "subagent_started", "", Map.of(
+                        "nodeId", "agent-1", "taskLabel", "Verify release"));
+
+        AiChatSocketEvent event = AiChatController.socketEvent(request, 8L, started);
+
+        assertThat(event.type()).isEqualTo("system");
+        assertThat(event.subtype()).isEqualTo("subagent_started");
+        assertThat(event.content()).isEmpty();
+        assertThat(event.metadata())
+                .containsEntry("nodeId", "agent-1")
+                .containsEntry("taskLabel", "Verify release");
     }
 
     @Test

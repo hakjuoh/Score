@@ -1685,7 +1685,7 @@ class WorkflowTest {
 
     private AiWorkflowPlan fanOutPlan(String id, String agentId) {
         AiWorkflowPlan.AgentTask task = new AiWorkflowPlan.AgentTask(
-                agentId, "member", "Do member", null, "Working", "Completed",
+                agentId, "member", "Do member", null, "Running", "Completed",
                 AiWorkflowPlan.ToolAccess.NONE, AiWorkflowPlan.Delegation.FAN_OUT);
         return new AiWorkflowPlan(new AiWorkflowPlan.WorkflowDefinition(id,
                 List.of(new AiWorkflowPlan.Member("member", task, null))), null, null);
@@ -1694,7 +1694,7 @@ class WorkflowTest {
     private AiWorkflowPlan.Member member(String id, String agentId) {
         return new AiWorkflowPlan.Member(id,
                 new AiWorkflowPlan.AgentTask(agentId, id, "Do " + id,
-                        null, "Working", "Completed",
+                        null, "Running", "Completed",
                         AiWorkflowPlan.ToolAccess.NONE), null);
     }
 

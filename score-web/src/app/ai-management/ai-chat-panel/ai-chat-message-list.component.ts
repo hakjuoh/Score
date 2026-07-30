@@ -32,6 +32,10 @@ import {
   aiModelSessionLabel,
   checkingAiMcpStatus
 } from './domain/ai-chat-panel.model';
+import {
+  isWorkingStatusText,
+  WORKING_STATUS_LABEL
+} from './domain/ai-chat-panel-display.constants';
 
 type AiChatMessageDisplayItem =
   | {
@@ -271,6 +275,21 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
       && message.eventType !== 'assistant_update';
   }
 
+  isWorkingStatus(value: string | undefined): boolean {
+    return isWorkingStatusText(value);
+  }
+
+  isActiveWorkingMessage(message: AiChatMessage): boolean {
+    return isWorkingStatusText(message.content)
+      && (message.inProgress === true || message.workflowStatus === 'started');
+  }
+
+  workingStatusStartedAt(message: AiChatMessage): number | undefined {
+    const activeLead = message.activities?.find(activity => activity.isLead && activity.inProgress);
+    const activeSpecialist = message.activities?.find(activity => activity.inProgress);
+    return activeLead?.firstSeenAt ?? activeSpecialist?.firstSeenAt ?? message.statusStartedAt;
+  }
+
   agentToolMessage(event: AiAgentActivityEvent, agentInProgress: boolean): AiChatMessage {
     const toolStatus: AiChatToolStatus | undefined = event.toolStatus === 'completed'
       || event.toolStatus === 'failed' || event.toolStatus === 'blocked'
@@ -368,13 +387,14 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
       || specialists.find(activity => activity.activeVerb)?.activeVerb);
   }
 
-  agentGroupPlan(message: AiChatMessage): string {
-    return message.activities?.find(activity => activity.isLead)?.content
+  agentGroupPlan(message: AiChatMessage): string | undefined {
+    const plan = message.activities?.find(activity => activity.isLead)?.content
       || (message.role === 'workflow_group'
         ? message.content
         : this.agentGroupCount(message) === 1
           ? 'A specialist is gathering evidence for the lead.'
           : 'Specialists are gathering evidence for the lead.');
+    return isWorkingStatusText(plan) ? undefined : plan;
   }
 
   agentGroupActivities(message: AiChatMessage): AiAgentActivity[] {
@@ -398,7 +418,10 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
   }
 
   nestedWorkflowSummary(message: AiChatMessage): string {
-    return message.content || this.agentGroupPhase(message);
+    const summary = message.content || this.agentGroupPhase(message);
+    if (!isWorkingStatusText(summary)) return summary;
+    return message.workflowStatus === 'started'
+      ? 'Workflow in progress' : this.agentGroupPhase(message);
   }
 
   agentDisplayName(activity: AiAgentActivity): string {
@@ -420,7 +443,8 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
   }
 
   private activePhase(verb?: string): string {
-    const value = verb?.trim() || 'Working';
+    const value = verb?.trim() || WORKING_STATUS_LABEL;
+    if (isWorkingStatusText(value)) return WORKING_STATUS_LABEL;
     return /\.{3}$/.test(value) ? value : `${value}...`;
   }
 

@@ -101,7 +101,7 @@
                                   mode="indeterminate"
                                   [diameter]="12"></mat-progress-spinner>
           </span>
-          <span class="message-text">Working</span>
+          <span class="message-text"><score-ai-working-status /></span>
         </div>
       </div>
     }
@@ -263,13 +263,17 @@
        [class.debug]="message.role === 'debug'"
        [class.formatting]="message.formatting"
        [class.history-toggleable]="historyCount > 0"
-       [attr.role]="message.role === 'error' || message.statusTone === 'error' ? 'alert' : isLiveProgressStatus(message) ? 'status' : null"
-       [attr.aria-live]="message.role === 'error' || message.statusTone === 'error' ? 'assertive' : isLiveProgressStatus(message) ? 'polite' : null"
-       [attr.aria-atomic]="message.role === 'error' || message.statusTone === 'error' || isLiveProgressStatus(message) ? 'true' : null">
+       [attr.role]="message.role === 'error' || message.statusTone === 'error' ? 'alert' : isLiveProgressStatus(message) || isActiveWorkingMessage(message) ? 'status' : null"
+       [attr.aria-live]="message.role === 'error' || message.statusTone === 'error' ? 'assertive' : isLiveProgressStatus(message) || isActiveWorkingMessage(message) ? 'polite' : null"
+       [attr.aria-atomic]="message.role === 'error' || message.statusTone === 'error' || isLiveProgressStatus(message) || isActiveWorkingMessage(message) ? 'true' : null">
     <div class="message-bubble">
       @if (message.role === 'assistant' || message.role === 'guide') {
         <span class="message-prefix">•</span>
-        @if (message.formatting && message.formattingPreviousContent) {
+        @if (isActiveWorkingMessage(message)) {
+          <span class="message-text">
+            <score-ai-working-status [startedAt]="message.statusStartedAt" />
+          </span>
+        } @else if (message.formatting && message.formattingPreviousContent) {
           <div class="formatted-swipe">
             <markdown class="message-markdown markdown-body formatted-layer formatted-before"
                       [data]="message.formattingPreviousContent"></markdown>
@@ -320,7 +324,13 @@
           <span class="message-prefix">*</span>
         }
         <span class="message-text" [class.status-segmented]="!!message.statusSuffix">
-          <span class="status-primary">{{ message.content }}</span>
+          <span class="status-primary">
+            @if (message.inProgress && isWorkingStatus(message.content)) {
+              <score-ai-working-status [startedAt]="message.statusStartedAt" />
+            } @else {
+              {{ message.content }}
+            }
+          </span>
           @if (message.statusSuffix) {
             <span class="status-suffix">{{ message.statusSuffix }}</span>
           }
@@ -336,7 +346,13 @@
              [attr.aria-label]="'Execution: ' + (agentGroupSummary(message) || 'starting')">
           <div class="agent-group-header">
             <mat-icon aria-hidden="true">{{ message.role === 'workflow_group' ? 'account_tree' : 'hub' }}</mat-icon>
-            <span class="agent-group-title">{{ agentGroupPhase(message) }}</span>
+            <span class="agent-group-title">
+              @if (isWorkingStatus(agentGroupPhase(message))) {
+                <score-ai-working-status [startedAt]="workingStatusStartedAt(message)" />
+              } @else {
+                {{ agentGroupPhase(message) }}
+              }
+            </span>
             @if (agentGroupCount(message) > 0) {
               <span class="agent-group-count">· {{ agentGroupCount(message) }}
                 {{ message.role === 'workflow_group'
@@ -347,12 +363,14 @@
               <span class="agent-group-summary">{{ agentGroupSummary(message) }}</span>
             }
           </div>
-          <div class="agent-group-plan">
-            @if (sequentialWorkflow(message)) {
-              <span class="workflow-branch" aria-hidden="true">└</span>
-            }
-            <span>{{ agentGroupPlan(message) }}</span>
-          </div>
+          @if (agentGroupPlan(message); as plan) {
+            <div class="agent-group-plan">
+              @if (sequentialWorkflow(message)) {
+                <span class="workflow-branch" aria-hidden="true">└</span>
+              }
+              <span>{{ plan }}</span>
+            </div>
+          }
           @for (activity of agentGroupActivities(message); track activity.agentId) {
             <button type="button" class="agent-group-row"
                     [attr.data-agent-id]="activity.agentId"

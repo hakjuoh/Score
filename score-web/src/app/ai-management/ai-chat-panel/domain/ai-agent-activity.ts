@@ -6,6 +6,10 @@ import {
   AiWorkflowType
 } from './ai-chat-panel.model';
 import {displayToolName, displayToolText} from './ai-tool-presentation';
+import {
+  isWorkingStatusText,
+  WORKING_STATUS_LABEL
+} from './ai-chat-panel-display.constants';
 
 const EXECUTION_ACTIVITY_SUBTYPES = new Set([
   'subagent_preparing',
@@ -67,11 +71,15 @@ export function isExecutionActivityEvent(event: AiChatSocketEvent): boolean {
 
 export function agentActivityUpdate(event: AiChatSocketEvent): AiAgentActivityUpdate | undefined {
   if (!isExecutionActivityEvent(event)) return undefined;
-  const content = event.content || event.response || event.message || '';
   const metadata = event.metadata || {};
   const agentId = text(metadata['nodeId']) || text(metadata['node_id']) || text(metadata['agentId'])
     || undefined;
-  if (!agentId || !content) return undefined;
+  if (!agentId) return undefined;
+  const agentName = text(metadata['agentName']) || text(metadata['agent_name'])
+    || 'Specialist';
+  const taskLabel = text(metadata['taskLabel']) || text(metadata['task_label']);
+  const content = text(event.content) || text(event.response) || text(event.message)
+    || '';
   const status: AiAgentExecutionStatus = event.subtype === 'subagent_preparing'
     || event.subtype === 'subagent_planned' ? 'planned'
     : event.subtype === 'subagent_cancelled'
@@ -80,10 +88,9 @@ export function agentActivityUpdate(event: AiChatSocketEvent): AiAgentActivityUp
         : event.subtype === 'subagent_completed' ? 'completed' : 'started';
   return {
     agentId,
-    agentName: text(metadata['agentName']) || text(metadata['agent_name'])
-      || 'Specialist',
+    agentName,
     agentRole: text(metadata['agentRole']) || text(metadata['agent_role']) || text(metadata['strategy']),
-    taskLabel: text(metadata['taskLabel']) || text(metadata['task_label']),
+    taskLabel,
     plannedAgentCount: positiveInteger(metadata['agent_count']),
     activeVerb: text(metadata['activeVerb']) || text(metadata['active_verb']),
     completedVerb: text(metadata['completedVerb']) || text(metadata['completed_verb']),
@@ -158,7 +165,7 @@ function applyAgentConversationLifecycle(activity: AiAgentActivity,
   if (update.status === 'planned') return;
   if (update.status === 'started' || update.status === 'synthesizing') {
     appendAgentGuide(activity, update.content);
-    showAgentStatus(activity, 'Working...', true);
+    showAgentStatus(activity, WORKING_STATUS_LABEL, true);
     return;
   }
   clearAgentStatus(activity);
@@ -195,7 +202,7 @@ export function settleAgentConversation(activity: AiAgentActivity,
 
 function appendAgentGuide(activity: AiAgentActivity, content: string): void {
   const normalized = content.trim();
-  if (!normalized || normalized === 'Working.') return;
+  if (!normalized || isWorkingStatusText(normalized)) return;
   clearAgentStatus(activity);
   appendDistinctMessage(activity.messages ||= [], {role: 'guide', content: normalized});
 }
@@ -205,6 +212,8 @@ function showAgentStatus(activity: AiAgentActivity, content: string,
   clearAgentStatus(activity);
   (activity.messages ||= []).push({
     role: 'progress', content, inProgress, eventType: 'agent_status',
+    ...(inProgress && isWorkingStatusText(content)
+      ? {statusStartedAt: activity.firstSeenAt} : {}),
     ...(tone !== 'neutral' ? {statusTone: tone} : {})
   });
 }
@@ -331,7 +340,7 @@ export function upsertAgentGuideEvent(activities: AiAgentActivity[],
     activity.events.push({status: activity.status, content});
   }
   appendAgentGuide(activity, content);
-  if (activity.inProgress) showAgentStatus(activity, 'Working...', true);
+  if (activity.inProgress) showAgentStatus(activity, WORKING_STATUS_LABEL, true);
   if (activity.inProgress) activity.content = content;
   activity.lastUpdateAt = now;
   return true;
@@ -456,7 +465,7 @@ export function upsertAgentToolEvent(activities: AiAgentActivity[],
     };
     if (existingMessage) Object.assign(existingMessage, toolMessage);
     else (activity.messages ||= []).push(toolMessage);
-    if (activity.inProgress) showAgentStatus(activity, 'Working...', true);
+    if (activity.inProgress) showAgentStatus(activity, WORKING_STATUS_LABEL, true);
   }
   if (activity.inProgress) activity.content = content;
   activity.lastUpdateAt = now;
