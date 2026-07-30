@@ -132,6 +132,8 @@ class PlannerAgentTest {
         assertThat(plan.root().edges()).isEmpty();
         assertThat(plan.root().members()).allSatisfy(member ->
                 assertThat(plan.root().predecessors(member.id())).isEmpty());
+        assertThat(plan.root().members()).allSatisfy(member ->
+                assertThat(member.agent().activeVerb()).isNull());
         verify(fixture.recorder).lifecycle(
                 org.mockito.ArgumentMatchers.eq("workflow_plan_fallback"), any(), any());
     }

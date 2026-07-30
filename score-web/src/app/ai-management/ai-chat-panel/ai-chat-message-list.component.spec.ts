@@ -9,6 +9,7 @@ import {AiChatMessageListComponent} from './ai-chat-message-list.component';
 import {AiChatInteractionPanelComponent} from './ai-chat-interaction-panel.component';
 import {AiChatToolCallComponent} from './ai-chat-tool-call.component';
 import {AiAgentActivity} from './domain/ai-agent-activity';
+import {AiWorkingStatusComponent} from './ai-working-status.component';
 
 describe('AiChatMessageListComponent', () => {
   let fixture: ComponentFixture<AiChatMessageListComponent>;
@@ -18,7 +19,8 @@ describe('AiChatMessageListComponent', () => {
       declarations: [
         AiChatMessageListComponent,
         AiChatInteractionPanelComponent,
-        AiChatToolCallComponent
+        AiChatToolCallComponent,
+        AiWorkingStatusComponent
       ],
       imports: [
         CommonModule,
@@ -165,6 +167,51 @@ describe('AiChatMessageListComponent', () => {
     expect(row.getAttribute('aria-atomic')).toBe('true');
     expect(row.querySelector('mat-progress-spinner')?.getAttribute('aria-hidden')).toBe('true');
     expect(fixture.nativeElement.querySelector('.request-pending-indicator')).toBeNull();
+  });
+
+  it('uses the shared elapsed status for exact, legacy, and guide Working values', () => {
+    const startedAt = Date.now();
+    fixture.componentInstance.messages = [
+      {role: 'progress', content: 'Working', inProgress: true, statusStartedAt: startedAt},
+      {role: 'progress', content: 'Working...', inProgress: true, statusStartedAt: startedAt},
+      {
+        role: 'guide', content: 'Working...', workflowStatus: 'started',
+        statusStartedAt: startedAt
+      }
+    ];
+
+    fixture.detectChanges();
+
+    const statuses = fixture.nativeElement.querySelectorAll(
+      'score-ai-working-status'
+    ) as NodeListOf<HTMLElement>;
+    expect(statuses).toHaveLength(3);
+    Array.from(statuses).forEach(status => {
+      expect(status.textContent?.trim()).toMatch(/^Working \(\d+s\)$/);
+      expect(status.getAttribute('aria-label')).toBe('Working');
+    });
+    expect(fixture.nativeElement.textContent).not.toContain('Working...');
+  });
+
+  it('shows one live workflow timer and removes fallback Working content at termination', () => {
+    fixture.componentInstance.messages = [{
+      role: 'workflow_group', content: 'Working', workflowStatus: 'started',
+      statusStartedAt: Date.now(), activities: [], children: []
+    }];
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('score-ai-working-status')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.agent-group-plan')).toBeNull();
+
+    fixture.componentRef.setInput('messages', [{
+      role: 'workflow_group', content: 'Working', workflowStatus: 'failed',
+      statusStartedAt: Date.now(), activities: [], children: []
+    }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('score-ai-working-status')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Working');
+    expect(fixture.nativeElement.textContent).toContain('Workflow failed');
   });
 
   it('keeps retry narration visible while only the long provider reason shrinks', async () => {

@@ -57,6 +57,18 @@ describe('AI agent activity semantics', () => {
     expect(agentActivityUpdate({...event('subagent_started'), content: ''})).toBeUndefined();
   });
 
+  it('accepts a contentless started event from its type and task metadata', () => {
+    expect(agentActivityUpdate({
+      ...event('subagent_started', {
+        agentId: 'request-1:worker:1', agentName: 'Verifier', taskLabel: 'Verify release'
+      }),
+      content: ''
+    })).toEqual(expect.objectContaining({
+      agentId: 'request-1:worker:1', status: 'started', inProgress: true,
+      content: '', taskLabel: 'Verify release'
+    }));
+  });
+
   it('maps current subagent lifecycle states without creating a synthetic lead', () => {
     expect(agentActivityUpdate(event('subagent_completed', {
       agentId: 'request-1:worker:1'
@@ -161,7 +173,10 @@ describe('AI agent activity semantics', () => {
     expect(activities[0].messages).toEqual([
       {role: 'user', content: 'Verify the current release record.'},
       {role: 'guide', content: 'I’ll verify the current release data.'},
-      {role: 'progress', content: 'Working...', inProgress: true, eventType: 'agent_status'}
+      expect.objectContaining({
+        role: 'progress', content: 'Working', inProgress: true,
+        eventType: 'agent_status', statusStartedAt: expect.any(Number)
+      })
     ]);
 
     const tool = (subtype: string): AiChatSocketEvent => ({
@@ -178,7 +193,10 @@ describe('AI agent activity semantics', () => {
       expect.objectContaining({
         role: 'tool_call', content: 'get_release completed.', toolStatus: 'completed'
       }),
-      {role: 'progress', content: 'Working...', inProgress: true, eventType: 'agent_status'}
+      expect.objectContaining({
+        role: 'progress', content: 'Working', inProgress: true,
+        eventType: 'agent_status', statusStartedAt: expect.any(Number)
+      })
     ]);
 
     upsertAgentActivity(activities, agentActivityUpdate({

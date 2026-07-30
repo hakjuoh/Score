@@ -31,6 +31,8 @@ export interface AiChatMessage {
   statusTone?: AiChatStatusTone;
   /** Stable tail of a status line; the leading content may ellipsize independently. */
   statusSuffix?: string;
+  /** Client timestamp used to keep a live Working duration stable across rendering. */
+  statusStartedAt?: number;
   turnId?: string;
   groupId?: string;
   toolCallId?: string;

@@ -185,7 +185,7 @@ public final class PlannerAgent implements Agent {
                     new AiWorkflowPlan.AgentTask(agent.id(), "Agent " + ordinal,
                             instruction,
                             "I’m independently checking the evidence for your request.",
-                            "Working",
+                            null,
                             "Completed",
                             AiWorkflowPlan.ToolAccess.READ_ONLY), null));
         }

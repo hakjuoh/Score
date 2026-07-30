@@ -11,7 +11,10 @@ import {
   terminalRequestErrorStatus,
   toolCallEventSemantics
 } from './domain/ai-chat-event-semantics';
-import {FORMATTER_META_RESPONSE_PATTERN} from './domain/ai-chat-panel-display.constants';
+import {
+  FORMATTER_META_RESPONSE_PATTERN,
+  WORKING_STATUS_LABEL
+} from './domain/ai-chat-panel-display.constants';
 import {
   AiAgentActivity,
   isExecutionActivityEvent,
@@ -170,7 +173,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       if (this.hasActiveStructuredToolRows()) {
         return;
       }
-      this.showStatus('Working...', true);
+      this.showStatus(WORKING_STATUS_LABEL, true);
       return;
     }
     if (content && event.metadata?.['inProgress'] === true) {
@@ -467,7 +470,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       this.clearStatusMessage();
       if (content.trim()) this.state.messages.push({role: 'guide', content: content.trim()});
       this.state.messages.push(placement.anchor);
-      this.showStatus('Working...', true);
+      this.showStatus(WORKING_STATUS_LABEL, true);
       this.state.agentActivities = placement.anchor.activities || [];
       return true;
     }

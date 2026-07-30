@@ -6,6 +6,10 @@ import {
 } from './ai-chat-event-semantics';
 import {AiChatPanelState} from './ai-chat-panel-state';
 import {AiChatMessage, AiChatSocketEvent, AiChatStatusOptions} from './ai-chat-panel.model';
+import {
+  isWorkingStatusText,
+  WORKING_STATUS_LABEL
+} from './ai-chat-panel-display.constants';
 
 @Injectable()
 export class AiChatMessageTrackerService {
@@ -20,8 +24,8 @@ export class AiChatMessageTrackerService {
   upsertToolGroup(state: AiChatPanelState, event: AiChatSocketEvent): void {
     const terminal = event.subtype === 'completed' || event.subtype === 'failed';
     const content = this.primaryContent(event) || 'Used tools';
-    this.showStatus(state, terminal ? 'Working' : content, true);
-    state.currentStatus = terminal ? 'Working' : content;
+    this.showStatus(state, terminal ? WORKING_STATUS_LABEL : content, true);
+    state.currentStatus = terminal ? WORKING_STATUS_LABEL : content;
   }
 
   handleToolCall(state: AiChatPanelState, event: AiChatSocketEvent): void {
@@ -37,7 +41,7 @@ export class AiChatMessageTrackerService {
         toolName: semantics.toolName || existing?.toolName,
         hidden: semantics.hidden || existing?.hidden === true
       });
-      this.showStatus(state, semantics.hidden ? 'Working' : semantics.content, true);
+      this.showStatus(state, semantics.hidden ? WORKING_STATUS_LABEL : semantics.content, true);
       state.currentStatus = semantics.content;
       return;
     }
@@ -52,14 +56,14 @@ export class AiChatMessageTrackerService {
       hidden: semantics.hidden || existing?.hidden === true
     };
     if (terminalSemantics.hidden) {
-      this.showStatus(state, 'Working', true);
-      state.currentStatus = 'Working';
+      this.showStatus(state, WORKING_STATUS_LABEL, true);
+      state.currentStatus = WORKING_STATUS_LABEL;
       return;
     }
 
     this.appendToolCall(state, terminalSemantics);
     const requestStatus = terminalSemantics.status === 'failed'
-      ? 'Continuing after tool failure' : 'Working';
+      ? 'Continuing after tool failure' : WORKING_STATUS_LABEL;
     this.showStatus(state, requestStatus, true);
     state.currentStatus = requestStatus;
   }
@@ -76,8 +80,8 @@ export class AiChatMessageTrackerService {
 
     this.activeToolCallsByKey.delete(active.key);
     if (active.hidden) {
-      this.showStatus(state, 'Working', true);
-      state.currentStatus = 'Working';
+      this.showStatus(state, WORKING_STATUS_LABEL, true);
+      state.currentStatus = WORKING_STATUS_LABEL;
       return true;
     }
 
@@ -99,8 +103,16 @@ export class AiChatMessageTrackerService {
 
   showStatus(state: AiChatPanelState, content: string, inProgress = false,
              options: AiChatStatusOptions = {}): void {
+    const previousStatus = this.statusMessageIndex === undefined
+      ? undefined : state.messages[this.statusMessageIndex];
+    const statusStartedAt = inProgress && isWorkingStatusText(content)
+      ? previousStatus?.inProgress && isWorkingStatusText(previousStatus.content)
+        ? previousStatus.statusStartedAt ?? Date.now()
+        : Date.now()
+      : undefined;
     const status: AiChatMessage = {
       role: 'progress', content, inProgress,
+      ...(statusStartedAt !== undefined ? {statusStartedAt} : {}),
       ...(options.eventType ? {eventType: options.eventType} : {}),
       ...(options.tone && options.tone !== 'neutral' ? {statusTone: options.tone} : {}),
       ...(options.suffix ? {statusSuffix: options.suffix} : {})

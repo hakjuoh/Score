@@ -46,6 +46,7 @@ import {AiChatComposerComponent} from './ai-management/ai-chat-panel/ai-chat-com
 import {AiChatHistoryListComponent} from './ai-management/ai-chat-panel/ai-chat-history-list.component';
 import {AiChatInteractionPanelComponent} from './ai-management/ai-chat-panel/ai-chat-interaction-panel.component';
 import {AiContextBudgetChartComponent} from './ai-management/ai-chat-panel/ai-context-budget-chart.component';
+import {AiWorkingStatusComponent} from './ai-management/ai-chat-panel/ai-working-status.component';
 
 const httpInterceptorsProviders = [
   {provide: HTTP_INTERCEPTORS, useClass: XhrInterceptor, multi: true},
@@ -106,7 +107,8 @@ class ShouldReuseRouteFalseRouteReuseStrategy extends BaseRouteReuseStrategy {
     AiChatToolCallComponent,
     AiChatInteractionPanelComponent,
     AiChatComposerComponent,
-    AiChatHistoryListComponent
+    AiChatHistoryListComponent,
+    AiWorkingStatusComponent
   ],
   providers: [
     provideTranslateService({
