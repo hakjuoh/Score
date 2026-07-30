@@ -48,6 +48,7 @@ export class AiChatPanelState {
   agentActivities: AiAgentActivity[] = [];
   agentListOpen = false;
   agentFocusId?: string;
+  agentFocusHistory: string[] = [];
   elicitation?: AiElicitationNotice;
   elicitationBusy = false;
   mutationApprovalBatch?: AiMutationApprovalBatchNotice;
@@ -242,6 +243,7 @@ export class AiChatPanelState {
     this.agentActivities = [];
     this.agentListOpen = false;
     this.agentFocusId = undefined;
+    this.agentFocusHistory = [];
   }
 
   private idleCancellation(): AiCancellationUiState {

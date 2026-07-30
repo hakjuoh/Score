@@ -24,6 +24,7 @@ public final class AgentAssignmentLifecycle {
         value.put("agent_id", agent.id().value());
         value.put("agent_name", agent.definition().name());
         value.put("task_label", task.label());
+        value.put("assignment", task.instruction());
         value.put("depth", location.depth() + 1);
         return Map.copyOf(value);
     }

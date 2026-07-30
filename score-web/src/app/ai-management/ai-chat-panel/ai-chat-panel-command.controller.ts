@@ -6,7 +6,7 @@ import {
   isTerminalAgentStatus
 } from './domain/ai-agent-activity';
 import {AiLocalCommand} from './domain/ai-chat-command.service';
-import {AiChatSocketEvent} from './domain/ai-chat-panel.model';
+import {AiChatMessage, AiChatSocketEvent} from './domain/ai-chat-panel.model';
 
 export abstract class AiChatPanelCommandController extends AiChatPanelMessageController {
   protected handleLocalCommand(localCommand: AiLocalCommand, commandText: string): void {
@@ -104,6 +104,12 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
     return agentFocusId ? this.findAgentActivity(agentFocusId) : undefined;
   }
 
+  get agentFocusBackLabel(): string {
+    const parentId = this.state.agentFocusHistory.at(-1);
+    const parent = parentId ? this.findAgentActivity(parentId) : undefined;
+    return parent ? `Back to ${parent.agentName} agent activity` : 'Back to conversation';
+  }
+
   get activityListLabel(): string {
     return this.state.agentActivities.some(activity => activity.executionKind === 'parallel')
       ? 'Parallel tasks in this request' : 'Agents in this request';
@@ -117,12 +123,17 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
     if (!this.findAgentActivity(agentId)) {
       return;
     }
+    if (this.state.agentFocusId && this.state.agentFocusId !== agentId) {
+      this.state.agentFocusHistory.push(this.state.agentFocusId);
+    } else if (!this.state.agentFocusId) {
+      this.state.agentFocusHistory = [];
+    }
     this.state.agentFocusId = agentId;
     this.state.agentListOpen = false;
   }
 
   closeAgentFocus(): void {
-    this.state.agentFocusId = undefined;
+    this.state.agentFocusId = this.state.agentFocusHistory.pop();
   }
 
   /** Finds an agent in the live fan-out first, then in settled group anchors. */
@@ -131,15 +142,20 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
     if (live) {
       return live;
     }
-    for (let index = this.state.messages.length - 1; index >= 0; index--) {
-      const message = this.state.messages[index];
-      if (message.role !== 'agent_group' && message.role !== 'workflow_group') {
-        continue;
+    return this.findAgentInMessages(this.state.messages, agentId);
+  }
+
+  private findAgentInMessages(messages: AiChatMessage[],
+                              agentId: string): AiAgentActivity | undefined {
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const message = messages[index];
+      for (const activity of message.activities || []) {
+        if (activity.agentId === agentId) return activity;
+        const nested = this.findAgentInMessages(activity.messages || [], agentId);
+        if (nested) return nested;
       }
-      const historical = message.activities?.find(activity => activity.agentId === agentId);
-      if (historical) {
-        return historical;
-      }
+      const nested = this.findAgentInMessages(message.children || [], agentId);
+      if (nested) return nested;
     }
     return undefined;
   }

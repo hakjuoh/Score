@@ -119,7 +119,7 @@ class GatewayAgentTest {
                 "conversation", null, List.of(), null, model.id().value(), null, null);
         AgentWorkflowContext.Request request = new AgentWorkflowContext.Request(
                 "request", "conversation", "user", model.id().value(), content,
-                false, false, 4, "balanced", null, false, false);
+                false, false, 4, "balanced", null, false, false, false);
         return AgentWorkflowContext.root(ChatExecutionContext.fromRequest(chatRequest, List.of(),
                 new UserMessage(content), null, null, false, false), request, 3);
     }

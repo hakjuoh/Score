@@ -57,6 +57,9 @@ import java.util.concurrent.CancellationException;
 public final class AgentRunner implements AgentIdentityProvider {
 
     private static final int MAX_OUTPUT_GUARDRAIL_RETRIES = 2;
+    private static final MiddlewareState.Key<AgentAssignmentRun.Lifecycle>
+            ASSIGNMENT_LIFECYCLE = new MiddlewareState.Key<>(
+            "agent-runner", "assignment-lifecycle", AgentAssignmentRun.Lifecycle.class);
     public static final String OUTPUT_GUARDRAIL_APPLIED = AgentOutput.OUTPUT_GUARDRAIL_APPLIED;
     public static final String OUTPUT_GUARDRAIL_SCOPE = AgentOutput.OUTPUT_GUARDRAIL_SCOPE;
 
@@ -174,15 +177,34 @@ public final class AgentRunner implements AgentIdentityProvider {
         // identity, handlers, instruction, tools, and guardrails describe one turn.
         agent = new org.oagi.score.gateway.http.api.ai_management.agent.DefinedAgent(
                 Objects.requireNonNull(agent.definition(), "Agent definition"));
-        AiMiddlewareChain.AgentExecution middlewareExecution = middleware.executeAgentWithContext(
-                new AiMiddleware.AgentContext(
-                        agent, context, new MiddlewareState()),
-                middlewareContext -> runCore(middlewareContext.agent(),
-                        middlewareContext.workflow(), middlewareContext.state()));
-        AgentDecision checked = ensureMiddlewareOutputChecked(middlewareExecution.context().agent(),
-                middlewareExecution.context().workflow(), middlewareExecution.decision());
-        middlewareExecution.context().workflow().progress();
-        return checked;
+        MiddlewareState state = new MiddlewareState();
+        try {
+            AiMiddlewareChain.AgentExecution middlewareExecution = middleware.executeAgentWithContext(
+                    new AiMiddleware.AgentContext(agent, context, state),
+                    middlewareContext -> runCore(middlewareContext.agent(),
+                            middlewareContext.workflow(), middlewareContext.state()));
+            AgentDecision checked = ensureMiddlewareOutputChecked(
+                    middlewareExecution.context().agent(),
+                    middlewareExecution.context().workflow(), middlewareExecution.decision());
+            if (checked instanceof AgentDecision.Complete complete) {
+                state.get(ASSIGNMENT_LIFECYCLE)
+                        .ifPresent(lifecycle -> lifecycle.completed().accept(complete.result()));
+            } else if (context.assignment() != null
+                    && context.assignment().delegation() == AiWorkflowPlan.Delegation.DIRECT) {
+                throw new IllegalStateException(
+                        "A DIRECT Agent assignment cannot hand off or delegate.");
+            }
+            middlewareExecution.context().workflow().progress();
+            return checked;
+        } catch (RuntimeException failure) {
+            var lifecycle = state.get(ASSIGNMENT_LIFECYCLE);
+            if (lifecycle.isPresent()) {
+                lifecycle.orElseThrow().failed().accept(failure);
+            } else {
+                AgentAssignmentRun.failPreflight(agent, context, null, failure);
+            }
+            throw failure;
+        }
     }
 
     /** Middleware may short-circuit or replace a decision, but never bypass final output policy. */
@@ -200,6 +222,11 @@ public final class AgentRunner implements AgentIdentityProvider {
     private AgentDecision runCore(Agent agent, AgentWorkflowContext context,
                                   MiddlewareState middlewareState) {
         AgentWorkflowContext current = context;
+        if (current.assignment() != null) {
+            // Marks that runCore owns any preflight failure. The outer middleware
+            // boundary only emits a fallback terminal when runCore was never entered.
+            middlewareState.put(ASSIGNMENT_LIFECYCLE, AgentAssignmentRun.Lifecycle.noop());
+        }
         current.checkpoint();
         current.progress();
         AgentAssignmentRun.Lifecycle activeLifecycle = null;
@@ -212,13 +239,13 @@ public final class AgentRunner implements AgentIdentityProvider {
             AgentRunRequest prepared = initial.request();
             if (prepared instanceof AgentRunRequest.Skip guardedSkip) {
                 activeLifecycle = AgentAssignmentRun.lifecycle(agent, current, prepared);
+                middlewareState.put(ASSIGNMENT_LIFECYCLE, activeLifecycle);
                 activeLifecycle.started().run();
                 current.progress();
                 current.checkpoint();
                 AgentDecision decision = policies.applyTerminalDecision(agent, current,
                         guardedSkip.decision());
                 current.checkpoint();
-                activeLifecycle.completed().accept(null);
                 current.progress();
                 return decision;
             }
@@ -226,6 +253,7 @@ public final class AgentRunner implements AgentIdentityProvider {
             String retryFeedback = null;
             dedicatedUsageSource = AgentAssignmentRun.registerUsage(agent, current, prepared);
             activeLifecycle = AgentAssignmentRun.lifecycle(agent, current, prepared);
+            middlewareState.put(ASSIGNMENT_LIFECYCLE, activeLifecycle);
             activeLifecycle.started().run();
             current.progress();
             AgentToolBinding resolvedBinding = null;
@@ -284,7 +312,6 @@ public final class AgentRunner implements AgentIdentityProvider {
                     continue;
                 }
                 current.checkpoint();
-                activeLifecycle.completed().accept(result);
                 current.progress();
                 return checked.decision();
             }
