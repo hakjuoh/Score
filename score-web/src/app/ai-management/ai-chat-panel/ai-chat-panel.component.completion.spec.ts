@@ -16,7 +16,7 @@ import {
   completedCancellationResponse,
   component,
   destroyComponent,
-  mutationConfirmationEvent,
+  changeConfirmationEvent,
   of,
   publicStatus,
   setupAiChatPanelSpec,
@@ -98,11 +98,17 @@ describe('AiChatPanelComponent request completion and recovery', () => {
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'assistant_final', content: 'The canonical completed answer.',
-      continuationRequired: false
+      continuationRequired: false,
+      files: [{
+        fileId: 'file-ws', format: 'csv', filename: 'websocket.csv',
+        mediaType: 'text/csv', size: 24, sha256: 'ws-sha256',
+        downloadUrl: '/api/ai/chat/conversations/conversation-1/files/file-ws'
+      }]
     });
 
     expect(component.state.messages).toContainEqual(expect.objectContaining({
-      role: 'assistant', content: 'The canonical completed answer.'
+      role: 'assistant', content: 'The canonical completed answer.',
+      files: [expect.objectContaining({fileId: 'file-ws', filename: 'websocket.csv'})]
     }));
     expect(component.state.pending).toBe(false);
     vi.advanceTimersByTime(COMPLETED_PAYLOAD_WAIT_MS);
@@ -125,11 +131,18 @@ describe('AiChatPanelComponent request completion and recovery', () => {
 
     chat.next({
       response: 'The canonical attachment answer.',
-      conversationId: 'conversation-1'
+      conversationId: 'conversation-1',
+      files: [{
+        fileId: 'file-rest', format: 'xlsx', filename: 'response.xlsx',
+        mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        size: 48, sha256: 'rest-sha256',
+        downloadUrl: '/api/ai/chat/conversations/conversation-1/files/file-rest'
+      }]
     });
 
     expect(component.state.messages).toContainEqual(expect.objectContaining({
-      role: 'assistant', content: 'The canonical attachment answer.'
+      role: 'assistant', content: 'The canonical attachment answer.',
+      files: [expect.objectContaining({fileId: 'file-rest', filename: 'response.xlsx'})]
     }));
     expect(component.state.pending).toBe(false);
     vi.advanceTimersByTime(COMPLETED_PAYLOAD_WAIT_MS);
@@ -145,14 +158,14 @@ describe('AiChatPanelComponent request completion and recovery', () => {
     component.state.prompt = 'Recover a persisted answer';
     component.send();
     transport.publishWhenConnected.mock.calls[0][0].publish();
-    component.state.mutationApprovalBatch = {
+    component.state.changeApprovalBatch = {
       batchId: 'batch-completed', requestId: 'request-1', conversationId: 'conversation-1',
       parallel: false, expiresAt: '2099-07-15T00:00:00Z', items: [{
         confirmationRequestId: 'confirmation-completed', toolName: 'update_bbie',
         argumentsSummary: '{"id":1}'
       }]
     };
-    component.state.mutationApprovalBatchBusy = true;
+    component.state.changeApprovalBatchBusy = true;
     component.cancelActiveRequest();
     cancellation.next(completedCancellationResponse());
 
@@ -170,9 +183,9 @@ describe('AiChatPanelComponent request completion and recovery', () => {
       role: 'assistant', content: 'Recovered persisted answer.'
     }));
     expect(component.state.pending).toBe(false);
-    expect(component.state.mutationApprovalBatch).toBeUndefined();
-    expect(component.state.mutationApprovalBatchQueue).toEqual([]);
-    expect(component.state.mutationApprovalBatchBusy).toBe(false);
+    expect(component.state.changeApprovalBatch).toBeUndefined();
+    expect(component.state.changeApprovalBatchQueue).toEqual([]);
+    expect(component.state.changeApprovalBatchBusy).toBe(false);
     expect(component.commandInputBlocked).toBe(false);
   });
 
@@ -224,7 +237,7 @@ describe('AiChatPanelComponent request completion and recovery', () => {
     }));
   });
 
-  it('recovers a strict mutation notice from a timed-out REST error', () => {
+  it('recovers a strict change notice from a timed-out REST error', () => {
     const chat = new Subject<AiChatRestResponse>();
     api.sendChat.mockReturnValueOnce(chat);
     component.state.conversationId = 'conversation-1';
@@ -236,14 +249,14 @@ describe('AiChatPanelComponent request completion and recovery', () => {
 
     chat.error(new HttpErrorResponse({
       status: 408,
-      error: {events: [mutationConfirmationEvent('request-1')]}
+      error: {events: [changeConfirmationEvent('request-1')]}
     }));
 
-    expect(component.mutationInteraction).toMatchObject({
+    expect(component.changeInteraction).toMatchObject({
       mode: 'confirm', toolName: 'create_business_context'
     });
     expect(component.state.pending).toBe(false);
-    expect((component as any).mutationRepeatDraft).toBeUndefined();
+    expect((component as any).changeRepeatDraft).toBeUndefined();
   });
 
   it('does not expose an arbitrary server error through the attachment message header', () => {

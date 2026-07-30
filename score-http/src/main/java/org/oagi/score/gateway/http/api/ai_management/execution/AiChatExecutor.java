@@ -2,11 +2,11 @@ package org.oagi.score.gateway.http.api.ai_management.execution;
 
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.model.AiApprovedExecution;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationPermissionMode;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalResolution;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalScope;
-import org.oagi.score.gateway.http.api.ai_management.model.AiPendingMutationApproval;
-import org.oagi.score.gateway.http.api.ai_management.model.AiResolvedMutation;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangePermissionMode;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalResolution;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalScope;
+import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApproval;
+import org.oagi.score.gateway.http.api.ai_management.model.AiResolvedChange;
 import org.oagi.score.gateway.http.api.ai_management.provider.AiProviderRetryExecutor;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionState;
@@ -15,7 +15,7 @@ import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver
 import org.oagi.score.gateway.http.api.ai_management.execution.AgentInputRefusedException;
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiCallbackToolSetAdapter;
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiToolAdapter;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeToolGuard;
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiUserMessageAdapter;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.ToolGuardrailRegistry;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentInputGuardrail;
@@ -36,12 +36,12 @@ import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareChai
 import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolExecutionGateway;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
-import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.configuration.ai.ConnectCenterMcpClientFactory;
-import org.oagi.score.gateway.http.api.ai_management.artifact.AiPlatformToolProvider;
+import org.oagi.score.gateway.http.api.ai_management.file.AiPlatformToolProvider;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiChatOptionsFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
 import org.oagi.score.gateway.http.configuration.ai.TrajectoryRecordingAdvisor;
@@ -88,11 +88,11 @@ public final class AiChatExecutor {
     private final ScoreAiModelRegistry models;
     private final ConnectCenterMcpClientFactory mcpClients;
     private final ToolSearchToolCallingAdvisor toolSearchAdvisor;
-    private final AiMutationToolGuard mutationGuard;
+    private final AiChangeToolGuard changeGuard;
     private final AiElicitationService elicitations;
     private final AiProviderRetryExecutor providerRetry;
     private final ScoreAiChatOptionsFactory optionsFactory;
-    private final AiMutationApprovalCoordinator approvalCoordinator;
+    private final AiChangeApprovalCoordinator approvalCoordinator;
     private final ToolGuardrailRegistry toolGuardrails;
     private final SpringAiCallbackToolSetAdapter callbackToolAdapter;
     private final SpringAiToolAdapter springAiToolAdapter;
@@ -107,11 +107,11 @@ public final class AiChatExecutor {
     @Autowired
     public AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                           ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                          AiMutationToolGuard mutationGuard,
+                          AiChangeToolGuard changeGuard,
                           AiElicitationService elicitations,
                           AiProviderRetryExecutor providerRetry,
                           ScoreAiChatOptionsFactory optionsFactory,
-                          AiMutationApprovalCoordinator approvalCoordinator,
+                          AiChangeApprovalCoordinator approvalCoordinator,
                           ToolGuardrailRegistry toolGuardrails,
                           SpringAiCallbackToolSetAdapter callbackToolAdapter,
                           SpringAiToolAdapter springAiToolAdapter,
@@ -125,7 +125,7 @@ public final class AiChatExecutor {
         this.models = models;
         this.mcpClients = mcpClients;
         this.toolSearchAdvisor = toolSearchAdvisor;
-        this.mutationGuard = mutationGuard;
+        this.changeGuard = changeGuard;
         this.elicitations = elicitations;
         this.providerRetry = providerRetry;
         this.optionsFactory = optionsFactory;
@@ -146,11 +146,11 @@ public final class AiChatExecutor {
     /** Compatibility constructor for callers predating configurable middleware. */
     public AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                           ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                          AiMutationToolGuard mutationGuard,
+                          AiChangeToolGuard changeGuard,
                           AiElicitationService elicitations,
                           AiProviderRetryExecutor providerRetry,
                           ScoreAiChatOptionsFactory optionsFactory,
-                          AiMutationApprovalCoordinator approvalCoordinator,
+                          AiChangeApprovalCoordinator approvalCoordinator,
                           ToolGuardrailRegistry toolGuardrails,
                           SpringAiCallbackToolSetAdapter callbackToolAdapter,
                           SpringAiToolAdapter springAiToolAdapter,
@@ -159,7 +159,7 @@ public final class AiChatExecutor {
                           AiExecutionInstructions instructions,
                           ScoreAiObservability observability,
                           ObjectProvider<ExecutionObserver> executionObservers) {
-        this(models, mcpClients, toolSearchAdvisor, mutationGuard, elicitations,
+        this(models, mcpClients, toolSearchAdvisor, changeGuard, elicitations,
                 providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
                 callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
                 instructions, observability, AiMiddlewareChain.none(), null, executionObservers);
@@ -168,18 +168,18 @@ public final class AiChatExecutor {
     AiChatExecutor(ScoreAiModelRegistry models,
                    ConnectCenterMcpClientFactory mcpClients,
                    ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                   AiMutationToolGuard mutationGuard,
+                   AiChangeToolGuard changeGuard,
                    AiElicitationService elicitations,
                    AiProviderRetryExecutor providerRetry,
                    ScoreAiChatOptionsFactory optionsFactory,
-                   AiMutationApprovalCoordinator approvalCoordinator,
+                   AiChangeApprovalCoordinator approvalCoordinator,
                    ToolGuardrailRegistry toolGuardrails,
                    SpringAiCallbackToolSetAdapter callbackToolAdapter,
                    SpringAiToolAdapter springAiToolAdapter,
                    AgentInputGuardrailChain modelInputGuardrails,
                    AiRequestRegistry requests,
                    ObjectProvider<ExecutionObserver> executionObservers) {
-        this(models, mcpClients, toolSearchAdvisor, mutationGuard, elicitations,
+        this(models, mcpClients, toolSearchAdvisor, changeGuard, elicitations,
                 providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
                 callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
                 AiExecutionInstructions.bundled(), ScoreAiObservability.noop(),
@@ -189,11 +189,11 @@ public final class AiChatExecutor {
     /** Compatibility constructor for focused executor tests. */
     AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                    ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                   AiMutationToolGuard mutationGuard,
+                   AiChangeToolGuard changeGuard,
                    AiElicitationService elicitations,
                    AiProviderRetryExecutor providerRetry,
                    ScoreAiChatOptionsFactory optionsFactory) {
-        this(models, mcpClients, toolSearchAdvisor, mutationGuard,
+        this(models, mcpClients, toolSearchAdvisor, changeGuard,
                 elicitations, providerRetry, optionsFactory, null, null, null, null, null,
                 null, null);
     }
@@ -201,12 +201,12 @@ public final class AiChatExecutor {
     /** Compatibility constructor for approval-coordination tests. */
     AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
                    ToolSearchToolCallingAdvisor toolSearchAdvisor,
-                   AiMutationToolGuard mutationGuard,
+                   AiChangeToolGuard changeGuard,
                    AiElicitationService elicitations,
                    AiProviderRetryExecutor providerRetry,
                    ScoreAiChatOptionsFactory optionsFactory,
-                   AiMutationApprovalCoordinator approvalCoordinator) {
-        this(models, mcpClients, toolSearchAdvisor, mutationGuard,
+                   AiChangeApprovalCoordinator approvalCoordinator) {
+        this(models, mcpClients, toolSearchAdvisor, changeGuard,
                 elicitations, providerRetry, optionsFactory, approvalCoordinator,
                 null, null, null, null, null, null);
     }
@@ -399,7 +399,7 @@ public final class AiChatExecutor {
         };
         ChatResponse response = providerRetry != null && recorder != null
                 ? providerRetry.execute(invocation.scope().requestId(), recorder,
-                recorder::executedMutationToolCallCount, providerCall)
+                recorder::executedChangeToolCallCount, providerCall)
                 : providerCall.get();
         String answer = visibleContent(response);
         if (!StringUtils.hasText(answer)) {
@@ -520,7 +520,7 @@ public final class AiChatExecutor {
         {
             ChatClient.Builder assistantBuilder = models.clientBuilder(request.modelName())
                     .defaultAdvisors(new TrajectoryRecordingAdvisor(recorder, observability));
-            AiMutationToolGuard.GuardedToolSession guardedSession = null;
+            AiChangeToolGuard.GuardedToolSession guardedSession = null;
             org.springframework.ai.tool.ToolCallbackProvider executableTools = null;
             if (context.agentToolBinding() != null) {
                 configureBoundTools(context, assistantBuilder, recorder, toolOutputTokenLimit);
@@ -536,7 +536,7 @@ public final class AiChatExecutor {
                 var localTools = context.toolPolicy() == ToolPolicy.FULL && platformTools != null
                         ? platformTools.tools(context.requester(), executionScope(context))
                         : org.oagi.score.gateway.http.api.ai_management.tool.ToolSet.empty();
-                Set<String> nonMutationToolNames = java.util.stream.Stream.concat(
+                Set<String> nonChangeToolNames = java.util.stream.Stream.concat(
                                 readOnlyToolNames.stream(), localTools.values().stream()
                                         .filter(tool -> tool.specification().effect()
                                                 == org.oagi.score.gateway.http.api.ai_management.tool.AiTool.ToolEffect.READ_ONLY
@@ -544,30 +544,30 @@ public final class AiChatExecutor {
                                                 == org.oagi.score.gateway.http.api.ai_management.tool.AiTool.ToolEffect.OUTPUT_WRITE)
                                         .map(tool -> tool.specification().name()))
                         .collect(java.util.stream.Collectors.toUnmodifiableSet());
-                recorder.readOnlyToolNames(nonMutationToolNames);
+                recorder.readOnlyToolNames(nonChangeToolNames);
                 if ((hasMcpTools || !localTools.isEmpty()) && !commonToolGateway) {
                     throw new IllegalStateException(
                             "The mandatory Tool execution gateway is not configured.");
                 }
                 if (context.toolPolicy() == ToolPolicy.FULL
                         && (mcp != null || !localTools.isEmpty())) {
-                    guardedSession = mutationGuard != null
+                    guardedSession = changeGuard != null
                             ? commonToolGateway
-                            ? mutationGuard.authorizationSession(request, context.requester(),
+                            ? changeGuard.authorizationSession(request, context.requester(),
                                     approvalCoordinator != null
                                             ? ignored -> { }
-                                            : recorder::mutationConfirmationRequired,
-                                    mcpCallbacks, nonMutationToolNames, runControl)
-                            : mutationGuard.session(request, context.requester(),
+                                            : recorder::changeConfirmationRequired,
+                                    mcpCallbacks, nonChangeToolNames, runControl)
+                            : changeGuard.session(request, context.requester(),
                                     approvalCoordinator != null
                                             ? ignored -> { }
-                                            : recorder::mutationConfirmationRequired,
-                                    mcpCallbacks, nonMutationToolNames, runControl)
+                                            : recorder::changeConfirmationRequired,
+                                    mcpCallbacks, nonChangeToolNames, runControl)
                             : null;
                 }
                 var guardedTools = context.toolPolicy() == ToolPolicy.READ_ONLY
-                        ? mutationGuard != null
-                                ? mutationGuard.readOnly(mcpCallbacks, readOnlyToolNames)
+                        ? changeGuard != null
+                                ? changeGuard.readOnly(mcpCallbacks, readOnlyToolNames)
                                 : (org.springframework.ai.tool.ToolCallbackProvider) () ->
                                         new org.springframework.ai.tool.ToolCallback[0]
                         : guardedSession != null ? guardedSession : mcpCallbacks;
@@ -628,8 +628,8 @@ public final class AiChatExecutor {
                 // A confirmed continuation already has a server-bound target tool.
                 // Give the model the guarded callbacks directly so it can resume that
                 // invocation and read it back without rediscovering it through
-                // toolSearchTool. Other mutations remain protected by the guard.
-                if (request.mutationConfirmation() != null) {
+                // toolSearchTool. Other changes remain protected by the guard.
+                if (request.changeConfirmation() != null) {
                     assistantBuilder.defaultAdvisors(DIRECT_TOOL_CALLING_ADVISOR);
                 } else {
                     // READ_ONLY sessions have already been reduced to the server-declared
@@ -639,11 +639,11 @@ public final class AiChatExecutor {
                 }
             }
             List<Message> messages = new ArrayList<>(context.history());
-            if (request.mutationConfirmation() != null
-                    && request.mutationConfirmation().revised()) {
+            if (request.changeConfirmation() != null
+                    && request.changeConfirmation().revised()) {
                 messages.add(new SystemMessage(instructions.render(
-                        AiExecutionInstructions.Template.REVISED_MUTATION_CONTINUATION,
-                        Map.of("toolName", request.mutationConfirmation().toolName())).value()));
+                        AiExecutionInstructions.Template.REVISED_CHANGE_CONTINUATION,
+                        Map.of("toolName", request.changeConfirmation().toolName())).value()));
             }
             messages.add(context.userMessage());
             if (guardedSession != null && executableTools != null) {
@@ -675,18 +675,18 @@ public final class AiChatExecutor {
             }
             List<Message> approvalMessages = new ArrayList<>(messages);
             int approvalBarrierCount = 0;
-            int approvedMutationCount = 0;
-            int deniedMutationCount = 0;
-            int failedMutationCount = 0;
+            int approvedChangeCount = 0;
+            int deniedChangeCount = 0;
+            int failedChangeCount = 0;
             while (guardedSession != null && approvalCoordinator != null
                     && !guardedSession.pendingApprovals().isEmpty()) {
-                List<AiPendingMutationApproval> pendingApprovals =
+                List<AiPendingChangeApproval> pendingApprovals =
                         List.copyOf(guardedSession.pendingApprovals());
-                AiMutationApprovalScope approvalScope = context.approvalScope() != null
+                AiChangeApprovalScope approvalScope = context.approvalScope() != null
                         ? context.approvalScope()
-                        : AiMutationApprovalScope.root(request.conversationId());
-                Map<String, AiMutationApprovalResolution> decisions;
-                List<AiResolvedMutation> resolutions;
+                        : AiChangeApprovalScope.root(request.conversationId());
+                Map<String, AiChangeApprovalResolution> decisions;
+                List<AiResolvedChange> resolutions;
                 try {
                     context.approvalWaitLifecycle().suspendForApproval();
                     try {
@@ -695,8 +695,8 @@ public final class AiChatExecutor {
                             decisions = approvalCoordinator.awaitDecisions(
                                     context.requester(), request.requestId(), request.conversationId(),
                                     approvalScope, pendingApprovals,
-                                    recorder::mutationApprovalBatchRequired,
-                                    recorder::mutationApprovalDecisionAccepted);
+                                    recorder::changeApprovalBatchRequired,
+                                    recorder::changeApprovalDecisionAccepted);
                         } finally {
                             runControl.definiteActivityFinished();
                         }
@@ -705,23 +705,23 @@ public final class AiChatExecutor {
                     }
                     resolutions = guardedSession.resolveApprovals(executableTools, decisions);
                 } finally {
-                    recorder.mutationApprovalsResolved(pendingApprovals);
+                    recorder.changeApprovalsResolved(pendingApprovals);
                 }
                 approvalBarrierCount++;
                 int executed = (int) resolutions.stream()
-                        .filter(AiResolvedMutation::executed).count();
+                        .filter(AiResolvedChange::executed).count();
                 // An approved call that then failed is not a denial: the user did approve it.
                 int denied = (int) resolutions.stream()
                         .filter(resolution -> !resolution.executed())
                         .filter(resolution -> resolution.result() != null
                                 && resolution.result().contains(
-                                        AiMutationToolGuard.MUTATION_CONFIRMATION_DENIED))
+                                        AiChangeToolGuard.CHANGE_CONFIRMATION_DENIED))
                         .count();
-                approvedMutationCount += executed;
-                deniedMutationCount += denied;
-                failedMutationCount += resolutions.size() - executed - denied;
+                approvedChangeCount += executed;
+                deniedChangeCount += denied;
+                failedChangeCount += resolutions.size() - executed - denied;
                 approvalMessages.add(new AssistantMessage(answer));
-                resolutions.forEach(resolution -> addResolvedMutation(
+                resolutions.forEach(resolution -> addResolvedChange(
                         approvalMessages, resolution, recorder, toolOutputTokenLimit));
                 approvalMessages.add(new UserMessage(instructions.render(
                         AiExecutionInstructions.Template.APPROVAL_CONTINUATION).value()));
@@ -730,13 +730,13 @@ public final class AiChatExecutor {
                         instruction, progress);
             }
             int continuation = 0;
-            while (guardedSession != null && guardedSession.mutationCompleted()
+            while (guardedSession != null && guardedSession.changeCompleted()
                     && !guardedSession.confirmationRequired()
-                    && !guardedSession.readAfterLastMutation()
+                    && !guardedSession.readAfterLastChange()
                     && continuation++ < MAX_READ_BACK_CONTINUATIONS) {
                 List<Message> continuationMessages = new ArrayList<>(context.history());
                 continuationMessages.add(context.userMessage());
-                guardedSession.completedMutations()
+                guardedSession.completedChanges()
                         .forEach(execution -> addApprovedExecution(
                                 continuationMessages, execution, recorder, toolOutputTokenLimit));
                 continuationMessages.add(new AssistantMessage(answer));
@@ -746,19 +746,19 @@ public final class AiChatExecutor {
                         false, internalPersona, executionScope(context), executionState,
                         instruction, progress);
             }
-            if (guardedSession != null && guardedSession.mutationCompleted()
+            if (guardedSession != null && guardedSession.changeCompleted()
                     && !guardedSession.confirmationRequired()
-                    && !guardedSession.readAfterLastMutation()) {
+                    && !guardedSession.readAfterLastChange()) {
                 throw new IllegalStateException(
-                        "The assistant stopped after a mutation without completing read-back.");
+                        "The assistant stopped after a change without completing read-back.");
             }
             if (approvalBarrierCount > 0) {
                 return new Result(answer, Map.of(
                         "approvalBarrierResolved", true,
                         "approvalBarrierCount", approvalBarrierCount,
-                        "approvedMutationCount", approvedMutationCount,
-                        "deniedMutationCount", deniedMutationCount,
-                        "failedMutationCount", failedMutationCount));
+                        "approvedChangeCount", approvedChangeCount,
+                        "deniedChangeCount", deniedChangeCount,
+                        "failedChangeCount", failedChangeCount));
             }
             return new Result(answer);
         }
@@ -782,8 +782,8 @@ public final class AiChatExecutor {
     private McpSchema.ElicitResult handleElicitation(
             Context context, ChatRequest request, AiTrajectoryRecorder recorder,
             McpSchema.ElicitFormRequest elicitation, WorkflowRunControl runControl) {
-        if (AiMutationPermissionMode.resolve(request.permissionMode())
-                == AiMutationPermissionMode.FULL_ACCESS
+        if (AiChangePermissionMode.resolve(request.permissionMode())
+                == AiChangePermissionMode.FULL_ACCESS
                 && isConfirmationOnly(elicitation.requestedSchema())) {
             return new McpSchema.ElicitResult(
                     McpSchema.ElicitResult.Action.ACCEPT, java.util.Map.of());
@@ -817,11 +817,11 @@ public final class AiChatExecutor {
                     streamVisibleContent, internalPersona, scope, instruction, progress);
         }
         // Transient provider failures are retried with visible backoff. An attempt
-        // that executed a data-changing tool is terminal: the recorder's mutation
+        // that executed a data-changing tool is terminal: the recorder's change
         // count is the executor's replay fence.
         return providerRetry.execute(request, recorder,
-                () -> Math.max(executionState.completedMutations(),
-                        recorder.executedMutationToolCallCount()), executionState,
+                () -> Math.max(executionState.completedChanges(),
+                        recorder.executedChangeToolCallCount()), executionState,
                 () -> attemptInvoke(assistant, options, request, messages, recorder,
                         streamVisibleContent, internalPersona, scope, instruction, progress));
     }
@@ -953,8 +953,8 @@ public final class AiChatExecutor {
                                 execution.toolName())))).build());
     }
 
-    private void addResolvedMutation(List<Message> messages,
-                                     AiResolvedMutation resolution,
+    private void addResolvedChange(List<Message> messages,
+                                     AiResolvedChange resolution,
                                      AiTrajectoryRecorder recorder,
                                      long toolOutputTokenLimit) {
         String callId = "approved-" + UUID.randomUUID();
@@ -989,7 +989,7 @@ public final class AiChatExecutor {
                           ScoreUser requester, AiTrajectoryRecorder recorder,
                           boolean toolsEnabled, boolean streamVisibleContent,
                           ToolPolicy toolPolicy, int agentDepth,
-                          AiMutationApprovalScope approvalScope,
+                          AiChangeApprovalScope approvalScope,
                           AgentApprovalWaitLifecycle approvalWaitLifecycle,
                           String agentId,
                           org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
@@ -1002,7 +1002,7 @@ public final class AiChatExecutor {
                        ScoreUser requester, AiTrajectoryRecorder recorder,
                        boolean toolsEnabled, boolean streamVisibleContent,
                        ToolPolicy toolPolicy, int agentDepth,
-                       AiMutationApprovalScope approvalScope,
+                       AiChangeApprovalScope approvalScope,
                        AgentApprovalWaitLifecycle approvalWaitLifecycle,
                        String agentId,
                        org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
@@ -1020,7 +1020,7 @@ public final class AiChatExecutor {
                        ScoreUser requester, AiTrajectoryRecorder recorder,
                        boolean toolsEnabled, boolean streamVisibleContent,
                        ToolPolicy toolPolicy, int agentDepth,
-                       AiMutationApprovalScope approvalScope,
+                       AiChangeApprovalScope approvalScope,
                        AgentApprovalWaitLifecycle approvalWaitLifecycle,
                        String agentId,
                        org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
@@ -1036,7 +1036,7 @@ public final class AiChatExecutor {
                        ScoreUser requester, AiTrajectoryRecorder recorder,
                        boolean toolsEnabled, boolean streamVisibleContent,
                        ToolPolicy toolPolicy, int agentDepth,
-                       AiMutationApprovalScope approvalScope,
+                       AiChangeApprovalScope approvalScope,
                        AgentApprovalWaitLifecycle approvalWaitLifecycle,
                        String agentId,
                        org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose,
@@ -1051,7 +1051,7 @@ public final class AiChatExecutor {
                        ScoreUser requester, AiTrajectoryRecorder recorder,
                        boolean toolsEnabled, boolean streamVisibleContent,
                        ToolPolicy toolPolicy, int agentDepth,
-                       AiMutationApprovalScope approvalScope,
+                       AiChangeApprovalScope approvalScope,
                        AgentApprovalWaitLifecycle approvalWaitLifecycle,
                        String agentId,
                        org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose executionPurpose) {
@@ -1064,7 +1064,7 @@ public final class AiChatExecutor {
                        ScoreUser requester, AiTrajectoryRecorder recorder,
                        boolean toolsEnabled, boolean streamVisibleContent,
                        ToolPolicy toolPolicy, int agentDepth,
-                       AiMutationApprovalScope approvalScope,
+                       AiChangeApprovalScope approvalScope,
                        AgentApprovalWaitLifecycle approvalWaitLifecycle) {
             this(request, history, userMessage, requester, recorder, toolsEnabled,
                     streamVisibleContent, toolPolicy, agentDepth, approvalScope,
@@ -1077,7 +1077,7 @@ public final class AiChatExecutor {
             this(request, history, userMessage, requester, recorder,
                     true, true, ToolPolicy.FULL, 0,
                     request != null && request.conversationId() != null
-                            ? AiMutationApprovalScope.root(request.conversationId()) : null,
+                            ? AiChangeApprovalScope.root(request.conversationId()) : null,
                     AgentApprovalWaitLifecycle.NOOP, "unresolved-root-agent",
                     org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope.Purpose.USER_RESPONSE);
         }
@@ -1088,7 +1088,7 @@ public final class AiChatExecutor {
             this(request, history, userMessage, requester, recorder, toolsEnabled,
                     streamVisibleContent, toolsEnabled ? ToolPolicy.FULL : ToolPolicy.NONE, 0,
                     request != null && request.conversationId() != null
-                            ? AiMutationApprovalScope.root(request.conversationId()) : null,
+                            ? AiChangeApprovalScope.root(request.conversationId()) : null,
                     AgentApprovalWaitLifecycle.NOOP, defaultAgentId(
                             toolsEnabled ? ToolPolicy.FULL : ToolPolicy.NONE, 0),
                     defaultPurpose(toolsEnabled ? ToolPolicy.FULL : ToolPolicy.NONE, 0));
@@ -1101,7 +1101,7 @@ public final class AiChatExecutor {
             this(request, history, userMessage, requester, recorder, toolsEnabled,
                     streamVisibleContent, toolPolicy, agentDepth,
                     request != null && request.conversationId() != null
-                            ? AiMutationApprovalScope.root(request.conversationId()) : null,
+                            ? AiChangeApprovalScope.root(request.conversationId()) : null,
                     AgentApprovalWaitLifecycle.NOOP, defaultAgentId(toolPolicy, agentDepth),
                     defaultPurpose(toolPolicy, agentDepth));
         }
@@ -1111,14 +1111,14 @@ public final class AiChatExecutor {
                        ScoreUser requester, AiTrajectoryRecorder recorder,
                        boolean toolsEnabled, boolean streamVisibleContent,
                        ToolPolicy toolPolicy, int agentDepth,
-                       AiMutationApprovalScope approvalScope) {
+                       AiChangeApprovalScope approvalScope) {
             this(request, history, userMessage, requester, recorder, toolsEnabled,
                     streamVisibleContent, toolPolicy, agentDepth, approvalScope,
                     AgentApprovalWaitLifecycle.NOOP, defaultAgentId(toolPolicy, agentDepth),
                     defaultPurpose(toolPolicy, agentDepth));
         }
 
-        public Context withApprovalScope(AiMutationApprovalScope scope) {
+        public Context withApprovalScope(AiChangeApprovalScope scope) {
             return new Context(request, history, userMessage, requester, recorder,
                     toolsEnabled, streamVisibleContent, toolPolicy, agentDepth, scope,
                     approvalWaitLifecycle, agentId, executionPurpose, guardrailDecisionIds,

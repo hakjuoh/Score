@@ -79,7 +79,7 @@ function confirmationRequestCount(items) {
   const ids = new Set();
   for (const item of items) {
     for (const event of item?.events || []) {
-      if (event?.subtype === 'mutation_confirmation_required'
+      if (event?.subtype === 'change_confirmation_required'
         && event?.metadata?.confirmationRequestId) {
         ids.add(event.metadata.confirmationRequestId);
       }
@@ -94,7 +94,7 @@ function confirmationEvidence(items) {
   for (const item of items) {
     for (const event of item?.events || []) {
       const id = event?.metadata?.confirmationRequestId;
-      if (event?.subtype !== 'mutation_confirmation_required' || !id || seen.has(id)) continue;
+      if (event?.subtype !== 'change_confirmation_required' || !id || seen.has(id)) continue;
       seen.add(id);
       evidence.push({
         confirmationRequestId: id,
@@ -135,7 +135,7 @@ async function eventDurations(runDirectory) {
 
 function commandFor(run) {
   // --run-id is intentionally omitted: the runner autogenerates a fresh
-  // timestamped ID, so a re-run gets its own output directory and mutation
+  // timestamped ID, so a re-run gets its own output directory and change
   // record names instead of corrupting the analyzed artifacts.
   const options = [
     ['--mode', run.mode], ['--strategy', run.strategy],
@@ -275,13 +275,13 @@ function summaryMarkdown(analysis) {
     '',
     '## Results',
     '',
-    '| Run | Case | Model / effort / runtime | Mode / strategy | Seconds | Graph | Mutation/read-back | Result |',
+    '| Run | Case | Model / effort / runtime | Mode / strategy | Seconds | Graph | Change/read-back | Result |',
     '|---|---|---|---|---:|---|---|:---:|'
   ];
   for (const run of analysis.runs) {
     for (const item of run.cases) {
       const combo = item.testCase.combo;
-      const evidence = item.task === 'mutation'
+      const evidence = item.task === 'change'
         ? `${item.tools.createdId || 'no ID'} / ${item.tools.readBack ? item.tools.readBackTool : 'missing'}`
         : item.tools.readBack ? item.tools.readBackTool : 'missing read';
       lines.push(`| ${markdownCell(run.runId)} | ${markdownCell(item.name)} | `
@@ -314,7 +314,7 @@ function summaryMarkdown(analysis) {
   }
   lines.push('## Strict checks', '',
     '- Nested MCP error payloads are rejected.',
-    '- Mutation success requires exactly one executed create result and one exact ID/name/description read-back after it.',
+    '- Change success requires exactly one executed create result and one exact ID/name/description read-back after it.',
     '- Lead and child lifecycle state machines, deterministic IDs, request/fan-out linkage, depth, and ordinals are validated.',
     '- Specialist calls must carry the recorded read-only guard classification derived from the server readOnlyHint annotations.',
     '');

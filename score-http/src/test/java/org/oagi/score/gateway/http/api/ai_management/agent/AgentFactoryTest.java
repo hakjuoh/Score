@@ -19,7 +19,7 @@ class AgentFactoryTest {
         AiModel model = new AiModel(new AiModel.ModelId("model-1"),
                 new AiModel.ProviderId("provider-1"), null, null);
         ToolSet available = new ToolSet(List.of(tool("read", AiTool.ToolEffect.READ_ONLY),
-                tool("write", AiTool.ToolEffect.MUTATION)));
+                tool("write", AiTool.ToolEffect.CHANGE)));
 
         AgentSession agent = AgentFactory.binding().create(definition, model, available);
 

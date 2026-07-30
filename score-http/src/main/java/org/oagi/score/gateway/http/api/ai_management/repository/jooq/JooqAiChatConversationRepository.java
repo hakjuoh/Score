@@ -413,7 +413,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         String role = switch (kind) {
             case "assistant", "user", "error", "progress", "tool_call", "guide" -> kind;
             case "workflow_result" -> "assistant";
-            case "mutation_approval_batch_requested", "mutation_approval_decision" -> "guide";
+            case "change_approval_batch_requested", "change_approval_decision" -> "guide";
             case "tool_call_update" -> "tool_call";
             case "agent_lifecycle" -> "agent_event";
             case "provider_error" -> workerOwned ? "provider_event" : "debug";
@@ -432,7 +432,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         putIfPresent(metadata, "toolName", toolName);
         putIfPresent(metadata, "toolCallSeq", toolCallSequence);
         String subtype = switch (kind) {
-            case "mutation_approval_batch_requested", "mutation_approval_decision" -> kind;
+            case "change_approval_batch_requested", "change_approval_decision" -> kind;
             case "agent_lifecycle" -> string(extra, "lifecycle_subtype");
             case "workflow_result" -> kind;
             case "provider_error", "provider_retry" -> kind;

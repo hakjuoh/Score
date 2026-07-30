@@ -10,5 +10,5 @@ public interface AiChatMaintenanceRepository {
 
     int deleteExpiredConversations(Instant cutoff);
 
-    int expireMutationConfirmations(Instant now);
+    int expireChangeConfirmations(Instant now);
 }

@@ -209,7 +209,7 @@ public final class ToolExecutionGateway {
                                 middlewareContext.arguments(),
                                 new AiTool.ToolExecutionContext(scope, Map.of())), "Tool result");
                         AiTool.ToolEffect effect = tool.specification().effect();
-                        state.toolCompleted(effect == AiTool.ToolEffect.MUTATION
+                        state.toolCompleted(effect == AiTool.ToolEffect.CHANGE
                                 || effect == AiTool.ToolEffect.UNKNOWN);
                         return result;
                     });

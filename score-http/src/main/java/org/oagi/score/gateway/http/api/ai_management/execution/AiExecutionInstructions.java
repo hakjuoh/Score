@@ -37,7 +37,7 @@ public final class AiExecutionInstructions {
         TEXTUAL_TOOL_CALL_RECOVERY("execution-textual-tool-call-recovery"),
         READ_BACK_CONTINUATION("execution-read-back-continuation"),
         APPROVAL_CONTINUATION("execution-approval-continuation"),
-        REVISED_MUTATION_CONTINUATION("execution-revised-mutation-continuation"),
+        REVISED_CHANGE_CONTINUATION("execution-revised-change-continuation"),
         REQUEST_SCOPED_INPUT("execution-request-scoped-input"),
         UI_ROUTE_MANIFEST_CONTEXT("execution-ui-route-manifest-context");
 

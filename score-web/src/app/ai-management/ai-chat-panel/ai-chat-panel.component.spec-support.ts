@@ -25,7 +25,7 @@ import {AiChatAttachmentService} from './domain/ai-chat-attachment.service';
 import {AiChatCancellationService} from './domain/ai-chat-cancellation.service';
 import {AiChatCommandService} from './domain/ai-chat-command.service';
 import {AiChatContextService} from './domain/ai-chat-context.service';
-import {AiConfirmedMutationRequestCoordinator} from './domain/ai-confirmed-mutation-request-coordinator';
+import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
 import {AiConversationRestoreService} from './domain/ai-conversation-restore.service';
 import {AiChatNavigationService} from './domain/ai-chat-navigation.service';
 import {AiChatPanelLayoutService} from './domain/ai-chat-panel-layout.service';
@@ -34,7 +34,7 @@ import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.servic
 import {AiChatSettingsService} from './domain/ai-chat-settings.service';
 import {AiChatTransportService} from './domain/ai-chat-transport.service';
 import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
-import {AiMutationInteractionService} from './domain/ai-mutation-interaction.service';
+import {AiChangeInteractionService} from './domain/ai-change-interaction.service';
 import {
   AiCancellationResponse,
   AiPublicExecutionRequestStatus
@@ -59,7 +59,7 @@ export {
   CANCELLATION_TERMINAL_TIMEOUT_MS,
   ACTIVE_REQUEST_RECOVERY_RETRY_DELAY_MS,
   COMPLETED_PAYLOAD_WAIT_MS,
-  MUTATION_CONFIRMATION_DECISION_TIMEOUT_MS,
+  CHANGE_CONFIRMATION_DECISION_TIMEOUT_MS,
   REQUEST_STATUS_WATCHDOG_MS
 } from './domain/ai-chat-panel.constants';
 export type {
@@ -80,7 +80,7 @@ export interface AiChatPanelApiMock {
   updateConversationModel: ReturnType<typeof vi.fn>;
   getConversation: ReturnType<typeof vi.fn>;
   deleteConversation: ReturnType<typeof vi.fn>;
-  decideMutationConfirmation: ReturnType<typeof vi.fn>;
+  decideChangeConfirmation: ReturnType<typeof vi.fn>;
 }
 
 export let component: AiChatPanelComponent;
@@ -154,7 +154,7 @@ export function setupAiChatPanelSpec(): void {
     updateConversationModel: vi.fn(() => NEVER),
     getConversation: vi.fn(() => NEVER),
     deleteConversation: vi.fn(() => of({deleted: true})),
-    decideMutationConfirmation: vi.fn(() => NEVER)
+    decideChangeConfirmation: vi.fn(() => NEVER)
   };
   snackBar = {open: vi.fn()};
   dialog = {open: vi.fn()};
@@ -194,7 +194,7 @@ export function setupAiChatPanelSpec(): void {
       AiChatAttachmentQueueService,
       {provide: AiChatAttachmentService, useValue: attachmentService},
       {provide: AiChatCommandService, useValue: {decide: () => ({kind: 'none'}), suggestions: () => []}},
-      AiConfirmedMutationRequestCoordinator,
+      AiConfirmedChangeRequestCoordinator,
       {provide: AiChatContextService, useValue: {
         nextContextUpdate: () => ({routeManifest: {schemaVersion: 1, routes: []}})
       }},
@@ -213,7 +213,7 @@ export function setupAiChatPanelSpec(): void {
           Math.min(maximum, Math.max(minimum, value))
       }},
       AiChatMessageTrackerService,
-      AiMutationInteractionService,
+      AiChangeInteractionService,
       AiChatPanelViewportService,
       AiChatSettingsService,
       {provide: AiChatTransportService, useValue: transport},
@@ -278,12 +278,12 @@ export function cancellationResponse(): AiCancellationResponse {
   };
 }
 
-export function startMutationConfirmation(status: 'REQUESTED' | 'APPROVED' = 'REQUESTED'): void {
+export function startChangeConfirmation(status: 'REQUESTED' | 'APPROVED' = 'REQUESTED'): void {
   component.state.conversationId = 'conversation-1';
   component.state.prompt = 'Create the same item again';
   component.send();
   transport.publishWhenConnected.mock.calls[0][0].publish();
-  sendMutationConfirmationNotice({metadata: {
+  sendChangeConfirmationNotice({metadata: {
     confirmationRequestId: 'confirmation-1',
     status,
     expiresAt: '2099-07-15T00:00:00Z',
@@ -292,27 +292,27 @@ export function startMutationConfirmation(status: 'REQUESTED' | 'APPROVED' = 'RE
   }});
 }
 
-export function sendMutationConfirmationNotice(override: Record<string, unknown> = {}): void {
+export function sendChangeConfirmationNotice(override: Record<string, unknown> = {}): void {
   (component as any).handleSocketEvent({
-    ...mutationConfirmationEvent('request-1'),
+    ...changeConfirmationEvent('request-1'),
     ...override
   });
 }
 
-export function mutationConfirmationEvent(requestId: string): any {
+export function changeConfirmationEvent(requestId: string): any {
   return {
     requestId,
     conversationId: 'conversation-1',
     type: 'system',
-    subtype: 'mutation_confirmation_required',
-    message: 'A data-changing action requires explicit approval.',
+    subtype: 'change_confirmation_required',
+    message: 'A change requires explicit approval.',
     continuationRequired: false,
     progress: [],
     ids: [],
     turnId: requestId,
     sequence: 4,
     visibility: 'visible',
-    content: 'A data-changing action requires explicit approval.',
+    content: 'A change requires explicit approval.',
     metadata: {
       confirmationRequestId: 'confirmation-1',
       status: 'REQUESTED',
@@ -323,12 +323,12 @@ export function mutationConfirmationEvent(requestId: string): any {
   };
 }
 
-export function finishMutationConfirmationRequest(): void {
+export function finishChangeConfirmationRequest(): void {
   (component as any).handleSocketEvent({
     requestId: 'request-1',
     conversationId: 'conversation-1',
     type: 'assistant_final',
-    content: 'The original action already completed.'
+    content: 'The original change already completed.'
   });
 }
 

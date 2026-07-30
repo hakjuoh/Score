@@ -396,7 +396,7 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void inFlightMutationCannotBeInterruptedByTheRequestInactivityLease() throws Exception {
+    void inFlightChangeCannotBeInterruptedByTheRequestInactivityLease() throws Exception {
         AiRequestRegistry registry = new AiRequestRegistry();
         AiRequestRegistry.Entry entry = registry.register(
                 "request-mutating", "conversation-mutating", user,
@@ -417,13 +417,13 @@ class AiRequestRegistryTest {
             }, executor);
 
             assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
-            assertThat(registry.mutationStarted(entry.requestId())).isTrue();
+            assertThat(registry.changeStarted(entry.requestId())).isTrue();
             Thread.sleep(240);
 
             assertThat(interrupted.getCount()).isEqualTo(1L);
             assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
 
-            registry.mutationFinished(entry.requestId());
+            registry.changeFinished(entry.requestId());
             assertThat(interrupted.await(1, TimeUnit.SECONDS)).isTrue();
             work.get(1, TimeUnit.SECONDS);
             assertThat(registry.status(entry.requestId(), user).status())
@@ -500,7 +500,7 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void mutationAdmissionAtTheTimeoutBoundaryRenewsInsteadOfInterrupting() throws Exception {
+    void changeAdmissionAtTheTimeoutBoundaryRenewsInsteadOfInterrupting() throws Exception {
         CountDownLatch timeoutReady = new CountDownLatch(1);
         CountDownLatch allowTimeoutTransition = new CountDownLatch(1);
         var scheduler = Executors.newSingleThreadScheduledExecutor(
@@ -515,7 +515,7 @@ class AiRequestRegistryTest {
             }
         });
         AiRequestRegistry.Entry entry = registry.register(
-                "request-racing-mutation", "conversation-racing-mutation", user,
+                "request-racing-change", "conversation-racing-change", user,
                 Instant.now().plusMillis(80));
         CountDownLatch workerStarted = new CountDownLatch(1);
         CountDownLatch workerInterrupted = new CountDownLatch(1);
@@ -534,14 +534,14 @@ class AiRequestRegistryTest {
 
             assertThat(workerStarted.await(1, TimeUnit.SECONDS)).isTrue();
             assertThat(timeoutReady.await(1, TimeUnit.SECONDS)).isTrue();
-            assertThat(registry.mutationStarted(entry.requestId())).isTrue();
+            assertThat(registry.changeStarted(entry.requestId())).isTrue();
             allowTimeoutTransition.countDown();
             Thread.sleep(120);
 
             assertThat(workerInterrupted.getCount()).isEqualTo(1L);
             assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
 
-            registry.mutationFinished(entry.requestId());
+            registry.changeFinished(entry.requestId());
             assertThat(workerInterrupted.await(1, TimeUnit.SECONDS)).isTrue();
             work.get(1, TimeUnit.SECONDS);
         } finally {
@@ -551,7 +551,7 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void completedMutationAtTheTimeoutBoundaryStillCountsAsActivity() throws Exception {
+    void completedChangeAtTheTimeoutBoundaryStillCountsAsActivity() throws Exception {
         CountDownLatch timeoutReady = new CountDownLatch(1);
         CountDownLatch allowTimeoutTransition = new CountDownLatch(1);
         CountDownLatch workerStarted = new CountDownLatch(1);
@@ -569,7 +569,7 @@ class AiRequestRegistryTest {
             }
         });
         AiRequestRegistry.Entry entry = registry.register(
-                "request-fast-mutation", "conversation-fast-mutation", user,
+                "request-fast-change", "conversation-fast-change", user,
                 Instant.now().plusMillis(120));
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             CompletableFuture<Void> work = CompletableFuture.runAsync(() -> {
@@ -586,8 +586,8 @@ class AiRequestRegistryTest {
 
             assertThat(workerStarted.await(1, TimeUnit.SECONDS)).isTrue();
             assertThat(timeoutReady.await(1, TimeUnit.SECONDS)).isTrue();
-            assertThat(registry.mutationStarted(entry.requestId())).isTrue();
-            registry.mutationFinished(entry.requestId());
+            assertThat(registry.changeStarted(entry.requestId())).isTrue();
+            registry.changeFinished(entry.requestId());
             allowTimeoutTransition.countDown();
             Thread.sleep(40);
 
@@ -605,15 +605,15 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void mutationCompletionRenewsBeforeRemovingTheInFlightFence() throws Exception {
-        CountDownLatch mutationDecremented = new CountDownLatch(1);
+    void changeCompletionRenewsBeforeRemovingTheInFlightFence() throws Exception {
+        CountDownLatch changeDecremented = new CountDownLatch(1);
         CountDownLatch allowCompletion = new CountDownLatch(1);
         var scheduler = Executors.newSingleThreadScheduledExecutor(
                 Thread.ofPlatform().daemon(true).factory());
         AiRequestRegistry registry = new AiRequestRegistry(
                 scheduler, Duration.ofSeconds(5), AiRequestStateStore.inMemory(),
                 () -> { }, () -> {
-            mutationDecremented.countDown();
+            changeDecremented.countDown();
             try {
                 allowCompletion.await();
             } catch (InterruptedException interrupted) {
@@ -621,16 +621,16 @@ class AiRequestRegistryTest {
             }
         });
         AiRequestRegistry.Entry entry = registry.register(
-                "request-finishing-mutation", "conversation-finishing-mutation", user,
+                "request-finishing-change", "conversation-finishing-change", user,
                 Instant.now().plusMillis(200));
         assertThat(registry.start(entry)).isTrue();
-        assertThat(registry.mutationStarted(entry.requestId())).isTrue();
+        assertThat(registry.changeStarted(entry.requestId())).isTrue();
         Thread.sleep(180);
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             CompletableFuture<Void> finish = CompletableFuture.runAsync(
-                    () -> registry.mutationFinished(entry.requestId()), executor);
+                    () -> registry.changeFinished(entry.requestId()), executor);
 
-            assertThat(mutationDecremented.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(changeDecremented.await(1, TimeUnit.SECONDS)).isTrue();
             Thread.sleep(80);
 
             assertThat(registry.status(entry.requestId(), user).status()).isEqualTo("RUNNING");
@@ -661,12 +661,12 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void mutationInFlightDuringCancellationRequiresReconciliation() {
+    void changeInFlightDuringCancellationRequiresReconciliation() {
         AiRequestRegistry registry = new AiRequestRegistry();
         AiRequestRegistry.Entry entry = registry.register("request-1", "conversation-1", user,
                 Instant.now().plusSeconds(60));
         assertThat(registry.start(entry)).isTrue();
-        assertThat(registry.mutationStarted("request-1")).isTrue();
+        assertThat(registry.changeStarted("request-1")).isTrue();
 
         var response = registry.cancel("request-1", "cancel-1", "conversation-1",
                 entry.generation(), user);
@@ -679,18 +679,18 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void refusesMutationAccountingForAnUnknownRequest() {
-        assertThat(new AiRequestRegistry().mutationStarted("missing-request")).isFalse();
+    void refusesChangeAccountingForAnUnknownRequest() {
+        assertThat(new AiRequestRegistry().changeStarted("missing-request")).isFalse();
     }
 
     @Test
-    void cancellationAfterACompletedMutationStillRequiresReconciliation() {
+    void cancellationAfterACompletedChangeStillRequiresReconciliation() {
         AiRequestRegistry registry = new AiRequestRegistry();
         AiRequestRegistry.Entry entry = registry.register("request-1", "conversation-1", user,
                 Instant.now().plusSeconds(60));
         assertThat(registry.start(entry)).isTrue();
-        assertThat(registry.mutationStarted("request-1")).isTrue();
-        registry.mutationFinished("request-1");
+        assertThat(registry.changeStarted("request-1")).isTrue();
+        registry.changeFinished("request-1");
 
         var response = registry.cancel("request-1", "cancel-1", "conversation-1",
                 entry.generation(), user);
@@ -823,7 +823,7 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void instanceShutdownFailsAnOwnedRequestWithoutAObservedMutation() {
+    void instanceShutdownFailsAnOwnedRequestWithoutAObservedChange() {
         AiRequestRegistry registry = new AiRequestRegistry();
         AiRequestRegistry.Entry entry = registry.register(
                 "request-shutdown", "conversation-shutdown", user,
@@ -840,13 +840,13 @@ class AiRequestRegistryTest {
     }
 
     @Test
-    void instanceShutdownRequiresReconciliationAfterAnObservedMutation() {
+    void instanceShutdownRequiresReconciliationAfterAnObservedChange() {
         AiRequestRegistry registry = new AiRequestRegistry();
         AiRequestRegistry.Entry entry = registry.register(
                 "request-mutating-shutdown", "conversation-mutating-shutdown", user,
                 Instant.now().plusSeconds(60));
         assertThat(registry.start(entry)).isTrue();
-        assertThat(registry.mutationStarted(entry.requestId())).isTrue();
+        assertThat(registry.changeStarted(entry.requestId())).isTrue();
 
         registry.terminalizeOwnedRequestsOnShutdown();
 

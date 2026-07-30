@@ -63,7 +63,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
     private final AiRequestStateStore stateStore;
     private final String instanceId;
     private final Runnable beforeInactivityTimeoutTransition;
-    private final Runnable afterMutationCountDecrement;
+    private final Runnable afterChangeCountDecrement;
 
     @Autowired
     public AiRequestRegistry(@Qualifier("scoreAiLifecycleScheduler") ScheduledExecutorService scheduler,
@@ -90,12 +90,12 @@ public class AiRequestRegistry implements ConversationCommitFence {
     AiRequestRegistry(ScheduledExecutorService scheduler, Duration stopGracePeriod,
                       AiRequestStateStore stateStore,
                       Runnable beforeInactivityTimeoutTransition,
-                      Runnable afterMutationCountDecrement) {
+                      Runnable afterChangeCountDecrement) {
         this.scheduler = scheduler;
         this.stopGracePeriod = stopGracePeriod;
         this.stateStore = stateStore;
         this.beforeInactivityTimeoutTransition = beforeInactivityTimeoutTransition;
-        this.afterMutationCountDecrement = afterMutationCountDecrement;
+        this.afterChangeCountDecrement = afterChangeCountDecrement;
         this.instanceId = UUID.randomUUID().toString();
         this.stateStore.addStopListener(this::stopRequested);
     }
@@ -116,7 +116,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
                     if (!matchesOwner(state, entry) || state.terminal()) {
                         return null;
                     }
-                    String terminalStatus = state.mutationObserved()
+                    String terminalStatus = state.changeObserved()
                             ? "UNKNOWN_RECONCILIATION_REQUIRED" : "FAILED";
                     storage.put(state.terminal(
                             terminalStatus, "WORKER_INSTANCE_SHUTDOWN", now));
@@ -251,7 +251,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
             AiSharedRequestState source = storage.get(requestId);
             if (source != null && isLogicallyActive(source, now)) {
                 throw new IllegalStateException(
-                        "Stop the active AI request before deciding its mutation confirmation.");
+                        "Stop the active AI request before deciding its change confirmation.");
             }
             Set<String> guarded = new LinkedHashSet<>();
             guarded.add(conversationId);
@@ -265,7 +265,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
                             || guarded.contains(state.conversationId()))
                             && isLogicallyActive(state, now))) {
                 throw new IllegalStateException(
-                        "Stop the active AI request before deciding its mutation confirmation.");
+                        "Stop the active AI request before deciding its change confirmation.");
             }
             guarded.forEach(id -> storage.putMaintenance(id, token, MAINTENANCE_LEASE));
             return Set.copyOf(guarded);
@@ -320,10 +320,10 @@ public class AiRequestRegistry implements ConversationCommitFence {
             Instant now = Instant.now();
             AiSharedRequestState finished;
             if ("CANCELLING".equals(state.status())) {
-                String target = state.mutationOutcomeUncertain()
+                String target = state.changeOutcomeUncertain()
                         ? "UNKNOWN_RECONCILIATION_REQUIRED" : state.terminalTarget();
-                String reason = state.mutationOutcomeUncertain()
-                        ? "MUTATION_OUTCOME_UNCERTAIN" : state.statusReason();
+                String reason = state.changeOutcomeUncertain()
+                        ? "CHANGE_OUTCOME_UNCERTAIN" : state.statusReason();
                 finished = state.terminal(target, reason, now);
             } else if (throwable == null) {
                 finished = state.terminal("COMPLETED", null, now);
@@ -364,7 +364,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
             remainingNanos = entry.inactivityLease.remainingNanos(nowNanos);
         }
         boolean definiteWorkInFlight = remainingNanos <= 0
-                && (interactionInFlight(entry) || mutationInFlight(entry));
+                && (interactionInFlight(entry) || changeInFlight(entry));
         long reviewedActivityEpoch;
         AiRequestInactivityLease.Review review;
         synchronized (entry) {
@@ -388,12 +388,12 @@ public class AiRequestRegistry implements ConversationCommitFence {
         }
     }
 
-    private boolean mutationInFlight(Entry entry) {
+    private boolean changeInFlight(Entry entry) {
         return stateStore.withRequestLock(entry.requestId, storage -> {
             AiSharedRequestState state = storage.get(entry.requestId);
             return matchesOwner(state, entry) && !state.terminal()
                     && !"CANCELLING".equals(state.status())
-                    && state.mutationInFlight() > 0;
+                    && state.changeInFlight() > 0;
         });
     }
 
@@ -450,7 +450,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
                 }
                 boolean activitySinceReview = reviewedActivityEpoch != null
                         && entry.activityEpoch.get() != reviewedActivityEpoch;
-                if (activitySinceReview || current.mutationInFlight() > 0) {
+                if (activitySinceReview || current.changeInFlight() > 0) {
                     return new TimeoutTransition(current, true);
                 }
                 AiSharedRequestState timed = current.timingOut(Instant.now(), workerPresent);
@@ -568,7 +568,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
         }
     }
 
-    public boolean mutationStarted(String requestId) {
+    public boolean changeStarted(String requestId) {
         Entry entry = localRequests.get(requestId);
         if (entry == null) return false;
         boolean started = stateStore.withRequestLock(requestId, storage -> {
@@ -577,9 +577,9 @@ public class AiRequestRegistry implements ConversationCommitFence {
                     || !"RUNNING".equals(state.status())) {
                 return false;
             }
-            storage.put(state.mutationStarted(Instant.now()));
+            storage.put(state.changeStarted(Instant.now()));
             // This atomic epoch is updated while holding the same distributed state
-            // lock used by timeout transition, so even a fast mutation cannot occur
+            // lock used by timeout transition, so even a fast change cannot occur
             // invisibly between inactivity review and terminalization.
             entry.activityEpoch.incrementAndGet();
             return true;
@@ -636,21 +636,21 @@ public class AiRequestRegistry implements ConversationCommitFence {
         });
     }
 
-    public void mutationFinished(String requestId) {
+    public void changeFinished(String requestId) {
         // Publish completion activity before removing the definite-work fence. Otherwise an
-        // inactivity review could observe mutationInFlight=0 while the old lease is expired.
+        // inactivity review could observe changeInFlight=0 while the old lease is expired.
         progress(requestId);
         Entry entry = localRequests.get(requestId);
         boolean decremented = stateStore.withRequestLock(requestId, storage -> {
             AiSharedRequestState state = storage.get(requestId);
             if (entry != null && matchesOwner(state, entry)) {
-                storage.put(state.mutationFinished(Instant.now()));
+                storage.put(state.changeFinished(Instant.now()));
                 entry.activityEpoch.incrementAndGet();
                 return true;
             }
             return false;
         });
-        if (decremented) afterMutationCountDecrement.run();
+        if (decremented) afterChangeCountDecrement.run();
         progress(requestId);
     }
 
@@ -921,12 +921,12 @@ public class AiRequestRegistry implements ConversationCommitFence {
         String terminalStatus;
         String reason;
         if ("CANCELLING".equals(state.status())) {
-            terminalStatus = state.mutationOutcomeUncertain()
+            terminalStatus = state.changeOutcomeUncertain()
                     ? "UNKNOWN_RECONCILIATION_REQUIRED" : state.terminalTarget();
-            reason = state.mutationOutcomeUncertain()
-                    ? "MUTATION_OUTCOME_UNCERTAIN" : "WORKER_INSTANCE_UNAVAILABLE";
+            reason = state.changeOutcomeUncertain()
+                    ? "CHANGE_OUTCOME_UNCERTAIN" : "WORKER_INSTANCE_UNAVAILABLE";
         } else {
-            terminalStatus = state.mutationObserved()
+            terminalStatus = state.changeObserved()
                     ? "UNKNOWN_RECONCILIATION_REQUIRED" : "TIMED_OUT";
             reason = "WORKER_INSTANCE_UNAVAILABLE";
         }

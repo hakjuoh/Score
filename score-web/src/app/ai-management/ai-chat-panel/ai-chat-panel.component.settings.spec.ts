@@ -136,7 +136,7 @@ describe('AiChatPanelComponent settings and active recovery', () => {
     expect(component.state.messages.some(message => message.content === '/model')).toBe(false);
   });
 
-  it('changes mutation approval policy through the permissions command', () => {
+  it('updates the change approval policy through the permissions command', () => {
     (component as any).loadAvailableModels();
 
     (component as any).openPermissionSettings('/permissions');

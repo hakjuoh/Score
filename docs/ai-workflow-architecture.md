@@ -49,13 +49,13 @@ The request registry has its own rolling inactivity lease configured by
 `score.ai.request-inactivity-timeout` (default 10 minutes). It reviews live requests periodically,
 publishes a renewed deadline when work has progressed, and times out only after a complete lease
 window with no observable progress. Agent progress, trajectory events, Tool admission/completion,
-and mutation execution renew the request lease; review polling does not. An in-flight mutation is
+and change execution renew the request lease; review polling does not. An in-flight change is
 treated as active work and cannot be interrupted by the request lease. Provider SDK call deadlines
 are disabled because a fixed wall-clock limit would terminate a healthy stream; raw provider chunks
 remain subject to the Agent inactivity lease above.
 
 User interaction waits are independent: `score.ai.elicitation-timeout` and
-`score.ai.mutation-approval-timeout` default to 10 minutes, while
+`score.ai.change-approval-timeout` default to 10 minutes, while
 `score.ai.mcp.request-timeout` controls one MCP operation. Because the MCP SDK uses one session-wide
 request timeout for both Tool calls and elicitation round trips, the effective MCP client timeout is
 the greater of `mcp.request-timeout` and `elicitation-timeout`; the elicitation service still enforces
@@ -63,7 +63,7 @@ its own interaction deadline. Requester-scoped broker JWTs are refreshed on ever
 so a rolling Agent session does not retain an expired token. The deprecated
 `SCORE_AI_REQUEST_TIMEOUT` value remains a fallback for the three new request/interaction settings
 until deployments migrate to `SCORE_AI_REQUEST_INACTIVITY_TIMEOUT`, `SCORE_AI_ELICITATION_TIMEOUT`,
-and `SCORE_AI_MUTATION_APPROVAL_TIMEOUT`.
+and `SCORE_AI_CHANGE_APPROVAL_TIMEOUT`.
 
 ## Recursive plan contract
 
@@ -123,7 +123,7 @@ selected as model-authored workers. A custom Agent must explicitly opt into assi
 The Workflow converts the guardrail-accepted user turn once into a protocol-neutral request snapshot. Routing,
 planning, evaluation, and synthesis use that snapshot instead of depending on controller payloads.
 Model calls enter through the Agent execution port. The assigned-worker adapter retains the existing
-tool, mutation-approval, guardrail, trajectory, and requester-scoped MCP mechanics.
+tool, change-approval, guardrail, trajectory, and requester-scoped MCP mechanics.
 
 ## Safety and failure semantics
 
@@ -140,7 +140,7 @@ tool, mutation-approval, guardrail, trajectory, and requester-scoped MCP mechani
   `ToolExecutionGateway` to the provider boundary.
 - A failed member is retained in the result tree. Other schedulable members continue; a Workflow
   fails only when all members fail. A partially successful response always receives an engine-authored
-  warning that successful mutations may already have taken effect; disclosure never depends on the
+  warning that successful changes may already have taken effect; disclosure never depends on the
   Synthesizer Agent following its prompt. Descendant failures are counted and propagated through every
   parent Workflow so an outer Synthesizer cannot erase the warning or its metadata.
 - Evaluator feedback cannot change Tool authority, Agent limits, depth, graph, or iteration bounds.
@@ -200,7 +200,7 @@ Each wrapper receives a synchronous, same-thread, single-use continuation that i
 wrapper returns. Calling it more than once, from another thread, or after return fails before another
 provider or Tool invocation. Tool wrappers run after authorization and therefore cannot rewrite Tool
 arguments; argument normalization and rewriting remain in the pre-authorization input Guardrails.
-This preserves the mutation replay and authorization invariants while still allowing a wrapper to
+This preserves the change replay and authorization invariants while still allowing a wrapper to
 short-circuit with a safe result. Existing Agent and Tool Guardrail chains remain mandatory execution
 boundaries and can be migrated behind registered adapters incrementally.
 
@@ -209,15 +209,15 @@ score:
   ai:
     middleware:
       profiles:
-        default: [secret-redactor, mutation-approval, output-safety]
+        default: [secret-redactor, change-approval, output-safety]
         compactor: [secret-redactor]
       profile-by-purpose:
         COMPACTION: compactor
       policies:
-        mutation-approval:
+        change-approval:
           mode: ENFORCE
           purposes: [USER_RESPONSE]
-          tool-effects: [MUTATION]
+          tool-effects: [CHANGE]
         output-safety:
           mode: SHADOW
           settings:

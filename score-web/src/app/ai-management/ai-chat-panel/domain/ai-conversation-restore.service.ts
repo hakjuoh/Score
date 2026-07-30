@@ -104,7 +104,7 @@ export class AiConversationRestoreService {
       groupId: message.groupId,
       toolCallId: message.toolCallId,
       subtype: message.subtype || message.toolStatus,
-      artifacts: message.artifacts,
+      files: message.files,
       metadata: {
         ...(message.metadata || {}),
         ...((message.toolCallSeq ?? message.toolCallSequence) !== undefined
@@ -335,7 +335,7 @@ export class AiConversationRestoreService {
       ...(toolStatus === 'failed' ? {
         recoverable: event.metadata?.['recoverable'] === true,
         retryable: event.metadata?.['retryable'] === true,
-        mutationSafe: event.metadata?.['mutationSafe'] === true
+        changeSafe: event.metadata?.['changeSafe'] === true
       } : {})
     };
   }
@@ -349,7 +349,7 @@ export class AiConversationRestoreService {
       && message.workflowNodeId && content) {
       return [{role: 'guide', content}, message];
     }
-    return [{...message, ...(event.artifacts?.length ? {artifacts: event.artifacts} : {})}];
+    return [{...message, ...(event.files?.length ? {files: event.files} : {})}];
   }
 
   private restoredToolContent(

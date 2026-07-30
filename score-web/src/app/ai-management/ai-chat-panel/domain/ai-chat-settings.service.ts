@@ -75,9 +75,9 @@ export class AiChatSettingsService {
     state.permissionSettingsOpen = false;
     this.persistence.persistSelection(state);
     const label = state.permissionMode === 'ask' ? 'Ask for approval'
-      : state.permissionMode === 'auto' ? 'Ask only for risky actions' : 'Full access';
+      : state.permissionMode === 'auto' ? 'Ask only for risky changes' : 'Full access';
     state.messages.push({
-      role: 'debug', content: `Mutation permissions changed to ${label}.`
+      role: 'debug', content: `Change permissions changed to ${label}.`
     });
     return true;
   }

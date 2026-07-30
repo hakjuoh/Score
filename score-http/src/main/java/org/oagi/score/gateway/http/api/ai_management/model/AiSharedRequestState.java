@@ -24,9 +24,9 @@ public record AiSharedRequestState(
         Instant cancellationRequestedAt,
         Instant cancellationAcknowledgedAt,
         long lastEventSequence,
-        boolean mutationObserved,
-        int mutationInFlight,
-        boolean mutationOutcomeUncertain) {
+        boolean changeObserved,
+        int changeInFlight,
+        boolean changeOutcomeUncertain) {
 
     public boolean terminal() {
         return "COMPLETED".equals(status) || "FAILED".equals(status)
@@ -37,20 +37,20 @@ public record AiSharedRequestState(
     public AiSharedRequestState withConversation(String value, Instant now) {
         return copy(value, updatedAt(now), status, statusReason, terminalTarget,
                 cancellationRequestId, cancellationRequestedAt, cancellationAcknowledgedAt,
-                lastEventSequence, mutationObserved, mutationInFlight, mutationOutcomeUncertain);
+                lastEventSequence, changeObserved, changeInFlight, changeOutcomeUncertain);
     }
 
     public AiSharedRequestState started(Instant now) {
         return copy(conversationId, now, "RUNNING", null, terminalTarget,
                 cancellationRequestId, cancellationRequestedAt, cancellationAcknowledgedAt,
-                lastEventSequence, mutationObserved, mutationInFlight, mutationOutcomeUncertain,
+                lastEventSequence, changeObserved, changeInFlight, changeOutcomeUncertain,
                 now, null);
     }
 
     public AiSharedRequestState cancelling(String cancellationId, String target, Instant now) {
         return copy(conversationId, now, "CANCELLING", statusReason, target,
                 cancellationId, now, now, lastEventSequence + 1,
-                mutationObserved, mutationInFlight, mutationObserved);
+                changeObserved, changeInFlight, changeObserved);
     }
 
     public AiSharedRequestState timingOut(Instant now, boolean workerPresent) {
@@ -59,7 +59,7 @@ public record AiSharedRequestState(
         }
         return copy(conversationId, now, "CANCELLING", "INACTIVITY_TIMEOUT", "TIMED_OUT",
                 cancellationRequestId, cancellationRequestedAt, cancellationAcknowledgedAt,
-                lastEventSequence + 1, mutationObserved, mutationInFlight, mutationObserved);
+                lastEventSequence + 1, changeObserved, changeInFlight, changeObserved);
     }
 
     /** Publishes the owning worker's next inactivity boundary without changing lifecycle state. */
@@ -70,28 +70,28 @@ public record AiSharedRequestState(
                 workerInstanceId, generation, renewedDeadline, renewedExpiresAt,
                 createdAt, now, startedAt, terminalAt, status, statusReason,
                 terminalTarget, cancellationRequestId, cancellationRequestedAt,
-                cancellationAcknowledgedAt, lastEventSequence, mutationObserved,
-                mutationInFlight, mutationOutcomeUncertain);
+                cancellationAcknowledgedAt, lastEventSequence, changeObserved,
+                changeInFlight, changeOutcomeUncertain);
     }
 
-    public AiSharedRequestState mutationStarted(Instant now) {
+    public AiSharedRequestState changeStarted(Instant now) {
         return copy(conversationId, now, status, statusReason, terminalTarget,
                 cancellationRequestId, cancellationRequestedAt, cancellationAcknowledgedAt,
-                lastEventSequence, true, mutationInFlight + 1, mutationOutcomeUncertain);
+                lastEventSequence, true, changeInFlight + 1, changeOutcomeUncertain);
     }
 
-    public AiSharedRequestState mutationFinished(Instant now) {
+    public AiSharedRequestState changeFinished(Instant now) {
         return copy(conversationId, now, status, statusReason, terminalTarget,
                 cancellationRequestId, cancellationRequestedAt, cancellationAcknowledgedAt,
-                lastEventSequence, mutationObserved, Math.max(0, mutationInFlight - 1),
-                mutationOutcomeUncertain);
+                lastEventSequence, changeObserved, Math.max(0, changeInFlight - 1),
+                changeOutcomeUncertain);
     }
 
     public AiSharedRequestState terminal(String terminalStatus, String reason, Instant now) {
         return copy(conversationId, now, terminalStatus, reason, terminalTarget,
                 cancellationRequestId, cancellationRequestedAt, cancellationAcknowledgedAt,
-                lastEventSequence + 1, mutationObserved, mutationInFlight,
-                mutationOutcomeUncertain, startedAt, now);
+                lastEventSequence + 1, changeObserved, changeInFlight,
+                changeOutcomeUncertain, startedAt, now);
     }
 
     public AiPublicExecutionRequestStatus snapshot() {
@@ -106,26 +106,26 @@ public record AiSharedRequestState(
             String nextConversationId, Instant nextUpdatedAt, String nextStatus,
             String nextStatusReason, String nextTerminalTarget, String nextCancellationRequestId,
             Instant nextCancellationRequestedAt, Instant nextCancellationAcknowledgedAt,
-            long nextLastEventSequence, boolean nextMutationObserved, int nextMutationInFlight,
-            boolean nextMutationOutcomeUncertain) {
+            long nextLastEventSequence, boolean nextChangeObserved, int nextChangeInFlight,
+            boolean nextChangeOutcomeUncertain) {
         return copy(nextConversationId, nextUpdatedAt, nextStatus, nextStatusReason,
                 nextTerminalTarget, nextCancellationRequestId, nextCancellationRequestedAt,
-                nextCancellationAcknowledgedAt, nextLastEventSequence, nextMutationObserved,
-                nextMutationInFlight, nextMutationOutcomeUncertain, startedAt, terminalAt);
+                nextCancellationAcknowledgedAt, nextLastEventSequence, nextChangeObserved,
+                nextChangeInFlight, nextChangeOutcomeUncertain, startedAt, terminalAt);
     }
 
     private AiSharedRequestState copy(
             String nextConversationId, Instant nextUpdatedAt, String nextStatus,
             String nextStatusReason, String nextTerminalTarget, String nextCancellationRequestId,
             Instant nextCancellationRequestedAt, Instant nextCancellationAcknowledgedAt,
-            long nextLastEventSequence, boolean nextMutationObserved, int nextMutationInFlight,
-            boolean nextMutationOutcomeUncertain, Instant nextStartedAt, Instant nextTerminalAt) {
+            long nextLastEventSequence, boolean nextChangeObserved, int nextChangeInFlight,
+            boolean nextChangeOutcomeUncertain, Instant nextStartedAt, Instant nextTerminalAt) {
         return new AiSharedRequestState(requestId, nextConversationId, appUserId,
                 workerInstanceId, generation, deadline, expiresAt, createdAt, nextUpdatedAt,
                 nextStartedAt, nextTerminalAt, nextStatus, nextStatusReason, nextTerminalTarget,
                 nextCancellationRequestId, nextCancellationRequestedAt,
-                nextCancellationAcknowledgedAt, nextLastEventSequence, nextMutationObserved,
-                nextMutationInFlight, nextMutationOutcomeUncertain);
+                nextCancellationAcknowledgedAt, nextLastEventSequence, nextChangeObserved,
+                nextChangeInFlight, nextChangeOutcomeUncertain);
     }
 
     private Instant updatedAt(Instant now) {

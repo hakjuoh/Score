@@ -32,7 +32,7 @@ class ToolExecutionGatewayTest {
         List<String> order = new ArrayList<>();
         AtomicInteger authorizations = new AtomicInteger();
         ExecutionState state = new ExecutionState();
-        AiTool tool = tool(AiTool.ToolEffect.MUTATION, arguments -> {
+        AiTool tool = tool(AiTool.ToolEffect.CHANGE, arguments -> {
             order.add("execute:" + arguments.json());
             return new AiTool.ToolResult("secret=raw");
         });
@@ -70,13 +70,13 @@ class ToolExecutionGatewayTest {
         assertThat(order).containsExactly("fence", "PRE_AUTHORIZATION", "authorize:{\"value\":1}",
                 "PRE_EXECUTION", "authorize:{\"value\":2}", "PRE_EXECUTION", "fence",
                 "execute:{\"value\":2}", "output");
-        assertThat(state.completedMutations()).isEqualTo(1);
+        assertThat(state.completedChanges()).isEqualTo(1);
     }
 
     @Test
-    void outputRefusalPreservesTruthThatMutationCompleted() {
+    void outputRefusalPreservesTruthThatChangeCompleted() {
         ExecutionState state = new ExecutionState();
-        AiTool mutation = tool(AiTool.ToolEffect.MUTATION,
+        AiTool change = tool(AiTool.ToolEffect.CHANGE,
                 ignored -> new AiTool.ToolResult("private result"));
         ToolGuardrailRegistry registry = new ToolGuardrailRegistry(
                 new ToolGuardrailRegistry.Set(List.of(request ->
@@ -85,35 +85,35 @@ class ToolExecutionGatewayTest {
                         List.of(request -> new ToolOutputGuardrail.Result.Refuse(
                                 new AiTool.ToolResult("result suppressed"),
                                 decision(GuardrailDecision.Action.REFUSE)))), Map.of());
-        ToolExecutionGateway gateway = new ToolExecutionGateway(new ToolSet(List.of(mutation)), registry,
+        ToolExecutionGateway gateway = new ToolExecutionGateway(new ToolSet(List.of(change)), registry,
                 List.of(), null, null, state, 1024);
 
-        assertThat(gateway.execute(mutation.specification().id(),
+        assertThat(gateway.execute(change.specification().id(),
                 new AiTool.ToolArguments("{}"), scope).json()).isEqualTo("result suppressed");
-        assertThat(state.completedMutations()).isEqualTo(1);
+        assertThat(state.completedChanges()).isEqualTo(1);
     }
 
     @Test
-    void outputWriteDoesNotTriggerDataMutationReplayFence() {
+    void outputWriteDoesNotTriggerDataChangeReplayFence() {
         ExecutionState state = new ExecutionState();
         AiTool outputWrite = tool(AiTool.ToolEffect.OUTPUT_WRITE,
-                ignored -> new AiTool.ToolResult("artifact created"));
+                ignored -> new AiTool.ToolResult("file created"));
         ToolExecutionGateway gateway = new ToolExecutionGateway(new ToolSet(List.of(outputWrite)),
                 passThroughRegistry(request -> new ToolOutputGuardrail.Result.Allow(
                         request.output(), decision(GuardrailDecision.Action.ALLOW))),
                 List.of(), null, null, state, 1024);
 
         assertThat(gateway.execute(outputWrite.specification().id(),
-                new AiTool.ToolArguments("{}"), scope).json()).isEqualTo("artifact created");
+                new AiTool.ToolArguments("{}"), scope).json()).isEqualTo("file created");
         assertThat(state.completedToolCalls()).isEqualTo(1);
-        assertThat(state.completedMutations()).isZero();
+        assertThat(state.completedChanges()).isZero();
     }
 
     @Test
-    void outputPolicyFailureStillFencesTheCompletedMutationFromRetry() {
+    void outputPolicyFailureStillFencesTheCompletedChangeFromRetry() {
         ExecutionState state = new ExecutionState();
-        AiTool mutation = tool(AiTool.ToolEffect.MUTATION,
-                ignored -> new AiTool.ToolResult("mutation completed"));
+        AiTool change = tool(AiTool.ToolEffect.CHANGE,
+                ignored -> new AiTool.ToolResult("change completed"));
         ToolGuardrailRegistry registry = new ToolGuardrailRegistry(
                 new ToolGuardrailRegistry.Set(List.of(request ->
                         new ToolInputGuardrail.Result.Allow(request.arguments(),
@@ -121,22 +121,22 @@ class ToolExecutionGatewayTest {
                         List.of(request -> {
                             throw new IllegalStateException("output policy unavailable");
                         })), Map.of());
-        ToolExecutionGateway gateway = new ToolExecutionGateway(new ToolSet(List.of(mutation)), registry,
+        ToolExecutionGateway gateway = new ToolExecutionGateway(new ToolSet(List.of(change)), registry,
                 List.of(), null, null, state, 1024);
 
-        AiTool.ToolResult result = gateway.execute(mutation.specification().id(),
+        AiTool.ToolResult result = gateway.execute(change.specification().id(),
                 new AiTool.ToolArguments("{}"), scope);
 
         assertThat(result.json()).contains("TOOL_POLICY_UNAVAILABLE");
         assertThat(result.metadata()).containsEntry("policy_unavailable", true);
-        assertThat(state.completedMutations()).isEqualTo(1);
+        assertThat(state.completedChanges()).isEqualTo(1);
     }
 
     @Test
     void sideEffectAndExecutionAuthorizationRunInsideTheAtomicFence() {
         java.util.concurrent.atomic.AtomicBoolean insideFence =
                 new java.util.concurrent.atomic.AtomicBoolean();
-        AiTool mutation = tool(AiTool.ToolEffect.MUTATION, ignored -> {
+        AiTool change = tool(AiTool.ToolEffect.CHANGE, ignored -> {
             assertThat(insideFence).isTrue();
             return new AiTool.ToolResult("completed");
         });
@@ -175,10 +175,10 @@ class ToolExecutionGatewayTest {
             }
         };
         ToolExecutionGateway gateway = new ToolExecutionGateway(
-                new ToolSet(List.of(mutation)), registry, List.of(authorization), fence,
+                new ToolSet(List.of(change)), registry, List.of(authorization), fence,
                 ExecutionObserver.noop(), new ExecutionState(), 1024);
 
-        assertThat(gateway.execute(mutation.specification().id(),
+        assertThat(gateway.execute(change.specification().id(),
                 new AiTool.ToolArguments("{}"), scope).json()).isEqualTo("completed");
         assertThat(insideFence).isFalse();
     }
@@ -210,10 +210,10 @@ class ToolExecutionGatewayTest {
     }
 
     @Test
-    void middlewareCannotReplayAMutationOrChangeAuthorizedArguments() {
+    void middlewareCannotReplayAChangeOrChangeAuthorizedArguments() {
         AtomicInteger executions = new AtomicInteger();
         ExecutionState state = new ExecutionState();
-        AiTool mutation = tool(AiTool.ToolEffect.MUTATION, ignored -> {
+        AiTool change = tool(AiTool.ToolEffect.CHANGE, ignored -> {
             executions.incrementAndGet();
             return new AiTool.ToolResult("changed");
         });
@@ -229,15 +229,15 @@ class ToolExecutionGatewayTest {
         };
         AiMiddlewareChain replayChain = chain(replay);
         ToolExecutionGateway replayGateway = new ToolExecutionGateway(
-                new ToolSet(List.of(mutation)), registry, List.of(), null, null, state,
+                new ToolSet(List.of(change)), registry, List.of(), null, null, state,
                 1024, replayChain, new MiddlewareState());
 
-        assertThatThrownBy(() -> replayGateway.execute(mutation.specification().id(),
+        assertThatThrownBy(() -> replayGateway.execute(change.specification().id(),
                 new AiTool.ToolArguments("{}"), scope))
                 .isInstanceOf(AiMiddlewareException.class)
                 .rootCause().hasMessageContaining("more than once");
         assertThat(executions).hasValue(1);
-        assertThat(state.completedMutations()).isEqualTo(1);
+        assertThat(state.completedChanges()).isEqualTo(1);
 
         AiMiddleware rewrite = new NamedMiddleware("rewrite") {
             @Override
@@ -245,8 +245,8 @@ class ToolExecutionGatewayTest {
                 return next.call(context.withArguments(new AiTool.ToolArguments("{\"other\":true}")));
             }
         };
-        assertThatThrownBy(() -> gateway(mutation, registry, rewrite).execute(
-                mutation.specification().id(), new AiTool.ToolArguments("{}"), scope))
+        assertThatThrownBy(() -> gateway(change, registry, rewrite).execute(
+                change.specification().id(), new AiTool.ToolArguments("{}"), scope))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("after authorization");
     }

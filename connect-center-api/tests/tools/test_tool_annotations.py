@@ -8,7 +8,7 @@ asserts the read-only annotation convention:
 - no other tool declares ``readOnlyHint=True``.
 
 ``readOnlyHint`` is a security classification, not naming cosmetics: the
-connectCenter assistant exempts hinted tools from mutation approval and hands
+connectCenter assistant exempts hinted tools from change approval and hands
 them to read-only fan-out specialists. A tool may declare the hint ONLY if it
 is behaviorally read-only (no writes, no state transitions, no side effects).
 If a tool with any side effect trips the first assertion because of its
@@ -82,7 +82,7 @@ async def test_get_and_who_am_i_tools_declare_read_only_hint():
         "Tools named get_*/who_am_i without annotations=ToolAnnotations(readOnlyHint=True): "
         f"{missing}. If a tool is behaviorally read-only, add the hint; if it has ANY "
         "side effect, RENAME it so it does not look like a read — do NOT add the hint, "
-        "because hinted tools bypass mutation approval in the connectCenter assistant."
+        "because hinted tools bypass change approval in the connectCenter assistant."
     )
 
 

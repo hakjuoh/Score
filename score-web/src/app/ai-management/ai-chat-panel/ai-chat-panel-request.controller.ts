@@ -3,13 +3,13 @@ import {Message} from '@stomp/stompjs';
 import {take, timeout} from 'rxjs/operators';
 import {AiChatPanelControllerBase} from './ai-chat-panel.controller-base';
 import {SAFE_ATTACHMENT_ERROR_PATTERNS} from './domain/ai-chat-panel-display.constants';
-import {isBoundConfirmedChatResponse} from './domain/ai-mutation-confirmation';
-import {CONFIRMED_MUTATION_RESPONSE_TIMEOUT_MS} from './domain/ai-chat-panel.constants';
+import {isBoundConfirmedChatResponse} from './domain/ai-change-confirmation';
+import {CONFIRMED_CHANGE_RESPONSE_TIMEOUT_MS} from './domain/ai-chat-panel.constants';
 import {
   AiChatAttachment,
   AiChatContextUpdate,
   AiChatSocketEvent,
-  AiMutationConfirmationAuthorization
+  AiChangeConfirmationAuthorization
 } from './domain/ai-chat-panel.model';
 import {
   isExecutionActivityEvent,
@@ -17,15 +17,15 @@ import {
   isSpecialistToolEvent
 } from './domain/ai-agent-activity';
 
-const MUTATION_APPROVAL_EVENT_SUBTYPES = new Set([
-  'mutation_approval_batch_required',
-  'mutation_approval_decision_accepted',
-  'mutation_approval_decision_rejected'
+const CHANGE_APPROVAL_EVENT_SUBTYPES = new Set([
+  'change_approval_batch_required',
+  'change_approval_decision_accepted',
+  'change_approval_decision_rejected'
 ]);
 
-function isMutationApprovalInteractionEvent(event: AiChatSocketEvent): boolean {
+function isChangeApprovalInteractionEvent(event: AiChatSocketEvent): boolean {
   return event.type === 'system' && !!event.subtype
-    && MUTATION_APPROVAL_EVENT_SUBTYPES.has(event.subtype);
+    && CHANGE_APPROVAL_EVENT_SUBTYPES.has(event.subtype);
 }
 
 export abstract class AiChatPanelRequestController extends AiChatPanelControllerBase {
@@ -34,7 +34,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     this.restoreChatScrollPending = false;
     this.state.activePanelTab = 'chat';
     const requestId = this.createRequestId();
-    this.beginMutationRepeatDraft(requestId, prompt, attachments);
+    this.beginChangeRepeatDraft(requestId, prompt, attachments);
     this.activeRequestId = requestId;
     this.activeRequestPublished = false;
     this.clearToolCallTracking();
@@ -67,12 +67,12 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
   protected sendHttpChat(
     prompt: string,
     attachments: AiChatAttachment[],
-    mutationConfirmation?: AiMutationConfirmationAuthorization
+    changeConfirmation?: AiChangeConfirmationAuthorization
   ): void {
     const requestId = this.activeRequestId || this.createRequestId();
     const contextUpdate = this.nextContextUpdate();
-    const confirmedMutation = mutationConfirmation !== undefined;
-    const confirmedConversationId = confirmedMutation
+    const confirmedChange = changeConfirmation !== undefined;
+    const confirmedConversationId = confirmedChange
       ? this.state.conversationId : undefined;
     const liveRestEventKeys = new Set<string>();
     const restEventKey = (event: AiChatSocketEvent): string | undefined =>
@@ -85,11 +85,11 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         if (key && liveRestEventKeys.has(key)) {
           return;
         }
-        if (isMutationApprovalInteractionEvent(event)) {
+        if (isChangeApprovalInteractionEvent(event)) {
           this.handleSocketEvent(event);
         } else if (event.type === 'system'
-          && event.subtype === 'mutation_confirmation_required') {
-          this.handleMutationConfirmationNotice(event);
+          && event.subtype === 'change_confirmation_required') {
+          this.handleChangeConfirmationNotice(event);
         } else if (event.type === 'system'
           && (event.subtype === 'context_usage' || event.subtype === 'context_compacted')) {
           this.handleSystemEvent(event);
@@ -134,7 +134,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         || event.type === 'system' && event.subtype === 'workflow_result'
         || event.type === 'system' && (event.subtype === 'provider_error'
           || event.subtype === 'provider_retry')
-        || isMutationApprovalInteractionEvent(event)
+        || isChangeApprovalInteractionEvent(event)
         || event.type === 'system' && (event.subtype === 'elicitation_required'
         || event.subtype === 'elicitation_decision_accepted'
         || event.subtype === 'elicitation_decision_rejected')) {
@@ -143,8 +143,8 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         this.handleSocketEvent(event);
       }
     });
-    this.showStatus(confirmedMutation
-      ? 'Sending approved action request.' : 'Uploading attachment request.', true);
+    this.showStatus(confirmedChange
+      ? 'Sending approved change request.' : 'Uploading attachment request.', true);
     this.scrollToBottom(true);
 
     this.requestSubscription?.unsubscribe();
@@ -161,11 +161,11 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       pageContext: contextUpdate.pageContext,
       routeManifest: contextUpdate.routeManifest,
       attachments,
-      ...(mutationConfirmation ? {mutationConfirmation} : {})
+      ...(changeConfirmation ? {changeConfirmation} : {})
     });
-    const boundedResponse = confirmedMutation
+    const boundedResponse = confirmedChange
       ? response.pipe(
-        timeout(CONFIRMED_MUTATION_RESPONSE_TIMEOUT_MS),
+        timeout(CONFIRMED_CHANGE_RESPONSE_TIMEOUT_MS),
         take(1)
       )
       : response;
@@ -174,7 +174,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         if (this.destroyed || this.activeRequestId !== requestId) {
           return;
         }
-        if (confirmedMutation
+        if (confirmedChange
           && (!confirmedConversationId
             || !isBoundConfirmedChatResponse(
               response, confirmedConversationId
@@ -202,14 +202,14 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         this.settleAgentActivity('completed');
         this.state.elicitation = undefined;
         this.state.elicitationBusy = false;
-        this.clearMutationApprovalBatch();
+        this.clearChangeApprovalBatch();
         this.activeRequestId = undefined;
         this.clearToolCallTracking();
         if (response.progress?.length && this.state.debugEnabled) {
           response.progress.forEach(progress => this.state.messages.push({role: 'progress', content: progress}));
         }
         if (response.response) {
-          this.commitAssistantMessage(requestId, response.response, response.artifacts);
+          this.commitAssistantMessage(requestId, response.response, response.files);
         }
         this.state.pending = false;
         this.state.reconciliationRequired = false;
@@ -217,11 +217,11 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         if (this.runDeferredNewChat()) {
           return;
         }
-        this.finishMutationRepeatOpportunity(
+        this.finishChangeRepeatOpportunity(
           requestId, response.conversationId || this.state.conversationId
         );
         this.loadConversationHistory();
-        if (!this.mutationDecisionOpen) {
+        if (!this.changeDecisionOpen) {
           this.focusPrompt();
         }
         this.scrollToBottom();
@@ -235,23 +235,23 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           this.state.currentStatus = 'Cancelling';
           return;
         }
-        if (confirmedMutation) {
+        if (confirmedChange) {
           this.completeUnknownConfirmedRequest(requestId);
           return;
         }
         replayRestEvents(errorEvents(error));
         const confirmationConversationId =
-          this.pendingMutationConfirmation?.conversationId;
+          this.pendingChangeConfirmation?.conversationId;
         this.completeProgressMessages();
         this.settleAgentActivity('failed');
         this.clearTimers();
         this.clearStatusMessage();
         if (!confirmationConversationId) {
-          this.clearMutationRepeatDraft(requestId);
+          this.clearChangeRepeatDraft(requestId);
         }
         this.state.elicitation = undefined;
         this.state.elicitationBusy = false;
-        this.clearMutationApprovalBatch();
+        this.clearChangeApprovalBatch();
         this.activeRequestId = undefined;
         this.clearToolCallTracking();
         this.state.messages.push({
@@ -264,10 +264,10 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         if (this.runDeferredNewChat()) {
           return;
         }
-        this.finishMutationRepeatOpportunity(
+        this.finishChangeRepeatOpportunity(
           requestId, confirmationConversationId
         );
-        if (!this.mutationDecisionOpen) {
+        if (!this.changeDecisionOpen) {
           this.focusPrompt();
         }
         this.scrollToBottom();
@@ -277,14 +277,14 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     // Do not retain a confirmed request subscription on the component: the
     // HTTP pipeline owns the callback-local grant until this single attempt
     // ends. Cancellation still uses its durable request identity.
-    if (!confirmedMutation) {
+    if (!confirmedChange) {
       this.requestSubscription = subscription;
     } else {
-      const unregisterRequest = this.confirmedMutationRequests.register(
+      const unregisterRequest = this.confirmedChangeRequests.register(
         requestId, () => subscription.unsubscribe()
       );
       const unregister = this.destroyRef.onDestroy(
-        () => this.confirmedMutationRequests.cancel(requestId)
+        () => this.confirmedChangeRequests.cancel(requestId)
       );
       subscription.add(() => {
         unregisterRequest();
@@ -319,14 +319,14 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.clearMutationApprovalBatch();
-    this.clearMutationRepeatDraft(requestId);
-    this.confirmedMutationRequests.cancel(requestId);
+    this.clearChangeApprovalBatch();
+    this.clearChangeRepeatDraft(requestId);
+    this.confirmedChangeRequests.cancel(requestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
     this.state.messages.push({
       role: 'error',
-      content: 'The approved action outcome is unknown and will not be retried automatically.'
+      content: 'The approved change outcome is unknown and will not be retried automatically.'
     });
     this.state.pending = false;
     this.state.reconciliationRequired = true;
@@ -339,7 +339,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     requestId: string,
     prompt: string,
     attachments: AiChatAttachment[],
-    mutationConfirmation?: AiMutationConfirmationAuthorization
+    changeConfirmation?: AiChangeConfirmationAuthorization
   ): void {
     this.transportService.publishWhenConnected({
       active: () => this.state.pending && this.activeRequestId === requestId,
@@ -352,7 +352,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         this.scrollToBottom();
       },
       publish: () => this.publishChatRequest(
-        requestId, prompt, attachments, mutationConfirmation
+        requestId, prompt, attachments, changeConfirmation
       ),
       onReconnectFailure: () => this.failStompReconnect(),
       onPublishError: () => this.failChatPublish()
@@ -378,7 +378,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       content: 'Could not reconnect to WebSocket after 3 attempts. Check that score-http is running and the /ws proxy is active, then try again.'
     });
     this.state.pending = false;
-    this.clearMutationRepeatDraft(this.activeRequestId);
+    this.clearChangeRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
     this.state.currentStatus = 'Error';
@@ -392,7 +392,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     requestId: string,
     prompt: string,
     attachments: AiChatAttachment[],
-    mutationConfirmation?: AiMutationConfirmationAuthorization
+    changeConfirmation?: AiChangeConfirmationAuthorization
   ): void {
     if (!this.state.pending || this.activeRequestId !== requestId) {
       return;
@@ -408,7 +408,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       pageContext: contextUpdate.pageContext,
       routeManifest: contextUpdate.routeManifest,
       attachments,
-      ...(mutationConfirmation ? {mutationConfirmation} : {})
+      ...(changeConfirmation ? {changeConfirmation} : {})
     });
     this.activeRequestPublished = true;
     this.responseTimeout = window.setTimeout(() => {
@@ -427,7 +427,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           content: 'The request was sent, but the backend did not acknowledge it. If this included an attachment, the WebSocket message may be too large or the backend may need to be restarted.'
         });
         this.state.pending = false;
-        this.clearMutationRepeatDraft(this.activeRequestId);
+        this.clearChangeRepeatDraft(this.activeRequestId);
         this.activeRequestId = undefined;
         this.clearToolCallTracking();
         this.state.currentStatus = 'Error';
@@ -445,7 +445,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     this.clearStatusMessage();
     this.state.messages.push({role: 'error', content: 'Could not send the WebSocket chat request.'});
     this.state.pending = false;
-    this.clearMutationRepeatDraft(this.activeRequestId);
+    this.clearChangeRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
     this.requestSubscription?.unsubscribe();

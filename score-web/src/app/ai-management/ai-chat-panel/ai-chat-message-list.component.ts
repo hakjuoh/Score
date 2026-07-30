@@ -20,10 +20,10 @@ import {
   AiChatModelInfo,
   AiElicitationNotice,
   AiElicitationResponse,
-  AiMutationApprovalBatchDecision,
-  AiMutationApprovalBatchNotice,
-  AiMutationInteraction,
-  AiMutationPermissionMode,
+  AiChangeApprovalBatchDecision,
+  AiChangeApprovalBatchNotice,
+  AiChangeInteraction,
+  AiChangePermissionMode,
   AiChatToolStatus,
   AiReasoningEffortInfo,
   aiModelSessionLabel
@@ -69,21 +69,21 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
   @Input() modelDraftReasoningEffort = '';
   @Input() selectedModelName = '';
   @Input() selectedReasoningEffort = '';
-  @Input() permissionMode: AiMutationPermissionMode = 'ask';
-  @Input() permissionDraft: AiMutationPermissionMode = 'ask';
+  @Input() permissionMode: AiChangePermissionMode = 'ask';
+  @Input() permissionDraft: AiChangePermissionMode = 'ask';
   @Input() agentFocus?: AiAgentActivity;
   @Input() agentFocusBackLabel = 'Back to conversation';
   @Input() modelChangePending = false;
-  @Input() mutationInteraction?: AiMutationInteraction;
-  @Input() mutationApprovalBatch?: AiMutationApprovalBatchNotice;
-  @Input() mutationApprovalBatchBusy = false;
+  @Input() changeInteraction?: AiChangeInteraction;
+  @Input() changeApprovalBatch?: AiChangeApprovalBatchNotice;
+  @Input() changeApprovalBatchBusy = false;
   @Input() elicitation?: AiElicitationNotice;
   @Input() elicitationBusy = false;
 
   @Output() attachmentRemoved = new EventEmitter<number>();
 
   get showRequestPendingIndicator(): boolean {
-    if (!this.pending || this.elicitation || this.mutationApprovalBatch) {
+    if (!this.pending || this.elicitation || this.changeApprovalBatch) {
       return false;
     }
     let latestUserIndex = -1;
@@ -101,23 +101,23 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
   @Output() modelDraftReasoningEffortChange = new EventEmitter<string>();
   @Output() modelSettingsApplied = new EventEmitter<void>();
   @Output() modelSettingsCancelled = new EventEmitter<void>();
-  @Output() permissionDraftChange = new EventEmitter<AiMutationPermissionMode>();
+  @Output() permissionDraftChange = new EventEmitter<AiChangePermissionMode>();
   @Output() permissionSettingsApplied = new EventEmitter<void>();
   @Output() permissionSettingsCancelled = new EventEmitter<void>();
   @Output() agentFocusRequested = new EventEmitter<string>();
   @Output() agentFocusClosed = new EventEmitter<void>();
-  @Output() mutationApproved = new EventEmitter<void>();
-  @Output() mutationDenied = new EventEmitter<void>();
-  @Output() mutationChangeRequested = new EventEmitter<void>();
-  @Output() mutationRevoked = new EventEmitter<void>();
-  @Output() mutationDismissed = new EventEmitter<void>();
-  @Output() mutationBatchApproved = new EventEmitter<void>();
-  @Output() mutationBatchDenied = new EventEmitter<void>();
-  @Output() mutationBatchDecided = new EventEmitter<AiMutationApprovalBatchDecision[]>();
+  @Output() changeApproved = new EventEmitter<void>();
+  @Output() changeDenied = new EventEmitter<void>();
+  @Output() changeRevisionRequested = new EventEmitter<void>();
+  @Output() changeRevoked = new EventEmitter<void>();
+  @Output() changeDismissed = new EventEmitter<void>();
+  @Output() changeBatchApproved = new EventEmitter<void>();
+  @Output() changeBatchDenied = new EventEmitter<void>();
+  @Output() changeBatchDecided = new EventEmitter<AiChangeApprovalBatchDecision[]>();
   @Output() elicitationResponded = new EventEmitter<AiElicitationResponse>();
 
   readonly permissionOptions: Array<{
-    value: AiMutationPermissionMode;
+    value: AiChangePermissionMode;
     name: string;
     description: string;
   }> = [
@@ -128,7 +128,7 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
     },
     {
       value: 'auto',
-      name: 'Ask only for risky actions',
+      name: 'Ask only for risky changes',
       description:
         'Automatically allow new data and changes to data you own; ask before changing' +
         " somebody else's data, and before any deletion, state change, or ownership transfer."
@@ -146,7 +146,7 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
 
   constructor(private readonly host: ElementRef<HTMLElement>) {}
 
-  artifactSize(bytes: number): string {
+  fileSize(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes < 0) return '';
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

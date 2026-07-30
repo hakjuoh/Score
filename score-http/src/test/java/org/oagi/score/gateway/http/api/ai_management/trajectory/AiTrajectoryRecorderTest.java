@@ -15,11 +15,11 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
 import org.oagi.score.gateway.http.api.ai_management.model.AiElicitationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationConfirmationNotice;
-import org.oagi.score.gateway.http.api.ai_management.model.AiPendingMutationApproval;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationNotice;
+import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApproval;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiMutationToolGuard;
+import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeToolGuard;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiToolFailureMessage;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -358,7 +358,7 @@ class AiTrajectoryRecorderTest {
                 new ToolResponseMessage.ToolResponse("approved-1", "create_business_context",
                         "{\"biz_ctx_id\":18}"),
                 new ToolResponseMessage.ToolResponse("approved-2", "delete_business_context",
-                        "{\"error\":\"MUTATION_CONFIRMATION_DENIED\"}"))).build();
+                        "{\"error\":\"CHANGE_CONFIRMATION_DENIED\"}"))).build();
 
         recorder.recordToolResponses(List.of(response));
 
@@ -381,13 +381,13 @@ class AiTrajectoryRecorderTest {
                 .inputSchema("{\"type\":\"object\"}")
                 .build());
         when(callback.call(anyString(), any(ToolContext.class))).thenReturn(
-                "{\"error\":\"MUTATION_CONFIRMATION_DENIED\","
+                "{\"error\":\"CHANGE_CONFIRMATION_DENIED\","
                         + "\"message\":\"The user denied this data-changing tool call.\"}");
 
         String output = recorder.recordingTools(() -> new ToolCallback[]{callback})
                 .getToolCallbacks()[0].call("{\"id\":1}", new ToolContext(Map.of()));
 
-        assertThat(output).contains(AiMutationToolGuard.MUTATION_CONFIRMATION_DENIED);
+        assertThat(output).contains(AiChangeToolGuard.CHANGE_CONFIRMATION_DENIED);
         assertThat(recorder.completedDomainToolCallCount()).isEqualTo(1);
         assertThat(recorder.successfulDomainToolCallCount()).isZero();
         assertThat(recorder.executedDomainToolCallCount()).isZero();
@@ -432,7 +432,7 @@ class AiTrajectoryRecorderTest {
                 new ToolResponseMessage.ToolResponse("read-1", "get_context_schemes",
                         "{\"items\":[]}"),
                 new ToolResponseMessage.ToolResponse("blocked-1", "create_business_context",
-                        "{\"error\":\"MUTATION_CONFIRMATION_REQUIRED\",\"confirmationRequestId\":\"c-1\"}"),
+                        "{\"error\":\"CHANGE_CONFIRMATION_REQUIRED\",\"confirmationRequestId\":\"c-1\"}"),
                 new ToolResponseMessage.ToolResponse("stopped-1", "update_business_context",
                         "{\"error\":\"REQUEST_STOPPING\"}"))).build();
 
@@ -443,8 +443,8 @@ class AiTrajectoryRecorderTest {
         // is neither an execution nor a pending approval.
         assertThat(root.executedDomainToolCallCount()).isEqualTo(1);
         assertThat(root.pendingApprovalCount()).isEqualTo(1);
-        worker.mutationApprovalsResolved(List.of(new AiPendingMutationApproval(
-                new AiMutationConfirmationNotice("c-1", "REQUESTED",
+        worker.changeApprovalsResolved(List.of(new AiPendingChangeApproval(
+                new AiChangeConfirmationNotice("c-1", "REQUESTED",
                         Instant.now().plusSeconds(60), "create_business_context", "{}"),
                 "create_business_context", "{}")));
         assertThat(root.pendingApprovalCount()).isZero();
@@ -469,17 +469,17 @@ class AiTrajectoryRecorderTest {
                 mock(ScoreUser.class), "conversation-1", "request-1", ignored -> {});
         ToolResponseMessage responses = ToolResponseMessage.builder().responses(List.of(
                 new ToolResponseMessage.ToolResponse("blocked-1", "update_business_context",
-                        "{\"error\":\"MUTATION_CONFIRMATION_REQUIRED\","
+                        "{\"error\":\"CHANGE_CONFIRMATION_REQUIRED\","
                                 + "\"confirmationRequestId\":\"confirmation-1\"}"),
                 new ToolResponseMessage.ToolResponse("blocked-2", "update_business_context",
-                        "{\"error\":\"MUTATION_CONFIRMATION_REQUIRED\","
+                        "{\"error\":\"CHANGE_CONFIRMATION_REQUIRED\","
                                 + "\"confirmationRequestId\":\"confirmation-1\"}"))).build();
 
         recorder.recordToolResponses(List.of(responses));
 
         assertThat(recorder.pendingApprovalCount()).isEqualTo(1);
-        recorder.mutationApprovalsResolved(List.of(new AiPendingMutationApproval(
-                new AiMutationConfirmationNotice("confirmation-1", "REQUESTED",
+        recorder.changeApprovalsResolved(List.of(new AiPendingChangeApproval(
+                new AiChangeConfirmationNotice("confirmation-1", "REQUESTED",
                         Instant.now().plusSeconds(60), "update_business_context", "{\"id\":1}"),
                 "update_business_context", "{\"id\":1}")));
         assertThat(recorder.pendingApprovalCount()).isZero();
@@ -493,11 +493,11 @@ class AiTrajectoryRecorderTest {
                 mock(ScoreUser.class), "conversation-1", "request-1", events::add);
         ToolResponseMessage responses = ToolResponseMessage.builder().responses(List.of(
                 new ToolResponseMessage.ToolResponse("text-1", "create_business_context",
-                        "{\"message\":\"example \\\"error\\\":\\\"MUTATION_CONFIRMATION_REQUIRED\\\"\"}"),
+                        "{\"message\":\"example \\\"error\\\":\\\"CHANGE_CONFIRMATION_REQUIRED\\\"\"}"),
                 new ToolResponseMessage.ToolResponse("nested-1", "create_business_context",
                         "{\"detail\":{\"error\":\"REQUEST_STOPPING\"}}"),
                 new ToolResponseMessage.ToolResponse("exact-1", "create_business_context",
-                        "{\"error\":\"MUTATION_CONFIRMATION_REQUIRED\"}"))).build();
+                        "{\"error\":\"CHANGE_CONFIRMATION_REQUIRED\"}"))).build();
 
         recorder.recordToolResponses(List.of(responses));
 
@@ -858,12 +858,12 @@ class AiTrajectoryRecorderTest {
         when(read.getToolDefinition()).thenReturn(ToolDefinition.builder()
                 .name("get_business_context").description("test").inputSchema("{\"type\":\"object\"}").build());
         when(read.call(anyString(), any(ToolContext.class))).thenReturn("{}");
-        ToolCallback mutation = mock(ToolCallback.class);
-        when(mutation.getToolDefinition()).thenReturn(ToolDefinition.builder()
+        ToolCallback change = mock(ToolCallback.class);
+        when(change.getToolDefinition()).thenReturn(ToolDefinition.builder()
                 .name("create_business_context").description("test").inputSchema("{\"type\":\"object\"}").build());
-        when(mutation.call(anyString(), any(ToolContext.class))).thenReturn("{}");
+        when(change.call(anyString(), any(ToolContext.class))).thenReturn("{}");
 
-        ToolCallbackProvider wrapped = recorder.recordingTools(() -> new ToolCallback[]{read, mutation});
+        ToolCallbackProvider wrapped = recorder.recordingTools(() -> new ToolCallback[]{read, change});
         wrapped.getToolCallbacks()[0].call("{}", new ToolContext(Map.of()));
         wrapped.getToolCallbacks()[1].call("{}", new ToolContext(Map.of()));
 
@@ -1499,7 +1499,7 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
-    void appliesTheRemainingContextBudgetToApprovedMutationResults() {
+    void appliesTheRemainingContextBudgetToApprovedChangeResults() {
         AiContextBudget budget = new AiContextBudget(
                 "model", 120L, 10L, 90L, 10L, 100L, false);
         List<AiExecutionEvent> events = new ArrayList<>();

@@ -5,7 +5,7 @@ import java.util.List;
 public record AiChatSocketRequest(String requestId, String prompt, String agent,
                                   String conversationId, String pageContext,
                                   List<ChatAttachment> attachments,
-                                  MutationConfirmation mutationConfirmation,
+                                  ChangeConfirmation changeConfirmation,
                                   String modelName,
                                   String reasoningEffort,
                                   String permissionMode,
@@ -15,14 +15,14 @@ public record AiChatSocketRequest(String requestId, String prompt, String agent,
     public AiChatSocketRequest(String requestId, String prompt, String agent,
                                String conversationId, String pageContext,
                                List<ChatAttachment> attachments,
-                               MutationConfirmation mutationConfirmation) {
+                               ChangeConfirmation changeConfirmation) {
         this(requestId, prompt, agent, conversationId, pageContext, attachments,
-                mutationConfirmation, null, null, null, null, null);
+                changeConfirmation, null, null, null, null, null);
     }
 
     public ChatRequest toChatRequest() {
         return new ChatRequest(prompt, requestId, agent, conversationId, pageContext,
-                attachments, mutationConfirmation, modelName, reasoningEffort,
+                attachments, changeConfirmation, modelName, reasoningEffort,
                 permissionMode, multiAgent, null, routeManifest);
     }
 }

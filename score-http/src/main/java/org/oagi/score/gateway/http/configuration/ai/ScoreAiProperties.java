@@ -16,7 +16,7 @@ public class ScoreAiProperties {
 
     private static final Duration DEFAULT_REQUEST_INACTIVITY_TIMEOUT = Duration.ofMinutes(10);
     private static final Duration DEFAULT_ELICITATION_TIMEOUT = Duration.ofMinutes(10);
-    private static final Duration DEFAULT_MUTATION_APPROVAL_TIMEOUT = Duration.ofMinutes(10);
+    private static final Duration DEFAULT_CHANGE_APPROVAL_TIMEOUT = Duration.ofMinutes(10);
 
     private Map<String, Provider> providers = new LinkedHashMap<>();
     private Map<String, Model> models = new LinkedHashMap<>();
@@ -24,7 +24,7 @@ public class ScoreAiProperties {
     private Duration requestTimeout;
     private Duration requestInactivityTimeout;
     private Duration elicitationTimeout;
-    private Duration mutationApprovalTimeout;
+    private Duration changeApprovalTimeout;
     private Assistant assistant = new Assistant();
     private Gateway gateway = new Gateway();
     private MultiAgent multiAgent = new MultiAgent();
@@ -86,13 +86,13 @@ public class ScoreAiProperties {
         this.elicitationTimeout = elicitationTimeout;
     }
 
-    public Duration getMutationApprovalTimeout() {
-        return mutationApprovalTimeout != null ? mutationApprovalTimeout
-                : requestTimeout != null ? requestTimeout : DEFAULT_MUTATION_APPROVAL_TIMEOUT;
+    public Duration getChangeApprovalTimeout() {
+        return changeApprovalTimeout != null ? changeApprovalTimeout
+                : requestTimeout != null ? requestTimeout : DEFAULT_CHANGE_APPROVAL_TIMEOUT;
     }
 
-    public void setMutationApprovalTimeout(Duration mutationApprovalTimeout) {
-        this.mutationApprovalTimeout = mutationApprovalTimeout;
+    public void setChangeApprovalTimeout(Duration changeApprovalTimeout) {
+        this.changeApprovalTimeout = changeApprovalTimeout;
     }
 
     public Assistant getAssistant() {
@@ -475,12 +475,12 @@ public class ScoreAiProperties {
 
     /** Independently configurable tool integrations. */
     public static class Tools {
-        private Artifacts artifacts = new Artifacts();
+        private Files files = new Files();
         private Mcp connectCenterMcp = new Mcp();
 
-        public Artifacts getArtifacts() { return artifacts; }
-        public void setArtifacts(Artifacts artifacts) {
-            this.artifacts = artifacts != null ? artifacts : new Artifacts();
+        public Files getFiles() { return files; }
+        public void setFiles(Files files) {
+            this.files = files != null ? files : new Files();
         }
         public Mcp getConnectCenterMcp() { return connectCenterMcp; }
         public void setConnectCenterMcp(Mcp connectCenterMcp) {
@@ -488,13 +488,13 @@ public class ScoreAiProperties {
         }
     }
 
-    /** The create_artifact tool, including rendering, storage, and retention. */
-    public static class Artifacts {
+    /** The create_file tool, including rendering, storage, and retention. */
+    public static class Files {
         private boolean enabled = true;
         private Duration retention = Duration.ofDays(7);
         private DataSize maxBytes = DataSize.ofMegabytes(20);
-        private ArtifactStorage storage = new ArtifactStorage();
-        private ArtifactRendering rendering = new ArtifactRendering();
+        private FileStorage storage = new FileStorage();
+        private FileRendering rendering = new FileRendering();
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -506,47 +506,47 @@ public class ScoreAiProperties {
         public void setMaxBytes(DataSize maxBytes) {
             this.maxBytes = maxBytes != null ? maxBytes : DataSize.ofMegabytes(20);
         }
-        public ArtifactStorage getStorage() { return storage; }
-        public void setStorage(ArtifactStorage storage) {
-            this.storage = storage != null ? storage : new ArtifactStorage();
+        public FileStorage getStorage() { return storage; }
+        public void setStorage(FileStorage storage) {
+            this.storage = storage != null ? storage : new FileStorage();
         }
-        public ArtifactRendering getRendering() { return rendering; }
-        public void setRendering(ArtifactRendering rendering) {
-            this.rendering = rendering != null ? rendering : new ArtifactRendering();
+        public FileRendering getRendering() { return rendering; }
+        public void setRendering(FileRendering rendering) {
+            this.rendering = rendering != null ? rendering : new FileRendering();
         }
     }
 
-    public static class ArtifactStorage {
+    public static class FileStorage {
         private String provider = "local";
-        private LocalArtifactStorage local = new LocalArtifactStorage();
-        private S3ArtifactStorage s3 = new S3ArtifactStorage();
-        private GoogleDriveArtifactStorage googleDrive = new GoogleDriveArtifactStorage();
+        private LocalFileStorage local = new LocalFileStorage();
+        private S3FileStorage s3 = new S3FileStorage();
+        private GoogleDriveFileStorage googleDrive = new GoogleDriveFileStorage();
 
         public String getProvider() { return provider; }
         public void setProvider(String provider) { this.provider = provider; }
-        public LocalArtifactStorage getLocal() { return local; }
-        public void setLocal(LocalArtifactStorage local) {
-            this.local = local != null ? local : new LocalArtifactStorage();
+        public LocalFileStorage getLocal() { return local; }
+        public void setLocal(LocalFileStorage local) {
+            this.local = local != null ? local : new LocalFileStorage();
         }
-        public S3ArtifactStorage getS3() { return s3; }
-        public void setS3(S3ArtifactStorage s3) {
-            this.s3 = s3 != null ? s3 : new S3ArtifactStorage();
+        public S3FileStorage getS3() { return s3; }
+        public void setS3(S3FileStorage s3) {
+            this.s3 = s3 != null ? s3 : new S3FileStorage();
         }
-        public GoogleDriveArtifactStorage getGoogleDrive() { return googleDrive; }
-        public void setGoogleDrive(GoogleDriveArtifactStorage googleDrive) {
-            this.googleDrive = googleDrive != null ? googleDrive : new GoogleDriveArtifactStorage();
+        public GoogleDriveFileStorage getGoogleDrive() { return googleDrive; }
+        public void setGoogleDrive(GoogleDriveFileStorage googleDrive) {
+            this.googleDrive = googleDrive != null ? googleDrive : new GoogleDriveFileStorage();
         }
     }
 
-    public static class LocalArtifactStorage {
-        private String rootDirectory = "./data/ai-artifacts";
+    public static class LocalFileStorage {
+        private String rootDirectory = "./data/ai-files";
         public String getRootDirectory() { return rootDirectory; }
         public void setRootDirectory(String rootDirectory) { this.rootDirectory = rootDirectory; }
     }
 
-    public static class S3ArtifactStorage {
+    public static class S3FileStorage {
         private String bucket;
-        private String prefix = "ai-artifacts";
+        private String prefix = "ai-files";
         private String region = "us-east-1";
         private String endpoint;
         private String accessKey;
@@ -568,7 +568,7 @@ public class ScoreAiProperties {
         public void setPathStyleAccess(boolean pathStyleAccess) { this.pathStyleAccess = pathStyleAccess; }
     }
 
-    public static class GoogleDriveArtifactStorage {
+    public static class GoogleDriveFileStorage {
         private String accessToken;
         private String folderId;
         private String apiBaseUrl = "https://www.googleapis.com";
@@ -580,7 +580,7 @@ public class ScoreAiProperties {
         public void setApiBaseUrl(String apiBaseUrl) { this.apiBaseUrl = apiBaseUrl; }
     }
 
-    public static class ArtifactRendering {
+    public static class FileRendering {
         private String assetBaseUri;
         private List<String> fontFiles = List.of();
         private DataSize maxExternalAssetBytes = DataSize.ofMegabytes(5);

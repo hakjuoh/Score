@@ -101,19 +101,19 @@
     }
 
     <score-ai-chat-interaction-panel
-      [mutation]="mutationInteraction"
-      [mutationApprovalBatch]="mutationApprovalBatch"
-      [mutationApprovalBatchBusy]="mutationApprovalBatchBusy"
+      [change]="changeInteraction"
+      [changeApprovalBatch]="changeApprovalBatch"
+      [changeApprovalBatchBusy]="changeApprovalBatchBusy"
       [elicitation]="elicitation"
       [elicitationBusy]="elicitationBusy"
-      (mutationApproved)="mutationApproved.emit()"
-      (mutationDenied)="mutationDenied.emit()"
-      (mutationChangeRequested)="mutationChangeRequested.emit()"
-      (mutationRevoked)="mutationRevoked.emit()"
-      (mutationDismissed)="mutationDismissed.emit()"
-      (mutationBatchApproved)="mutationBatchApproved.emit()"
-      (mutationBatchDenied)="mutationBatchDenied.emit()"
-      (mutationBatchDecided)="mutationBatchDecided.emit($event)"
+      (changeApproved)="changeApproved.emit()"
+      (changeDenied)="changeDenied.emit()"
+      (changeRevisionRequested)="changeRevisionRequested.emit()"
+      (changeRevoked)="changeRevoked.emit()"
+      (changeDismissed)="changeDismissed.emit()"
+      (changeBatchApproved)="changeBatchApproved.emit()"
+      (changeBatchDenied)="changeBatchDenied.emit()"
+      (changeBatchDecided)="changeBatchDecided.emit($event)"
       (elicitationResponded)="elicitationResponded.emit($event)">
     </score-ai-chat-interaction-panel>
 
@@ -191,8 +191,8 @@
     }
 
     @if (permissionSettingsOpen) {
-      <div class="model-command-panel" role="group" aria-label="Mutation permissions">
-        <div class="model-command-title">Update Model Permissions</div>
+      <div class="model-command-panel" role="group" aria-label="Change permissions">
+        <div class="model-command-title">Update Change Permissions</div>
         <section class="model-command-section" aria-label="Permission mode">
           <div class="model-command-options">
             @for (option of permissionOptions; track option.value; let i = $index) {
@@ -272,14 +272,14 @@
         } @else {
           <markdown class="message-markdown markdown-body" [data]="message.content"></markdown>
         }
-        @if (message.artifacts?.length) {
-          <div class="message-artifacts" aria-label="Generated files">
-            @for (artifact of message.artifacts; track artifact.artifactId) {
-              <a class="message-artifact" [href]="artifact.downloadUrl" download>
+        @if (message.files?.length) {
+          <div class="message-files" aria-label="Generated files">
+            @for (file of message.files; track file.fileId) {
+              <a class="message-file" [href]="file.downloadUrl" download>
                 <mat-icon aria-hidden="true">download</mat-icon>
-                <span class="message-artifact-details">
-                  <span class="message-artifact-name">{{ artifact.filename }}</span>
-                  <span class="message-artifact-meta">{{ artifact.format.toUpperCase() }} · {{ artifactSize(artifact.size) }}</span>
+                <span class="message-file-details">
+                  <span class="message-file-name">{{ file.filename }}</span>
+                  <span class="message-file-meta">{{ file.format.toUpperCase() }} · {{ fileSize(file.size) }}</span>
                 </span>
               </a>
             }

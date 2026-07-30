@@ -1,7 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.controller.payload;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import org.oagi.score.gateway.http.api.ai_management.artifact.AiArtifactDescriptor;
+import org.oagi.score.gateway.http.api.ai_management.file.AiFileDescriptor;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -30,13 +30,13 @@ public record AiChatSocketEvent(
         String content,
         String groupId,
         String toolCallId,
-        List<AiArtifactDescriptor> artifacts,
+        List<AiFileDescriptor> files,
         Map<String, Object> metadata) {
 
     public AiChatSocketEvent {
         progress = progress != null ? List.copyOf(progress) : List.of();
         ids = ids != null ? List.copyOf(ids) : List.of();
-        artifacts = artifacts != null ? List.copyOf(artifacts) : List.of();
+        files = files != null ? List.copyOf(files) : List.of();
         metadata = metadata != null ? Map.copyOf(metadata) : Map.of();
     }
 
@@ -75,7 +75,7 @@ public record AiChatSocketEvent(
         return new AiChatSocketEvent(requestId, response.conversationId(), "assistant_final", "Completed.",
                 response.agent(), response.response(), response.continuationRequired(), response.progress(),
                 null, null, null, List.of(), null, requestId, null, null, "visible",
-                response.response(), null, null, response.artifacts(),
+                response.response(), null, null, response.files(),
                 Map.of("continuationRequired", response.continuationRequired()));
     }
 
@@ -134,7 +134,7 @@ public record AiChatSocketEvent(
         return new AiChatSocketEvent(requestId, conversationId, "HISTORY_MESSAGE", message.role(), null,
                 message.content(), false, List.of(), null, null, null, List.of(), message.index(),
                 message.turnId(), null, message.subtype(), message.visibility(), message.content(),
-                message.groupId(), message.toolCallId(), message.artifacts(), eventMetadata);
+                message.groupId(), message.toolCallId(), message.files(), eventMetadata);
     }
 
     public static AiChatSocketEvent detail(String requestId, String conversationId, long sequence,
@@ -144,12 +144,12 @@ public record AiChatSocketEvent(
                 subtype, "debug", content, null, null, metadata);
     }
 
-    public static AiChatSocketEvent mutationConfirmationRequired(
+    public static AiChatSocketEvent changeConfirmationRequired(
             String requestId, String conversationId, long sequence, String content,
             Map<String, Object> metadata) {
         return new AiChatSocketEvent(requestId, conversationId, "system", content, null, null,
                 false, List.of(), null, null, null, List.of(), null, requestId, sequence,
-                "mutation_confirmation_required", "visible", content, null, null, metadata);
+                "change_confirmation_required", "visible", content, null, null, metadata);
     }
 
     public static AiChatSocketEvent elicitationRequired(
@@ -173,7 +173,7 @@ public record AiChatSocketEvent(
             metadata.put("terminal", false);
             metadata.put("recoverable", true);
             metadata.put("retryable", false);
-            metadata.put("mutationSafe", true);
+            metadata.put("changeSafe", true);
         }
         return new AiChatSocketEvent(requestId, conversationId, "tool_call", content, null, null,
                 false, List.of(), null, null, null, List.of(), null, requestId, sequence,

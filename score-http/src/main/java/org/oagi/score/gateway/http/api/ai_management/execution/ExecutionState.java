@@ -8,17 +8,17 @@ public final class ExecutionState {
 
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private final AtomicLong completedToolCalls = new AtomicLong();
-    private final AtomicLong completedMutations = new AtomicLong();
+    private final AtomicLong completedChanges = new AtomicLong();
     private final AtomicLong retries = new AtomicLong();
 
     public boolean cancel() { return cancelled.compareAndSet(false, true); }
     public boolean cancelled() { return cancelled.get(); }
-    public long toolCompleted(boolean mutation) {
-        if (mutation) completedMutations.incrementAndGet();
+    public long toolCompleted(boolean change) {
+        if (change) completedChanges.incrementAndGet();
         return completedToolCalls.incrementAndGet();
     }
     public long completedToolCalls() { return completedToolCalls.get(); }
-    public long completedMutations() { return completedMutations.get(); }
+    public long completedChanges() { return completedChanges.get(); }
     public long retryStarted() { return retries.incrementAndGet(); }
     public long retries() { return retries.get(); }
 }

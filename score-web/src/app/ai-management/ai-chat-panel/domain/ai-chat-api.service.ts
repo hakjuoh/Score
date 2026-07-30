@@ -10,7 +10,7 @@ import {
   AiReasoningEffortInfo,
   AiCancellationCommand,
   AiCancellationResponse,
-  AiMutationConfirmationDecisionResponse,
+  AiChangeConfirmationDecisionResponse,
   AiPublicExecutionRequestStatus,
   AiChatRequest,
   AiChatRestResponse,
@@ -43,18 +43,18 @@ export class AiChatApiService {
     return this.http.post<AiChatRestResponse>('/api/ai/chat', request, this.localErrorHandling());
   }
 
-  decideMutationConfirmation(
+  decideChangeConfirmation(
     conversationId: string,
     confirmationRequestId: string,
     decision: 'APPROVE' | 'DENY',
     revisionPrompt?: string
-  ): Observable<AiMutationConfirmationDecisionResponse> {
+  ): Observable<AiChangeConfirmationDecisionResponse> {
     if (!conversationId.trim() || !confirmationRequestId.trim()) {
       throw new Error('A conversationId and confirmationRequestId are required.');
     }
-    return this.http.post<AiMutationConfirmationDecisionResponse>(
+    return this.http.post<AiChangeConfirmationDecisionResponse>(
       '/api/ai/chat/conversations/' + encodeURIComponent(conversationId)
-      + '/mutation-confirmations/' + encodeURIComponent(confirmationRequestId)
+      + '/change-confirmations/' + encodeURIComponent(confirmationRequestId)
       + '/decision',
       {decision, ...(revisionPrompt ? {revisionPrompt} : {})},
       this.localErrorHandling()

@@ -10,7 +10,7 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConv
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationSummary;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
-import org.oagi.score.gateway.http.api.ai_management.controller.payload.MutationConfirmation;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChangeConfirmation;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatLatestUsage;
@@ -19,7 +19,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiCompactCommand;
 import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationPermissionMode;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangePermissionMode;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPersistentWorkflowCommand;
 import org.oagi.score.gateway.http.api.ai_management.agent.Agent;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentDecision;
@@ -31,8 +31,8 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentWorkflowContext;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
 import org.oagi.score.gateway.http.api.ai_management.agent.DefinedAgent;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
-import org.oagi.score.gateway.http.api.ai_management.artifact.AiArtifactDescriptor;
-import org.oagi.score.gateway.http.api.ai_management.artifact.AiArtifactService;
+import org.oagi.score.gateway.http.api.ai_management.file.AiFileDescriptor;
+import org.oagi.score.gateway.http.api.ai_management.file.AiFileService;
 import org.oagi.score.gateway.http.api.ai_management.agent.ResponseOnlyAgent;
 import org.oagi.score.gateway.http.api.ai_management.conversation.ConversationResultCommitter;
 import org.oagi.score.gateway.http.api.ai_management.conversation.ConversationCompactor;
@@ -120,7 +120,7 @@ public class ChatService {
     private final ScoreAiObservability observability;
     private final ExecutionObserver observer;
     private final PublicOutputDisclosureGate disclosureGate;
-    private final AiArtifactService artifacts;
+    private final AiFileService files;
 
     @Autowired
     public ChatService(ScoreAiModelRegistry models, AgentRunner agentRunner,
@@ -135,7 +135,7 @@ public class ChatService {
                        ConversationResultCommitter resultCommitter,
                        ConversationCompactor compactor,
                        ResponseOnlyAgent responseOnlyAgent,
-                       AiArtifactService artifacts,
+                       AiFileService files,
                        ScoreAiObservability observability,
                        ObjectProvider<ExecutionObserver> executionObservers) {
         this(models, new Dependencies(agentRunner, toolSearchAdvisor,
@@ -144,7 +144,7 @@ public class ChatService {
                         requester, AiChatJsonSerializer.getInstance()),
                 objectMapper, requests, contextBudgets, workflow, agentRunner,
                 atifTrajectoryService, inputGuardrails, outputGuardrails,
-                resultCommitter, compactor, responseOnlyAgent, artifacts, observability,
+                resultCommitter, compactor, responseOnlyAgent, files, observability,
                 ExecutionObserver.composite(Objects.nonNull(executionObservers)
                         ? executionObservers.orderedStream().toList() : List.of())));
     }
@@ -167,7 +167,7 @@ public class ChatService {
         this.resultCommitter = value.resultCommitter();
         this.compactor = value.compactor();
         this.responseOnlyAgent = value.responseOnlyAgent();
-        this.artifacts = value.artifacts();
+        this.files = value.files();
         this.observability = Objects.nonNull(value.observability())
                 ? value.observability() : ScoreAiObservability.noop();
         this.observer = Objects.nonNull(value.observer())
@@ -193,7 +193,7 @@ public class ChatService {
             ConversationResultCommitter resultCommitter,
             ConversationCompactor compactor,
             ResponseOnlyAgent responseOnlyAgent,
-            AiArtifactService artifacts,
+            AiFileService files,
             ScoreAiObservability observability,
             ExecutionObserver observer) {
     }
@@ -229,7 +229,7 @@ public class ChatService {
                 ? workflowCommand.orElseThrow().activeWorkflow() : storedActiveWorkflow;
         request = request.withActiveWorkflow(activeWorkflow);
         request = AiWorkflowIntent.applyExplicitDelegation(request);
-        if (request.mutationConfirmation() != null) {
+        if (request.changeConfirmation() != null) {
             request = request.withActiveWorkflow("assistant")
                     .withMultiAgent(AiMultiAgentOptions.single());
         }
@@ -298,7 +298,7 @@ public class ChatService {
         };
 
         String visiblePrompt = visiblePrompt(prepared);
-        String permissionMode = AiMutationPermissionMode.resolve(prepared.permissionMode()).value();
+        String permissionMode = AiChangePermissionMode.resolve(prepared.permissionMode()).value();
         Map<String, Object> userExtra = new LinkedHashMap<>();
         userExtra.putAll(traceContext);
         userExtra.put("ui_projection", true);
@@ -504,12 +504,12 @@ public class ChatService {
             throw failure;
         }
         recorder.sealAgainstLateCallbacks();
-        List<AiArtifactDescriptor> createdArtifacts = artifacts != null
-                ? artifacts.ensureRequestedArtifacts(requester, executionScope(prepared, requester),
+        List<AiFileDescriptor> createdFiles = files != null
+                ? files.ensureRequestedFiles(requester, executionScope(prepared, requester),
                         prepared.prompt(), safeAnswer)
                 : List.of();
         return new ChatResponse(responseAgentId, safeAnswer, prepared.conversationId(),
-                false, List.copyOf(progressMessages), createdArtifacts, List.of());
+                false, List.copyOf(progressMessages), createdFiles, List.of());
     }
 
     private ExecutionScope executionScope(ChatRequest request, ScoreUser requester) {
@@ -626,12 +626,12 @@ public class ChatService {
     @Transactional(readOnly = true)
     public ChatConversationDetails conversation(ScoreUser requester, String conversationId) {
         ChatConversationDetails details = conversationRepository(requester).get(conversationId);
-        if (artifacts != null) {
+        if (files != null) {
             var messages = details.messages().stream().map(message -> {
                 if (!"assistant".equals(message.role()) || !StringUtils.hasText(message.requestId())) {
                     return message;
                 }
-                List<AiArtifactDescriptor> attached = artifacts.findByRequest(
+                List<AiFileDescriptor> attached = files.findByRequest(
                         requester, conversationId, message.requestId());
                 return new org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatHistoryMessage(
                         message.index(), message.role(), message.content(), message.requestId(),
@@ -759,7 +759,7 @@ public class ChatService {
 
     @Transactional
     public boolean deleteConversation(ScoreUser requester, String conversationId) {
-        if (artifacts != null) artifacts.deleteConversationArtifacts(requester, conversationId);
+        if (files != null) files.deleteConversationFiles(requester, conversationId);
         boolean deleted = conversationRepository(requester).delete(conversationId);
         if (deleted) {
             chatMemory(requester).clear(conversationId);
@@ -1152,9 +1152,9 @@ public class ChatService {
         if (request.attachments().size() > MAX_ATTACHMENTS) {
             throw new IllegalArgumentException("A maximum of 10 attachments is allowed per request.");
         }
-        AiMutationPermissionMode.resolve(request.permissionMode());
-        if (request.mutationConfirmation() != null) {
-            MutationConfirmation confirmation = request.mutationConfirmation();
+        AiChangePermissionMode.resolve(request.permissionMode());
+        if (request.changeConfirmation() != null) {
+            ChangeConfirmation confirmation = request.changeConfirmation();
             String toolName = confirmation.toolName();
             String arguments = confirmation.arguments();
             String revisionPrompt = confirmation.revisionPrompt();
@@ -1173,14 +1173,14 @@ public class ChatService {
                     && Objects.equals(Objects.requireNonNullElse(request.prompt(), "").strip(),
                     revisionPrompt.strip());
             if ((!validExact || hasToolName && !validTool) && !validRevision) {
-                throw new IllegalArgumentException("Approved mutation tool details are invalid.");
+                throw new IllegalArgumentException("Approved change tool details are invalid.");
             }
         }
     }
 
     private ChatRequest requirePrepared(ChatRequest request) {
         validate(request);
-        if (request.mutationConfirmation() != null) {
+        if (request.changeConfirmation() != null) {
             request = request.withActiveWorkflow("assistant")
                     .withMultiAgent(AiMultiAgentOptions.single());
         }

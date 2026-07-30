@@ -9,7 +9,7 @@ public record ChatRequest(
         String conversationId,
         String pageContext,
         List<ChatAttachment> attachments,
-        MutationConfirmation mutationConfirmation,
+        ChangeConfirmation changeConfirmation,
         String modelName,
         String reasoningEffort,
         String permissionMode,
@@ -19,17 +19,17 @@ public record ChatRequest(
 
     public ChatRequest(String prompt, String requestId, String agent, String conversationId,
                        String pageContext, List<ChatAttachment> attachments,
-                       MutationConfirmation mutationConfirmation) {
+                       ChangeConfirmation changeConfirmation) {
         this(prompt, requestId, agent, conversationId, pageContext, attachments,
-                mutationConfirmation, null, null, null, null, null, null);
+                changeConfirmation, null, null, null, null, null, null);
     }
 
     public ChatRequest(String prompt, String requestId, String agent, String conversationId,
                        String pageContext, List<ChatAttachment> attachments,
-                       MutationConfirmation mutationConfirmation, String modelName,
+                       ChangeConfirmation changeConfirmation, String modelName,
                        String reasoningEffort, String permissionMode) {
         this(prompt, requestId, agent, conversationId, pageContext, attachments,
-                mutationConfirmation, modelName, reasoningEffort, permissionMode, null, null, null);
+                changeConfirmation, modelName, reasoningEffort, permissionMode, null, null, null);
     }
 
     public ChatRequest {
@@ -40,25 +40,25 @@ public record ChatRequest(
     public ChatRequest withConversation(String conversationId, String modelName,
                                         String reasoningEffort) {
         return new ChatRequest(prompt, requestId, agent, conversationId, pageContext, attachments,
-                mutationConfirmation, modelName, reasoningEffort, permissionMode,
+                changeConfirmation, modelName, reasoningEffort, permissionMode,
                 multiAgent, activeWorkflow, routeManifest);
     }
 
     public ChatRequest withMultiAgent(AiMultiAgentOptions options) {
         return new ChatRequest(prompt, requestId, agent, conversationId, pageContext, attachments,
-                mutationConfirmation, modelName, reasoningEffort, permissionMode,
+                changeConfirmation, modelName, reasoningEffort, permissionMode,
                 options, activeWorkflow, routeManifest);
     }
 
     public ChatRequest withActiveWorkflow(String workflow) {
         return new ChatRequest(prompt, requestId, agent, conversationId, pageContext, attachments,
-                mutationConfirmation, modelName, reasoningEffort, permissionMode,
+                changeConfirmation, modelName, reasoningEffort, permissionMode,
                 multiAgent, workflow, routeManifest);
     }
 
     public ChatRequest withConversationId(String value) {
         return new ChatRequest(prompt, requestId, agent, value, pageContext, attachments,
-                mutationConfirmation, modelName, reasoningEffort, permissionMode,
+                changeConfirmation, modelName, reasoningEffort, permissionMode,
                 multiAgent, activeWorkflow, routeManifest);
     }
 }

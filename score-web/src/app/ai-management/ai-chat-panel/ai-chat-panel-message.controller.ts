@@ -209,9 +209,9 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.clearMutationApprovalBatch();
-    this.confirmedMutationRequests.cancel(this.activeRequestId);
-    this.clearMutationRepeatDraft(this.activeRequestId);
+    this.clearChangeApprovalBatch();
+    this.confirmedChangeRequests.cancel(this.activeRequestId);
+    this.clearChangeRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
     this.state.messages.push({role: 'debug', content: content || 'Request cancelled.'});
@@ -234,9 +234,9 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.clearMutationApprovalBatch();
-    this.confirmedMutationRequests.cancel(this.activeRequestId);
-    this.clearMutationRepeatDraft(this.activeRequestId);
+    this.clearChangeApprovalBatch();
+    this.confirmedChangeRequests.cancel(this.activeRequestId);
+    this.clearChangeRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
     if (this.activeRestoreRequestId) {
@@ -264,9 +264,9 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.clearMutationApprovalBatch();
-    this.confirmedMutationRequests.cancel(this.activeRequestId);
-    this.clearMutationRepeatDraft(this.activeRequestId);
+    this.clearChangeApprovalBatch();
+    this.confirmedChangeRequests.cancel(this.activeRequestId);
+    this.clearChangeRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
     this.clearToolCallTracking();
     if (this.activeRestoreRequestId) {

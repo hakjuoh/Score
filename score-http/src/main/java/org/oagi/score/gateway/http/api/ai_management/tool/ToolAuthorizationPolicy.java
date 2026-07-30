@@ -4,7 +4,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 
 import java.util.Objects;
 
-/** Optional blocking authorization policy, including exact mutation confirmation. */
+/** Optional blocking authorization policy, including exact change confirmation. */
 @FunctionalInterface
 public interface ToolAuthorizationPolicy {
 
@@ -12,7 +12,7 @@ public interface ToolAuthorizationPolicy {
 
     /**
      * Acquires any execution-time lease after arguments are stable and the request fence passed.
-     * A mutation policy uses this hook to close the cancellation race immediately before the
+     * A change policy uses this hook to close the cancellation race immediately before the
      * provider is invoked.
      */
     default Result beforeExecution(Request request) {

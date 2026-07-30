@@ -30,14 +30,14 @@ describe('AiChatPanelComponent tool events', () => {
       groupId: 'mcp', toolCallId: 'call-1', content: 'GitHub search',
       metadata: {
         toolName: 'github_search', statusMessage: 'GitHub search failed.',
-        terminal: false, recoverable: true, retryable: true, mutationSafe: true
+        terminal: false, recoverable: true, retryable: true, changeSafe: true
       }
     });
 
     expect(component.state.messages).toContainEqual(expect.objectContaining({
       role: 'tool_call', content: 'github_search failed.',
       groupId: 'mcp', toolCallId: 'call-1', toolName: 'github_search',
-      toolStatus: 'failed', recoverable: true, retryable: true, mutationSafe: true
+      toolStatus: 'failed', recoverable: true, retryable: true, changeSafe: true
     }));
     expect(component.state.pending).toBe(true);
     expect(component.interactionBlocked).toBe(true);
@@ -72,7 +72,7 @@ describe('AiChatPanelComponent tool events', () => {
         type: 'tool_call', subtype: 'failed', groupId: 'request-1', turnId: 'request-1',
         toolCallId: 'call-1', content: 'create_item failed.',
         metadata: {toolName: 'create_item', toolCallSeq: 1, terminal: false,
-          recoverable: true, retryable: false, mutationSafe: true,
+          recoverable: true, retryable: false, changeSafe: true,
           toolDetail: 'create_item\nError: value must be an integer.'}
       },
       {
@@ -134,7 +134,7 @@ describe('AiChatPanelComponent tool events', () => {
         type: 'tool_call', subtype: 'failed', groupId: 'request-1', turnId: 'request-1',
         toolCallId: 'call-1', content: 'create_item failed.',
         metadata: {toolName: 'create_item', toolCallSeq: 1, terminal: false,
-          recoverable: true, retryable: false, mutationSafe: true,
+          recoverable: true, retryable: false, changeSafe: true,
           toolDetail: 'create_item\nError: value must be an integer.'}
       },
       {
@@ -148,7 +148,7 @@ describe('AiChatPanelComponent tool events', () => {
         type: 'tool_call', subtype: 'failed', groupId: 'request-1', turnId: 'request-1',
         toolCallId: 'call-2', content: 'create_item failed.',
         metadata: {toolName: 'create_item', toolCallSeq: 2, terminal: false,
-          recoverable: true, retryable: false, mutationSafe: true,
+          recoverable: true, retryable: false, changeSafe: true,
           toolDetail: 'create_item\nError: value must be an integer.'}
       }
     ];
@@ -165,7 +165,7 @@ describe('AiChatPanelComponent tool events', () => {
     expect(component.state.messages.at(-1)).toEqual(expect.objectContaining({role: 'error'}));
   });
 
-  it('renders a live awaiting-approval row for a guard-blocked mutation without ending the request', () => {
+  it('renders a live awaiting-approval row for a guard-blocked change without ending the request', () => {
     component.state.prompt = 'Create a business context';
     component.send();
 
@@ -401,9 +401,9 @@ describe('AiChatPanelComponent tool events', () => {
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', turnId, type: 'tool_call', subtype: 'started',
-      groupId, toolCallId: 'call-2', content: 'Denied mutation',
+      groupId, toolCallId: 'call-2', content: 'Denied change',
       metadata: {
-        toolName: 'denied_mutation', statusMessage: 'Checking mutation policy.',
+        toolName: 'denied_change', statusMessage: 'Checking change policy.',
         toolCallSeq: 2
       }
     });
@@ -411,11 +411,11 @@ describe('AiChatPanelComponent tool events', () => {
     // The policy-denied second call terminates before the allowed first call.
     (component as any).handleSocketEvent({
       requestId: 'request-1', turnId, type: 'tool_call', subtype: 'failed',
-      groupId, toolCallId: 'call-2', content: 'Denied mutation',
+      groupId, toolCallId: 'call-2', content: 'Denied change',
       metadata: {
-        toolName: 'denied_mutation', statusMessage: 'Mutation denied by policy.',
+        toolName: 'denied_change', statusMessage: 'Change denied by policy.',
         toolCallSeq: 2, terminal: false, recoverable: true,
-        retryable: false, mutationSafe: true
+        retryable: false, changeSafe: true
       }
     });
     (component as any).handleSocketEvent({
@@ -441,7 +441,7 @@ describe('AiChatPanelComponent tool events', () => {
         toolStatus: 'completed'
       },
       {
-        toolCallId: 'call-2', content: 'denied_mutation failed.',
+        toolCallId: 'call-2', content: 'denied_change failed.',
         toolStatus: 'failed'
       }
     ]);
@@ -473,10 +473,10 @@ describe('AiChatPanelComponent tool events', () => {
     (component as any).handleSocketEvent({
       requestId: 'restore-order', conversationId: 'conversation-1',
       type: 'HISTORY_MESSAGE', message: 'tool_call', subtype: 'failed',
-      content: 'Mutation denied by policy.', groupId, toolCallId: 'call-2', index: 1,
+      content: 'Change denied by policy.', groupId, toolCallId: 'call-2', index: 1,
       metadata: restoreMetadata({
-        toolName: 'denied_mutation', recoverable: true,
-        retryable: false, mutationSafe: true
+        toolName: 'denied_change', recoverable: true,
+        retryable: false, changeSafe: true
       })
     });
     (component as any).handleSocketEvent({

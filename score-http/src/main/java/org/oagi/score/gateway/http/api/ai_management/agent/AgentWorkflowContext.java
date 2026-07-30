@@ -185,7 +185,7 @@ public record AgentWorkflowContext(
                           int maximumAgents, String strategy,
                           String workflowPreference, boolean delegationRequested,
                           boolean explicitDelegationRequested,
-                          boolean mutationConfirmation) {
+                          boolean changeConfirmation) {
         public Request {
             requestId = required(requestId, "requestId");
             conversationId = required(conversationId, "conversationId");

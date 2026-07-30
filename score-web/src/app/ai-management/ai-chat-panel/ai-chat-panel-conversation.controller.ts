@@ -2,7 +2,7 @@ import {HttpErrorResponse} from '@angular/common/http';
 import {forkJoin, map, of, tap} from 'rxjs';
 import {take} from 'rxjs/operators';
 import {AiChatPanelCommandController} from './ai-chat-panel-command.controller';
-import {pendingMutationApprovalBatches} from './domain/ai-mutation-approval-batch';
+import {pendingChangeApprovalBatches} from './domain/ai-change-approval-batch';
 import {
   AiActiveRequestIdentity,
   AiChatConversationDetails,
@@ -224,20 +224,20 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
       this.recoveredRequestSnapshotId = undefined;
     }
     const recoveredApprovals = this.isTerminalExecutionStatus(status.status)
-      ? [] : pendingMutationApprovalBatches(
+      ? [] : pendingChangeApprovalBatches(
         details.messages || [], status.requestId, details.conversationId
       );
-    const activeApproval = this.state.mutationApprovalBatch;
+    const activeApproval = this.state.changeApprovalBatch;
     if (activeApproval
       && recoveredApprovals.some(batch => batch.batchId === activeApproval.batchId)) {
-      this.state.mutationApprovalBatchQueue = recoveredApprovals.filter(
+      this.state.changeApprovalBatchQueue = recoveredApprovals.filter(
         batch => batch.batchId !== activeApproval.batchId
       );
     } else {
-      this.state.mutationApprovalBatch = recoveredApprovals.shift();
-      this.state.mutationApprovalBatchQueue = recoveredApprovals;
-      this.state.mutationApprovalBatchBusy = false;
-      this.scheduleMutationApprovalExpiry();
+      this.state.changeApprovalBatch = recoveredApprovals.shift();
+      this.state.changeApprovalBatchQueue = recoveredApprovals;
+      this.state.changeApprovalBatchBusy = false;
+      this.scheduleChangeApprovalExpiry();
     }
     this.state.agentActivities = [...messages].reverse()
       .find(message => (message.role === 'agent_group' || message.role === 'workflow_group')
@@ -245,10 +245,10 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
     this.state.conversationId = details.conversationId;
     this.sessionPersistence.rememberLastConversation(details.conversationId);
     this.state.restoreConversationSettings(details);
-    this.state.currentStatus = this.state.mutationApprovalBatch
-      ? (this.state.mutationApprovalBatch.items.length === 1
+    this.state.currentStatus = this.state.changeApprovalBatch
+      ? (this.state.changeApprovalBatch.items.length === 1
         ? 'Approval required'
-        : `${this.state.mutationApprovalBatch.items.length} approvals required`)
+        : `${this.state.changeApprovalBatch.items.length} approvals required`)
       : this.isTerminalExecutionStatus(status.status)
         ? status.status : 'Request in progress';
     if (this.restoreChatScrollPending) {
@@ -264,7 +264,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
     this.requestSubscription?.unsubscribe();
     this.requestSubscription = undefined;
     this.clearTimers();
-    this.clearMutationApprovalBatch();
+    this.clearChangeApprovalBatch();
     this.completeProgressMessages();
     this.settleAgentActivity(status.status === 'COMPLETED' ? 'completed'
       : status.status === 'CANCELLED' ? 'cancelled' : 'failed');
@@ -285,7 +285,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
       return;
     }
     const content = status.status === 'UNKNOWN_RECONCILIATION_REQUIRED'
-      ? 'The backend restarted while a data-changing action may have been running. '
+      ? 'The backend restarted while a change may have been running. '
         + 'Review the result before retrying.'
       : 'The assistant request stopped because the backend restarted.';
     if (!this.state.messages.some(message => message.role === 'error' && message.content === content)) {
@@ -427,8 +427,8 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
     this.clearStatusMessage();
     this.state.elicitation = undefined;
     this.state.elicitationBusy = false;
-    this.clearMutationApprovalBatch();
-    this.clearMutationRepeatDraft(requestId);
+    this.clearChangeApprovalBatch();
+    this.clearChangeRepeatDraft(requestId);
     this.requestSubscription?.unsubscribe();
     this.requestSubscription = undefined;
     this.activeRequestPublished = false;
@@ -450,9 +450,9 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
   deleteConversation(conversationId: string, event?: Event): void {
     event?.preventDefault();
     event?.stopPropagation();
-    if (this.mutationDecisionOpen || this.mutationDecisionInFlight) {
+    if (this.changeDecisionOpen || this.changeDecisionInFlight) {
       this.snackBar.open(
-        'Finish the action approval decision before deleting chat history.',
+        'Finish the change approval decision before deleting chat history.',
         'Dismiss', {duration: 3500}
       );
       return;

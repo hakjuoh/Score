@@ -1,6 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.agent;
 
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalScope;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalScope;
 
 import java.util.List;
 import java.util.Map;
@@ -48,7 +48,7 @@ public interface AgentExecutionContext {
     List<String> guardrailDecisionIds();
 
     /** Approval scope propagated across nested Workflow Agent turns. */
-    AiMutationApprovalScope approvalScope();
+    AiChangeApprovalScope approvalScope();
 
     Map<String, Object> workflowObservationContext();
 
@@ -85,5 +85,5 @@ public interface AgentExecutionContext {
                                            AgentExecutionRecorder recorder,
                                            AgentToolPolicy policy,
                                            String assignedAgentId,
-                                           AiMutationApprovalScope approvalScope);
+                                           AiChangeApprovalScope approvalScope);
 }

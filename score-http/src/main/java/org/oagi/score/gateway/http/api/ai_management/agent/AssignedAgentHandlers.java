@@ -1,6 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.agent;
 
-import org.oagi.score.gateway.http.api.ai_management.model.AiMutationApprovalScope;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalScope;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -57,7 +57,7 @@ public final class AssignedAgentHandlers {
                 instructions.render(AgentInstructions.Template.WORKER_ASSIGNMENT,
                         Map.of("assignment", task.instruction())).value(),
                 parent.userMessage().attachments());
-        AiMutationApprovalScope approvalScope = AiMutationApprovalScope.individual(
+        AiChangeApprovalScope approvalScope = AiChangeApprovalScope.individual(
                 rootConversationId(parent), childConversationId, agent.id().value(), task.label());
         AgentExecutionContext child = parent.forAssignedAgent(childConversationId,
                 history, assignment, recorder, policy, agent.id().value(), approvalScope)

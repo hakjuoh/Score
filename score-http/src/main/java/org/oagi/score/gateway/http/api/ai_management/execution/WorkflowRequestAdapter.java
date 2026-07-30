@@ -20,12 +20,12 @@ public final class WorkflowRequestAdapter {
                 ? request.multiAgent().maxAgents() : 1;
         String strategy = request.multiAgent() != null
                 ? request.multiAgent().strategy() : "balanced";
-        boolean delegation = request.mutationConfirmation() == null
+        boolean delegation = request.changeConfirmation() == null
                 && (request.multiAgent() != null && request.multiAgent().active()
                 || StringUtils.hasText(request.activeWorkflow())
                 && !"assistant".equalsIgnoreCase(request.activeWorkflow().strip())
                 && !"direct".equalsIgnoreCase(request.activeWorkflow().strip()));
-        boolean explicitDelegation = request.mutationConfirmation() == null
+        boolean explicitDelegation = request.changeConfirmation() == null
                 && DelegationIntent.explicitlyRequestsAgents(
                         accepted != null ? accepted.content() : request.prompt());
         return new AgentWorkflowContext.Request(request.requestId(),
@@ -39,6 +39,6 @@ public final class WorkflowRequestAdapter {
                 StringUtils.hasText(request.pageContext()), maximumAgents,
                 strategy, request.activeWorkflow(), delegation,
                 explicitDelegation,
-                request.mutationConfirmation() != null);
+                request.changeConfirmation() != null);
     }
 }

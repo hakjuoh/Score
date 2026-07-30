@@ -89,18 +89,18 @@ class AiProviderRetryExecutorTest {
     }
 
     @Test
-    void neverReplaysAnAttemptThatExecutedAMutation() {
+    void neverReplaysAnAttemptThatExecutedAChange() {
         AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
-        AtomicLong mutations = new AtomicLong();
+        AtomicLong changes = new AtomicLong();
         AiProviderRetryExecutor executor = new AiProviderRetryExecutor(settings(5), null);
 
-        assertThatThrownBy(() -> executor.execute(request(), recorder, mutations::get, () -> {
-            mutations.incrementAndGet();
+        assertThatThrownBy(() -> executor.execute(request(), recorder, changes::get, () -> {
+            changes.incrementAndGet();
             throw new TransientAiException("connection dropped mid-stream");
         }))
                 .isInstanceOfSatisfying(AiProviderException.class, failure -> {
                     assertThat(failure.attempts()).isEqualTo(1);
-                    assertThat(failure.mutationApplied()).isTrue();
+                    assertThat(failure.changeApplied()).isTrue();
                     assertThat(failure.getMessage())
                             .contains("Data changes that already completed remain applied.");
                 });

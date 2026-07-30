@@ -9,8 +9,8 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancel
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancellationResponse;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiElicitationDecisionRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
-import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMutationApprovalDecisionRequest;
-import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMutationConfirmationDecisionRequest;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChangeApprovalDecisionRequest;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChangeConfirmationDecisionRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
@@ -19,8 +19,8 @@ import org.oagi.score.gateway.http.api.ai_management.execution.AiSharedStateUnav
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
-import org.oagi.score.gateway.http.api.ai_management.service.AiMutationConfirmationService;
-import org.oagi.score.gateway.http.api.ai_management.service.AiMutationApprovalCoordinator;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChangeConfirmationService;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.service.ChatService;
@@ -102,8 +102,8 @@ class AiChatControllerTest {
                 nullable(String.class), nullable(String.class))).thenReturn(turn);
         AiChatController controller = new AiChatController(
                 chatService, sessionService, messagingTemplate, webSocketUsers, registry,
-                mock(AiMutationConfirmationService.class), mock(AiElicitationService.class),
-                mock(AiMutationApprovalCoordinator.class), new ScoreAiProperties(), observability,
+                mock(AiChangeConfirmationService.class), mock(AiElicitationService.class),
+                mock(AiChangeApprovalCoordinator.class), new ScoreAiProperties(), observability,
                 Runnable::run);
         Principal wsPrincipal = mock(Principal.class);
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
@@ -148,7 +148,7 @@ class AiChatControllerTest {
     }
 
     @Test
-    void returnsMutationConfirmationEventsFromTheRestTransport() throws Exception {
+    void returnsChangeConfirmationEventsFromTheRestTransport() throws Exception {
         AiChatController controller = controller(new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
         ChatRequest request = request("request-1", "conversation-1");
         when(sessionService.asScoreUser(principal)).thenReturn(user);
@@ -157,8 +157,8 @@ class AiChatControllerTest {
             @SuppressWarnings("unchecked")
             Consumer<AiExecutionEvent> events = invocation.getArgument(2);
             events.accept(AiExecutionEvent.progress("internal progress"));
-            events.accept(AiExecutionEvent.detail("mutation_confirmation_required",
-                    "A data-changing action requires explicit approval.", Map.of(
+            events.accept(AiExecutionEvent.detail("change_confirmation_required",
+                    "A change requires explicit approval.", Map.of(
                             "confirmationRequestId", "confirmation-1",
                             "status", "REQUESTED",
                             "expiresAt", "2099-07-15T00:00:00Z",
@@ -174,7 +174,7 @@ class AiChatControllerTest {
         assertThat(response.events()).singleElement().satisfies(event -> {
             assertThat(event.requestId()).isEqualTo("request-1");
             assertThat(event.conversationId()).isEqualTo("conversation-1");
-            assertThat(event.subtype()).isEqualTo("mutation_confirmation_required");
+            assertThat(event.subtype()).isEqualTo("change_confirmation_required");
             assertThat(event.metadata()).containsEntry("confirmationRequestId", "confirmation-1");
         });
     }
@@ -217,7 +217,7 @@ class AiChatControllerTest {
     }
 
     @Test
-    void streamsAndReturnsMutationApprovalDecisionsBeforeTheRestResponseCompletes() throws Exception {
+    void streamsAndReturnsChangeApprovalDecisionsBeforeTheRestResponseCompletes() throws Exception {
         AiChatController controller = controller(
                 new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
         ChatRequest request = request("request-1", "conversation-1");
@@ -227,7 +227,7 @@ class AiChatControllerTest {
         when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             Consumer<AiExecutionEvent> events = invocation.getArgument(2);
-            events.accept(AiExecutionEvent.detail("mutation_approval_batch_required",
+            events.accept(AiExecutionEvent.detail("change_approval_batch_required",
                     "Two actions require approval.", Map.of(
                             "batchId", "batch-1", "parallel", true,
                             "expiresAt", "2099-07-15T00:00:00Z",
@@ -238,8 +238,8 @@ class AiChatControllerTest {
                                     Map.of("confirmationRequestId", "confirmation-2",
                                             "toolName", "delete_bbie",
                                             "argumentsSummary", "{\"id\":2}")))));
-            events.accept(AiExecutionEvent.detail("mutation_approval_decision_accepted",
-                    "Approved 1 action and denied 1. Continuing the active request.",
+            events.accept(AiExecutionEvent.detail("change_approval_decision_accepted",
+                    "Approved 1 change and denied 1. Continuing the active request.",
                     Map.of("batchId", "batch-1")));
             return new ChatResponse("connectcenter-assistant", "Done.",
                     "conversation-1", false, List.of());
@@ -250,8 +250,8 @@ class AiChatControllerTest {
 
         assertThat(response).isNotNull();
         assertThat(response.events()).extracting(AiChatSocketEvent::subtype)
-                .containsExactly("mutation_approval_batch_required",
-                        "mutation_approval_decision_accepted");
+                .containsExactly("change_approval_batch_required",
+                        "change_approval_decision_accepted");
         assertThat(response.events().getLast().metadata()).containsEntry("batchId", "batch-1");
         verify(messagingTemplate, times(2)).convertAndSendToUser(eq("tester"),
                 eq("/queue/ai/chat/request-1"), any(AiChatSocketEvent.class));
@@ -259,20 +259,20 @@ class AiChatControllerTest {
 
     @Test
     void delegatesOneBatchDecisionToTheCoordinatorWithoutPublishingAnOutOfBandAck() {
-        AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
+        AiChangeApprovalCoordinator approvals = mock(AiChangeApprovalCoordinator.class);
         ScoreAiProperties properties = new ScoreAiProperties();
         AiChatController controller = new AiChatController(
                 chatService, sessionService, messagingTemplate, webSocketUsers,
-                new AiRequestRegistry(), mock(AiMutationConfirmationService.class),
+                new AiRequestRegistry(), mock(AiChangeConfirmationService.class),
                 mock(AiElicitationService.class), approvals, properties, Runnable::run);
         Principal wsPrincipal = mock(Principal.class);
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
         when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
-        AiMutationApprovalDecisionRequest command = new AiMutationApprovalDecisionRequest(
+        AiChangeApprovalDecisionRequest command = new AiChangeApprovalDecisionRequest(
                 "request-1", "conversation-1", "batch-1", List.of(
-                new AiMutationApprovalDecisionRequest.ItemDecision("confirmation-1", "APPROVE"),
-                new AiMutationApprovalDecisionRequest.ItemDecision("confirmation-2", "DENY")));
-        controller.decideMutationApproval(command, wsPrincipal, headers);
+                new AiChangeApprovalDecisionRequest.ItemDecision("confirmation-1", "APPROVE"),
+                new AiChangeApprovalDecisionRequest.ItemDecision("confirmation-2", "DENY")));
+        controller.decideChangeApproval(command, wsPrincipal, headers);
 
         verify(approvals).decide(user, command);
         verify(messagingTemplate, never()).convertAndSendToUser(
@@ -288,8 +288,8 @@ class AiChatControllerTest {
                 observations::add));
         AiChatController controller = new AiChatController(
                 chatService, sessionService, messagingTemplate, webSocketUsers,
-                new AiRequestRegistry(), mock(AiMutationConfirmationService.class),
-                elicitations, mock(AiMutationApprovalCoordinator.class),
+                new AiRequestRegistry(), mock(AiChangeConfirmationService.class),
+                elicitations, mock(AiChangeApprovalCoordinator.class),
                 new ScoreAiProperties(), ScoreAiObservability.noop(), observer, Runnable::run);
         Principal wsPrincipal = mock(Principal.class);
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
@@ -328,29 +328,29 @@ class AiChatControllerTest {
 
     @Test
     void republishesAnAcknowledgementForAnExactCommittedBatchRetry() {
-        AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
+        AiChangeApprovalCoordinator approvals = mock(AiChangeApprovalCoordinator.class);
         AiChatController controller = new AiChatController(
                 chatService, sessionService, messagingTemplate, webSocketUsers,
-                new AiRequestRegistry(), mock(AiMutationConfirmationService.class),
+                new AiRequestRegistry(), mock(AiChangeConfirmationService.class),
                 mock(AiElicitationService.class), approvals,
                 new ScoreAiProperties(), Runnable::run);
         Principal wsPrincipal = mock(Principal.class);
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
         when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
-        AiMutationApprovalDecisionRequest command = new AiMutationApprovalDecisionRequest(
+        AiChangeApprovalDecisionRequest command = new AiChangeApprovalDecisionRequest(
                 "request-1", "conversation-1", "batch-1", List.of(
-                new AiMutationApprovalDecisionRequest.ItemDecision(
+                new AiChangeApprovalDecisionRequest.ItemDecision(
                         "confirmation-1", "APPROVE")));
         when(approvals.decide(user, command)).thenReturn(
-                new AiMutationApprovalCoordinator.DecisionAcknowledgement("batch-1", 1, 0));
+                new AiChangeApprovalCoordinator.DecisionAcknowledgement("batch-1", 1, 0));
 
-        controller.decideMutationApproval(command, wsPrincipal, headers);
+        controller.decideChangeApproval(command, wsPrincipal, headers);
 
         ArgumentCaptor<AiChatSocketEvent> event = ArgumentCaptor.forClass(AiChatSocketEvent.class);
         verify(messagingTemplate).convertAndSendToUser(
                 eq("tester"), eq("/queue/ai/chat/request-1"), event.capture());
         assertThat(event.getValue().subtype())
-                .isEqualTo("mutation_approval_decision_accepted");
+                .isEqualTo("change_approval_decision_accepted");
         assertThat(event.getValue().metadata())
                 .containsEntry("batchId", "batch-1")
                 .containsEntry("replayed", true);
@@ -361,9 +361,9 @@ class AiChatControllerTest {
         AiRequestRegistry registry = new AiRequestRegistry();
         registry.register("request-1", "conversation-1", user,
                 Instant.now().plusSeconds(30));
-        AiMutationConfirmationService confirmations =
-                mock(AiMutationConfirmationService.class);
-        AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
+        AiChangeConfirmationService confirmations =
+                mock(AiChangeConfirmationService.class);
+        AiChangeApprovalCoordinator approvals = mock(AiChangeApprovalCoordinator.class);
         when(confirmations.sourceRequestId(
                 user, "child-conversation-1", "confirmation-1"))
                 .thenReturn("request-1");
@@ -376,9 +376,9 @@ class AiChatControllerTest {
                 approvals, new ScoreAiProperties(), Runnable::run);
         when(sessionService.asScoreUser(principal)).thenReturn(user);
 
-        assertThatThrownBy(() -> controller.decideMutationConfirmation(
+        assertThatThrownBy(() -> controller.decideChangeConfirmation(
                 principal, "child-conversation-1", "confirmation-1",
-                new AiMutationConfirmationDecisionRequest("APPROVE", null)))
+                new AiChangeConfirmationDecisionRequest("APPROVE", null)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("active AI request");
 
@@ -389,11 +389,11 @@ class AiChatControllerTest {
     @Test
     void staleRestCancellationCannotCancelCurrentApprovalOrElicitationWaits() {
         AiRequestRegistry registry = mock(AiRequestRegistry.class);
-        AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
+        AiChangeApprovalCoordinator approvals = mock(AiChangeApprovalCoordinator.class);
         AiElicitationService elicitations = mock(AiElicitationService.class);
         AiChatController controller = new AiChatController(
                 chatService, sessionService, messagingTemplate, webSocketUsers, registry,
-                mock(AiMutationConfirmationService.class), elicitations, approvals,
+                mock(AiChangeConfirmationService.class), elicitations, approvals,
                 new ScoreAiProperties(), Runnable::run);
         AiCancelRequest command = new AiCancelRequest(
                 "request-1", "cancel-1", "conversation-stale", 6L);
@@ -413,11 +413,11 @@ class AiChatControllerTest {
     @Test
     void staleWebSocketCancellationCannotCancelCurrentApprovalOrElicitationWaits() {
         AiRequestRegistry registry = mock(AiRequestRegistry.class);
-        AiMutationApprovalCoordinator approvals = mock(AiMutationApprovalCoordinator.class);
+        AiChangeApprovalCoordinator approvals = mock(AiChangeApprovalCoordinator.class);
         AiElicitationService elicitations = mock(AiElicitationService.class);
         AiChatController controller = new AiChatController(
                 chatService, sessionService, messagingTemplate, webSocketUsers, registry,
-                mock(AiMutationConfirmationService.class), elicitations, approvals,
+                mock(AiChangeConfirmationService.class), elicitations, approvals,
                 new ScoreAiProperties(), Runnable::run);
         Principal wsPrincipal = mock(Principal.class);
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
@@ -557,7 +557,7 @@ class AiChatControllerTest {
             when(chatService.chat(any(ChatRequest.class), eq(user), any())).thenAnswer(invocation -> {
                 @SuppressWarnings("unchecked")
                 Consumer<AiExecutionEvent> events = invocation.getArgument(2);
-                events.accept(mutationNotice());
+                events.accept(changeNotice());
                 try {
                     Thread.sleep(60_000);
                     return new ChatResponse("agent", "late", "conversation-timeout", false, List.of());
@@ -709,7 +709,7 @@ class AiChatControllerTest {
                                         java.util.concurrent.Executor executor) {
         return new AiChatController(chatService, sessionService, messagingTemplate,
                 webSocketUsers, registry,
-                mock(AiMutationConfirmationService.class), properties, executor);
+                mock(AiChangeConfirmationService.class), properties, executor);
     }
 
     private ChatRequest request(String requestId, String conversationId) {
@@ -717,9 +717,9 @@ class AiChatControllerTest {
                 null, List.of(), null);
     }
 
-    private AiExecutionEvent mutationNotice() {
-        return AiExecutionEvent.detail("mutation_confirmation_required",
-                "A data-changing action requires explicit approval.", Map.of(
+    private AiExecutionEvent changeNotice() {
+        return AiExecutionEvent.detail("change_confirmation_required",
+                "A change requires explicit approval.", Map.of(
                         "confirmationRequestId", "confirmation-1",
                         "status", "REQUESTED",
                         "expiresAt", "2099-07-15T00:00:00Z",

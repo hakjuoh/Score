@@ -82,7 +82,7 @@ async function runCase(combo, ordinal, total) {
         conversationId: null,
         pageContext: `Model/runtime smoke matrix ${runId}`,
         attachments: [],
-        mutationConfirmation: null,
+        changeConfirmation: null,
         modelName: combo.modelName,
         reasoningEffort: combo.reasoningEffort,
         runtime: combo.runtime,

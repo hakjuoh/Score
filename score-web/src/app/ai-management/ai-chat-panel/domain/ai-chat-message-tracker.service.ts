@@ -193,7 +193,7 @@ export class AiChatMessageTrackerService {
       toolStatus: semantics.status,
       recoverable: semantics.recoverable,
       retryable: semantics.retryable,
-      mutationSafe: semantics.mutationSafe
+      changeSafe: semantics.changeSafe
     };
     if (index !== undefined && state.messages[index]) {
       state.messages[index] = message;

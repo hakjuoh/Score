@@ -996,12 +996,12 @@ class ScoreAiObservabilityTest {
         exporter.observe(ExecutionObservation.of("agent.run.failed", scope, agent));
 
         lifecycle.accept(AiExecutionEvent.detail(
-                "mutation_approval_batch_required", "", Map.of("batchId", "batch-idempotent")));
+                "change_approval_batch_required", "", Map.of("batchId", "batch-idempotent")));
         repeatConcurrently(12, () -> lifecycle.accept(AiExecutionEvent.detail(
-                "mutation_approval_decision_accepted", "", Map.of(
+                "change_approval_decision_accepted", "", Map.of(
                         "batchId", "batch-idempotent", "approved", 1, "denied", 0))));
         lifecycle.accept(AiExecutionEvent.detail(
-                "mutation_approval_batch_required", "", Map.of("batchId", "batch-idempotent")));
+                "change_approval_batch_required", "", Map.of("batchId", "batch-idempotent")));
 
         lifecycle.accept(AiExecutionEvent.detail(
                 "elicitation_required", "", Map.of("elicitationId", "elicitation-idempotent")));

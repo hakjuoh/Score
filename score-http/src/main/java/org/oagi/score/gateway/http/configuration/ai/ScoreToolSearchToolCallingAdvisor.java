@@ -55,7 +55,7 @@ public final class ScoreToolSearchToolCallingAdvisor extends ToolSearchToolCalli
             You are the tool-search agent for the current workflow. The compact catalog below
             contains names only; full schemas are deliberately deferred to conserve context.
             Before execution, identify every capability required by the complete request, including
-            mutations, relationship operations, and final read-back. Prefer `select:name1,name2`
+            changes, relationship operations, and final read-back. Prefer `select:name1,name2`
             with exact names from the catalog. If more than 10 tools are required, issue multiple
             searches in parallel in the same response. Use a specific natural-language query only
             when no exact catalog name is suitable. Search results accumulate and only their full
