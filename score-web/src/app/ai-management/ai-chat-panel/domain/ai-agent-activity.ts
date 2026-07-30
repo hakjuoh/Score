@@ -2,31 +2,21 @@ import {
   AiAgentExecutionStatus,
   AiChatMessage,
   AiChatSocketEvent,
-  AiChatStatusTone
+  AiChatStatusTone,
+  AiWorkflowType
 } from './ai-chat-panel.model';
 import {displayToolName, displayToolText} from './ai-tool-presentation';
 
 const EXECUTION_ACTIVITY_SUBTYPES = new Set([
-  'multi_agent_started',
-  'multi_agent_cancelled',
+  'subagent_preparing',
   'subagent_planned',
   'subagent_started',
+  'subagent_retry',
+  'subagent_output_retry_handoff',
   'subagent_completed',
   'subagent_failed',
   'subagent_cancelled',
-  'multi_agent_synthesizing',
-  'multi_agent_completed',
-  'multi_agent_failed',
-  'parallel_workflow_started',
-  'parallel_workflow_cancelled',
-  'parallel_task_planned',
-  'parallel_task_started',
-  'parallel_task_completed',
-  'parallel_task_failed',
-  'parallel_task_cancelled',
-  'parallel_workflow_synthesizing',
-  'parallel_workflow_completed',
-  'parallel_workflow_failed'
+  'subagent_refused'
 ]);
 
 export interface AiAgentActivityEvent {
@@ -47,8 +37,7 @@ export interface AiAgentActivity {
   plannedAgentCount?: number;
   activeVerb?: string;
   completedVerb?: string;
-  workflow?: string;
-  executionKind?: string;
+  workflowType?: AiWorkflowType;
   /** Assignment sent by the owning Agent to this child conversation. */
   assignment?: string;
   /** Final guarded output returned by this child conversation. */
@@ -67,58 +56,8 @@ export interface AiAgentActivity {
 export type AiAgentActivityUpdate = Omit<AiAgentActivity,
   'firstSeenAt' | 'lastUpdateAt' | 'events' | 'messages'>;
 
-/**
- * Resolves one stable workflow-execution group for both live and restored
- * events. Planner/evaluator iterations share a request but have distinct root
- * node prefixes; descendants inherit the root through their parent link.
- */
-export class AiAgentActivityGroupResolver {
-  private readonly groupByNode = new Map<string, string>();
-
-  resolve(event: AiChatSocketEvent): string {
-    const ownerId = agentActivityOwnerId(event);
-    const metadata = event.metadata || {};
-    const nodeId = text(metadata['nodeId']) || text(metadata['node_id'])
-      || text(metadata['agentId']);
-    const parentNodeId = text(metadata['parentNodeId']) || text(metadata['parent_node_id']);
-    const explicit = text(metadata['fanoutId']) || text(metadata['fanout_id']);
-    const inherited = parentNodeId
-      ? this.groupByNode.get(this.nodeKey(ownerId, parentNodeId)) : undefined;
-    const rootNode = metadata['depth'] === 1 || isLeadLifecycle(event) ? nodeId : undefined;
-    const structural = composedRootPrefix(nodeId) || composedRootPrefix(parentNodeId);
-    const localGroupId = explicit || structural || rootNode || 'request';
-    const groupId = inherited || this.nodeKey(ownerId, localGroupId);
-    if (nodeId) this.groupByNode.set(this.nodeKey(ownerId, nodeId), groupId);
-    return groupId;
-  }
-
-  ownerPrefix(event: AiChatSocketEvent): string {
-    return `${agentActivityOwnerId(event)}\u0000`;
-  }
-
-  clear(): void {
-    this.groupByNode.clear();
-  }
-
-  private nodeKey(ownerId: string, nodeId: string): string {
-    return `${ownerId}\u0000${nodeId}`;
-  }
-}
-
 export function agentActivityOwnerId(event: AiChatSocketEvent): string {
   return text(event.turnId) || event.requestId;
-}
-
-function isLeadLifecycle(event: AiChatSocketEvent): boolean {
-  return !!event.subtype?.startsWith('multi_agent')
-    || !!event.subtype?.startsWith('parallel_workflow');
-}
-
-function composedRootPrefix(nodeId?: string): string | undefined {
-  return nodeId?.match(/^(main:\d+:[^:]+)(?::|$)/)?.[1]
-    || nodeId?.match(/^(.+?:composed:iteration-[^:]+)(?::|$)/)?.[1]
-    || nodeId?.match(/^(.+?:composed)(?::(?:lead|worker)(?::|$))/)?.[1]
-    || nodeId?.match(/^(.+?)-(?:lead|agent-\d\d)$/)?.[1];
 }
 
 export function isExecutionActivityEvent(event: AiChatSocketEvent): boolean {
@@ -130,42 +69,31 @@ export function agentActivityUpdate(event: AiChatSocketEvent): AiAgentActivityUp
   if (!isExecutionActivityEvent(event)) return undefined;
   const content = event.content || event.response || event.message || '';
   const metadata = event.metadata || {};
-  const isLead = !!event.subtype?.startsWith('multi_agent')
-    || !!event.subtype?.startsWith('parallel_workflow');
   const agentId = text(metadata['nodeId']) || text(metadata['node_id']) || text(metadata['agentId'])
-    || (isLead ? `${event.requestId}:lead` : undefined);
+    || undefined;
   if (!agentId || !content) return undefined;
-  const status: AiAgentExecutionStatus = event.subtype === 'subagent_planned'
-    || event.subtype === 'parallel_task_planned' ? 'planned'
-    : event.subtype === 'subagent_cancelled' || event.subtype === 'multi_agent_cancelled'
-      || event.subtype === 'parallel_task_cancelled'
-      || event.subtype === 'parallel_workflow_cancelled' ? 'cancelled'
-      : event.subtype === 'subagent_failed'
-    || event.subtype === 'multi_agent_failed' || event.subtype === 'parallel_task_failed'
-    || event.subtype === 'parallel_workflow_failed' ? 'failed'
-    : event.subtype === 'subagent_completed' || event.subtype === 'multi_agent_completed'
-      || event.subtype === 'parallel_task_completed'
-      || event.subtype === 'parallel_workflow_completed' ? 'completed'
-      : event.subtype === 'multi_agent_synthesizing'
-        || event.subtype === 'parallel_workflow_synthesizing' ? 'synthesizing' : 'started';
+  const status: AiAgentExecutionStatus = event.subtype === 'subagent_preparing'
+    || event.subtype === 'subagent_planned' ? 'planned'
+    : event.subtype === 'subagent_cancelled'
+      || event.subtype === 'subagent_output_retry_handoff' ? 'cancelled'
+      : event.subtype === 'subagent_failed' || event.subtype === 'subagent_refused' ? 'failed'
+        : event.subtype === 'subagent_completed' ? 'completed' : 'started';
   return {
     agentId,
     agentName: text(metadata['agentName']) || text(metadata['agent_name'])
-      || (isLead ? 'Lead agent' : 'Specialist'),
+      || 'Specialist',
     agentRole: text(metadata['agentRole']) || text(metadata['agent_role']) || text(metadata['strategy']),
     taskLabel: text(metadata['taskLabel']) || text(metadata['task_label']),
     plannedAgentCount: positiveInteger(metadata['agent_count']),
     activeVerb: text(metadata['activeVerb']) || text(metadata['active_verb']),
     completedVerb: text(metadata['completedVerb']) || text(metadata['completed_verb']),
-    workflow: text(metadata['workflow']),
-    executionKind: text(metadata['executionKind']) || text(metadata['execution_kind'])
-      || (event.subtype?.startsWith('parallel_') ? 'parallel' : 'multi_agent'),
+    workflowType: knownWorkflowType(metadata['workflowType'] ?? metadata['workflow_type']),
     assignment: text(metadata['assignment']),
     result: text(metadata['result']),
     status,
     content,
-    inProgress: status === 'started' || status === 'synthesizing',
-    isLead
+    inProgress: status === 'started',
+    isLead: false
   };
 }
 
@@ -208,8 +136,7 @@ export function upsertAgentActivity(activities: AiAgentActivity[],
   existing.plannedAgentCount = update.plannedAgentCount || existing.plannedAgentCount;
   existing.activeVerb = update.activeVerb || existing.activeVerb;
   existing.completedVerb = update.completedVerb || existing.completedVerb;
-  existing.workflow = update.workflow || existing.workflow;
-  existing.executionKind = update.executionKind || existing.executionKind;
+  existing.workflowType = update.workflowType || existing.workflowType;
   existing.assignment = update.assignment || existing.assignment;
   existing.result = update.result || existing.result;
   existing.status = update.status;
@@ -552,5 +479,10 @@ function text(value: unknown): string | undefined {
 
 function positiveInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+    ? value : undefined;
+}
+
+function knownWorkflowType(value: unknown): AiWorkflowType | undefined {
+  return value === 'direct' || value === 'sequential' || value === 'parallel'
     ? value : undefined;
 }

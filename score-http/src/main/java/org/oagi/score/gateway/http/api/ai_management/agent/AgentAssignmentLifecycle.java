@@ -19,6 +19,7 @@ public final class AgentAssignmentLifecycle {
                 context.location(), "Workflow location");
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("workflow", location.workflowId());
+        value.put("workflow_type", location.workflowType().wireName());
         value.put("node_id", location.nodeId() + ":agent:" + context.assignmentId());
         value.put("parent_node_id", location.nodeId());
         value.put("agent_id", agent.id().value());

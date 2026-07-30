@@ -23,8 +23,7 @@ public final class WorkflowRequestAdapter {
         boolean delegation = request.changeConfirmation() == null
                 && (request.multiAgent() != null && request.multiAgent().active()
                 || StringUtils.hasText(request.activeWorkflow())
-                && !"assistant".equalsIgnoreCase(request.activeWorkflow().strip())
-                && !"direct".equalsIgnoreCase(request.activeWorkflow().strip()));
+                && "agents".equalsIgnoreCase(request.activeWorkflow().strip()));
         boolean explicitDelegation = request.changeConfirmation() == null
                 && DelegationIntent.explicitlyRequestsAgents(
                         accepted != null ? accepted.content() : request.prompt());

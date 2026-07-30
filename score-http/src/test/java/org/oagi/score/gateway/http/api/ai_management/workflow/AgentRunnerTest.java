@@ -36,6 +36,7 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequ
 import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiModelCatalog;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowType;
 import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddleware;
 import org.oagi.score.gateway.http.api.ai_management.middleware.AiMiddlewareChain;
 import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
@@ -189,7 +190,7 @@ class AgentRunnerTest {
                                 "model", "prompt", false, false, 1, "balanced",
                                 null, true, false, false), 1)
                 .inWorkflow(plan, new AgentWorkflowContext.Location(
-                        "assigned-workflow", "root:assigned", "root", 1))
+                        "assigned-workflow", "root:assigned", "root", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(plan, "member", task, List.of());
         Agent agent = new DefinedAgent(new AgentDefinition(
                 new Agent.AgentId("assigned-agent"), "Assigned Agent", "Completes an assignment",
@@ -239,7 +240,7 @@ class AgentRunnerTest {
                                 "model", "prompt", false, false, 1, "balanced",
                                 null, true, false, false), 1)
                 .inWorkflow(plan, new AgentWorkflowContext.Location(
-                        "assigned-workflow", "root:assigned", "root", 1))
+                        "assigned-workflow", "root:assigned", "root", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(plan, "member", task, List.of());
         Agent agent = new DefinedAgent(new AgentDefinition(
                 new Agent.AgentId("assigned-agent"), "Assigned Agent", "Completes an assignment",
@@ -594,7 +595,7 @@ class AgentRunnerTest {
                                 "model", "prompt", false, false, 1, "balanced",
                                 null, true, false, false), 1)
                 .inWorkflow(plan, new AgentWorkflowContext.Location(
-                        "preflight-workflow", "root:preflight", "root", 1))
+                        "preflight-workflow", "root:preflight", "root", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(plan, "member", task, List.of());
         Agent agent = new DefinedAgent(new AgentDefinition(
                 new Agent.AgentId("preflight-agent"), "Preflight Agent", "Fails during preparation",

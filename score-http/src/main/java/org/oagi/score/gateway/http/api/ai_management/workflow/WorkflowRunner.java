@@ -14,6 +14,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutputRetryHando
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowFeedback;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowType;
 import org.oagi.score.gateway.http.api.ai_management.model.WorkflowPlanValidator;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
@@ -110,7 +111,8 @@ public final class WorkflowRunner {
             throw new IllegalStateException("No Agent definitions are available for this Workflow.");
         }
 
-        Map<String, Object> namespace = namespace(context, "main", "main", null, 0, 1);
+        Map<String, Object> namespace = namespace(
+                context, "main", "main", null, 0, 1, AiWorkflowType.DIRECT);
         AgentExecutionRecorder workflowRecorder = context.recorder().fork(namespace);
         WorkflowRunBudget budget = new WorkflowRunBudget(context.requestId(),
                 context.recorder(), inactivityTimeout,
@@ -119,7 +121,8 @@ public final class WorkflowRunner {
                 root.request().maximumAgents());
         AgentWorkflowContext rootContext = root.withRunControl(budget)
                 .inWorkflow(null,
-                new AgentWorkflowContext.Location("main", "main", null, 0));
+                new AgentWorkflowContext.Location(
+                        "main", "main", null, 0, AiWorkflowType.DIRECT));
         RunState state = new RunState(rootContext);
         Deque<Call> queue = new ArrayDeque<>();
         Agent first = gateway != null ? gateway : assistant;
@@ -270,11 +273,13 @@ public final class WorkflowRunner {
         }
         AgentExecutionContext execution = parent.execution();
         String nodeId = runtimeNodeId(parentNodeId, nodeKey);
+        AiWorkflowType workflowType = AiWorkflowType.from(workflow);
         Map<String, Object> namespace = namespace(execution, workflow.id(), nodeId, parentNodeId,
-                depth, workflow.members().size());
+                depth, workflow.members().size(), workflowType);
         AgentExecutionRecorder recorder = execution.recorder().fork(namespace);
         AgentWorkflowContext local = parent.inWorkflow(plan,
-                new AgentWorkflowContext.Location(workflow.id(), nodeId, parentNodeId, depth));
+                new AgentWorkflowContext.Location(
+                        workflow.id(), nodeId, parentNodeId, depth, workflowType));
         recorder.lifecycle("workflow_started", plan.guideMessage(),
                 lifecycle(namespace, "started", Map.of(
                         "member_count", workflow.members().size())));
@@ -584,13 +589,15 @@ public final class WorkflowRunner {
 
     private Map<String, Object> namespace(AgentExecutionContext context,
                                           String workflowName, String nodeId,
-                                          String parentNodeId, int depth, int members) {
+                                          String parentNodeId, int depth, int members,
+                                          AiWorkflowType workflowType) {
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("workflow", workflowName);
         value.put("node_id", nodeId);
         if (parentNodeId != null) value.put("parent_node_id", parentNodeId);
         value.put("depth", depth);
         value.put("member_count", members);
+        value.put("workflow_type", workflowType.wireName());
         value.put("request_id", context.requestId());
         return Map.copyOf(value);
     }

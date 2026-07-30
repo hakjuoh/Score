@@ -27,7 +27,7 @@ public record AiWorkflowPlan(WorkflowDefinition root,
 
     public record WorkflowDefinition(String id, List<Member> members, List<Edge> edges) {
 
-        /** Backward-compatible chain: each member depends on its predecessor. */
+        /** Sequential convenience form: each member depends on its predecessor. */
         public WorkflowDefinition(String id, List<Member> members) {
             this(id, members, chainEdges(members));
         }
@@ -58,6 +58,16 @@ public record AiWorkflowPlan(WorkflowDefinition root,
                     .collect(Collectors.toUnmodifiableSet());
             return members.stream().map(Member::id)
                     .filter(predecessorIds::contains).toList();
+        }
+
+        /** Members whose declared predecessors have all settled, in declaration order. */
+        public List<Member> readyMembers(Set<String> pending, Set<String> completed) {
+            Objects.requireNonNull(pending, "pending workflow member ids");
+            Objects.requireNonNull(completed, "completed workflow member ids");
+            return members.stream()
+                    .filter(member -> pending.contains(member.id()))
+                    .filter(member -> completed.containsAll(predecessors(member.id())))
+                    .toList();
         }
 
         private static List<Edge> chainEdges(List<Member> members) {

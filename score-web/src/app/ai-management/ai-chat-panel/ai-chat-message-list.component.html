@@ -327,28 +327,32 @@
         </span>
       } @else if (message.role === 'agent_group' || message.role === 'workflow_group') {
         <div class="agent-group-block"
+             [class.workflow-sequential]="sequentialWorkflow(message)"
+             [class.workflow-parallel]="agentGroupWorkflowType(message) === 'parallel'"
              [attr.role]="(message.children?.length || 0) > 0 ? 'group' : 'status'"
              [attr.aria-live]="(message.children?.length || 0) > 0 ? null : 'polite'"
              [attr.aria-atomic]="(message.children?.length || 0) > 0 ? null : 'false'"
-             [attr.data-workflow]="agentGroupWorkflow(message)"
-             [attr.data-execution-kind]="agentGroupExecutionKind(message)"
-             [attr.aria-label]="(agentGroupWorkflowLabel(message) || 'Workflow') + ': '
-               + (agentGroupSummary(message) || 'starting')">
+             [attr.data-workflow-type]="agentGroupWorkflowType(message)"
+             [attr.aria-label]="'Execution: ' + (agentGroupSummary(message) || 'starting')">
           <div class="agent-group-header">
             <mat-icon aria-hidden="true">{{ message.role === 'workflow_group' ? 'account_tree' : 'hub' }}</mat-icon>
             <span class="agent-group-title">{{ agentGroupPhase(message) }}</span>
-            @if (agentGroupWorkflowLabel(message); as workflowLabel) {
-              <span class="agent-group-workflow">· {{ workflowLabel }}</span>
-            }
             @if (agentGroupCount(message) > 0) {
               <span class="agent-group-count">· {{ agentGroupCount(message) }}
-                {{ message.role === 'workflow_group' ? 'tasks' : (agentGroupCount(message) === 1 ? 'specialist' : 'specialists') }}</span>
+                {{ message.role === 'workflow_group'
+                  ? (agentGroupCount(message) === 1 ? 'task' : 'tasks')
+                  : (agentGroupCount(message) === 1 ? 'specialist' : 'specialists') }}</span>
             }
             @if (agentGroupSummary(message)) {
               <span class="agent-group-summary">{{ agentGroupSummary(message) }}</span>
             }
           </div>
-          <div class="agent-group-plan">{{ agentGroupPlan(message) }}</div>
+          <div class="agent-group-plan">
+            @if (sequentialWorkflow(message)) {
+              <span class="workflow-branch" aria-hidden="true">└</span>
+            }
+            <span>{{ agentGroupPlan(message) }}</span>
+          </div>
           @for (activity of agentGroupActivities(message); track activity.agentId) {
             <button type="button" class="agent-group-row"
                     [attr.data-agent-id]="activity.agentId"
@@ -360,13 +364,29 @@
                   <mat-progress-spinner class="message-progress-spinner"
                                         mode="indeterminate" [diameter]="12"></mat-progress-spinner>
                 } @else if (activity.status === 'planned') {
-                  <mat-icon>schedule</mat-icon>
+                  @if (sequentialWorkflow(message)) {
+                    <span class="workflow-checkbox">☐</span>
+                  } @else {
+                    <mat-icon>schedule</mat-icon>
+                  }
                 } @else if (activity.status === 'failed') {
-                  <mat-icon>error_outline</mat-icon>
+                  @if (sequentialWorkflow(message)) {
+                    <span class="workflow-checkbox">☒</span>
+                  } @else {
+                    <mat-icon>error_outline</mat-icon>
+                  }
                 } @else if (activity.status === 'cancelled') {
-                  <mat-icon>cancel</mat-icon>
+                  @if (sequentialWorkflow(message)) {
+                    <span class="workflow-checkbox">☒</span>
+                  } @else {
+                    <mat-icon>cancel</mat-icon>
+                  }
                 } @else {
-                  <mat-icon>check_circle_outline</mat-icon>
+                  @if (sequentialWorkflow(message)) {
+                    <span class="workflow-checkbox">☑</span>
+                  } @else {
+                    <mat-icon>check_circle_outline</mat-icon>
+                  }
                 }
               </span>
               <span class="agent-row-name">{{ agentDisplayName(activity) }}</span>
@@ -377,9 +397,20 @@
               <span class="agent-row-elapsed">{{ agentElapsed(activity) }}</span>
             </button>
           }
-          @for (child of message.children || []; track $index) {
-            <ng-container [ngTemplateOutlet]="messageRow"
-                          [ngTemplateOutletContext]="{ message: child }"></ng-container>
+          @for (child of message.children || []; track child.workflowNodeId || $index) {
+            @if (child.role === 'workflow_group') {
+              <details class="nested-workflow-item">
+                <summary>
+                  <span aria-hidden="true">└</span>
+                  <span>{{ nestedWorkflowSummary(child) }}</span>
+                </summary>
+                <ng-container [ngTemplateOutlet]="messageRow"
+                              [ngTemplateOutletContext]="{ message: child }"></ng-container>
+              </details>
+            } @else {
+              <ng-container [ngTemplateOutlet]="messageRow"
+                            [ngTemplateOutletContext]="{ message: child }"></ng-container>
+            }
           }
         </div>
       } @else if (message.role === 'tool_group') {

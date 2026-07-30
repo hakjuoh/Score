@@ -279,7 +279,8 @@ export class AiConversationRestoreService {
       // lifecycle that creates the specialist activity. Its lifecycle repeats
       // that status, so suppress the worker-owned guide instead of restoring it
       // as a root conversation message.
-      if (isSpecialistActivityEvent(guideEvent)) return null;
+      if (isSpecialistActivityEvent(guideEvent)
+        && !this.restoredExecution.isPlainEvent(guideEvent)) return null;
     }
     // The durable trajectory contains audit-only progress, model reasoning,
     // and orchestration rows that are never retained in the completed live
@@ -301,7 +302,8 @@ export class AiConversationRestoreService {
     }
 
     const toolEvent: AiChatSocketEvent = {...event, type: 'tool_call'};
-    if (isSpecialistToolEvent(toolEvent)) {
+    if (isSpecialistToolEvent(toolEvent)
+      && !this.restoredExecution.isPlainEvent(toolEvent)) {
       for (const activities of this.restoredGroupsForEvent(event)) {
         if (upsertAgentToolEvent(activities, toolEvent)) break;
       }
@@ -347,10 +349,13 @@ export class AiConversationRestoreService {
     const content = this.nonBlankText(event.response)
       || this.nonBlankText(event.content);
     if (event.message === 'agent_event' && event.subtype === 'workflow_started'
-      && message.workflowNodeId && content) {
+      && message.role === 'workflow_group' && message.workflowNodeId && content) {
       return [{role: 'guide', content}, message];
     }
-    return [{...message, ...(event.files?.length ? {files: event.files} : {})}];
+    if (event.files?.length) message.files = event.files;
+    // Keep the Composite-owned object identity. Later lifecycle frames update
+    // this exact restored message in place, just as live socket frames do.
+    return [message];
   }
 
   private restoredToolContent(
@@ -373,6 +378,16 @@ export class AiConversationRestoreService {
     if (event.subtype === 'workflow_started') {
       const placement = this.restoredExecution.startWorkflow(lifecycleEvent, []);
       if (!placement || !placement.created) return null;
+      if (placement.presentation === 'hidden') return null;
+      if (placement.presentation === 'message') {
+        if (!placement.anchor) return null;
+        if (!placement.root) {
+          placement.container.push(placement.anchor);
+          return null;
+        }
+        return placement.anchor;
+      }
+      if (!placement.anchor) return null;
       if (!placement.root) {
         appendWorkflowConversation(placement.container, content, placement.anchor, false);
         return null;
@@ -384,7 +399,12 @@ export class AiConversationRestoreService {
       return null;
     }
     const placement = this.restoredExecution.placeAgent(lifecycleEvent);
-    return placement?.createdRootAnchor ? placement.anchor || null : null;
+    if (placement?.createdRootAnchor) return placement.anchor || null;
+    const plain = this.restoredExecution.upsertPlainActivity(lifecycleEvent, []);
+    if (!plain || !plain.created) return null;
+    if (plain.root) return plain.message;
+    plain.container.push(plain.message);
+    return null;
   }
 
   private restoredGroupsForEvent(event: AiChatSocketEvent): AiAgentActivity[][] {

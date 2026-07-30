@@ -163,12 +163,12 @@ describe('AiConversationRestoreService', () => {
   it('isolates reused workflow node ids by historical turn during WebSocket restore', async () => {
     const rootMetadata = {
       node_id: 'main:1:planned-workflow', parent_node_id: 'main',
-      depth: 1, member_count: 1, status: 'started'
+      depth: 1, member_count: 1, workflow_type: 'sequential', status: 'started'
     };
     const workerMetadata = {
       node_id: 'main:1:planned-workflow:agent:count-accs',
       parent_node_id: 'main:1:planned-workflow', depth: 2,
-      agent_name: 'Evidence researcher', status: 'started'
+      agent_name: 'Evidence researcher', workflow_type: 'sequential', status: 'started'
     };
     handle({requestId: 'restore-request', type: 'HISTORY_START', conversationId: 'c1'}, callbacks);
     handle({
@@ -651,7 +651,7 @@ describe('AiConversationRestoreService', () => {
     ]);
   });
 
-  it('reconstructs guide text, dynamic agent verbs, and child tool activity', () => {
+  it('does not reconstruct removed parallel compatibility events as a workflow box', () => {
     const projected = service.projectStoredMessages([
       {index: 0, role: 'user', content: 'Compare two BODs.'},
       {index: 1, role: 'guide', content: 'I’ll review both BODs independently.'},
@@ -705,15 +705,7 @@ describe('AiConversationRestoreService', () => {
     ]);
 
     expect(projected.map(message => message.role))
-      .toEqual(['user', 'guide', 'workflow_group', 'assistant']);
-    const group = projected.find(message => message.role === 'workflow_group')!;
-    expect(group.activities).toHaveLength(2);
-    expect(group.activities?.find(activity => activity.isLead)).toEqual(expect.objectContaining({
-      status: 'completed', activeVerb: 'Comparing', completedVerb: 'Compared',
-      workflow: 'parallel', executionKind: 'parallel'
-    }));
-    expect(group.activities?.find(activity => !activity.isLead)?.events)
-      .toContainEqual(expect.objectContaining({status: 'tool', content: 'get_asccp completed.'}));
+      .toEqual(['user', 'guide', 'assistant']);
   });
 
   it('keeps legacy composed-worker guides and tools out of the restored root chat', () => {
@@ -751,20 +743,12 @@ describe('AiConversationRestoreService', () => {
     ]);
 
     expect(projected.map(message => message.role))
-      .toEqual(['user', 'guide', 'agent_group', 'assistant']);
+      .toEqual(['user', 'guide', 'assistant']);
     expect(projected.some(message => message.content === 'Listing every extending ACC.'))
       .toBe(false);
-    const specialist = projected.find(message => message.role === 'agent_group')
-      ?.activities?.[0];
-    expect(specialist).toMatchObject({
-      agentId: 'request-1:find-extenders', status: 'completed'
-    });
-    expect(specialist?.events).toContainEqual(expect.objectContaining({
-      status: 'tool', content: 'get_acc completed.'
-    }));
   });
 
-  it('restores a complete new-format composed workflow as one stable group', () => {
+  it('does not reconstruct removed composed compatibility events as a workflow box', () => {
     const fanout = 'request-1:composed';
     const worker = `${fanout}:worker:research`;
     const projected = service.projectStoredMessages([
@@ -836,19 +820,7 @@ describe('AiConversationRestoreService', () => {
       {index: 9, role: 'assistant', content: 'Everything was checked.'}
     ]);
 
-    expect(projected.map(message => message.role)).toEqual(['user', 'agent_group', 'assistant']);
-    const activities = projected[1].activities || [];
-    expect(activities).toHaveLength(2);
-    expect(activities.find(activity => activity.isLead))
-      .toMatchObject({status: 'completed', completedVerb: 'Checked', plannedAgentCount: 1});
-    expect(activities.find(activity => !activity.isLead)?.events).toEqual(expect.arrayContaining([
-      expect.objectContaining({status: 'tool', content: 'get_acc completed.'}),
-      expect.objectContaining({status: 'provider_error', content: 'Overloaded'}),
-      expect.objectContaining({
-        status: 'provider_retry',
-        content: 'The model provider request failed; retrying (attempt 1 of 10).'
-      })
-    ]));
+    expect(projected.map(message => message.role)).toEqual(['user', 'assistant']);
   });
 
   it('keeps composed workflow iterations and requests in separate restored groups', () => {
@@ -857,7 +829,7 @@ describe('AiConversationRestoreService', () => {
         index: 0, role: 'agent_event', requestId: 'request-1',
         subtype: 'workflow_started', content: 'First workflow started.', metadata: {
           node_id: 'main:1:planned-workflow', parent_node_id: 'main', depth: 1,
-          member_count: 3, status: 'started'
+          member_count: 3, workflow_type: 'parallel', status: 'started'
         }
       },
       {
@@ -865,7 +837,7 @@ describe('AiConversationRestoreService', () => {
         subtype: 'subagent_started', content: 'First worker started.', metadata: {
           node_id: 'main:1:planned-workflow:agent:count-accs',
           parent_node_id: 'main:1:planned-workflow', depth: 2,
-          agent_name: 'Evidence researcher', status: 'started'
+          agent_name: 'Evidence researcher', workflow_type: 'parallel', status: 'started'
         }
       },
       {
@@ -873,7 +845,7 @@ describe('AiConversationRestoreService', () => {
         subtype: 'workflow_started', content: 'Nested workflow started.', metadata: {
           node_id: 'workflow:opaque-nested-node',
           parent_node_id: 'main:1:planned-workflow', depth: 2,
-          member_count: 1, status: 'started'
+          member_count: 1, workflow_type: 'sequential', status: 'started'
         }
       },
       {
@@ -881,14 +853,14 @@ describe('AiConversationRestoreService', () => {
         subtype: 'subagent_started', content: 'Nested worker started.', metadata: {
           node_id: 'workflow:opaque-worker-node',
           parent_node_id: 'workflow:opaque-nested-node', depth: 3,
-          agent_name: 'Critical reviewer', status: 'started'
+          agent_name: 'Critical reviewer', workflow_type: 'sequential', status: 'started'
         }
       },
       {
         index: 4, role: 'agent_event', requestId: 'request-1',
         subtype: 'workflow_started', content: 'Second workflow started.', metadata: {
           node_id: 'main:2:root-work', parent_node_id: 'main', depth: 1,
-          member_count: 3, status: 'started'
+          member_count: 3, workflow_type: 'parallel', status: 'started'
         }
       },
       {
@@ -896,14 +868,14 @@ describe('AiConversationRestoreService', () => {
         subtype: 'subagent_started', content: 'Second worker started.', metadata: {
           node_id: 'main:2:root-work:agent:count-accs',
           parent_node_id: 'main:2:root-work', depth: 2,
-          agent_name: 'Evidence researcher', status: 'started'
+          agent_name: 'Evidence researcher', workflow_type: 'parallel', status: 'started'
         }
       },
       {
         index: 6, role: 'agent_event', requestId: 'request-2',
         subtype: 'workflow_started', content: 'Next request workflow started.', metadata: {
           node_id: 'main:1:planned-workflow', parent_node_id: 'main', depth: 1,
-          member_count: 1, status: 'started'
+          member_count: 1, workflow_type: 'sequential', status: 'started'
         }
       },
       {
@@ -911,7 +883,7 @@ describe('AiConversationRestoreService', () => {
         subtype: 'subagent_started', content: 'Next request worker started.', metadata: {
           node_id: 'main:1:planned-workflow:agent:count-accs',
           parent_node_id: 'main:1:planned-workflow', depth: 2,
-          agent_name: 'Evidence researcher', status: 'started'
+          agent_name: 'Evidence researcher', workflow_type: 'sequential', status: 'started'
         }
       },
       {
@@ -955,7 +927,8 @@ describe('AiConversationRestoreService', () => {
     const projected = service.projectStoredMessages([{
       index: 0, role: 'agent_event', requestId: 'request-1',
       subtype: 'workflow_started', content: 'I’m checking the request.', metadata: {
-        node_id: 'main:1:workflow', parent_node_id: 'main', depth: 1
+        node_id: 'main:1:workflow', parent_node_id: 'main', depth: 1,
+        workflow_type: 'sequential'
       }
     }, {
       index: 1, role: 'agent_event', requestId: 'request-1',
@@ -968,6 +941,75 @@ describe('AiConversationRestoreService', () => {
       .toBe(expectedStatus);
   });
 
+  it('restores an unknown workflow type as ordinary messages without duplication', () => {
+    const projected = service.projectStoredMessages([{
+      index: 0, role: 'agent_event', requestId: 'request-1',
+      subtype: 'workflow_started', content: 'Starting a future execution mode.', metadata: {
+        node_id: 'main:future', parent_node_id: 'main', depth: 1,
+        workflow_type: 'speculative'
+      }
+    }, {
+      index: 1, role: 'agent_event', requestId: 'request-1',
+      subtype: 'subagent_started', content: 'Future task running.', metadata: {
+        node_id: 'main:future:agent:one', parent_node_id: 'main:future',
+        agent_name: 'Future task'
+      }
+    }, {
+      index: 2, role: 'agent_event', requestId: 'request-1',
+      subtype: 'subagent_completed', content: 'Future task complete.', metadata: {
+        node_id: 'main:future:agent:one', parent_node_id: 'main:future',
+        agent_name: 'Future task'
+      }
+    }, {
+      index: 3, role: 'agent_event', requestId: 'request-1',
+      subtype: 'workflow_completed', content: 'Future execution complete.', metadata: {
+        node_id: 'main:future', parent_node_id: 'main', depth: 1
+      }
+    }]);
+
+    expect(projected).toEqual([
+      expect.objectContaining({
+        role: 'guide', eventType: 'workflow_lifecycle', workflowType: 'speculative',
+        workflowNodeId: 'main:future', content: 'Future execution complete.'
+      }),
+      expect.objectContaining({
+        role: 'guide', eventType: 'workflow_activity',
+        workflowNodeId: 'main:future:agent:one', content: 'Future task complete.'
+      })
+    ]);
+    expect(projected.some(message => message.role === 'workflow_group')).toBe(false);
+  });
+
+  it('places an unknown nested workflow in its owning Agent conversation', () => {
+    const root = 'main:root';
+    const owner = root + ':agent:owner';
+    const unknown = owner + ':future';
+    const projected = service.projectStoredMessages([{
+      index: 0, role: 'agent_event', requestId: 'request-1',
+      subtype: 'workflow_started', content: 'Starting root.', metadata: {
+        node_id: root, parent_node_id: 'main', depth: 1, workflow_type: 'sequential'
+      }
+    }, {
+      index: 1, role: 'agent_event', requestId: 'request-1',
+      subtype: 'subagent_started', content: 'Owner running.', metadata: {
+        node_id: owner, parent_node_id: root, agent_name: 'Owner'
+      }
+    }, {
+      index: 2, role: 'agent_event', requestId: 'request-1',
+      subtype: 'workflow_started', content: 'Starting future nested mode.', metadata: {
+        node_id: unknown, parent_node_id: owner, depth: 3, workflow_type: 'speculative'
+      }
+    }]);
+
+    const ownerActivity = projected.find(message => message.workflowNodeId === root)
+      ?.activities?.find(activity => activity.agentId === owner);
+    expect(ownerActivity?.messages).toContainEqual(expect.objectContaining({
+      role: 'guide', eventType: 'workflow_lifecycle', workflowNodeId: unknown,
+      content: 'Starting future nested mode.'
+    }));
+    expect(projected.some(message => message.workflowNodeId === unknown)).toBe(false);
+  });
+
   it('restores a nested workflow failure as the owning Agent final error', () => {
     const root = 'main:1:root';
     const parent = root + ':agent:parent';
@@ -976,20 +1018,22 @@ describe('AiConversationRestoreService', () => {
       {
         index: 0, role: 'agent_event', requestId: 'request-1',
         subtype: 'workflow_started', content: 'Starting root.', metadata: {
-          node_id: root, parent_node_id: 'main', depth: 1
+          node_id: root, parent_node_id: 'main', depth: 1,
+          workflow_type: 'sequential'
         }
       },
       {
         index: 1, role: 'agent_event', requestId: 'request-1',
         subtype: 'subagent_started', content: 'Starting parent.', metadata: {
           node_id: parent, parent_node_id: root, depth: 2,
-          agent_id: 'parent', agent_name: 'Parent'
+          agent_id: 'parent', agent_name: 'Parent', workflow_type: 'sequential'
         }
       },
       {
         index: 2, role: 'agent_event', requestId: 'request-1',
         subtype: 'workflow_started', content: 'Starting nested.', metadata: {
-          node_id: nested, parent_node_id: parent, depth: 3
+          node_id: nested, parent_node_id: parent, depth: 3,
+          workflow_type: 'sequential'
         }
       },
       {
@@ -1007,7 +1051,7 @@ describe('AiConversationRestoreService', () => {
     });
   });
 
-  it('restores durable cancellation as terminal instead of running', () => {
+  it('ignores removed durable fan-out compatibility lifecycle', () => {
     const fanout = 'request-1:composed';
     const worker = `${fanout}:worker:research`;
     const projected = service.projectStoredMessages([
@@ -1040,10 +1084,7 @@ describe('AiConversationRestoreService', () => {
       }
     ]);
 
-    const activities = projected.find(message => message.role === 'agent_group')?.activities || [];
-    expect(activities).toHaveLength(2);
-    expect(activities.every(activity => activity.status === 'cancelled')).toBe(true);
-    expect(activities.every(activity => !activity.inProgress)).toBe(true);
+    expect(projected).toEqual([{role: 'user', content: 'Check the structures.'}]);
   });
 
 });

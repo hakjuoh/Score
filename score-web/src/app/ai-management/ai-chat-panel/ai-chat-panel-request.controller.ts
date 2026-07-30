@@ -16,6 +16,7 @@ import {
   isSpecialistActivityEvent,
   isSpecialistToolEvent
 } from './domain/ai-agent-activity';
+import {isWorkflowLifecycleEvent} from './domain/ai-execution-composite';
 
 const CHANGE_APPROVAL_EVENT_SUBTYPES = new Set([
   'change_approval_batch_required',
@@ -93,7 +94,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         } else if (event.type === 'system'
           && (event.subtype === 'context_usage' || event.subtype === 'context_compacted')) {
           this.handleSystemEvent(event);
-        } else if (isExecutionActivityEvent(event)) {
+        } else if (isWorkflowLifecycleEvent(event) || isExecutionActivityEvent(event)) {
           this.handleSystemEvent(event);
         } else if (event.type === 'system' && event.subtype === 'guide') {
           this.handleSystemEvent(event);
@@ -127,7 +128,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       '/user/queue/ai/chat/' + requestId
     ).subscribe((message: Message) => {
       const event = JSON.parse(message.body) as AiChatSocketEvent;
-      if (isExecutionActivityEvent(event)
+      if (isWorkflowLifecycleEvent(event) || isExecutionActivityEvent(event)
         || isSpecialistToolEvent(event)
         || event.type === 'tool_call' || event.type === 'tool_group'
         || event.type === 'system' && event.subtype === 'guide'

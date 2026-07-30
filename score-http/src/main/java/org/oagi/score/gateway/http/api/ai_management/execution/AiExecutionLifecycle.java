@@ -30,7 +30,7 @@ public record AiExecutionLifecycle(String eventType, String subtype,
             "originalUtf8Bytes", "returnedUtf8Bytes", "toolOutputTokenLimit",
             "contextUsage", "reason", "automatic", "batchId", "approved", "denied",
             "elicitationId",
-            "workflow", "node_id", "parent_node_id", "fanout_id", "depth", "member_count",
+            "workflow", "workflow_type", "node_id", "parent_node_id", "fanout_id", "depth", "member_count",
             "agent_run_id",
             "agent_count", "max_agents", "worker_count", "completed",
             "workflow_iteration", "iteration", "failed", "failed_count", "failure_count",
@@ -132,6 +132,7 @@ public record AiExecutionLifecycle(String eventType, String subtype,
             case "mcp_protocol_version", "network_protocol_name", "network_transport" ->
                     safeIdentifier(value.toString(), 80);
             case "workflow" -> safeIdentifier(value.toString(), 100);
+            case "workflow_type" -> workflowType(value);
             case "reason" -> "context_compacted".equals(subtype)
                     ? compactionReason(value.toString()) : null;
             case "contextUsage" -> value instanceof AiContextUsageInfo usage
@@ -157,6 +158,14 @@ public record AiExecutionLifecycle(String eventType, String subtype,
         return switch (normalized) {
             case "manual", "threshold" -> normalized;
             default -> "other";
+        };
+    }
+
+    private static String workflowType(Object value) {
+        String normalized = value.toString().strip().toLowerCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "direct", "sequential", "parallel" -> normalized;
+            default -> "unknown";
         };
     }
 

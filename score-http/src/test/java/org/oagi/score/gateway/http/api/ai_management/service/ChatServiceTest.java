@@ -540,7 +540,7 @@ class ChatServiceTest {
     }
 
     @Test
-    void restoresThePersistedActiveWorkflowForAnOrdinaryFollowUp() {
+    void ignoresARemovedPersistedWorkflowNameForAnOrdinaryFollowUp() {
         ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
@@ -560,7 +560,7 @@ class ChatServiceTest {
                 "Show business context 75", "request-2", null, "conversation-1",
                 null, List.of(), null), requester);
 
-        assertThat(prepared.activeWorkflow()).isEqualTo("orchestrator_workers");
+        assertThat(prepared.activeWorkflow()).isNull();
         assertThat(prepared.multiAgent().active()).isFalse();
     }
 
@@ -656,7 +656,7 @@ class ChatServiceTest {
     }
 
     @Test
-    void exposesThePersistedWorkflowPreferenceInConversationDetails() {
+    void hidesARemovedWorkflowPreferenceInConversationDetails() {
         ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
@@ -668,7 +668,7 @@ class ChatServiceTest {
 
         ChatConversationDetails details = service.conversation(requester, "conversation-1");
 
-        assertThat(details.activeWorkflow()).isEqualTo("parallel");
+        assertThat(details.activeWorkflow()).isNull();
     }
 
     @Test

@@ -369,14 +369,15 @@ class ScoreAiObservabilityTest {
         observe("request-2", AiExecutionEvent.tool(
                 "started", "", "tool-call-2", "search", 1));
         observe("request-2", AiExecutionEvent.detail(
-                "parallel_workflow_started", "", Map.of(
-                        "fanout_id", "fanout-1", "workflow", "parallel", "agent_count", 3)));
+                "workflow_started", "", Map.of(
+                        "node_id", "fanout-1", "workflow", "research",
+                        "workflow_type", "parallel", "member_count", 3)));
 
         turn.complete("CANCELLED", null);
 
         assertThat(spans.getFinishedSpanItems()).extracting(SpanData::getName)
                 .containsExactlyInAnyOrder("execute_tool search",
-                        "invoke_workflow parallel",
+                        "invoke_workflow recursive",
                         "invoke_workflow assistant");
         assertThat(spans.getFinishedSpanItems()).filteredOn(span -> !turnEntrypoint(span))
                 .allSatisfy(span -> assertThat(span.getAttributes().get(
@@ -390,19 +391,16 @@ class ScoreAiObservabilityTest {
                 "gpt-5", "medium", "ask");
         ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
         observe("request-3", AiExecutionEvent.detail(
-                "parallel_workflow_started", "", Map.of(
-                        "node_id", "lead-1", "workflow", "parallel")));
-        observe("request-3", AiExecutionEvent.detail(
-                "parallel_task_planned", "", Map.of(
-                        "node_id", "worker-1", "parent_node_id", "lead-1",
-                        "workflow", "parallel")));
+                "workflow_started", "", Map.of(
+                        "node_id", "work-1", "workflow", "research",
+                        "workflow_type", "parallel")));
         AiExecutionObservationExporter exporter = new AiExecutionObservationExporter(observability);
         ExecutionScope scope = new ExecutionScope("request-3", "conversation-3", "user-1",
                 1, ExecutionScope.Purpose.USER_RESPONSE, List.of());
         Map<String, Object> attributes = Map.of(
                 "agent_run_id", "run-1", "agent_id", "workflow-branch-dynamic-id",
                 "model_id", "gpt-5", "workflow_node_id", "worker-1",
-                "workflow_parent_node_id", "lead-1");
+                "workflow_parent_node_id", "work-1");
         exporter.observe(ExecutionObservation.of("agent.run.started", scope, attributes));
         // Simulates a Reactor/thread boundary where Context.current() is lost. With one active
         // agent the parent remains unambiguous and must be restored by the observability facade.
@@ -416,12 +414,9 @@ class ScoreAiObservabilityTest {
                 .complete(responseWithUsage("end_turn"));
         exporter.observe(ExecutionObservation.of("agent.run.completed", scope, attributes));
         observe("request-3", AiExecutionEvent.detail(
-                "parallel_task_completed", "", Map.of(
-                        "node_id", "worker-1", "parent_node_id", "lead-1",
-                        "workflow", "parallel")));
-        observe("request-3", AiExecutionEvent.detail(
-                "parallel_workflow_completed", "", Map.of(
-                        "node_id", "lead-1", "workflow", "parallel")));
+                "workflow_completed", "", Map.of(
+                        "node_id", "work-1", "workflow", "research",
+                        "workflow_type", "parallel")));
         turn.complete("COMPLETED", null);
 
         SpanData workflow = span(spans.getFinishedSpanItems(), "score.ai.workflow");
@@ -604,6 +599,30 @@ class ScoreAiObservabilityTest {
     }
 
     @Test
+    void closesAnOutputRetryHandoffWorkflowWithACancelledOutcome() {
+        ChatRequest request = new ChatRequest("prompt", "request-retry-handoff", null,
+                "conversation-retry-handoff", null, List.of(), null,
+                "gpt-5", "medium", "ask");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_started", "", Map.of(
+                        "node_id", "child-1", "parent_node_id", "main",
+                        "workflow", "research-group", "workflow_type", "sequential")));
+        observe(request.requestId(), AiExecutionEvent.detail(
+                "workflow_output_retry_handoff", "", Map.of(
+                        "node_id", "child-1", "parent_node_id", "main",
+                        "workflow", "research-group", "workflow_type", "sequential")));
+        turn.complete("COMPLETED", null);
+
+        SpanData workflow = spans.getFinishedSpanItems().stream()
+                .filter(span -> "research-group".equals(span.getAttributes().get(
+                        AttributeKey.stringKey("score.ai.workflow.name"))))
+                .findFirst().orElseThrow();
+        assertThat(workflow.getAttributes().get(
+                AttributeKey.stringKey("score.ai.outcome"))).isEqualTo("cancelled");
+    }
+
+    @Test
     void preservesAValidMaximumLengthWorkflowIdInTelemetry() {
         String workflowId = "w".repeat(100);
         ChatRequest request = new ChatRequest("prompt", "request-long-workflow", null,
@@ -773,30 +792,32 @@ class ScoreAiObservabilityTest {
         Map<String, Object> first = Map.of(
                 "agent_run_id", "worker-run-1", "agent_id", "catalog-worker-1",
                 "model_id", "gpt-5", "workflow_node_id", "worker-1",
-                "workflow_parent_node_id", "lead-1");
+                "workflow_parent_node_id", "work-1");
         Map<String, Object> second = Map.of(
                 "agent_run_id", "worker-run-2", "agent_id", "catalog-worker-2",
                 "model_id", "gpt-5", "workflow_node_id", "worker-2",
-                "workflow_parent_node_id", "lead-1");
+                "workflow_parent_node_id", "work-1");
 
         observe(request.requestId(), AiExecutionEvent.detail(
-                "multi_agent_started", "", Map.of(
-                        "node_id", "lead-1", "workflow", "orchestrator_workers")));
+                "workflow_started", "", Map.of(
+                        "node_id", "work-1", "workflow", "research",
+                        "workflow_type", "parallel")));
         observe(request.requestId(), AiExecutionEvent.detail(
                 "subagent_started", "", Map.of(
-                        "node_id", "worker-1", "parent_node_id", "lead-1",
-                        "workflow", "orchestrator_workers")));
+                        "node_id", "worker-1", "parent_node_id", "work-1",
+                        "workflow", "research", "workflow_type", "parallel")));
         exporter.observe(ExecutionObservation.of("agent.run.started", scope, first));
         exporter.observe(ExecutionObservation.of("agent.run.started", scope, second));
         exporter.observe(ExecutionObservation.of("agent.run.completed", scope, first));
         exporter.observe(ExecutionObservation.of("agent.run.completed", scope, second));
         observe(request.requestId(), AiExecutionEvent.detail(
                 "subagent_completed", "", Map.of(
-                        "node_id", "worker-1", "parent_node_id", "lead-1",
-                        "workflow", "orchestrator_workers")));
+                        "node_id", "worker-1", "parent_node_id", "work-1",
+                        "workflow", "research", "workflow_type", "parallel")));
         observe(request.requestId(), AiExecutionEvent.detail(
-                "multi_agent_completed", "", Map.of(
-                        "node_id", "lead-1", "workflow", "orchestrator_workers")));
+                "workflow_completed", "", Map.of(
+                        "node_id", "work-1", "workflow", "research",
+                        "workflow_type", "parallel")));
         turn.complete("COMPLETED", null);
 
         List<SpanData> exported = spans.getFinishedSpanItems();
@@ -805,7 +826,7 @@ class ScoreAiObservabilityTest {
         assertThat(exported).filteredOn(span ->
                 "invoke_workflow".equals(operation(span)) && !turnEntrypoint(span)).hasSize(1);
         SpanData workflow = span(exported, "score.ai.workflow");
-        assertThat(workflow.getName()).isEqualTo("invoke_workflow orchestrator_workers");
+        assertThat(workflow.getName()).isEqualTo("invoke_workflow recursive");
         assertThat(exported).filteredOn(span ->
                 "invoke_agent".equals(operation(span))
                         && span.getAttributes().get(
@@ -995,11 +1016,13 @@ class ScoreAiObservabilityTest {
                             "server_address", "connect-center-mcp", "server_port", 8080)));
         }
         observe("request-8", AiExecutionEvent.detail(
-                "multi_agent_started", "", Map.of(
-                        "node_id", "lead-1", "workflow", "parallel", "agent_count", 2)));
+                "workflow_started", "", Map.of(
+                        "node_id", "work-1", "workflow", "research",
+                        "workflow_type", "parallel", "member_count", 2)));
         observe("request-8", AiExecutionEvent.detail(
-                "multi_agent_completed", "", Map.of(
-                        "node_id", "lead-1", "workflow", "parallel", "failed_agents", 1)));
+                "workflow_completed", "", Map.of(
+                        "node_id", "work-1", "workflow", "research",
+                        "workflow_type", "parallel", "failed", 1)));
         turn.complete("COMPLETED", null);
 
         SpanData tool = span(spans.getFinishedSpanItems(), "score.ai.tool");
@@ -1016,6 +1039,8 @@ class ScoreAiObservabilityTest {
                 .isEqualTo(8080L);
         assertThat(workflow.getAttributes().get(
                 AttributeKey.booleanKey("score.ai.workflow.partial_failure"))).isTrue();
+        assertThat(workflow.getAttributes().get(
+                AttributeKey.stringKey("score.ai.workflow.type"))).isEqualTo("parallel");
         assertThat(workflow.getAttributes().get(AttributeKey.stringKey("score.ai.outcome")))
                 .isEqualTo("partial_failure");
     }
@@ -1096,18 +1121,21 @@ class ScoreAiObservabilityTest {
                 "failed", "", "tool-idempotent", "search", 1));
 
         lifecycle.accept(AiExecutionEvent.detail(
-                "parallel_workflow_started", "", Map.of(
-                        "fanout_id", "fanout-idempotent", "workflow", "parallel")));
+                "workflow_started", "", Map.of(
+                        "node_id", "workflow-idempotent", "workflow", "research",
+                        "workflow_type", "parallel")));
         repeatConcurrently(12, () -> lifecycle.accept(AiExecutionEvent.detail(
-                "parallel_workflow_completed", "", Map.of(
-                        "fanout_id", "fanout-idempotent", "workflow", "parallel"))));
+                "workflow_completed", "", Map.of(
+                        "node_id", "workflow-idempotent", "workflow", "research",
+                        "workflow_type", "parallel"))));
         lifecycle.accept(AiExecutionEvent.detail(
-                "parallel_workflow_started", "", Map.of(
-                        "fanout_id", "fanout-idempotent", "workflow", "parallel")));
+                "workflow_started", "", Map.of(
+                        "node_id", "workflow-idempotent", "workflow", "research",
+                        "workflow_type", "parallel")));
 
         Map<String, Object> agent = Map.of(
                 "agent_run_id", "run-idempotent", "agent_id", "worker-1",
-                "model_id", "gpt-5", "workflow_node_id", "fanout-idempotent");
+                "model_id", "gpt-5", "workflow_node_id", "workflow-idempotent");
         exporter.observe(ExecutionObservation.of("agent.run.started", scope, agent));
         repeatConcurrently(12, () -> exporter.observe(
                 ExecutionObservation.of("agent.run.completed", scope, agent)));

@@ -32,11 +32,8 @@ final class WorkflowGraphScheduler {
 
         while (!pending.isEmpty()) {
             checkpoint.run();
-            List<AiWorkflowPlan.Member> ready = workflow.members().stream()
-                    .filter(member -> pending.contains(member.id()))
-                    .filter(member -> completed.keySet().containsAll(
-                            workflow.predecessors(member.id())))
-                    .toList();
+            List<AiWorkflowPlan.Member> ready = workflow.readyMembers(
+                    pending, completed.keySet());
             if (ready.isEmpty()) {
                 throw new IllegalStateException(
                         "Workflow has no ready member; its dependency graph is invalid.");

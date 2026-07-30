@@ -115,7 +115,7 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
         : activities.some(activity => activity.status === 'failed') ? 'failed'
           : activities.some(activity => activity.status === 'cancelled') ? 'stopped'
             : lead?.inProgress ? 'working' : 'finished';
-    const unit = activities.some(activity => activity.executionKind === 'parallel')
+    const unit = activities.some(activity => activity.workflowType === 'parallel')
       ? 'Tasks' : 'Agents';
     return `${unit} ${settled}/${total} · ${phase}`;
   }
@@ -132,8 +132,8 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
   }
 
   get activityListLabel(): string {
-    return this.state.agentActivities.some(activity => activity.executionKind === 'parallel')
-      ? 'Parallel tasks in this request' : 'Agents in this request';
+    return this.state.agentActivities.some(activity => activity.workflowType === 'parallel')
+      ? 'Tasks in this request' : 'Agents in this request';
   }
 
   onAgentStripClick(): void {

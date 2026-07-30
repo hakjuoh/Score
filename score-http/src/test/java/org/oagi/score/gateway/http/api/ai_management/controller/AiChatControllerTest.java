@@ -211,7 +211,9 @@ class AiChatControllerTest {
             events.accept(AiExecutionEvent.detail(
                     "subagent_cancelled", "Research stopped.", Map.of("nodeId", "worker-1")));
             events.accept(AiExecutionEvent.detail(
-                    "multi_agent_cancelled", "Workflow stopped.", Map.of("nodeId", "lead-1")));
+                    "workflow_cancelled", "Workflow stopped.", Map.of("nodeId", "work-1")));
+            events.accept(AiExecutionEvent.detail(
+                    "workflow_stalled", "Workflow stalled.", Map.of("nodeId", "work-2")));
             return new ChatResponse("connectcenter-assistant", "Stopped.",
                     "conversation-1", false, List.of());
         });
@@ -229,7 +231,9 @@ class AiChatControllerTest {
                         org.assertj.core.groups.Tuple.tuple(
                                 "system", "subagent_cancelled", "visible"),
                         org.assertj.core.groups.Tuple.tuple(
-                                "system", "multi_agent_cancelled", "visible"));
+                                "system", "workflow_cancelled", "visible"),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "system", "workflow_stalled", "visible"));
     }
 
     @Test

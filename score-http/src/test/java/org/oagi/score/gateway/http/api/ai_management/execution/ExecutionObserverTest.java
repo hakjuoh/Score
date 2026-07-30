@@ -56,6 +56,17 @@ class ExecutionObserverTest {
     }
 
     @Test
+    void lifecycleObservationKeepsOnlyKnownBoundedWorkflowTypes() {
+        AiExecutionLifecycle parallel = AiExecutionLifecycle.from(AiExecutionEvent.detail(
+                "workflow_started", "private", Map.of("workflow_type", "PARALLEL")));
+        AiExecutionLifecycle future = AiExecutionLifecycle.from(AiExecutionEvent.detail(
+                "workflow_started", "private", Map.of("workflow_type", "speculative-private")));
+
+        assertThat(parallel.metadata()).containsEntry("workflow_type", "parallel");
+        assertThat(future.metadata()).containsEntry("workflow_type", "unknown");
+    }
+
+    @Test
     void emptyAndFailingOptionalObserversNeverChangeExecution() {
         ExecutionScope scope = new ExecutionScope("request", "conversation", "user", 1,
                 ExecutionScope.Purpose.USER_RESPONSE, List.of());

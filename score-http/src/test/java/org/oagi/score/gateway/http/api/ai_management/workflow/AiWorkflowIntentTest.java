@@ -63,6 +63,16 @@ class AiWorkflowIntentTest {
     }
 
     @Test
+    void removedWorkflowPreferenceNamesDoNotActivateAgentNegationHandling() {
+        ChatRequest removedPreference = request(
+                "Do not use sub-agents for this request.", AiMultiAgentOptions.single())
+                .withActiveWorkflow("orchestrator_workers");
+
+        assertThat(AiWorkflowIntent.applyExplicitDelegation(removedPreference))
+                .isSameAs(removedPreference);
+    }
+
+    @Test
     void treatsUsingSubAgentsAsAnExplicitAgentWorkflowOnEveryTurn() {
         ChatRequest first = request("create a sample business context using sub agents",
                 AiMultiAgentOptions.single());

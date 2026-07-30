@@ -43,9 +43,7 @@ public final class AiWorkflowIntent {
     private static boolean agentsAreActive(ChatRequest request) {
         if (request.multiAgent().active()) return true;
         String workflow = request.activeWorkflow();
-        return workflow != null && !workflow.isBlank()
-                && !"assistant".equalsIgnoreCase(workflow.strip())
-                && !"direct".equalsIgnoreCase(workflow.strip());
+        return workflow != null && "agents".equalsIgnoreCase(workflow.strip());
     }
 
     public static Optional<AiPersistentWorkflowCommand> persistentWorkflowCommand(String prompt) {
