@@ -49,21 +49,34 @@ describe('AI agent activity semantics', () => {
   });
 
   it('recognizes only the bounded orchestration event family', () => {
-    expect(isExecutionActivityEvent(event('multi_agent_synthesizing'))).toBe(true);
-    expect(isExecutionActivityEvent(event('parallel_workflow_synthesizing'))).toBe(true);
+    expect(isExecutionActivityEvent(event('subagent_preparing'))).toBe(true);
+    expect(isExecutionActivityEvent(event('subagent_retry'))).toBe(true);
+    expect(isExecutionActivityEvent(event('multi_agent_synthesizing'))).toBe(false);
+    expect(isExecutionActivityEvent(event('parallel_workflow_synthesizing'))).toBe(false);
     expect(isExecutionActivityEvent(event('tool_started'))).toBe(false);
     expect(agentActivityUpdate({...event('subagent_started'), content: ''})).toBeUndefined();
   });
 
-  it('marks the lead lifecycle and terminal synthesis states', () => {
-    expect(agentActivityUpdate(event('multi_agent_completed'))).toEqual(expect.objectContaining({
-      agentId: 'request-1:lead', agentName: 'Lead agent', isLead: true,
+  it('maps current subagent lifecycle states without creating a synthetic lead', () => {
+    expect(agentActivityUpdate(event('subagent_completed', {
+      agentId: 'request-1:worker:1'
+    }))).toEqual(expect.objectContaining({
+      agentId: 'request-1:worker:1', isLead: false,
       status: 'completed', inProgress: false
     }));
-    expect(agentActivityUpdate(event('multi_agent_failed'))).toEqual(expect.objectContaining({
+    expect(agentActivityUpdate(event('subagent_refused', {
+      agentId: 'request-1:worker:1'
+    }))).toEqual(expect.objectContaining({
       status: 'failed', inProgress: false
     }));
-    expect(agentActivityUpdate(event('multi_agent_cancelled'))).toEqual(expect.objectContaining({
+    expect(agentActivityUpdate(event('subagent_cancelled', {
+      agentId: 'request-1:worker:1'
+    }))).toEqual(expect.objectContaining({
+      status: 'cancelled', inProgress: false
+    }));
+    expect(agentActivityUpdate(event('subagent_output_retry_handoff', {
+      agentId: 'request-1:worker:1'
+    }))).toEqual(expect.objectContaining({
       status: 'cancelled', inProgress: false
     }));
     expect(agentActivityUpdate(event('subagent_planned', {
@@ -78,21 +91,16 @@ describe('AI agent activity semantics', () => {
     }));
   });
 
-  it('keeps parallel workflow tasks distinct from multi-agent lifecycle', () => {
-    expect(agentActivityUpdate(event('parallel_workflow_started', {
-      workflow: 'parallel', execution_kind: 'parallel'
+  it('uses workflow_type to present a subagent as a parallel item', () => {
+    expect(agentActivityUpdate(event('subagent_completed', {
+      agentId: 'parallel-1', workflow_type: 'parallel', conversation_kind: 'PARALLEL'
     }))).toEqual(expect.objectContaining({
-      isLead: true, executionKind: 'parallel', status: 'started'
-    }));
-    expect(agentActivityUpdate(event('parallel_task_completed', {
-      agentId: 'parallel-1', workflow: 'parallel', conversation_kind: 'PARALLEL'
-    }))).toEqual(expect.objectContaining({
-      isLead: false, executionKind: 'parallel', status: 'completed'
+      isLead: false, workflowType: 'parallel', status: 'completed'
     }));
     expect(agentActivityUpdate(event('subagent_completed', {
-      agentId: 'agent-1', workflow: 'parallel', conversation_kind: 'SUBAGENT'
+      agentId: 'agent-1', workflow_type: 'parallel', conversation_kind: 'SUBAGENT'
     }))).toEqual(expect.objectContaining({
-      isLead: false, executionKind: 'multi_agent', status: 'completed'
+      isLead: false, workflowType: 'parallel', status: 'completed'
     }));
   });
 
@@ -273,15 +281,7 @@ describe('AI agent activity semantics', () => {
     expect(agentActivitySummary(activities)).toBe('1 done · 1 running');
 
     upsertAgentActivity(activities, agentActivityUpdate(
-      event('multi_agent_synthesizing', {agentName: 'Lead agent'})
-    )!);
-    expect(agentActivitySummary(activities)).toBe('1 done · synthesizing');
-
-    upsertAgentActivity(activities, agentActivityUpdate(
       event('subagent_failed', {agentId: 'a2', agentName: 'Two'})
-    )!);
-    upsertAgentActivity(activities, agentActivityUpdate(
-      event('multi_agent_completed', {agentName: 'Lead agent'})
     )!);
     expect(agentActivitySummary(activities)).toBe('1 done · 1 failed');
   });

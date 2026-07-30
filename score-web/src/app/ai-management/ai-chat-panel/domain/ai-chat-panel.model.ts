@@ -11,6 +11,7 @@ export interface AiChatStatusOptions {
   suffix?: string;
 }
 export type AiChatToolStatus = 'completed' | 'failed' | 'blocked' | 'denied' | 'cancelled';
+export type AiWorkflowType = 'direct' | 'sequential' | 'parallel';
 export type AiChatPanelTab = 'chat' | 'history';
 export type AiChangePermissionMode = 'ask' | 'auto' | 'full_access';
 export type AiAgentExecutionStatus =
@@ -51,6 +52,10 @@ export interface AiChatMessage {
   /** Stable execution-graph identity used to rebuild nested workflows. */
   workflowNodeId?: string;
   workflowParentNodeId?: string;
+  /** Server-declared execution semantics; nesting is represented by parent/child node IDs. */
+  workflowType?: AiWorkflowType | string;
+  /** Direct member count declared by workflow_started, before lifecycle rows arrive. */
+  workflowItemCount?: number;
   workflowStatus?: AiAgentExecutionStatus;
   files?: AiChatFile[];
 }

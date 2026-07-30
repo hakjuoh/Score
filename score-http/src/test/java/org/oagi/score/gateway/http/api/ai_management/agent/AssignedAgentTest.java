@@ -7,6 +7,7 @@ import org.oagi.score.gateway.http.api.ai_management.execution.AgentExecutionSer
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalScope;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
+import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowType;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentInputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
@@ -76,7 +77,7 @@ class AssignedAgentTest {
                                 3, "balanced", "agents", true, false, false), 3)
                 .forIteration(plan, null, 1)
                 .inWorkflow(plan, new AgentWorkflowContext.Location(
-                        "research-work", "main:1:research-work", "main", 1))
+                        "research-work", "main:1:research-work", "main", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(plan, "research", task, List.of(upstream));
 
         AssignedAgentHandlers handlers = new AssignedAgentHandlers(instructions);
@@ -141,7 +142,7 @@ class AssignedAgentTest {
                                 "user-1", "model", "Inspect it", false, false,
                                 3, "balanced", "agents", true, false, false), 3)
                 .inWorkflow(plan, new AgentWorkflowContext.Location(
-                        "outer", "main:1:outer", "main", 1))
+                        "outer", "main:1:outer", "main", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(plan, "nested", task, List.of());
         AssignedAgentHandlers handlers = new AssignedAgentHandlers(instructions);
         AssignedAgent assigned = new AssignedAgent(definition, handlers.requestHandler(),
@@ -222,7 +223,7 @@ class AssignedAgentTest {
                                 "user", "model", "Inspect it", false, false,
                                 1, "balanced", null, true, false, false), 1, control)
                 .inWorkflow(plan, new AgentWorkflowContext.Location(
-                        "research-work", "main:research-work", "main", 1))
+                        "research-work", "main:research-work", "main", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(plan, "member", task, List.of());
         AssignedAgentHandlers handlers = new AssignedAgentHandlers(instructions);
         AssignedAgent assigned = new AssignedAgent(definition, handlers.requestHandler(),
@@ -287,7 +288,7 @@ class AssignedAgentTest {
                                 "user", "model", "Inspect it", false, false,
                                 1, "balanced", null, true, false, false), 1, control)
                 .inWorkflow(plan, new AgentWorkflowContext.Location(
-                        "research-work", "main:research-work", "main", 1))
+                        "research-work", "main:research-work", "main", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(plan, "member", task, List.of());
         AssignedAgentHandlers handlers = new AssignedAgentHandlers(instructions);
         AssignedAgent assigned = new AssignedAgent(definition, handlers.requestHandler(),
@@ -333,7 +334,7 @@ class AssignedAgentTest {
                                 "user", "model", "prompt", false, false,
                                 1, "balanced", null, true, false, false), 1)
                 .inWorkflow(plan, new AgentWorkflowContext.Location(
-                        "work", "main:work", "main", 1))
+                        "work", "main:work", "main", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(plan, "member", task, List.of());
 
         AssignedAgentHandlers handlers = new AssignedAgentHandlers(instructions);

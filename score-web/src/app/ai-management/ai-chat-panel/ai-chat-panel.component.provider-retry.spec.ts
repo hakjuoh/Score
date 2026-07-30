@@ -178,17 +178,18 @@ describe('AiChatPanelComponent provider retry status', () => {
 
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
-      type: 'system', subtype: 'parallel_workflow_started',
+      type: 'system', subtype: 'workflow_started',
       content: 'Three specialists started.',
       metadata: {
-        fanoutId: 'fanout-1', nodeId: 'fanout-1-lead',
-        agentId: 'fanout-1-lead', agentName: 'Lead agent',
-        agentCount: 3, executionKind: 'parallel', status: 'started'
+        nodeId: 'fanout-1', parentNodeId: 'main', depth: 1,
+        member_count: 3, workflowType: 'parallel', status: 'started'
       }
     });
 
     expect(alertStatusRow()).toBeUndefined();
-    expect(component.state.currentStatus).toBe('Parallel tasks working');
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      role: 'workflow_group', workflowType: 'parallel', workflowItemCount: 3
+    }));
   });
 
   it('renders the provider message in the red error row after the final failure', () => {
@@ -254,22 +255,29 @@ describe('AiChatPanelComponent provider retry status', () => {
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
-      type: 'system', subtype: 'multi_agent_started',
-      content: 'Lead agent started.',
-      metadata: {agentId: 'fanout-1-lead', agentName: 'Lead agent'}
+      type: 'system', subtype: 'workflow_started',
+      content: 'Specialists started.',
+      metadata: {
+        nodeId: 'fanout-1', parentNodeId: 'main', depth: 1,
+        member_count: 1, workflowType: 'sequential'
+      }
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'subagent_started',
       content: 'Evidence checker started.',
-      metadata: {agentId: 'fanout-1-agent-01', agentName: 'Evidence checker'}
+      metadata: {
+        nodeId: 'fanout-1-agent-01', parentNodeId: 'fanout-1',
+        agentId: 'fanout-1-agent-01', agentName: 'Evidence checker',
+        workflowType: 'sequential'
+      }
     });
     expect(component.state.currentStatus).toBe('Agents working');
 
     const workerMetadata = {
       fanoutId: 'fanout-1',
       nodeId: 'fanout-1-agent-01',
-      parentNodeId: 'fanout-1-lead',
+      parentNodeId: 'fanout-1',
       agentId: 'fanout-1-agent-01'
     };
     (component as any).handleSocketEvent(providerErrorEvent(workerMetadata));

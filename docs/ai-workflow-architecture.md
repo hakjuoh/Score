@@ -4,8 +4,16 @@ The assistant uses one recursive call-flow model. An `AiWorkflowPlan.WorkflowDef
 Workflow graph: Agent or child-Workflow members are vertices and explicit directed edges are data
 dependencies. A `WorkflowRunner` schedules that graph; the Workflow definition itself does not
 execute an Agent. Ready vertices fan out on virtual threads, and each dependency layer joins in
-member declaration order. There are no `direct`, `chain`, `parallel`, `routing`, or
-`orchestrator-workers` execution classes and no node compiler registry.
+member declaration order. The graph remains the execution model; `DIRECT`, `SEQUENTIAL`, and
+`PARALLEL` are server-derived presentation types, not planner-authored execution classes.
+
+Every `workflow_started` event carries `workflow_type`. The implicit depth-zero main flow is
+`direct` and does not open a Workflow box. A planned graph is `sequential` when every scheduler
+layer has one ready member, and `parallel` when any layer has multiple ready members. The UI renders
+sequential items with checkbox characters and one active spinner, and parallel items with a spinner
+on every concurrently active item. The type name itself is not displayed. An unknown future type is
+shown as an ordinary chat message. Nested Workflow is not a type: child graphs are represented by
+the dependency graph and opened recursively from their parent item.
 
 ## Main call flow
 
@@ -71,8 +79,9 @@ and `SCORE_AI_CHANGE_APPROVAL_TIMEOUT`.
 or one child `WorkflowDefinition`; edges reference member IDs and form an acyclic dependency graph.
 A member never contains an execution-pattern name. Root vertices receive inherited evidence,
 dependent vertices receive successful direct-predecessor results as untrusted reference evidence,
-and independent ready vertices execute concurrently. Omitting the edge list preserves the legacy
-member-order chain for serialized plans; an explicit empty edge list creates independent roots.
+and independent ready vertices execute concurrently. Omitting the edge list creates a sequential
+member-order graph; an explicit empty edge list creates independent roots. The Planner never emits
+`workflow_type`; the Runner derives it from the validated graph at execution time.
 
 The Planner Agent may create semantic sub-workflows to group a coherent subproblem. The same
 Workflow engine runs every level. A one-member Workflow returns that member's result directly;
@@ -251,6 +260,8 @@ Span attributes describe actual runtime identity rather than a preselected patte
 - `gen_ai.workflow.name`: model-authored or main Workflow ID
 - `gen_ai.workflow.nested`: `true` on planned Workflows; absent on the turn entrypoint
 - `score.ai.workflow.run_id`: request/iteration/node execution ID
+- `score.ai.workflow.type`: bounded UI presentation semantics from event `workflow_type`
+  (`direct`, `sequential`, or `parallel`)
 - `score.ai.workflow.kind`: `workflow`
 - `score.ai.workflow.partial_failure`: whether some members failed
 - `member_count`, `completed`, and `failed`: bounded direct structural outcomes

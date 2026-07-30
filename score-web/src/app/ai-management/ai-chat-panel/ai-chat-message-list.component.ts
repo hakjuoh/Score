@@ -371,9 +371,7 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
   agentGroupPlan(message: AiChatMessage): string {
     return message.activities?.find(activity => activity.isLead)?.content
       || (message.role === 'workflow_group'
-        ? this.agentGroupExecutionKind(message) === 'parallel'
-          ? 'Running independent workflow tasks before synthesizing their results.'
-          : 'Running workflow tasks before synthesizing their results.'
+        ? message.content
         : this.agentGroupCount(message) === 1
           ? 'A specialist is gathering evidence for the lead.'
           : 'Specialists are gathering evidence for the lead.');
@@ -387,34 +385,20 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
     const activities = message.activities || [];
     const actual = activities.filter(activity => !activity.isLead).length;
     const planned = activities.find(activity => activity.isLead)?.plannedAgentCount || 0;
-    return Math.max(actual, planned);
+    return Math.max(actual, planned, message.workflowItemCount || 0);
   }
 
-  agentGroupWorkflow(message: AiChatMessage): string | undefined {
-    const activities = message.activities || [];
-    return activities.find(activity => activity.isLead)?.workflow
-      || activities.find(activity => activity.workflow)?.workflow;
+  agentGroupWorkflowType(message: AiChatMessage): string | undefined {
+    return message.workflowType
+      || message.activities?.find(activity => activity.workflowType)?.workflowType;
   }
 
-  agentGroupExecutionKind(message: AiChatMessage): string | undefined {
-    const activities = message.activities || [];
-    return activities.find(activity => activity.isLead)?.executionKind
-      || activities.find(activity => activity.executionKind)?.executionKind;
+  sequentialWorkflow(message: AiChatMessage): boolean {
+    return this.agentGroupWorkflowType(message) === 'sequential';
   }
 
-  agentGroupWorkflowLabel(message: AiChatMessage): string | undefined {
-    if (message.role === 'workflow_group') {
-      return this.agentGroupExecutionKind(message) === 'parallel'
-        ? 'Parallel workflow' : 'Workflow';
-    }
-    const workflow = this.agentGroupWorkflow(message);
-    if (workflow === 'chain') return 'Chain workflow';
-    if (workflow === 'routing') return 'Routing workflow';
-    if (workflow === 'orchestrator_workers') return 'Agent workflow';
-    if (message.role === 'agent_group') {
-      return this.agentGroupCount(message) === 1 ? 'Specialist workflow' : 'Multi-agent workflow';
-    }
-    return undefined;
+  nestedWorkflowSummary(message: AiChatMessage): string {
+    return message.content || this.agentGroupPhase(message);
   }
 
   agentDisplayName(activity: AiAgentActivity): string {

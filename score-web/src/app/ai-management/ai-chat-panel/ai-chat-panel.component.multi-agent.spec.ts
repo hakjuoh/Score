@@ -18,17 +18,30 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     type: 'system',
     subtype,
     content: `${agentName} ${subtype}.`,
-    metadata: {agentId, agentName, agentRole: 'Independent review'}
+    metadata: {
+      nodeId: agentId, parentNodeId: 'fanout-1', agentId, agentName,
+      agentRole: 'Independent review', workflowType: 'sequential'
+    }
   });
 
-  function startPublishedRequest(): void {
+  function startPublishedRequest(workflowType: 'sequential' | 'parallel' | false = 'sequential'): void {
     component.state.prompt = 'Verify this request independently';
     component.send();
     transport.publishWhenConnected.mock.calls[0][0].publish();
+    if (workflowType) {
+      (component as any).handleSocketEvent({
+        requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+        subtype: 'workflow_started', content: 'I’ll verify the request.',
+        metadata: {
+          nodeId: 'fanout-1', parentNodeId: 'main', depth: 1,
+          member_count: 2, workflowType
+        }
+      });
+    }
   }
 
   it('renders admission as Working and then opens a guided workflow', () => {
-    startPublishedRequest();
+    startPublishedRequest(false);
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'accepted', content: '',
@@ -47,27 +60,77 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       content: 'I’ll check the three component counts independently.',
       metadata: {
         nodeId: 'main:1:counts', parentNodeId: 'main', depth: 1,
-        member_count: 3
+        member_count: 3, workflowType: 'parallel'
       }
     });
 
     expect(component.state.messages.slice(-3).map(message =>
       [message.role, message.content])).toEqual([
       ['guide', 'I’ll check the three component counts independently.'],
-      ['workflow_group', 'Workflow'],
+      ['workflow_group', 'I’ll check the three component counts independently.'],
       ['progress', 'Working...']
     ]);
   });
 
+  it('does not create a workflow row for direct execution', () => {
+    startPublishedRequest(false);
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'workflow_started', content: 'I’ll handle this directly.',
+      metadata: {
+        nodeId: 'main', depth: 0, member_count: 1, workflowType: 'direct'
+      }
+    });
+
+    expect(component.state.messages.some(message =>
+      message.role === 'workflow_group' || message.content === 'I’ll handle this directly.'))
+      .toBe(false);
+  });
+
+  it('updates an unknown workflow type as one ordinary chat message', () => {
+    startPublishedRequest(false);
+    const started = {
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'workflow_started', content: 'Running a future execution mode.',
+      metadata: {
+        nodeId: 'main:future', parentNodeId: 'main', depth: 1,
+        member_count: 1, workflowType: 'speculative'
+      }
+    };
+
+    (component as any).handleSocketEvent(started);
+    const fallback = component.state.messages.find(message =>
+      message.workflowNodeId === 'main:future');
+    expect(fallback).toMatchObject({
+      role: 'guide', eventType: 'workflow_lifecycle', workflowType: 'speculative',
+      workflowStatus: 'started', content: 'Running a future execution mode.'
+    });
+    expect(component.state.messages.some(message => message.role === 'workflow_group')).toBe(false);
+
+    (component as any).handleSocketEvent({
+      ...started, subtype: 'workflow_completed', content: 'Future execution finished.'
+    });
+
+    expect(component.state.messages.filter(message =>
+      message.workflowNodeId === 'main:future')).toEqual([fallback]);
+    expect(fallback).toMatchObject({
+      role: 'guide', workflowStatus: 'completed', content: 'Future execution finished.'
+    });
+  });
+
   it('nests a delegated workflow inside its owning Agent conversation', () => {
-    startPublishedRequest();
+    startPublishedRequest(false);
     const root = 'main:1:counts';
     const parentAgent = `${root}:agent:count-accs`;
     const nested = `${parentAgent}:count-accs-delegated`;
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'workflow_started', content: 'I’ll verify the counts.',
-      metadata: {nodeId: root, parentNodeId: 'main', depth: 1, member_count: 1}
+      metadata: {
+        nodeId: root, parentNodeId: 'main', depth: 1,
+        member_count: 1, workflowType: 'sequential'
+      }
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
@@ -75,7 +138,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       content: 'I’ll count the ACCs in this release.',
       metadata: {
         nodeId: parentAgent, parentNodeId: root, depth: 2,
-        agentName: 'Evidence researcher', executionKind: 'parallel',
+        agentName: 'Evidence researcher', workflowType: 'sequential',
         assignment: 'Spawn exactly 2 sub-agents to cross-check the ACC count.'
       }
     });
@@ -83,14 +146,17 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'workflow_started',
       content: 'I’ll cross-check the result with two independent readers.',
-      metadata: {nodeId: nested, parentNodeId: parentAgent, depth: 3, member_count: 2}
+      metadata: {
+        nodeId: nested, parentNodeId: parentAgent, depth: 3,
+        member_count: 2, workflowType: 'parallel'
+      }
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'subagent_planned', content: 'Queued first check.',
       metadata: {
         nodeId: `${nested}:agent:first`, parentNodeId: nested, depth: 4,
-        agentName: 'First reader', executionKind: 'parallel'
+        agentName: 'First reader', workflowType: 'parallel'
       }
     });
 
@@ -122,14 +188,16 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     ['workflow_stalled', 'failed'],
     ['workflow_refused', 'failed']
   ] as const)('settles nested Working state for %s', (subtype, expectedStatus) => {
-    startPublishedRequest();
+    startPublishedRequest(false);
     const root = 'main:1:root';
     const parentAgent = `${root}:agent:parent`;
     const nested = `${parentAgent}:delegated`;
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'workflow_started', content: 'I’m checking the request.',
-      metadata: {nodeId: root, parentNodeId: 'main', depth: 1}
+      metadata: {
+        nodeId: root, parentNodeId: 'main', depth: 1, workflowType: 'sequential'
+      }
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
@@ -139,7 +207,9 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'workflow_started', content: 'I’m cross-checking it.',
-      metadata: {nodeId: nested, parentNodeId: parentAgent, depth: 3}
+      metadata: {
+        nodeId: nested, parentNodeId: parentAgent, depth: 3, workflowType: 'sequential'
+      }
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
@@ -162,18 +232,22 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
   });
 
   it('recursively settles every descendant when the request terminates', () => {
-    startPublishedRequest();
+    startPublishedRequest(false);
     const root = 'main:1:root';
     const parentAgent = `${root}:agent:parent`;
     const nested = `${parentAgent}:delegated`;
     const childAgent = `${nested}:agent:child`;
     for (const event of [
       {subtype: 'workflow_started', content: 'I’m checking the request.',
-        metadata: {nodeId: root, parentNodeId: 'main', depth: 1}},
+        metadata: {
+          nodeId: root, parentNodeId: 'main', depth: 1, workflowType: 'sequential'
+        }},
       {subtype: 'subagent_started', content: 'I’m checking one part.',
         metadata: {nodeId: parentAgent, parentNodeId: root, depth: 2, agentName: 'Parent'}},
       {subtype: 'workflow_started', content: 'I’m cross-checking it.',
-        metadata: {nodeId: nested, parentNodeId: parentAgent, depth: 3}},
+        metadata: {
+          nodeId: nested, parentNodeId: parentAgent, depth: 3, workflowType: 'sequential'
+        }},
       {subtype: 'subagent_started', content: 'I’m reading the evidence.',
         metadata: {nodeId: childAgent, parentNodeId: nested, depth: 4, agentName: 'Child'}}
     ]) {
@@ -198,13 +272,10 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     startPublishedRequest();
 
     (component as any).handleSocketEvent(activity(
-      'multi_agent_started', 'fanout-1-lead', 'Lead agent'
-    ));
-    (component as any).handleSocketEvent(activity(
       'subagent_started', 'fanout-1-agent-01', 'Evidence checker'
     ));
     (component as any).handleSocketEvent(activity(
-      'multi_agent_synthesizing', 'fanout-1-lead', 'Lead agent'
+      'subagent_started', 'fanout-1-agent-02', 'Edge case hunter'
     ));
     // A streamed answer lands between lifecycle events. The consolidated block
     // must keep tracking agents by stable identity, not by array position.
@@ -213,15 +284,15 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       type: 'assistant_update', content: 'Drafting the final answer.'
     });
     (component as any).handleSocketEvent(activity(
-      'multi_agent_completed', 'fanout-1-lead', 'Lead agent'
+      'subagent_completed', 'fanout-1-agent-02', 'Edge case hunter'
     ));
 
-    expect(component.state.messages.filter(message => message.role === 'agent_group'))
+    expect(component.state.messages.filter(message => message.role === 'workflow_group'))
       .toHaveLength(1);
     expect(component.state.agentActivities).toHaveLength(2);
-    expect(component.state.agentActivities.find(agent => agent.agentId === 'fanout-1-lead'))
+    expect(component.state.agentActivities.find(agent => agent.agentId === 'fanout-1-agent-02'))
       .toMatchObject({
-        agentName: 'Lead agent', isLead: true, status: 'completed', inProgress: false
+        agentName: 'Edge case hunter', isLead: false, status: 'completed', inProgress: false
       });
     expect(component.state.agentActivities.find(agent => agent.agentId === 'fanout-1-agent-01'))
       .toMatchObject({
@@ -235,24 +306,26 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     });
     expect(component.state.agentActivities
       .every(agent => agent.inProgress === false)).toBe(true);
-    expect(component.state.messages.filter(message => message.role === 'agent_group'))
+    expect(component.state.messages.filter(message => message.role === 'workflow_group'))
       .toHaveLength(1);
   });
 
   it('renders parallel workflow lifecycle in a distinct workflow group', () => {
-    startPublishedRequest();
+    startPublishedRequest('parallel');
     (component as any).handleSocketEvent({
-      ...activity('parallel_workflow_started', 'fanout-1-lead', 'Workflow lead'),
+      ...activity('subagent_started', 'fanout-1-agent-01', 'Record reader'),
       metadata: {
-        agentId: 'fanout-1-lead', agentName: 'Workflow lead', workflow: 'parallel',
-        executionKind: 'parallel', agent_count: 2
+        nodeId: 'fanout-1-agent-01', parentNodeId: 'fanout-1',
+        agentId: 'fanout-1-agent-01', agentName: 'Record reader',
+        workflowType: 'parallel', conversationKind: 'PARALLEL'
       }
     });
     (component as any).handleSocketEvent({
-      ...activity('parallel_task_started', 'fanout-1-agent-01', 'Record reader'),
+      ...activity('subagent_started', 'fanout-1-agent-02', 'Context reader'),
       metadata: {
-        agentId: 'fanout-1-agent-01', agentName: 'Record reader', workflow: 'parallel',
-        executionKind: 'parallel', conversationKind: 'PARALLEL'
+        nodeId: 'fanout-1-agent-02', parentNodeId: 'fanout-1',
+        agentId: 'fanout-1-agent-02', agentName: 'Context reader',
+        workflowType: 'parallel', conversationKind: 'PARALLEL'
       }
     });
 
@@ -261,7 +334,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     expect(component.state.messages.filter(message => message.role === 'agent_group'))
       .toHaveLength(0);
     expect(component.agentStripLabel).toBe('Tasks 0/2 · working');
-    expect(component.state.currentStatus).toBe('Parallel tasks working');
+    expect(component.state.currentStatus).toBe('Tasks working');
   });
 
   it('keeps the aggregate status working while other specialists still run', () => {
@@ -333,6 +406,14 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     }];
     component.send();
 
+    const workflowStarted = {
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'workflow_started', content: 'I’ll inspect the attachment.',
+      metadata: {
+        nodeId: 'fanout-1', parentNodeId: 'main', depth: 1,
+        member_count: 1, workflowType: 'sequential'
+      }
+    };
     const started = activity('subagent_started', 'fanout-1-agent-01', 'Domain explorer');
     const toolCall = {
       requestId: 'request-1', conversationId: 'conversation-1',
@@ -344,13 +425,14 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       }
     };
     const completed = activity('subagent_completed', 'fanout-1-agent-01', 'Domain explorer');
+    live.next({body: JSON.stringify(workflowStarted)});
     live.next({body: JSON.stringify(started)});
     live.next({body: JSON.stringify(toolCall)});
     live.next({body: JSON.stringify(completed)});
     response.next({
       response: 'Attachment analysis complete.',
       conversationId: 'conversation-1',
-      events: [started, toolCall, completed]
+      events: [workflowStarted, started, toolCall, completed]
     });
 
     expect(component.state.agentActivities).toHaveLength(1);
@@ -363,7 +445,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     ]);
     expect(component.state.messages.some(message =>
       message.role === 'tool_call' || message.role === 'tool_group')).toBe(false);
-    expect(component.state.messages.filter(message => message.role === 'agent_group'))
+    expect(component.state.messages.filter(message => message.role === 'workflow_group'))
       .toHaveLength(1);
     expect(component.state.messages).toContainEqual(expect.objectContaining({
       role: 'assistant', content: 'Attachment analysis complete.'
@@ -379,7 +461,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'assistant_final', content: 'Verified final answer.'
     });
-    const anchor = component.state.messages.find(message => message.role === 'agent_group');
+    const anchor = component.state.messages.find(message => message.role === 'workflow_group');
     const snapshot = anchor?.activities;
     expect(snapshot?.[0]).toMatchObject({agentId: 'fanout-1-agent-01', status: 'completed'});
 
@@ -410,11 +492,24 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
 
     component.state.prompt = 'Verify this again independently';
     component.send();
-    (component as any).handleSocketEvent(activity(
-      'subagent_started', 'fanout-2-agent-01', 'Second checker'
-    ));
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'workflow_started', content: 'I’ll verify the request again.',
+      metadata: {
+        nodeId: 'fanout-2', parentNodeId: 'main', depth: 1,
+        member_count: 1, workflowType: 'sequential'
+      }
+    });
+    (component as any).handleSocketEvent({
+      ...activity('subagent_started', 'fanout-2-agent-01', 'Second checker'),
+      metadata: {
+        nodeId: 'fanout-2-agent-01', parentNodeId: 'fanout-2',
+        agentId: 'fanout-2-agent-01', agentName: 'Second checker',
+        workflowType: 'sequential'
+      }
+    });
 
-    const anchors = component.state.messages.filter(message => message.role === 'agent_group');
+    const anchors = component.state.messages.filter(message => message.role === 'workflow_group');
     expect(anchors).toHaveLength(2);
     expect(anchors[0].activities).not.toBe(anchors[1].activities);
     expect(anchors[0].activities?.map(agent => agent.agentId)).toEqual(['fanout-1-agent-01']);
@@ -461,53 +556,45 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     startPublishedRequest();
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
-      type: 'system', subtype: 'multi_agent_started',
-      content: 'Checking every extender and reviewing the conflicts.',
-      metadata: {
-        agentId: 'request-1:composed:lead', agentName: 'Lead agent',
-        activeVerb: 'Checking', completedVerb: 'Checked', agent_count: 2,
-        executionScope: 'lead', workflow: 'chain', executionKind: 'multi_agent'
-      }
-    });
-    (component as any).handleSocketEvent({
-      requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'subagent_planned', content: 'Find extenders is queued.',
       metadata: {
+        nodeId: 'request-1:composed:worker:find-extenders', parentNodeId: 'fanout-1',
         agentId: 'request-1:composed:worker:find-extenders',
         agentName: 'Evidence researcher', taskLabel: 'Find extenders',
         activeVerb: 'Searching', completedVerb: 'Searched',
-        executionScope: 'worker', conversationKind: 'SUBAGENT'
+        executionScope: 'worker', conversationKind: 'SUBAGENT', workflowType: 'sequential'
       }
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'subagent_planned', content: 'Review conflicts is queued.',
       metadata: {
+        nodeId: 'request-1:composed:worker:conflict-review', parentNodeId: 'fanout-1',
         agentId: 'request-1:composed:worker:conflict-review',
         agentName: 'Critical reviewer', taskLabel: 'Review conflicts',
         activeVerb: 'Reviewing', completedVerb: 'Reviewed',
-        executionScope: 'worker', conversationKind: 'SUBAGENT'
+        executionScope: 'worker', conversationKind: 'SUBAGENT', workflowType: 'sequential'
       }
     });
 
-    const group = component.state.messages.find(message => message.role === 'agent_group');
-    expect(group?.activities?.find(candidate => candidate.isLead))
-      .toMatchObject({plannedAgentCount: 2, activeVerb: 'Checking'});
-    expect(group?.activities?.filter(candidate => !candidate.isLead))
+    const group = component.state.messages.find(message => message.role === 'workflow_group');
+    expect(group?.workflowItemCount).toBe(2);
+    expect(group?.activities)
       .toEqual(expect.arrayContaining([
         expect.objectContaining({taskLabel: 'Find extenders', status: 'planned'}),
         expect.objectContaining({taskLabel: 'Review conflicts', status: 'planned'})
       ]));
-    expect(group?.activities).toHaveLength(3);
+    expect(group?.activities).toHaveLength(2);
 
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'subagent_started',
       content: 'Listing every extending ACC.',
       metadata: {
+        nodeId: 'request-1:composed:worker:find-extenders', parentNodeId: 'fanout-1',
         agentId: 'request-1:composed:worker:find-extenders', agentName: 'Evidence researcher',
         activeVerb: 'Searching', completedVerb: 'Searched',
-        executionScope: 'worker', conversationKind: 'SUBAGENT'
+        executionScope: 'worker', conversationKind: 'SUBAGENT', workflowType: 'sequential'
       }
     });
 
@@ -515,8 +602,9 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'guide', content: 'Inspecting the ACC associations.',
       metadata: {
+        nodeId: 'request-1:composed:worker:find-extenders', parentNodeId: 'fanout-1',
         agentId: 'request-1:composed:worker:find-extenders', executionScope: 'worker',
-        conversationKind: 'SUBAGENT'
+        conversationKind: 'SUBAGENT', workflowType: 'sequential'
       }
     });
     (component as any).handleSocketEvent({
@@ -524,8 +612,9 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       type: 'tool_call', subtype: 'completed',
       groupId: 'request-1', toolCallId: 'call-1', content: 'get_acc completed.',
       metadata: {
+        nodeId: 'request-1:composed:worker:find-extenders', parentNodeId: 'fanout-1',
         agentId: 'request-1:composed:worker:find-extenders', executionScope: 'worker',
-        conversationKind: 'SUBAGENT', toolName: 'get_acc'
+        conversationKind: 'SUBAGENT', workflowType: 'sequential', toolName: 'get_acc'
       }
     });
 
@@ -543,9 +632,10 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'subagent_completed', content: 'Searched.',
       metadata: {
+        nodeId: 'request-1:composed:worker:find-extenders', parentNodeId: 'fanout-1',
         agentId: 'request-1:composed:worker:find-extenders', agentName: 'Evidence researcher',
         activeVerb: 'Searching', completedVerb: 'Searched',
-        executionScope: 'worker', conversationKind: 'SUBAGENT'
+        executionScope: 'worker', conversationKind: 'SUBAGENT', workflowType: 'sequential'
       }
     });
 
@@ -554,78 +644,85 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       type: 'system', subtype: 'subagent_started',
       content: 'Reviewing the conflict findings.',
       metadata: {
+        nodeId: 'request-1:composed:worker:conflict-review', parentNodeId: 'fanout-1',
         agentId: 'request-1:composed:worker:conflict-review', agentName: 'Critical reviewer',
         activeVerb: 'Reviewing', completedVerb: 'Reviewed',
-        executionScope: 'worker', conversationKind: 'SUBAGENT'
+        executionScope: 'worker', conversationKind: 'SUBAGENT', workflowType: 'sequential'
       }
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype: 'subagent_completed', content: 'Reviewed.',
       metadata: {
+        nodeId: 'request-1:composed:worker:conflict-review', parentNodeId: 'fanout-1',
         agentId: 'request-1:composed:worker:conflict-review', agentName: 'Critical reviewer',
         activeVerb: 'Reviewing', completedVerb: 'Reviewed',
-        executionScope: 'worker', conversationKind: 'SUBAGENT'
+        executionScope: 'worker', conversationKind: 'SUBAGENT', workflowType: 'sequential'
       }
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
-      type: 'system', subtype: 'multi_agent_completed', content: 'Checked.',
+      type: 'system', subtype: 'workflow_completed', content: 'Checked.',
       metadata: {
-        agentId: 'request-1:composed:lead', agentName: 'Lead agent',
-        activeVerb: 'Checking', completedVerb: 'Checked', agent_count: 2,
-        executionScope: 'lead', workflow: 'chain', executionKind: 'multi_agent'
+        nodeId: 'fanout-1', parentNodeId: 'main', workflowType: 'sequential'
       }
     });
 
-    expect(component.state.messages.filter(message => message.role === 'agent_group'))
+    expect(component.state.messages.filter(message => message.role === 'workflow_group'))
       .toHaveLength(1);
     expect(component.state.agentActivities.filter(candidate => !candidate.isLead))
       .toHaveLength(2);
-    expect(component.state.agentActivities.find(candidate => candidate.isLead))
-      .toMatchObject({status: 'completed', completedVerb: 'Checked'});
+    expect(group).toMatchObject({workflowStatus: 'completed'});
   });
 
   it('starts a new group for each evaluator workflow iteration', () => {
-    startPublishedRequest();
-    const lifecycle = (subtype: string, agentId: string, content: string) => ({
+    startPublishedRequest(false);
+    const startWorkflow = (iteration: number) => (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
-      type: 'system', subtype, content,
+      type: 'system', subtype: 'workflow_started', content: `Plan ${iteration}.`,
       metadata: {
-        agentId,
-        agentName: subtype.startsWith('multi_agent') ? 'Lead agent' : 'Evidence researcher',
-        executionScope: subtype.startsWith('multi_agent') ? 'lead' : 'worker',
-        conversationKind: subtype.startsWith('multi_agent') ? 'ROOT' : 'SUBAGENT',
-        activeVerb: 'Checking', completedVerb: 'Checked', agent_count: 1,
-        workflow: 'chain', executionKind: 'multi_agent'
+        nodeId: `main:${iteration}:research`, parentNodeId: 'main', depth: 1,
+        member_count: 1, workflowType: 'sequential'
+      }
+    });
+    const lifecycle = (iteration: number, subtype: string, content: string) => ({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system', subtype, content,
+      metadata: {
+        nodeId: `main:${iteration}:research:agent:reader`,
+        parentNodeId: `main:${iteration}:research`, agentName: 'Evidence researcher',
+        activeVerb: 'Checking', completedVerb: 'Checked', workflowType: 'sequential'
       }
     });
 
-    const leadOne = 'request-1:composed:iteration-1:lead';
-    const workerOne = 'request-1:composed:iteration-1:worker:research';
-    (component as any).handleSocketEvent(lifecycle('multi_agent_started', leadOne, 'First plan.'));
-    (component as any).handleSocketEvent(lifecycle('subagent_planned', workerOne, 'Queued.'));
-    (component as any).handleSocketEvent(lifecycle('subagent_started', workerOne, 'Checking.'));
-    (component as any).handleSocketEvent(lifecycle('subagent_completed', workerOne, 'Checked.'));
-    (component as any).handleSocketEvent(lifecycle('multi_agent_completed', leadOne, 'Checked.'));
+    startWorkflow(1);
+    (component as any).handleSocketEvent(lifecycle(1, 'subagent_planned', 'Queued.'));
+    (component as any).handleSocketEvent(lifecycle(1, 'subagent_started', 'Checking.'));
+    (component as any).handleSocketEvent(lifecycle(1, 'subagent_completed', 'Checked.'));
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'workflow_completed', content: 'Checked.',
+      metadata: {nodeId: 'main:1:research', parentNodeId: 'main', workflowType: 'sequential'}
+    });
 
-    const firstGroup = component.state.messages.find(message => message.role === 'agent_group');
+    const firstGroup = component.state.messages.find(message => message.role === 'workflow_group');
     const firstActivities = firstGroup?.activities;
-    const leadTwo = 'request-1:composed:iteration-2:lead';
-    (component as any).handleSocketEvent(lifecycle('multi_agent_started', leadTwo, 'Revised plan.'));
+    startWorkflow(2);
+    (component as any).handleSocketEvent(lifecycle(2, 'subagent_started', 'Rechecking.'));
 
-    const groups = component.state.messages.filter(message => message.role === 'agent_group');
+    const groups = component.state.messages.filter(message => message.role === 'workflow_group');
     expect(groups).toHaveLength(2);
     expect(groups[0].activities).toBe(firstActivities);
     expect(groups[0].activities?.every(candidate => !candidate.inProgress)).toBe(true);
     expect(groups[1].activities).toBe(component.state.agentActivities);
     expect(component.state.agentActivities).toEqual([
-      expect.objectContaining({agentId: leadTwo, status: 'started', inProgress: true})
+      expect.objectContaining({
+        agentId: 'main:2:research:agent:reader', status: 'started', inProgress: true
+      })
     ]);
   });
 
   it('separates worker-only Planner iterations and keeps only the latest synthesis', () => {
-    startPublishedRequest();
+    startPublishedRequest(false);
     const worker = (iteration: number, index: number, subtype: string) => ({
       requestId: 'request-1', conversationId: 'conversation-1',
       type: 'system', subtype,
@@ -635,11 +732,18 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
         parentNodeId: `main:${iteration}:release-count`,
         agentId: `main:${iteration}:release-count:worker-${index}`,
         agentName: `Counter ${index}`,
-        executionScope: 'worker', conversationKind: 'PARALLEL',
-        executionKind: 'parallel'
+        executionScope: 'worker', conversationKind: 'PARALLEL', workflowType: 'parallel'
       }
     });
     const completeIteration = (iteration: number, result: string) => {
+      (component as any).handleSocketEvent({
+        requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+        subtype: 'workflow_started', content: `Counting iteration ${iteration}.`,
+        metadata: {
+          nodeId: `main:${iteration}:release-count`, parentNodeId: 'main', depth: 1,
+          member_count: 3, workflowType: 'parallel'
+        }
+      });
       for (let index = 1; index <= 3; index++) {
         (component as any).handleSocketEvent(worker(iteration, index, 'subagent_started'));
         (component as any).handleSocketEvent(worker(iteration, index, 'subagent_completed'));
@@ -708,7 +812,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
   });
 
   it('reattaches live updates to a restored workflow group', () => {
-    startPublishedRequest();
+    startPublishedRequest(false);
     const nodeId = 'main:1:release-count:worker-1';
     const activities = [{
       agentId: nodeId, agentName: 'Counter 1', status: 'started',
@@ -726,7 +830,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       metadata: {
         nodeId, parentNodeId: 'main:1:release-count',
         agentId: nodeId, agentName: 'Counter 1',
-        executionScope: 'worker', conversationKind: 'PARALLEL', executionKind: 'parallel'
+        executionScope: 'worker', conversationKind: 'PARALLEL', workflowType: 'parallel'
       }
     });
 
@@ -792,9 +896,6 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
 
   it('keeps lead tool events in the main chat flow', () => {
     startPublishedRequest();
-    (component as any).handleSocketEvent(activity(
-      'multi_agent_started', 'fanout-1-lead', 'Lead agent'
-    ));
 
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
@@ -806,9 +907,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     expect(component.state.messages).toContainEqual(expect.objectContaining({
       role: 'tool_call', toolName: 'github_search', toolStatus: 'completed'
     }));
-    expect(component.state.agentActivities
-      .find(candidate => candidate.agentId === 'fanout-1-lead')?.events
-      .some(entry => entry.status === 'tool')).toBe(false);
+    expect(component.state.agentActivities).toEqual([]);
   });
 
   it('splits lead narration at tool boundaries and renders the answer last', () => {
@@ -978,7 +1077,7 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     ));
     expect(component.agentStripVisible).toBe(false);
     // The settled run stays inspectable through the inline agent group block.
-    expect(component.state.messages.filter(message => message.role === 'agent_group'))
+    expect(component.state.messages.filter(message => message.role === 'workflow_group'))
       .toHaveLength(1);
   });
 
@@ -1002,13 +1101,8 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
 
   it('uses the server-planned specialist count for prompt-triggered fan-out status', () => {
     startPublishedRequest();
-    (component as any).handleSocketEvent({
-      ...activity('multi_agent_started', 'fanout-1-lead', 'Lead agent'),
-      metadata: {
-        agentId: 'fanout-1-lead', agentName: 'Lead agent',
-        agentRole: 'manager and final synthesizer', agent_count: 2
-      }
-    });
+    expect(component.state.messages.find(message => message.role === 'workflow_group')
+      ?.workflowItemCount).toBe(2);
     (component as any).handleSocketEvent(activity(
       'subagent_started', 'fanout-1-agent-01', 'Sync reader'
     ));
