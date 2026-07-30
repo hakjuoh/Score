@@ -17,7 +17,8 @@ class AiAgentCatalogTest {
                 .containsExactly("compactor-agent", "connectcenter-assistant",
                         "critical-reviewer", "definition-generator", "evidence-researcher",
                         "gateway-agent", "general-purpose", "name-suggester",
-                        "response-only-agent", "workflow-evaluator", "workflow-planner",
+                        "response-only-agent", "tool-search-advisor", "workflow-evaluator",
+                        "workflow-planner",
                         "workflow-synthesizer");
         assertThat(catalog.workers()).allSatisfy(agent -> {
             assertThat(agent.instruction()).isNotBlank();

@@ -34,6 +34,9 @@ class CreateFileToolTest {
                 """), new AiTool.ToolExecutionContext(scope, java.util.Map.of()));
 
         assertThat(tool.specification().effect()).isEqualTo(AiTool.ToolEffect.OUTPUT_WRITE);
+        assertThat(tool.specification().outputSchema())
+                .contains("\"fileId\"", "\"format\"", "\"filename\"", "\"mediaType\"",
+                        "\"size\"", "\"sha256\"");
         assertThat(result.json()).contains("file-1", "report.md").doesNotContain("/download");
     }
 }

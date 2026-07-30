@@ -44,6 +44,7 @@ import org.oagi.score.gateway.http.configuration.ai.ConnectCenterMcpClientFactor
 import org.oagi.score.gateway.http.api.ai_management.file.AiPlatformToolProvider;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiChatOptionsFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
+import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.oagi.score.gateway.http.configuration.ai.TrajectoryRecordingAdvisor;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.springframework.ai.chat.client.ChatClient;
@@ -103,6 +104,7 @@ public final class AiChatExecutor {
     private final ScoreAiObservability observability;
     private final AiMiddlewareChain middleware;
     private final AiPlatformToolProvider platformTools;
+    private final boolean toolSearchEnabled;
 
     @Autowired
     public AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
@@ -121,6 +123,7 @@ public final class AiChatExecutor {
                           ScoreAiObservability observability,
                           AiMiddlewareChain middleware,
                           AiPlatformToolProvider platformTools,
+                          ScoreAiProperties properties,
                           ObjectProvider<ExecutionObserver> executionObservers) {
         this.models = models;
         this.mcpClients = mcpClients;
@@ -139,6 +142,8 @@ public final class AiChatExecutor {
         this.observability = observability != null ? observability : ScoreAiObservability.noop();
         this.middleware = middleware != null ? middleware : AiMiddlewareChain.none();
         this.platformTools = platformTools;
+        this.toolSearchEnabled = properties == null
+                || properties.getTools().getToolSearch().isEnabled();
         this.observer = ExecutionObserver.composite(executionObservers != null
                 ? executionObservers.orderedStream().toList() : List.of());
     }
@@ -162,7 +167,8 @@ public final class AiChatExecutor {
         this(models, mcpClients, toolSearchAdvisor, changeGuard, elicitations,
                 providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
                 callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
-                instructions, observability, AiMiddlewareChain.none(), null, executionObservers);
+                instructions, observability, AiMiddlewareChain.none(), null,
+                new ScoreAiProperties(), executionObservers);
     }
 
     AiChatExecutor(ScoreAiModelRegistry models,
@@ -182,8 +188,29 @@ public final class AiChatExecutor {
         this(models, mcpClients, toolSearchAdvisor, changeGuard, elicitations,
                 providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
                 callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
+                new ScoreAiProperties(), executionObservers);
+    }
+
+    AiChatExecutor(ScoreAiModelRegistry models,
+                   ConnectCenterMcpClientFactory mcpClients,
+                   ToolSearchToolCallingAdvisor toolSearchAdvisor,
+                   AiChangeToolGuard changeGuard,
+                   AiElicitationService elicitations,
+                   AiProviderRetryExecutor providerRetry,
+                   ScoreAiChatOptionsFactory optionsFactory,
+                   AiChangeApprovalCoordinator approvalCoordinator,
+                   ToolGuardrailRegistry toolGuardrails,
+                   SpringAiCallbackToolSetAdapter callbackToolAdapter,
+                   SpringAiToolAdapter springAiToolAdapter,
+                   AgentInputGuardrailChain modelInputGuardrails,
+                   AiRequestRegistry requests,
+                   ScoreAiProperties properties,
+                   ObjectProvider<ExecutionObserver> executionObservers) {
+        this(models, mcpClients, toolSearchAdvisor, changeGuard, elicitations,
+                providerRetry, optionsFactory, approvalCoordinator, toolGuardrails,
+                callbackToolAdapter, springAiToolAdapter, modelInputGuardrails, requests,
                 AiExecutionInstructions.bundled(), ScoreAiObservability.noop(),
-                AiMiddlewareChain.none(), null, executionObservers);
+                AiMiddlewareChain.none(), null, properties, executionObservers);
     }
 
     /** Compatibility constructor for focused executor tests. */
@@ -520,6 +547,7 @@ public final class AiChatExecutor {
         {
             ChatClient.Builder assistantBuilder = models.clientBuilder(request.modelName())
                     .defaultAdvisors(new TrajectoryRecordingAdvisor(recorder, observability));
+            String directToolCatalog = "";
             AiChangeToolGuard.GuardedToolSession guardedSession = null;
             org.springframework.ai.tool.ToolCallbackProvider executableTools = null;
             if (context.agentToolBinding() != null) {
@@ -572,7 +600,8 @@ public final class AiChatExecutor {
                                         new org.springframework.ai.tool.ToolCallback[0]
                         : guardedSession != null ? guardedSession : mcpCallbacks;
                 var coreTools = callbackToolAdapter != null
-                        ? callbackToolAdapter.adapt(guardedTools, readOnlyToolNames).plus(localTools)
+                        ? callbackToolAdapter.adapt(guardedTools, readOnlyToolNames,
+                                mcp != null ? mcp.toolCatalog() : List.of()).plus(localTools)
                         : localTools;
                 if (!coreTools.isEmpty()) {
                     ExecutionScope scope = executionScope(context);
@@ -629,8 +658,11 @@ public final class AiChatExecutor {
                 // Give the model the guarded callbacks directly so it can resume that
                 // invocation and read it back without rediscovering it through
                 // toolSearchTool. Other changes remain protected by the guard.
-                if (request.changeConfirmation() != null) {
+                if (request.changeConfirmation() != null
+                        || !toolSearchEnabled) {
                     assistantBuilder.defaultAdvisors(DIRECT_TOOL_CALLING_ADVISOR);
+                    directToolCatalog = McpToolCatalog.render(coreTools,
+                            mcp != null ? mcp.toolCatalog() : List.of());
                 } else {
                     // READ_ONLY sessions have already been reduced to the server-declared
                     // read-only callback set above. Keep that private safe registry deferred too,
@@ -638,6 +670,9 @@ public final class AiChatExecutor {
                     assistantBuilder.defaultAdvisors(toolSearchAdvisor);
                 }
             }
+            Agent.Instruction runtimeInstruction = directToolCatalog.isEmpty()
+                    ? instruction
+                    : new Agent.Instruction(instruction.value() + directToolCatalog);
             List<Message> messages = new ArrayList<>(context.history());
             if (request.changeConfirmation() != null
                     && request.changeConfirmation().revised()) {
@@ -656,7 +691,7 @@ public final class AiChatExecutor {
             long completedToolCallsBeforeAnswer = recorder.completedToolCallCount();
             String answer = invoke(assistant, options, request, messages, recorder,
                     context.streamVisibleContent(), internalPersona, executionScope(context),
-                    executionState, instruction, progress);
+                    executionState, runtimeInstruction, progress);
             int textualToolCallRecovery = 0;
             while (isTextualToolCallPlaceholder(answer)
                     && recorder.completedToolCallCount() == completedToolCallsBeforeAnswer
@@ -667,7 +702,7 @@ public final class AiChatExecutor {
                         AiExecutionInstructions.Template.TEXTUAL_TOOL_CALL_RECOVERY).value()));
                 answer = invoke(assistant, options, request, recoveryMessages, recorder,
                         context.streamVisibleContent(), internalPersona, executionScope(context),
-                        executionState, instruction, progress);
+                        executionState, runtimeInstruction, progress);
             }
             if (isTextualToolCallPlaceholder(answer)) {
                 throw new IllegalStateException(
@@ -727,7 +762,7 @@ public final class AiChatExecutor {
                         AiExecutionInstructions.Template.APPROVAL_CONTINUATION).value()));
                 answer = invoke(assistant, options, request, approvalMessages, recorder,
                         false, internalPersona, executionScope(context), executionState,
-                        instruction, progress);
+                        runtimeInstruction, progress);
             }
             int continuation = 0;
             while (guardedSession != null && guardedSession.changeCompleted()
@@ -744,7 +779,7 @@ public final class AiChatExecutor {
                         AiExecutionInstructions.Template.READ_BACK_CONTINUATION).value()));
                 answer = invoke(assistant, options, request, continuationMessages, recorder,
                         false, internalPersona, executionScope(context), executionState,
-                        instruction, progress);
+                        runtimeInstruction, progress);
             }
             if (guardedSession != null && guardedSession.changeCompleted()
                     && !guardedSession.confirmationRequired()

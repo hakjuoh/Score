@@ -1,5 +1,5 @@
 <span class="tool-call-a11y-status" role="status" aria-live="polite" aria-atomic="true">
-  {{ statusLabel }}: {{ content }}
+  {{ statusLabel }}: {{ visibleContent }}
 </span>
 @if (hasDetail) {
   <details class="tool-call-disclosure">
@@ -16,9 +16,9 @@
           <mat-icon class="message-prefix-icon agent-focus-tool-icon" aria-hidden="true">build</mat-icon>
         }
       </span>
-      <span class="message-text">{{ content }}</span>
+      <span class="message-text">{{ visibleContent }}</span>
     </summary>
-    <pre class="tool-call-detail">{{ detail }}</pre>
+    <pre class="tool-call-detail">{{ visibleDetail }}</pre>
   </details>
 } @else {
   <div class="tool-call-summary tool-call-summary-static">
@@ -33,6 +33,6 @@
         <mat-icon class="message-prefix-icon agent-focus-tool-icon" aria-hidden="true">build</mat-icon>
       }
     </span>
-    <span class="message-text">{{ content }}</span>
+    <span class="message-text">{{ visibleContent }}</span>
   </div>
 }

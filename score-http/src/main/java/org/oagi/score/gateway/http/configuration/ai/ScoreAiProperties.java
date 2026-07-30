@@ -476,16 +476,29 @@ public class ScoreAiProperties {
     /** Independently configurable tool integrations. */
     public static class Tools {
         private Files files = new Files();
+        private ToolSearch toolSearch = new ToolSearch();
         private Mcp connectCenterMcp = new Mcp();
 
         public Files getFiles() { return files; }
         public void setFiles(Files files) {
             this.files = files != null ? files : new Files();
         }
+        public ToolSearch getToolSearch() { return toolSearch; }
+        public void setToolSearch(ToolSearch toolSearch) {
+            this.toolSearch = toolSearch != null ? toolSearch : new ToolSearch();
+        }
         public Mcp getConnectCenterMcp() { return connectCenterMcp; }
         public void setConnectCenterMcp(Mcp connectCenterMcp) {
             this.connectCenterMcp = connectCenterMcp != null ? connectCenterMcp : new Mcp();
         }
+    }
+
+    /** Deferred tool discovery. Disabled mode exposes the complete callback registry. */
+    public static class ToolSearch {
+        private boolean enabled = true;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
     }
 
     /** The create_file tool, including rendering, storage, and retention. */
