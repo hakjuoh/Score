@@ -2,8 +2,6 @@ package org.oagi.score.gateway.http.api.ai_management.tool;
 
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeAuthorization;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationNotice;
-import org.oagi.score.gateway.http.api.ai_management.model.AiChangePermissionMode;
-import org.oagi.score.gateway.http.api.ai_management.model.AiChangeRisk;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
@@ -15,14 +13,13 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChangeCo
 import org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl;
 import org.oagi.score.gateway.http.api.ai_management.service.AiChangeConfirmationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiGuardedToolCallback;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiTool;
 import org.oagi.score.gateway.http.api.ai_management.tool.ToolAuthorizationPolicy;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.ai.tool.definition.ToolDefinition;
-import org.springframework.ai.tool.metadata.ToolMetadata;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
@@ -36,7 +33,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /** Enforces explicit, one-time approval before any connectCenter MCP tool call the server did not declare read-only. */
@@ -66,9 +62,9 @@ public class AiChangeToolGuard {
 
     private final AiChangeConfirmationService confirmations;
     private final AiRequestRegistry requests;
-    private final AiChangeOwnershipPolicy ownership;
+    private final AiChangeApprovalPolicy approvalPolicy;
     private final AiToolInputNormalizer inputNormalizer;
-    private final ObjectMapper objectMapper;
+    private final AiChangeToolResults results;
 
     public AiChangeToolGuard(AiChangeConfirmationService confirmations, AiRequestRegistry requests) {
         this(confirmations, requests, AiChangeOwnershipPolicy.UNVERIFIED, new ObjectMapper());
@@ -84,8 +80,8 @@ public class AiChangeToolGuard {
                                AiChangeOwnershipPolicy ownership, ObjectMapper objectMapper) {
         this.confirmations = confirmations;
         this.requests = requests;
-        this.ownership = ownership;
-        this.objectMapper = objectMapper;
+        this.approvalPolicy = new AiChangeApprovalPolicy(ownership);
+        this.results = new AiChangeToolResults(objectMapper);
         this.inputNormalizer = new AiToolInputNormalizer(objectMapper);
     }
 
@@ -117,8 +113,8 @@ public class AiChangeToolGuard {
         GuardedToolSession session = new GuardedToolSession(
                 request, requester, notices, guarded, readOnlyToolNames, runControl);
         for (int index = 0; index < callbacks.length; index++) {
-            guarded[index] = new GuardedToolCallback(callbacks[index], request, requester,
-                    notices, session);
+            guarded[index] = new AiGuardedToolCallback(
+                    callbacks[index], session, inputNormalizer);
         }
         return session;
     }
@@ -166,72 +162,6 @@ public class AiChangeToolGuard {
                 || !readOnlyToolNames.contains(toolName);
     }
 
-    private final class GuardedToolCallback implements ToolCallback {
-        private final ToolCallback delegate;
-        private final ChatRequest request;
-        private final ScoreUser requester;
-        private final Consumer<AiChangeConfirmationNotice> notices;
-        private final GuardedToolSession session;
-
-        private GuardedToolCallback(ToolCallback delegate, ChatRequest request, ScoreUser requester,
-                                    Consumer<AiChangeConfirmationNotice> notices,
-                                    GuardedToolSession session) {
-            this.delegate = delegate;
-            this.request = request;
-            this.requester = requester;
-            this.notices = notices;
-            this.session = session;
-        }
-
-        @Override
-        public ToolDefinition getToolDefinition() { return delegate.getToolDefinition(); }
-
-        @Override
-        public ToolMetadata getToolMetadata() { return delegate.getToolMetadata(); }
-
-        @Override
-        public String call(String input) { return call(input, new ToolContext(java.util.Map.of())); }
-
-        @Override
-        public String call(String input, ToolContext context) {
-            String name = getToolDefinition().name();
-            String normalizedInput = inputNormalizer.normalize(
-                    input, getToolDefinition().inputSchema());
-            if (!session.isChange(name)) {
-                String result = delegate.call(normalizedInput, context);
-                session.readCompleted();
-                return result;
-            }
-            Optional<String> cached = session.cachedResult(name, normalizedInput);
-            if (cached.isPresent()) {
-                return cached.get();
-            }
-            ChangeConfirmation supplied = session.redemption(name, normalizedInput)
-                    .orElse(request.changeConfirmation());
-            if (supplied != null || requiresApproval(request, requester, name, normalizedInput)) {
-                AiChangeAuthorization authorization = confirmations.authorize(
-                        requester, request.conversationId(), request.requestId(), supplied,
-                        name, normalizedInput);
-                if (!authorization.allowed()) {
-                    session.markConfirmationRequired(authorization.notice(), name, normalizedInput);
-                    notices.accept(authorization.notice());
-                    return confirmationRequiredResult(
-                            authorization.notice().confirmationRequestId());
-                }
-            }
-            if (!session.startChange(name, normalizedInput)) {
-                return REQUEST_STOPPING_RESULT;
-            }
-            try {
-                String result = delegate.call(normalizedInput, context);
-                session.changeCompleted(name, normalizedInput, result);
-                return result;
-            } finally {
-                session.releaseChangeLease(name, normalizedInput);
-            }
-        }
-    }
-
     /** Request-scoped tool state used to resume an exact approval and enforce read-back. */
     public final class GuardedToolSession implements ToolCallbackProvider, ToolAuthorizationPolicy {
         private final ChatRequest request;
@@ -239,7 +169,7 @@ public class AiChangeToolGuard {
         private final Consumer<AiChangeConfirmationNotice> notices;
         private final ToolCallback[] callbacks;
         private final Set<String> readOnlyToolNames;
-        private final WorkflowRunControl runControl;
+        private final AiChangeExecutionLease changeLease;
         private final AtomicLong sequence = new AtomicLong();
         private final CopyOnWriteArrayList<AiApprovedExecution> completedChanges =
                 new CopyOnWriteArrayList<>();
@@ -248,8 +178,6 @@ public class AiChangeToolGuard {
         private final ConcurrentHashMap<String, ChangeConfirmation> redemptions =
                 new ConcurrentHashMap<>();
         private final ConcurrentHashMap<String, String> resolvedChangeResults =
-                new ConcurrentHashMap<>();
-        private final ConcurrentHashMap<String, AtomicInteger> activeChangeLeases =
                 new ConcurrentHashMap<>();
         private volatile long lastChangeSequence = -1L;
         private volatile long lastReadSequence = -1L;
@@ -265,10 +193,13 @@ public class AiChangeToolGuard {
             this.notices = notices;
             this.callbacks = callbacks;
             this.readOnlyToolNames = readOnlyToolNames != null ? Set.copyOf(readOnlyToolNames) : Set.of();
-            this.runControl = Objects.requireNonNullElse(runControl, WorkflowRunControl.NOOP);
+            WorkflowRunControl requiredRunControl =
+                    Objects.requireNonNullElse(runControl, WorkflowRunControl.NOOP);
+            this.changeLease = new AiChangeExecutionLease(
+                    request.requestId(), requests, requiredRunControl);
         }
 
-        boolean isChange(String toolName) {
+        public boolean isChange(String toolName) {
             return AiChangeToolGuard.isChange(toolName, readOnlyToolNames);
         }
 
@@ -292,7 +223,9 @@ public class AiChangeToolGuard {
             }
             ChangeConfirmation supplied = redemption(name, normalizedInput)
                     .orElse(request.changeConfirmation());
-            if (supplied != null || requiresApproval(request, requester, name, normalizedInput)) {
+            if (supplied != null
+                    || approvalPolicy.requiresApproval(
+                    request.permissionMode(), requester, name, normalizedInput)) {
                 AiChangeAuthorization result = confirmations.authorize(
                         requester, request.conversationId(), request.requestId(), supplied,
                         name, normalizedInput);
@@ -300,11 +233,31 @@ public class AiChangeToolGuard {
                     markConfirmationRequired(result.notice(), name, normalizedInput);
                     notices.accept(result.notice());
                     return new ToolAuthorizationPolicy.Result.Refuse(new AiTool.ToolResult(
-                            confirmationRequiredResult(result.notice().confirmationRequestId())));
+                            results.confirmationRequired(result.notice().confirmationRequestId())));
                 }
             }
             return new ToolAuthorizationPolicy.Result.Allow(
                     supplied != null ? supplied.confirmationRequestId() : "permission-mode");
+        }
+
+        /** Applies the legacy Spring AI callback approval protocol for one normalized call. */
+        public Optional<String> approvalRefusal(String name, String normalizedInput) {
+            ChangeConfirmation supplied = redemption(name, normalizedInput)
+                    .orElse(request.changeConfirmation());
+            if (supplied == null && !approvalPolicy.requiresApproval(
+                    request.permissionMode(), requester, name, normalizedInput)) {
+                return Optional.empty();
+            }
+            AiChangeAuthorization authorization = confirmations.authorize(
+                    requester, request.conversationId(), request.requestId(), supplied,
+                    name, normalizedInput);
+            if (authorization.allowed()) {
+                return Optional.empty();
+            }
+            markConfirmationRequired(authorization.notice(), name, normalizedInput);
+            notices.accept(authorization.notice());
+            return Optional.of(results.confirmationRequired(
+                    authorization.notice().confirmationRequestId()));
         }
 
         @Override
@@ -371,7 +324,7 @@ public class AiChangeToolGuard {
                 result = callback.call(supplied.arguments(), new ToolContext(Map.of()));
             } catch (RuntimeException failure) {
                 return Optional.of(new AiApprovedExecution(supplied.toolName(),
-                        supplied.arguments(), changeFailedResult(failure)));
+                        supplied.arguments(), results.changeFailed(failure)));
             }
             if (lastChangeSequence == changesBefore) {
                 return Optional.empty();
@@ -431,7 +384,7 @@ public class AiChangeToolGuard {
                      * approval, because the redemption is already spent.
                      */
                     resolved.add(new AiResolvedChange(approval.toolName(),
-                            approval.arguments(), changeFailedResult(failure), false));
+                            approval.arguments(), results.changeFailed(failure), false));
                     continue;
                 }
                 if (lastChangeSequence == changesBefore) {
@@ -461,7 +414,7 @@ public class AiChangeToolGuard {
             return List.copyOf(completedChanges);
         }
 
-        private void markConfirmationRequired(
+        void markConfirmationRequired(
                 AiChangeConfirmationNotice notice, String toolName, String arguments) {
             confirmationRequired = true;
             boolean recorded = pendingApprovals.stream().anyMatch(existing ->
@@ -471,29 +424,11 @@ public class AiChangeToolGuard {
             }
         }
 
-        private Optional<ChangeConfirmation> redemption(String toolName, String arguments) {
+        Optional<ChangeConfirmation> redemption(String toolName, String arguments) {
             if (redemptions.isEmpty()) {
                 return Optional.empty();
             }
             return Optional.ofNullable(redemptions.remove(key(toolName, arguments)));
-        }
-
-        private String changeFailedResult(RuntimeException failure) {
-            String detail = failureDetail(failure);
-            return objectMapper.createObjectNode()
-                    .put("error", CHANGE_FAILED)
-                    .put("message", StringUtils.hasText(detail)
-                            ? detail : "The data-changing tool call did not complete.")
-                    .toString();
-        }
-
-        private String failureDetail(Throwable failure) {
-            for (Throwable candidate = failure; candidate != null; candidate = candidate.getCause()) {
-                if (StringUtils.hasText(candidate.getMessage())) {
-                    return candidate.getMessage();
-                }
-            }
-            return null;
         }
 
         private String key(String toolName, String arguments) {
@@ -503,17 +438,17 @@ public class AiChangeToolGuard {
                     + Objects.toString(arguments, "");
         }
 
-        private void readCompleted() {
+        public void readCompleted() {
             lastReadSequence = sequence.incrementAndGet();
         }
 
-        private void changeCompleted(String toolName, String input, String result) {
+        public void changeCompleted(String toolName, String input, String result) {
             lastChangeSequence = sequence.incrementAndGet();
             resolvedChangeResults.put(key(toolName, input), result);
             completedChanges.add(new AiApprovedExecution(toolName, input, result));
         }
 
-        private Optional<String> cachedResult(String toolName, String input) {
+        public Optional<String> cachedResult(String toolName, String input) {
             return Optional.ofNullable(resolvedChangeResults.get(key(toolName, input)));
         }
 
@@ -521,40 +456,15 @@ public class AiChangeToolGuard {
             return key(authorization.tool().name(), authorization.arguments().json());
         }
 
-        private boolean startChange(String toolName, String arguments) {
+        public boolean startChange(String toolName, String arguments) {
             return startChange(key(toolName, arguments));
         }
 
         private boolean startChange(String executionKey) {
-            runControl.definiteActivityStarted();
-            boolean registered = false;
-            boolean tracked = false;
-            try {
-                registered = requests.changeStarted(request.requestId());
-                if (!registered) {
-                    return false;
-                }
-                activeChangeLeases.compute(executionKey, (ignored, leases) -> {
-                    AtomicInteger current = leases != null ? leases : new AtomicInteger();
-                    current.incrementAndGet();
-                    return current;
-                });
-                tracked = true;
-                return true;
-            } finally {
-                if (!tracked) {
-                    try {
-                        if (registered) {
-                            requests.changeFinished(request.requestId());
-                        }
-                    } finally {
-                        runControl.definiteActivityFinished();
-                    }
-                }
-            }
+            return changeLease.acquire(executionKey);
         }
 
-        private void releaseChangeLease(String toolName, String arguments) {
+        public void releaseChangeLease(String toolName, String arguments) {
             releaseChangeLease(key(toolName, arguments));
         }
 
@@ -563,47 +473,12 @@ public class AiChangeToolGuard {
         }
 
         private void releaseChangeLease(String executionKey) {
-            java.util.concurrent.atomic.AtomicBoolean released =
-                    new java.util.concurrent.atomic.AtomicBoolean();
-            activeChangeLeases.computeIfPresent(executionKey, (ignored, leases) -> {
-                released.set(true);
-                return leases.decrementAndGet() <= 0 ? null : leases;
-            });
-            if (!released.get()) return;
-            try {
-                requests.changeFinished(request.requestId());
-            } finally {
-                runControl.definiteActivityFinished();
-            }
+            changeLease.release(executionKey);
         }
     }
 
-    /**
-     * Reports whether a data-changing tool call needs explicit approval under the request's
-     * permission mode. Automatic mode skips approval for tools that only create new data, and
-     * for tools that change one existing record while the requester owns that record; every
-     * other data-changing tool, including deletions and state changes on the requester's own
-     * data, is approved explicitly.
-     */
-    private boolean requiresApproval(ChatRequest request, ScoreUser requester,
-                                     String toolName, String arguments) {
-        AiChangePermissionMode permissionMode =
-                AiChangePermissionMode.resolve(request.permissionMode());
-        AiChangeRisk risk = AiChangeRiskCatalog.ruleOf(toolName).risk();
-        if (permissionMode.automaticallyAllows(risk)) {
-            return false;
-        }
-        return !permissionMode.requiresOwnershipCheck(risk)
-                || !ownership.requesterOwnsTarget(requester, toolName, arguments);
-    }
-
-    private String confirmationRequiredResult(String confirmationRequestId) {
-        var result = objectMapper.createObjectNode();
-        result.put("error", CHANGE_CONFIRMATION_REQUIRED);
-        result.put("message", "This data-changing tool call was not executed."
-                + " Wait for explicit user approval.");
-        result.put("confirmationRequestId", confirmationRequestId);
-        return result.toString();
+    public static String requestStoppingResult() {
+        return REQUEST_STOPPING_RESULT;
     }
 
 }
