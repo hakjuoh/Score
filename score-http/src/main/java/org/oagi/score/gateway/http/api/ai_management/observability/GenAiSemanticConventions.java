@@ -5,7 +5,6 @@ import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.trace.SpanBuilder;
 import org.springframework.util.StringUtils;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 
@@ -47,11 +46,6 @@ final class GenAiSemanticConventions {
     static String spanName(String operation, String target) {
         return StringUtils.hasText(target) && !"unknown".equalsIgnoreCase(target.strip())
                 ? operation + " " + target.strip() : operation;
-    }
-
-    static double elapsedSeconds(long startedNanos) {
-        return Duration.ofNanos(Math.max(0L, System.nanoTime() - startedNanos)).toNanos()
-                / 1_000_000_000.0;
     }
 
     static Attributes inferenceAttributes(String operation, String provider, String requestModel,

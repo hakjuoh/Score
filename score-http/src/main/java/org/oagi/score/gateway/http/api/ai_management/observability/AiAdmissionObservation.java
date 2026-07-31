@@ -69,7 +69,7 @@ final class AiAdmissionObservation {
         instruments.turns.add(1, labels);
         instruments.admissionRejections.add(1, labels);
         instruments.genAiWorkflowDuration.record(
-                GenAiSemanticConventions.elapsedSeconds(startedNanos),
+                AiObservationTiming.elapsedSeconds(startedNanos),
                 GenAiSemanticConventions.workflowDurationAttributes(
                         "assistant", failure != null ? failure.getClass().getName()
                                 : "admission_rejected", false));

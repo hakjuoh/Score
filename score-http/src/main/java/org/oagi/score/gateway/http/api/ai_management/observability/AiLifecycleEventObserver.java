@@ -74,11 +74,11 @@ final class AiLifecycleEventObserver {
         tools.closeMatching(key -> key.requestId.equals(requestId),
                 operation -> operation.finish(requestOutcome, true));
         approvals.closeMatching(key -> key.requestId.equals(requestId), started ->
-            instruments.approvalWait.record(elapsedMillis(started),
+            instruments.approvalWait.record(AiObservationTiming.elapsedMillis(started),
                     Attributes.builder().put("score.ai.approval.type", "change")
                             .put("score.ai.approval.outcome", outcome(requestOutcome)).build()));
         elicitations.closeMatching(key -> key.requestId.equals(requestId), started ->
-            instruments.approvalWait.record(elapsedMillis(started),
+            instruments.approvalWait.record(AiObservationTiming.elapsedMillis(started),
                     Attributes.builder().put("score.ai.approval.type", "elicitation")
                             .put("score.ai.approval.outcome", outcome(requestOutcome)).build()));
     }
@@ -168,7 +168,7 @@ final class AiLifecycleEventObserver {
                 new OperationKey(requestId, batchId), System::nanoTime);
         if (started == null) return;
         String result = number(metadata.get("denied")) > 0 ? "partially_denied" : "approved";
-        instruments.approvalWait.record(elapsedMillis(started),
+        instruments.approvalWait.record(AiObservationTiming.elapsedMillis(started),
                 Attributes.builder().put("score.ai.approval.type", "change")
                         .put("score.ai.approval.outcome", result).build());
         Span.fromContext(parents.apply(requestId)).addEvent("score.ai.approval.decided",
@@ -193,7 +193,7 @@ final class AiLifecycleEventObserver {
                 new OperationKey(requestId, id), System::nanoTime);
         if (started == null) return;
         String result = subtype.endsWith("accepted") ? "accepted" : "rejected";
-        instruments.approvalWait.record(elapsedMillis(started),
+        instruments.approvalWait.record(AiObservationTiming.elapsedMillis(started),
                 Attributes.builder().put("score.ai.approval.type", "elicitation")
                         .put("score.ai.approval.outcome", result).build());
         Span.fromContext(parents.apply(requestId)).addEvent("score.ai.elicitation." + result);
@@ -401,7 +401,7 @@ final class AiLifecycleEventObserver {
                 span.setAttribute("error.type", errorType);
                 span.setStatus(StatusCode.ERROR, normalized);
             }
-            double duration = elapsedMillis(startedNanos);
+            double duration = AiObservationTiming.elapsedMillis(startedNanos);
             AttributesBuilder labels = Attributes.builder().put(
                     workflow ? "score.ai.workflow.name" : "score.ai.tool.source", metricName)
                     .put("score.ai.outcome", normalized);
@@ -409,14 +409,14 @@ final class AiLifecycleEventObserver {
                 instruments.workflows.add(1, labels.build());
                 instruments.workflowDuration.record(duration, labels.build());
                 instruments.genAiWorkflowDuration.record(
-                        GenAiSemanticConventions.elapsedSeconds(startedNanos),
+                        AiObservationTiming.elapsedSeconds(startedNanos),
                         GenAiSemanticConventions.workflowDurationAttributes(
                                 semanticTarget, errorType, true));
             } else {
                 instruments.toolCalls.add(1, labels.build());
                 instruments.toolDuration.record(duration, labels.build());
                 instruments.genAiExecuteToolDuration.record(
-                        GenAiSemanticConventions.elapsedSeconds(startedNanos),
+                        AiObservationTiming.elapsedSeconds(startedNanos),
                         GenAiSemanticConventions.toolDurationAttributes(
                                 semanticTarget, semanticAgent, errorType));
             }
