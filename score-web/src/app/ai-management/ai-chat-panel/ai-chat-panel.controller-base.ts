@@ -9,13 +9,9 @@ import {AuthService} from '../../authentication/auth.service';
 import {WebPageInfoService} from '../../basis/basis.service';
 import {ConfirmDialogService} from '../../common/confirm-dialog/confirm-dialog.service';
 import {AiChatComposerComponent} from './ai-chat-composer.component';
-import {AiContextBudgetData} from './ai-context-budget-chart.model';
 import {AiChatApiService} from './domain/ai-chat-api.service';
 import {AiActiveRequestRecoveryService} from './domain/ai-active-request-recovery.service';
-import {
-  AiChatAttachmentQueueCallbacks,
-  AiChatAttachmentQueueService
-} from './domain/ai-chat-attachment-queue.service';
+import {AiChatAttachmentQueueService} from './domain/ai-chat-attachment-queue.service';
 import {AiChatAttachmentService} from './domain/ai-chat-attachment.service';
 import {
   AiChatCancellationCallbacks,
@@ -30,10 +26,7 @@ import {
   AiRequestTerminalCoordinator,
   AiRequestTerminalTransition
 } from './domain/ai-request-terminal-coordinator';
-import {
-  AiConversationRestoreCallbacks,
-  AiConversationRestoreService
-} from './domain/ai-conversation-restore.service';
+import {AiConversationRestoreService} from './domain/ai-conversation-restore.service';
 import {AiConversationProjector} from './domain/ai-conversation-projector';
 import {AiChatNavigationService} from './domain/ai-chat-navigation.service';
 import {AiChatPanelLayoutService} from './domain/ai-chat-panel-layout.service';
@@ -44,18 +37,16 @@ import {AiChatSessionPersistenceService} from './domain/ai-chat-session-persiste
 import {AiChatSettingsService} from './domain/ai-chat-settings.service';
 import {AiChatTransportService} from './domain/ai-chat-transport.service';
 import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
+import {AiChatWorkspacePersistenceCoordinator} from './domain/ai-chat-workspace-persistence-coordinator';
 import {
   AiAgentActivity,
   isTerminalAgentStatus,
   settleAgentConversation
 } from './domain/ai-agent-activity';
 import {
-  AiChangeInteractionCallbacks,
   AiChangeInteractionService,
-  ChangeRepeatDraft,
-  ChangeRepeatOpportunity
+  ChangeRepeatDraft
 } from './domain/ai-change-interaction.service';
-import {AiTerminalRequestErrorStatus} from './domain/ai-chat-event-semantics';
 import {
   AiActiveRequestIdentity,
   AiAgentExecutionStatus,
@@ -63,18 +54,13 @@ import {
   AiChatAttachment,
   AiChatCommand,
   AiChatContextUpdate,
-  AiChatConversationDetails,
-  AiChatDock,
   AiChatMessage,
   AiMcpStatus,
   AiChatPanelTab,
   AiChatSocketEvent,
-  AiElicitationResponse,
   AiExecutionStatus,
-  AiChangeConfirmationAuthorization,
   AiChangeConfirmationNotice,
   AiChangeInteraction,
-  AiPublicExecutionRequestStatus,
   ResizeState,
   checkingAiMcpStatus,
   failedAiMcpStatusCheck,
@@ -112,6 +98,7 @@ export abstract class AiChatPanelControllerBase {
   protected settingsService = inject(AiChatSettingsService);
   protected transportService = inject(AiChatTransportService);
   protected windowCoordinator = inject(AiChatWindowCoordinatorService);
+  protected workspacePersistence = inject(AiChatWorkspacePersistenceCoordinator);
   protected sanitizer = inject(DomSanitizer);
   protected webPageInfo = inject(WebPageInfoService);
   protected auth = inject(AuthService);
@@ -142,10 +129,6 @@ export abstract class AiChatPanelControllerBase {
   protected destroyed = false;
   protected readonly destroyed$ = new Subject<void>();
   private mcpStatusCheck?: Observable<AiMcpStatus>;
-  private workspacePersistenceReady = false;
-  private workspacePersistenceSignature = '';
-  private attachmentPersistenceSignature = '';
-  private attachmentRestoreGeneration = 0;
   protected restoreChatScrollPending = false;
 
   abstract composer?: AiChatComposerComponent;
@@ -338,241 +321,106 @@ export abstract class AiChatPanelControllerBase {
   }
 
   protected initializeWorkspacePersistence(workspaceRestored: boolean): void {
-    this.restoreChatScrollPending = workspaceRestored;
-    this.workspacePersistenceSignature = this.currentWorkspacePersistenceSignature();
-    this.attachmentPersistenceSignature = this.currentAttachmentPersistenceSignature();
-    this.workspacePersistenceReady = true;
-    this.restorePersistedDraftAttachments();
+    this.workspacePersistence.initialize(
+      this.state,
+      {
+        workspaceRestored,
+        setRestoreChatScroll: pending => this.restoreChatScrollPending = pending,
+        isDestroyed: () => this.destroyed
+      }
+    );
   }
 
   protected restorePersistedDraftAttachments(): void {
-    const generation = ++this.attachmentRestoreGeneration;
-    void this.sessionPersistence.restoreDraftAttachments().then(attachments => {
-      if (this.destroyed || generation !== this.attachmentRestoreGeneration
-        || this.state.attachments.length > 0) {
-        return;
-      }
-      this.state.attachments = attachments;
-    });
+    this.workspacePersistence.restoreDraftAttachments(this.state, () => this.destroyed);
   }
 
   protected persistWorkspaceIfChanged(): void {
-    if (!this.workspacePersistenceReady || this.destroyed
-      || this.state.popoutActive && !this.popoutMode) return;
-    const workspaceSignature = this.currentWorkspacePersistenceSignature();
-    if (workspaceSignature !== this.workspacePersistenceSignature) {
-      this.workspacePersistenceSignature = workspaceSignature;
-      this.sessionPersistence.persistWorkspace(this.state);
-    }
-    const attachmentSignature = this.currentAttachmentPersistenceSignature();
-    if (attachmentSignature !== this.attachmentPersistenceSignature) {
-      this.attachmentPersistenceSignature = attachmentSignature;
-      this.attachmentRestoreGeneration += 1;
-      void this.sessionPersistence.persistDraftAttachments(this.state.attachments);
-    }
+    this.workspacePersistence.persistIfChanged(this.state, {
+      destroyed: this.destroyed, popoutMode: this.popoutMode
+    });
   }
 
   protected flushWorkspacePersistence(): void {
-    this.sessionPersistence.persistWorkspace(this.state);
-    this.workspacePersistenceSignature = this.currentWorkspacePersistenceSignature();
-    this.attachmentPersistenceSignature = this.currentAttachmentPersistenceSignature();
-    this.attachmentRestoreGeneration += 1;
-    void this.sessionPersistence.persistDraftAttachments(this.state.attachments);
+    this.workspacePersistence.flush(this.state);
   }
 
   protected invalidateDraftAttachmentRestore(): void {
-    this.attachmentRestoreGeneration += 1;
+    this.workspacePersistence.invalidateDraftAttachmentRestore();
   }
 
-  private currentWorkspacePersistenceSignature(): string {
-    return JSON.stringify([
-      this.state.activePanelTab,
-      this.state.sideSize,
-      this.state.horizontalSize,
-      this.state.prompt,
-      this.state.chatScrollTop,
-      this.state.historyScrollTop
-    ]);
-  }
-
-  private currentAttachmentPersistenceSignature(): string {
-    return JSON.stringify(this.state.attachments.map(attachment => [
-      attachment.name, attachment.mediaType, attachment.size, attachment.data.length
-    ]));
-  }
-
-  abstract get panelStyle(): {[key: string]: string};
-
-  abstract ngOnInit(): void;
-  abstract ngOnDestroy(): void;
-  abstract open(event?: MouseEvent): void;
-  abstract close(event?: MouseEvent): void;
-  abstract openPopout(event?: Event): void;
-  abstract focusPopout(event?: Event): void;
-  abstract reattachPopout(event?: Event): void;
-  abstract setDock(dock: AiChatDock): void;
-  abstract setPanelTab(tab: AiChatPanelTab, event?: Event): void;
-  abstract send(): void;
-  protected abstract startChatRequest(prompt: string, attachments: AiChatAttachment[]): void;
-  protected abstract sendHttpChat(prompt: string, attachments: AiChatAttachment[],
-                                  changeConfirmation?: AiChangeConfirmationAuthorization): void;
-  protected abstract attachmentFailureMessage(error: unknown): string;
-  protected abstract completeUnknownConfirmedRequest(requestId: string): void;
-  protected abstract connectAndPublishWhenReady(requestId: string, prompt: string,
-                                                attachments: AiChatAttachment[],
-                                                changeConfirmation?: AiChangeConfirmationAuthorization): void;
-  protected abstract failStompReconnect(): void;
-  protected abstract publishChatRequest(requestId: string, prompt: string,
-                                        attachments: AiChatAttachment[],
-                                        changeConfirmation?: AiChangeConfirmationAuthorization): void;
-  protected abstract failChatPublish(): void;
-  abstract openFilePicker(input: HTMLInputElement): void;
-  abstract onFileInputChange(event: Event): void;
-  abstract onDragOver(event: DragEvent): void;
-  abstract onDragLeave(event: DragEvent): void;
-  abstract onDrop(event: DragEvent): void;
-  abstract removeAttachment(index: number): void;
-  abstract onComposerKeydown(event: KeyboardEvent): void;
-  abstract onPromptChange(): void;
-  protected abstract addFiles(fileList?: FileList | null): void;
-  protected abstract addFile(file: File): void;
-  protected abstract attachmentQueueCallbacks(): AiChatAttachmentQueueCallbacks;
-  abstract applyCommandSuggestion(command: AiChatCommand): void;
-  abstract changeModelDraft(modelName: string): void;
-  abstract applyModelSettings(): void;
-  abstract closeModelSettings(): void;
-  abstract startNewChat(event?: Event, activePanelTab?: AiChatPanelTab): void;
-  abstract startResize(event: MouseEvent): void;
-  abstract onResizeMove(event: MouseEvent): void;
-  abstract stopResize(): void;
-  protected abstract handleSocketEvent(event: AiChatSocketEvent): void;
-  protected abstract handleElicitationRequired(event: AiChatSocketEvent): void;
-  protected abstract handleElicitationDecisionEvent(event: AiChatSocketEvent): void;
-  abstract respondToElicitation(response: AiElicitationResponse): void;
-  protected abstract completeFinalEvent(event: AiChatSocketEvent): void;
-  protected abstract commitAssistantMessage(requestId: string, content: string,
-                                            files?: import('./domain/ai-chat-panel.model').AiChatFile[]): number;
-  protected abstract beginChangeRepeatDraft(requestId: string, prompt: string,
-                                              attachments: AiChatAttachment[]): void;
-  protected abstract handleChangeConfirmationNotice(event: AiChatSocketEvent): void;
-  protected abstract completeConflictingChangeConfirmationFinal(
-    requestId: string, confirmationConversationId: string
+  // Forward dependencies used before their owning controller layer is mixed
+  // into the final component. Public template methods are intentionally not
+  // repeated here; this contract contains only genuine cross-layer calls.
+  protected abstract acceptedIdentity(event: AiChatSocketEvent): AiActiveRequestIdentity | undefined;
+  protected abstract acknowledgeRecoveredRequestLiveEvent(requestId: string): void;
+  protected abstract applyFormattedResponse(event: AiChatSocketEvent): void;
+  protected abstract beginChangeRepeatDraft(
+    requestId: string, prompt: string, attachments: AiChatAttachment[]
   ): void;
+  protected abstract canRequestChangeRevision(): boolean;
+  abstract cancelActiveRequest(): void;
+  protected abstract cancelConversationRestore(): void;
+  protected abstract cancellationCallbacks(): AiChatCancellationCallbacks;
+  protected abstract captureAcceptedIdentity(event: AiChatSocketEvent): void;
+  protected abstract captureTerminalIdentity(event: AiChatSocketEvent): boolean;
+  protected abstract clearActiveRecovery(): void;
+  protected abstract clearChangeRepeatDraft(requestId?: string): void;
+  protected abstract clearCompletedPayloadRecovery(): void;
+  protected abstract clearProviderRecoveryState(): void;
+  protected abstract clearRequestStatusWatchdog(): void;
+  protected abstract clearStatusMessage(eventType?: string): void;
+  protected abstract clearTimers(): void;
+  protected abstract clearToolCallTracking(): void;
+  protected abstract commitAssistantMessage(
+    requestId: string, content: string,
+    files?: import('./domain/ai-chat-panel.model').AiChatFile[]
+  ): number;
+  protected abstract completeCancellationTerminal(
+    status: AiExecutionStatus, response?: AiCancellationResponse
+  ): void;
+  protected abstract completeProgressMessages(): void;
+  protected abstract createRequestId(): string;
+  protected abstract createRestoreToken(): string;
+  protected abstract divertSpecialistToolEvent(event: AiChatSocketEvent): boolean;
   protected abstract finishChangeRepeatOpportunity(
     requestId: string, terminalConversationId: string | undefined
   ): void;
-  protected abstract showChangeRepeatInteraction(opportunity: ChangeRepeatOpportunity): void;
-  abstract approveChangeInteraction(): void;
-  abstract denyChangeInteraction(): void;
-  abstract requestChangeRevision(): void;
-  abstract revokeChangeInteraction(): void;
-  abstract dismissChangeInteraction(): void;
-  protected abstract canRequestChangeRevision(): boolean;
-  protected abstract sendChangeRevisionRequest(prompt: string, attachments: AiChatAttachment[]): void;
-  protected abstract showLostGrantInteraction(opportunity: ChangeRepeatOpportunity): void;
-  protected abstract changeInteractionCallbacks(): AiChangeInteractionCallbacks;
-  protected abstract sendConfirmedChangeRepeat(
-    opportunity: ChangeRepeatOpportunity, confirmationGrant: string,
-    revision?: {prompt: string; attachments: AiChatAttachment[]}
-  ): boolean;
-  protected abstract clearChangeRepeatDraft(requestId?: string): void;
-  protected abstract handleSystemEvent(event: AiChatSocketEvent): void;
-  protected abstract handleProviderRetryEvent(event: AiChatSocketEvent): boolean;
-  protected abstract clearProviderRecoveryState(): void;
-  protected abstract completeCancelledRequest(content?: string): void;
-  protected abstract completeAuthenticationFailure(content?: string): void;
-  protected abstract completeFailedRequest(content?: string,
-                                           status?: AiTerminalRequestErrorStatus): void;
-  protected abstract upsertToolGroup(event: AiChatSocketEvent): void;
-  protected abstract handleToolCallEvent(event: AiChatSocketEvent): void;
-  protected abstract divertSpecialistToolEvent(event: AiChatSocketEvent): boolean;
-  protected abstract handleLegacyRecoverableToolError(event: AiChatSocketEvent, content: string): boolean;
-  protected abstract isToolDiscoveryName(value: unknown): boolean;
-  protected abstract isRecognizedRequestEvent(event: AiChatSocketEvent): boolean;
-  protected abstract hasActiveStructuredToolRows(): boolean;
-  protected abstract handleConversationRestoreEvent(event: AiChatSocketEvent): void;
-  protected abstract conversationRestoreCallbacks(): AiConversationRestoreCallbacks;
-  abstract requestManualCompact(): void;
-  abstract openContextBudgetDialog(): void;
-  abstract contextBudgetData(): AiContextBudgetData | undefined;
-  abstract showContextBudgetHover(): void;
-  abstract keepContextBudgetHoverOpen(): void;
-  abstract closeContextBudgetHover(immediately?: boolean): void;
-  protected abstract applyContextEvent(event: AiChatSocketEvent): void;
-  protected abstract loadAvailableModels(): void;
-  protected abstract applyFormattedResponse(event: AiChatSocketEvent): void;
-  protected abstract normalizedDisplayText(value?: string): string;
-  abstract scrollChatToBottom(event?: MouseEvent): void;
-  abstract onChatPaneScroll(): void;
-  abstract onHistoryScrollTopChange(scrollTop: number): void;
-  protected abstract scrollToBottom(force?: boolean): void;
-  protected abstract restoreChatScrollPosition(consumePending?: boolean): void;
-  protected abstract updateScrollToBottomButton(): void;
-  abstract focusPrompt(): void;
-  abstract focusPromptIfNoSelection(): void;
-  abstract onPanelClick(event: MouseEvent): void;
-  protected abstract resizePromptInput(): void;
-  abstract onMessageListClick(event: MouseEvent): void;
-  protected abstract handleLocalCommand(localCommand: AiLocalCommand, commandText: string): void;
-  protected abstract openModelSettings(commandText: string): void;
-  protected abstract finishModelSettings(displayName: string, reasoningEffort: string): void;
-  protected abstract openPermissionSettings(commandText: string): void;
-  abstract applyPermissionSettings(): void;
-  abstract closePermissionSettings(): void;
-  abstract cancelActiveRequest(): void;
-  abstract retryCancellation(): void;
-  abstract forceSafeStop(): void;
-  abstract loadConversation(conversationId: string): void;
-  protected abstract publishConversationRestoreWhenReady(requestId: string, conversationId: string): void;
-  protected abstract publishConversationRestoreAttempt(requestId: string, conversationId: string): void;
-  protected abstract failConversationRestoreReconnect(requestId: string): void;
   protected abstract finishConversationRestore(): void;
-  protected abstract cancelConversationRestore(): void;
-  protected abstract scrollChatPaneToTop(): void;
-  abstract loadConversationHistory(): void;
-  protected abstract recoverActiveRequest(onIdle?: () => void): void;
-  protected abstract restoreLastConversation(): void;
-  protected abstract pollRecoveredRequest(): void;
-  protected abstract loadTerminalRecoveredConversation(status: AiPublicExecutionRequestStatus): void;
-  protected abstract applyRecoveredConversation(details: AiChatConversationDetails,
-                                                 status: AiPublicExecutionRequestStatus): void;
-  protected abstract finishRecoveredRequest(status: AiPublicExecutionRequestStatus): void;
-  protected abstract scheduleRecoveredRequestPoll(delay: number): void;
-  protected abstract clearActiveRecovery(): void;
-  protected abstract acknowledgeRecoveredRequestLiveEvent(requestId: string): void;
-  protected abstract isTerminalExecutionStatus(status: AiExecutionStatus): boolean;
-  abstract deleteConversation(conversationId: string, event?: Event): void;
-  protected abstract deleteConversationNow(conversationId: string): void;
-  protected abstract showStatus(content: string, inProgress?: boolean,
-                                options?: import('./domain/ai-chat-panel.model').AiChatStatusOptions): void;
-  protected abstract completeProgressMessages(): void;
-  protected abstract completeToolGroupMessages(): void;
-  protected abstract clearToolCallTracking(): void;
-  protected abstract clearStatusMessage(eventType?: string): void;
-  protected abstract refreshBranding(): void;
-  protected abstract clearTimers(): void;
-  protected abstract cancellationCallbacks(): AiChatCancellationCallbacks;
-  protected abstract updateActiveIdentity(identity: AiActiveRequestIdentity): void;
-  protected abstract captureAcceptedIdentity(event: AiChatSocketEvent): void;
-  protected abstract scheduleRequestStatusWatchdog(): void;
-  protected abstract clearRequestStatusWatchdog(): void;
-  protected abstract acceptedIdentity(event: AiChatSocketEvent): AiActiveRequestIdentity | undefined;
-  protected abstract captureTerminalIdentity(event: AiChatSocketEvent): boolean;
-  protected abstract matchesTerminalIdentity(event: AiChatSocketEvent): boolean;
-  protected abstract matchesActiveIdentity(identity: AiActiveRequestIdentity): boolean;
-  protected abstract terminalIdentity(event: AiChatSocketEvent): AiActiveRequestIdentity | undefined;
-  protected abstract completeCancellationTerminal(status: AiExecutionStatus,
-                                                  response?: AiCancellationResponse): void;
-  protected abstract awaitCompletedPayload(response?: AiCancellationResponse): void;
-  protected abstract finishCompletedPayload(requestId: string, conversationId?: string,
-                                            content?: string): void;
-  protected abstract clearCompletedPayloadRecovery(): void;
-  protected abstract runDeferredNewChat(): boolean;
-  protected abstract createRequestId(): string;
-  protected abstract createRestoreToken(): string;
-  protected abstract nextContextUpdate(): AiChatContextUpdate;
+  protected abstract finishModelSettings(displayName: string, reasoningEffort: string): void;
+  abstract focusPrompt(): void;
+  protected abstract handleChangeConfirmationNotice(event: AiChatSocketEvent): void;
+  protected abstract handleConversationRestoreEvent(event: AiChatSocketEvent): void;
+  protected abstract handleLocalCommand(localCommand: AiLocalCommand, commandText: string): void;
+  protected abstract handleSocketEvent(event: AiChatSocketEvent): void;
+  protected abstract handleSystemEvent(event: AiChatSocketEvent): void;
+  protected abstract handleToolCallEvent(event: AiChatSocketEvent): void;
   protected abstract invalidateAttachmentReads(): void;
+  protected abstract isRecognizedRequestEvent(event: AiChatSocketEvent): boolean;
+  protected abstract loadAvailableModels(): void;
+  abstract loadConversationHistory(): void;
+  protected abstract matchesActiveIdentity(identity: AiActiveRequestIdentity): boolean;
+  protected abstract matchesTerminalIdentity(event: AiChatSocketEvent): boolean;
+  protected abstract nextContextUpdate(): AiChatContextUpdate;
+  protected abstract recoverActiveRequest(onIdle?: () => void): void;
+  protected abstract refreshBranding(): void;
+  protected abstract resizePromptInput(): void;
+  protected abstract restoreChatScrollPosition(consumePending?: boolean): void;
+  protected abstract restoreLastConversation(): void;
+  protected abstract runDeferredNewChat(): boolean;
+  protected abstract scheduleRequestStatusWatchdog(): void;
+  protected abstract scrollChatPaneToTop(): void;
+  protected abstract scrollToBottom(force?: boolean): void;
+  protected abstract sendChangeRevisionRequest(
+    prompt: string, attachments: AiChatAttachment[]
+  ): void;
+  protected abstract showStatus(
+    content: string, inProgress?: boolean,
+    options?: import('./domain/ai-chat-panel.model').AiChatStatusOptions
+  ): void;
   protected abstract updateMainPanelInset(): void;
+  protected abstract upsertToolGroup(event: AiChatSocketEvent): void;
+
 }
 
 let aiChatPanelInstanceSequence = 0;
