@@ -1,4 +1,3 @@
-import {take, takeUntil} from 'rxjs/operators';
 import {AiChatPanelEventController} from './ai-chat-panel-event.controller';
 import {AiContextBudgetDialogComponent} from './ai-context-budget-dialog.component';
 import {AiContextBudgetData} from './ai-context-budget-chart.model';
@@ -525,18 +524,6 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   protected applyContextEvent(event: AiChatSocketEvent): void {
     const usage = contextUsageValue(event.metadata?.['contextUsage'], this.state.selectedModelName);
     this.state.setContextUsage(usage);
-  }
-
-  protected loadAvailableModels(): void {
-    this.api.getAvailableModels().pipe(take(1), takeUntil(this.destroyed$)).subscribe({
-      next: models => {
-        this.state.setAvailableModels(models);
-        if (!this.state.conversationId) {
-          this.sessionPersistence.restoreSelection(this.state);
-        }
-      },
-      error: () => this.state.setAvailableModels([])
-    });
   }
 
   protected applyFormattedResponse(event: AiChatSocketEvent): void {
