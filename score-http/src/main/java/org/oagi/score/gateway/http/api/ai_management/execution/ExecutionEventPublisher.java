@@ -13,10 +13,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.ArrayDeque;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -241,8 +239,12 @@ public final class ExecutionEventPublisher implements ExecutionObserver {
                 return;
             }
             Instant previousOccurredAt = stream.lastOccurredAt;
-            ExecutionObservation event = canonical(
-                    observation, stream, stream.sequence.incrementAndGet());
+            ExecutionObservation active = withActiveGeneration(observation);
+            ExecutionEventCanonicalizer.CanonicalEvent canonical =
+                    ExecutionEventCanonicalizer.canonicalize(
+                            active, stream.sequence.incrementAndGet(), stream.lastOccurredAt);
+            ExecutionObservation event = canonical.observation();
+            stream.lastOccurredAt = canonical.occurredAt();
             try {
                 persistence.accept(event);
             } catch (RuntimeException | Error failure) {
@@ -391,30 +393,6 @@ public final class ExecutionEventPublisher implements ExecutionObserver {
                         event.attributes().get(EVENT_ID), rejected);
             }
         }
-    }
-
-    private ExecutionObservation canonical(ExecutionObservation source, RequestStream stream,
-                                           long sequence) {
-        source = withActiveGeneration(source);
-        Instant now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
-        Instant occurredAt = stream.lastOccurredAt != null && !now.isAfter(stream.lastOccurredAt)
-                ? stream.lastOccurredAt.plus(1, java.time.temporal.ChronoUnit.MICROS) : now;
-        stream.lastOccurredAt = occurredAt;
-        Map<String, Object> attributes = new LinkedHashMap<>(source.attributes());
-        String eventId = UUID.randomUUID().toString();
-        attributes.put(EVENT_ID, eventId);
-        attributes.put(EVENT_SEQUENCE, sequence);
-        attributes.put(EVENT_OCCURRED_AT, occurredAt.toString());
-        AiExecutionLifecycle.from(source).ifPresent(lifecycle -> {
-            Map<String, Object> metadata = new LinkedHashMap<>(lifecycle.metadata());
-            metadata.put(EVENT_ID, eventId);
-            metadata.put(EVENT_SEQUENCE, sequence);
-            metadata.put(EVENT_OCCURRED_AT, occurredAt.toString());
-            attributes.put("lifecycle", new AiExecutionLifecycle(
-                    lifecycle.eventType(), lifecycle.subtype(), lifecycle.toolCallId(),
-                    lifecycle.toolName(), lifecycle.toolCallSequence(), metadata));
-        });
-        return new ExecutionObservation(source.type(), source.scope(), occurredAt, attributes);
     }
 
     private ExecutionObservation withActiveGeneration(ExecutionObservation observation) {
