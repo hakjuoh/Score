@@ -63,32 +63,26 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
   }
 
   protected openModelSettings(commandText: string): void {
-    this.settingsService.openModel(this.state, commandText);
+    this.modelSettings.open(this.state, commandText);
     this.resizePromptInput();
     this.scrollToBottom(true);
   }
 
-  protected finishModelSettings(displayName: string, reasoningEffort: string): void {
-    this.settingsService.finishModel(this.state, displayName, reasoningEffort);
-    this.scrollToBottom(true);
-    this.focusPrompt();
-  }
-
   protected openPermissionSettings(commandText: string): void {
-    this.settingsService.openPermission(this.state, commandText);
+    this.permissionSettings.open(this.state, commandText);
     this.resizePromptInput();
     this.scrollToBottom(true);
   }
 
   applyPermissionSettings(): void {
-    if (this.settingsService.applyPermission(this.state)) {
+    if (this.permissionSettings.apply(this.state)) {
       this.scrollToBottom(true);
       this.focusPrompt();
     }
   }
 
   closePermissionSettings(): void {
-    this.settingsService.closePermission(this.state);
+    this.permissionSettings.close(this.state);
     this.focusPrompt();
   }
 

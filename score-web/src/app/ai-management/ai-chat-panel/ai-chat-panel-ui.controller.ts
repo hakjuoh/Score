@@ -1,8 +1,6 @@
 import {Directive} from '@angular/core';
-import {take, takeUntil} from 'rxjs/operators';
 import {AiChatPanelRequestController} from './ai-chat-panel-request.controller';
 import {AiChatAttachmentQueueCallbacks} from './domain/ai-chat-attachment-queue.service';
-import {contextUsageValue} from './domain/ai-chat-event-semantics';
 import {
   AiChatCommand,
   AiChatDock,
@@ -52,6 +50,10 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
       return;
     }
     this.updateMainPanelInset();
+  }
+
+  protected loadAvailableModels(): void {
+    this.modelSettings.load(this.state, this.destroyed$);
   }
 
   ngOnDestroy(): void {
@@ -334,55 +336,27 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
   }
 
   changeModelDraft(modelName: string): void {
-    this.settingsService.changeModelDraft(this.state, modelName);
+    this.modelSettings.changeDraft(this.state, modelName);
   }
 
   applyModelSettings(): void {
-    const model = this.state.availableModels.find(candidate => candidate.name === this.state.modelDraftName);
-    const reasoningEffort = this.state.modelDraftReasoningEffort;
-    if (!this.state.modelSettingsOpen || !model
-      || !model.reasoningEfforts.some(effort => effort.name === reasoningEffort)
-      || this.state.modelChangePending) {
-      return;
-    }
-    const previousModelName = this.state.selectedModelName;
-    const previousReasoningEffort = this.state.selectedReasoningEffort;
-    if (!this.state.conversationId) {
-      this.state.selectedModelName = model.name;
-      this.state.selectedReasoningEffort = reasoningEffort;
-      this.state.resetContextUsageForSelectedModel();
-      this.finishModelSettings(model.displayName, reasoningEffort);
-      return;
-    }
-    this.state.modelChangePending = true;
-    this.api.updateConversationModel(
-      this.state.conversationId, model.name, reasoningEffort
-    ).pipe(
-      take(1), takeUntil(this.destroyed$)
-    ).subscribe({
-      next: response => {
-        this.state.selectedModelName = response.modelName;
-        this.state.selectedReasoningEffort = response.reasoningEffort;
-        this.state.resetContextUsageForSelectedModel();
-        this.state.setContextUsage(contextUsageValue(response.contextUsage, response.modelName));
-        this.state.modelChangePending = false;
-        this.finishModelSettings(model.displayName, response.reasoningEffort);
-        if (response.contextCompacted) {
-          this.snackBar.open('The conversation context was compacted for the selected model.',
-            'Dismiss', {duration: 3500});
-        }
+    this.modelSettings.apply(this.state, this.destroyed$, {
+      completed: () => {
+        this.scrollToBottom(true);
+        this.focusPrompt();
       },
-      error: () => {
-        this.state.selectedModelName = previousModelName;
-        this.state.selectedReasoningEffort = previousReasoningEffort;
-        this.state.modelChangePending = false;
-        this.snackBar.open('Could not change the assistant model.', 'Dismiss', {duration: 3500});
-      }
+      compacted: () => this.snackBar.open(
+        'The conversation context was compacted for the selected model.',
+        'Dismiss', {duration: 3500}
+      ),
+      failed: () => this.snackBar.open(
+        'Could not change the assistant model.', 'Dismiss', {duration: 3500}
+      )
     });
   }
 
   closeModelSettings(): void {
-    if (this.settingsService.closeModel(this.state)) {
+    if (this.modelSettings.close(this.state)) {
       this.focusPrompt();
     }
   }
@@ -421,7 +395,8 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     this.requestSubscription?.unsubscribe();
     this.transportService.cancelReconnect();
     this.clearStatusMessage();
-    this.settingsService.reset();
+    this.permissionSettings.reset();
+    this.modelSettings.reset();
     this.state.resetForNewChat();
     this.sessionPersistence.clearLastConversation();
     this.sessionPersistence.restoreSelection(this.state);

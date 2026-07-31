@@ -23,7 +23,8 @@ import {AiConversationRestoreRenderer} from './domain/ai-conversation-restore-re
 import {AiChatMessageTrackerService} from './domain/ai-chat-message-tracker.service';
 import {AiChangeInteractionService} from './domain/ai-change-interaction.service';
 import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.service';
-import {AiChatSettingsService} from './domain/ai-chat-settings.service';
+import {AiPermissionSettingsService} from './domain/ai-permission-settings.service';
+import {AiModelSettingsCoordinator} from './domain/ai-model-settings-coordinator';
 import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
 import {AiChatWorkspacePersistenceCoordinator} from './domain/ai-chat-workspace-persistence-coordinator';
 
@@ -62,7 +63,8 @@ export {
     AiChatMessageTrackerService,
     AiChangeInteractionService,
     AiChatPanelViewportService,
-    AiChatSettingsService,
+    AiPermissionSettingsService,
+    AiModelSettingsCoordinator,
     AiChatWindowCoordinatorService,
     AiChatWorkspacePersistenceCoordinator
   ]
