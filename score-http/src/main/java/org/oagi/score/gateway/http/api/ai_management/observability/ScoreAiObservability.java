@@ -82,7 +82,8 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
     private final ConcurrentMap<String, TurnState> turns = new ConcurrentHashMap<>();
     private final List<BiConsumer<String, String>> closeListeners = new CopyOnWriteArrayList<>();
     private final AiLifecycleEventObserver lifecycleEvents;
-    private final ObjectProvider<ExecutionObserver> eventPublishers;
+    private final AiObservationEvents events;
+    private final AiAdmissionObservation admissionObservation;
 
     @Autowired
     public ScoreAiObservability(ScoreAiObservabilitySdk sdk, ScoreAiModelRegistry models,
@@ -109,7 +110,8 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         this.instruments = new AiObservationInstruments(installed.getMeter(INSTRUMENTATION_SCOPE));
         this.requestModelResolver = Objects.requireNonNull(
                 requestModelResolver, "requestModelResolver");
-        this.eventPublishers = eventPublishers;
+        this.events = new AiObservationEvents(eventPublishers);
+        this.admissionObservation = new AiAdmissionObservation(tracer, instruments, events);
         this.lifecycleEvents = new AiLifecycleEventObserver(
                 tracer, instruments, this::parentContext, this::activeAgentName,
                 this::explicitParentContext);
@@ -220,56 +222,10 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                                          long generation) {
         if (request == null) return;
         long startedNanos = System.nanoTime();
-        String normalizedReason = admissionReasonCategory(reason);
         String requestModel = requestModel(request.modelName());
-        ExecutionObservation rejectionEvent = publish("workflow.root.rejected",
-                scope(request.requestId(), request.conversationId(), requester, generation,
-                        ExecutionScope.Purpose.USER_RESPONSE), Map.of(
-                        "outcome", "admission_rejected",
-                        "failure_type", failure != null
-                                ? failure.getClass().getSimpleName() : "admission_rejected"));
-        SpanBuilder builder = tracer.spanBuilder(GenAiSemanticConventions.spanName(
-                        GenAiSemanticConventions.INVOKE_WORKFLOW, "assistant"))
-                .setParent(extractedParent(traceparent, tracestate))
-                .setAttribute("gen_ai.operation.name", GenAiSemanticConventions.INVOKE_WORKFLOW)
-                .setAttribute("gen_ai.workflow.name", "assistant")
-                .setAttribute("gen_ai.request.model", requestModel)
-                .setAttribute("score.ai.request.id", value(request.requestId()))
-                .setAttribute("score.ai.conversation.id", value(request.conversationId()))
-                .setAttribute("score.ai.outcome", "admission_rejected")
-                .setAttribute("score.ai.admission.reason", normalizedReason);
-        eventIdentity(builder, rejectionEvent);
-        putModelAlias(builder, request.modelName(), requestModel);
-        if (StringUtils.hasText(request.conversationId())) {
-            builder.setAttribute("gen_ai.conversation.id", request.conversationId().strip());
-        }
-        if (requester != null && requester.userId() != null) {
-            builder.setAttribute("enduser.id", requester.userId().value().toString());
-        }
-        Span span = builder.startSpan();
-        if (failure != null) {
-            span.setAttribute("error.type", failure.getClass().getName());
-        }
-        span.setStatus(StatusCode.ERROR, "admission_rejected");
-        Attributes labels = Attributes.builder()
-                .putAll(modelAttributes(requestModel, "admission_rejected"))
-                .put("score.ai.admission.reason", normalizedReason)
-                .build();
-        instruments.turns.add(1, labels);
-        instruments.admissionRejections.add(1, labels);
-        Attributes standard = GenAiSemanticConventions.workflowDurationAttributes(
-                "assistant",
-                failure != null ? failure.getClass().getName() : "admission_rejected", false);
-        instruments.genAiWorkflowDuration.record(
-                GenAiSemanticConventions.elapsedSeconds(startedNanos), standard);
-        ExecutionObservation closed = publish(ExecutionEventPublisher.REQUEST_CLOSED,
-                scope(request.requestId(), request.conversationId(), requester, generation,
-                        ExecutionScope.Purpose.USER_RESPONSE), Map.of(
-                        "outcome", "admission_rejected",
-                        "failure_type", failure != null
-                                ? failure.getClass().getSimpleName() : "admission_rejected"));
-        terminalEventIdentity(span, closed);
-        span.end();
+        admissionObservation.record(request, requester, failure, reason, generation,
+                requestModel, startedNanos,
+                () -> extractedParent(traceparent, tracestate));
     }
 
     public ModelCall startModelCall(String requestId, String model, String provider, String phase) {
@@ -354,14 +310,7 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
 
     private ExecutionScope scope(String requestId, String conversationId, ScoreUser requester,
                                  long generation, ExecutionScope.Purpose purpose) {
-        String requesterId = requester != null && requester.userId() != null
-                ? requester.userId().value().toString()
-                : requester != null && StringUtils.hasText(requester.username())
-                ? requester.username() : "unknown";
-        String correlatedConversation = StringUtils.hasText(conversationId)
-                ? conversationId.strip() : requestId;
-        return new ExecutionScope(requestId, correlatedConversation, requesterId,
-                Math.max(0L, generation), purpose, List.of());
+        return events.scope(requestId, conversationId, requester, generation, purpose);
     }
 
     private ExecutionObservation publish(String type, ExecutionScope scope,
@@ -372,48 +321,20 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
     private ExecutionObservation publish(String type, ExecutionScope scope,
                                          Map<String, Object> attributes,
                                          java.util.function.Consumer<ExecutionObservation> projection) {
-        if (eventPublishers == null) return null;
-        ExecutionObserver publisher = eventPublishers.getIfAvailable();
-        if (publisher == null) return null;
-        java.util.concurrent.atomic.AtomicReference<ExecutionObservation> published =
-                new java.util.concurrent.atomic.AtomicReference<>();
-        publisher.publish(ExecutionObservation.of(type, scope, attributes), published::set,
-                projection);
-        return published.get();
+        return events.publish(type, scope, attributes, projection);
     }
 
     private static void eventIdentity(SpanBuilder builder, ExecutionObservation event) {
-        if (event == null) return;
-        Object id = event.attributes().get(ExecutionEventPublisher.EVENT_ID);
-        Object sequence = event.attributes().get(ExecutionEventPublisher.EVENT_SEQUENCE);
-        if (id != null) builder.setAttribute(ExecutionEventPublisher.EVENT_ID, id.toString());
-        if (sequence instanceof Number number) {
-            builder.setAttribute(ExecutionEventPublisher.EVENT_SEQUENCE, number.longValue());
-        }
-        builder.setAttribute(ExecutionEventPublisher.EVENT_OCCURRED_AT,
-                event.occurredAt().toString());
-        builder.setStartTimestamp(event.occurredAt());
+        AiObservationEvents.startIdentity(builder, event);
     }
 
     private static void eventIdentity(SpanBuilder builder,
                                       AiTrajectoryRecorder.ExecutionEventIdentity event) {
-        if (event == null) return;
-        builder.setAttribute(ExecutionEventPublisher.EVENT_ID, event.eventId());
-        builder.setAttribute(ExecutionEventPublisher.EVENT_SEQUENCE, event.sequence());
-        builder.setAttribute(ExecutionEventPublisher.EVENT_OCCURRED_AT,
-                event.occurredAt().toString());
-        builder.setStartTimestamp(event.occurredAt());
+        AiObservationEvents.startIdentity(builder, event);
     }
 
     private static void terminalEventIdentity(Span span, ExecutionObservation event) {
-        if (event == null) return;
-        Object id = event.attributes().get(ExecutionEventPublisher.EVENT_ID);
-        Object sequence = event.attributes().get(ExecutionEventPublisher.EVENT_SEQUENCE);
-        if (id != null) span.setAttribute("score.event.end.id", id.toString());
-        if (sequence instanceof Number number) {
-            span.setAttribute("score.event.end.sequence", number.longValue());
-        }
-        span.setAttribute("score.event.end.occurred_at", event.occurredAt().toString());
+        AiObservationEvents.terminalIdentity(span, event);
     }
 
     private static void putModelAlias(SpanBuilder builder, String alias, String requestModel) {
@@ -738,22 +659,15 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
     }
 
     private static Attributes modelAttributes(String model, String outcome) {
-        AttributesBuilder attributes = Attributes.builder()
-                .put("gen_ai.request.model", value(model));
-        if (outcome != null) attributes.put("score.ai.outcome", outcome);
-        return attributes.build();
+        return AiObservationLabels.model(model, outcome);
     }
 
     static Attributes providerModelAttributes(String provider, String model, String outcome) {
-        AttributesBuilder attributes = Attributes.builder()
-                .put("gen_ai.provider.name", value(provider))
-                .put("gen_ai.request.model", value(model));
-        if (outcome != null) attributes.put("score.ai.outcome", outcome);
-        return attributes.build();
+        return AiObservationLabels.providerModel(provider, model, outcome);
     }
 
     static String value(String value) {
-        return StringUtils.hasText(value) ? value.strip() : "unknown";
+        return AiObservationLabels.value(value);
     }
 
     private static double elapsedMillis(long startedNanos) {
@@ -1395,41 +1309,18 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
     }
 
     private static String finishReasonCategory(String reason) {
-        String normalized = AiObservationInstruments.normalized(reason);
-        return switch (normalized) {
-            case "stop", "end_turn", "stop_sequence" -> "stop";
-            case "length", "max_tokens" -> "length";
-            case "tool_calls", "tool_use" -> "tool_calls";
-            case "content_filter", "refusal" -> "content_filter";
-            case "error" -> "error";
-            default -> "unknown";
-        };
+        return AiObservationLabels.finishReasonCategory(reason);
     }
 
     private static String finishReasonValue(String reason) {
-        String normalized = reason != null ? reason.strip() : "";
-        return normalized.matches("[A-Za-z0-9_.:/-]{1,80}") ? normalized : "_OTHER";
+        return AiObservationLabels.finishReasonValue(reason);
     }
 
     private static String admissionReasonCategory(String reason) {
-        String normalized = AiObservationInstruments.normalized(reason);
-        return switch (normalized) {
-            case "registry_capacity", "user_limit", "conversation_busy", "duplicate_request",
-                 "validation", "preparation_failed", "executor_rejected",
-                 "transport_send_failed", "admission_failed" -> normalized;
-            default -> "other";
-        };
+        return AiObservationLabels.admissionReasonCategory(reason);
     }
 
     private static BigDecimal nonNegativeDecimal(Object value) {
-        if (value == null) return null;
-        try {
-            String text = value.toString().strip();
-            if (text.length() > 40 || !text.matches("[0-9]+(?:\\.[0-9]+)?")) return null;
-            BigDecimal amount = new BigDecimal(text);
-            return amount.signum() >= 0 ? amount : null;
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
+        return AiObservationLabels.nonNegativeDecimal(value);
     }
 }

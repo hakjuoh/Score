@@ -9,14 +9,13 @@ import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiContextUsageInfo;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
-import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
-
-import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.function.BiFunction;
+
+import static org.oagi.score.gateway.http.api.ai_management.observability.AiLifecycleMetadata.*;
 
 /** Converts existing trajectory lifecycle events into content-free spans and metrics. */
 final class AiLifecycleEventObserver {
@@ -356,93 +355,6 @@ final class AiLifecycleEventObserver {
         return builder.startSpan();
     }
 
-    private static void setStringAttribute(io.opentelemetry.api.trace.SpanBuilder builder,
-                                           String key, Object value) {
-        String candidate = Objects.toString(value, null);
-        if (candidate != null && !candidate.isBlank() && !"unknown".equals(candidate)) {
-            builder.setAttribute(key, candidate);
-        }
-    }
-
-    private static void setEventIdentity(io.opentelemetry.api.trace.SpanBuilder builder,
-                                         Map<String, Object> metadata) {
-        setStringAttribute(builder, ExecutionEventPublisher.EVENT_ID,
-                metadata.get(ExecutionEventPublisher.EVENT_ID));
-        Object sequence = metadata.get(ExecutionEventPublisher.EVENT_SEQUENCE);
-        if (sequence instanceof Number number && number.longValue() > 0) {
-            builder.setAttribute(ExecutionEventPublisher.EVENT_SEQUENCE, number.longValue());
-        }
-        setStringAttribute(builder, ExecutionEventPublisher.EVENT_OCCURRED_AT,
-                metadata.get(ExecutionEventPublisher.EVENT_OCCURRED_AT));
-        Object occurredAt = metadata.get(ExecutionEventPublisher.EVENT_OCCURRED_AT);
-        if (occurredAt != null) {
-            try {
-                builder.setStartTimestamp(java.time.Instant.parse(occurredAt.toString()));
-            } catch (java.time.format.DateTimeParseException ignored) {
-                // Canonical publisher validation normally makes this unreachable.
-            }
-        }
-    }
-
-    private static void setTerminalEventIdentity(Span span, Map<String, Object> metadata) {
-        Object id = metadata.get(ExecutionEventPublisher.EVENT_ID);
-        if (id != null) span.setAttribute("score.event.end.id", id.toString());
-        Object sequence = metadata.get(ExecutionEventPublisher.EVENT_SEQUENCE);
-        if (sequence instanceof Number number) {
-            span.setAttribute("score.event.end.sequence", number.longValue());
-        }
-        Object occurredAt = metadata.get(ExecutionEventPublisher.EVENT_OCCURRED_AT);
-        if (occurredAt != null) span.setAttribute("score.event.end.occurred_at", occurredAt.toString());
-    }
-
-    /**
-     * The depth-zero queue every turn runs is the turn itself, and the turn's entrypoint span
-     * already reports it as {@code invoke_workflow}. Emitting a second span here would duplicate
-     * the entrypoint, so the implicit root stays out of the trace and its Agent calls line up as
-     * siblings under the entrypoint until a Workflow is actually planned. Planned Workflows nest
-     * inside that entrypoint and therefore carry {@code score.ai.workflow.nested}.
-     */
-    private static boolean implicitRootQueue(Map<String, Object> metadata) {
-        return metadata.get("parent_node_id") == null && number(metadata.get("depth")) == 0;
-    }
-
-    private static boolean workflowEvent(String subtype) {
-        return !"unknown".equals(terminalSuffix(subtype))
-                && "workflow".equals(workflowPrefix(subtype));
-    }
-
-    private static String terminalSuffix(String subtype) {
-        for (String suffix : new String[]{
-                "output_retry_handoff", "started", "planned", "synthesizing", "completed",
-                "failed", "cancelled", "refused", "stalled"}) {
-            if (subtype.endsWith("_" + suffix)) return suffix;
-        }
-        return "unknown";
-    }
-
-    private static String workflowPrefix(String subtype) {
-        String suffix = terminalSuffix(subtype);
-        return subtype.endsWith("_" + suffix)
-                ? subtype.substring(0, subtype.length() - suffix.length() - 1) : subtype;
-    }
-
-    private static String workflowMetricName(String workflow) {
-        String normalized = AiObservationInstruments.normalized(workflow);
-        return switch (normalized) {
-            case "main" -> normalized;
-            default -> "recursive";
-        };
-    }
-
-    private static String workflowType(Map<String, Object> metadata) {
-        String normalized = Objects.toString(metadata.get("workflow_type"), "unknown")
-                .strip().toLowerCase(java.util.Locale.ROOT);
-        return switch (normalized) {
-            case "direct", "sequential", "parallel" -> normalized;
-            default -> "unknown";
-        };
-    }
-
     private Context workflowParent(String requestId, Map<String, Object> metadata) {
         String parentId = Objects.toString(metadata.get("parent_node_id"), null);
         Context parent = explicitParents.apply(requestId, parentId);
@@ -450,51 +362,7 @@ final class AiLifecycleEventObserver {
     }
 
     static String outcome(String status) {
-        String normalized = status != null ? status.strip().toLowerCase() : "unknown";
-        return switch (normalized) {
-            case "completed", "complete", "success" -> "success";
-            case "timed_out", "timeout" -> "timeout";
-            case "stalled" -> "stalled";
-            case "cancelled", "canceled", "output_retry_handoff" -> "cancelled";
-            case "denied", "blocked", "refused" -> "refused";
-            case "failed", "error", "partial_failure" -> normalized;
-            case "admission_rejected" -> "admission_rejected";
-            case "unknown_reconciliation_required" -> "error";
-            default -> "unknown";
-        };
-    }
-
-    private static boolean hasFailures(Map<String, Object> metadata) {
-        return firstPositive(metadata, "failed", "failed_count", "failure_count",
-                "failed_agents") > 0;
-    }
-
-    private static long firstPositive(Map<String, Object> metadata, String... names) {
-        for (String name : names) {
-            long value = number(metadata.get(name));
-            if (value > 0) return value;
-        }
-        return 0;
-    }
-
-    private static long number(Object value) {
-        if (value instanceof Number number) return number.longValue();
-        try { return value != null ? Long.parseLong(value.toString()) : -1L; }
-        catch (NumberFormatException ignored) { return -1L; }
-    }
-
-    private static String boundedType(Object value) {
-        String type = Objects.toString(value, "unknown").strip();
-        return type.matches("[A-Za-z0-9_.$-]{1,120}") ? type : "unknown";
-    }
-
-    private static String statusClass(long status) {
-        return status >= 100 && status <= 599 ? (status / 100) + "xx" : "unknown";
-    }
-
-    private static double elapsedMillis(long startedNanos) {
-        return Duration.ofNanos(Math.max(0L, System.nanoTime() - startedNanos)).toNanos()
-                / 1_000_000.0;
+        return AiLifecycleMetadata.outcome(status);
     }
 
     private record OperationKey(String requestId, String operationId) { }

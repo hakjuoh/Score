@@ -6,6 +6,7 @@ import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.api.trace.SpanKind;
+import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.TraceFlags;
 import io.opentelemetry.api.trace.TraceState;
 import io.opentelemetry.context.Context;
@@ -50,6 +51,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 
@@ -81,6 +83,91 @@ class ScoreAiObservabilityTest {
                 .setMeterProvider(meterProvider)
                 .build();
         observability = new ScoreAiObservability(openTelemetry, "3.6.0-test");
+    }
+
+    @Test
+    void recordsAdmissionRejectionWithCanonicalEventsSpanAndMetrics() {
+        List<ExecutionObservation> published = new CopyOnWriteArrayList<>();
+        ExecutionEventPublisher publisher = ExecutionEventPublisher.forListeners(
+                List.of(published::add));
+        @SuppressWarnings("unchecked")
+        ObjectProvider<ExecutionObserver> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(publisher);
+        ScoreAiObservability observed = new ScoreAiObservability(
+                openTelemetry, "3.6.0-test", alias -> {
+                    LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(20));
+                    return "resolved-model";
+                }, provider);
+        ChatRequest request = new ChatRequest("private", "request-rejected", null,
+                "conversation-rejected", null, List.of(), null,
+                "model-alias", "medium", "ask");
+
+        observed.recordAdmissionRejection(request, null,
+                new IllegalStateException("sensitive failure detail"),
+                "registry_capacity", null, null, 17L);
+
+        assertThat(published).extracting(ExecutionObservation::type)
+                .containsExactly("workflow.root.rejected", ExecutionEventPublisher.REQUEST_CLOSED);
+        assertThat(published).allSatisfy(event -> {
+            assertThat(event.scope().generation()).isEqualTo(17L);
+            assertThat(event.scope().requesterId()).isEqualTo("unknown");
+            assertThat(event.attributes()).containsKeys(
+                    ExecutionEventPublisher.EVENT_ID,
+                    ExecutionEventPublisher.EVENT_SEQUENCE,
+                    ExecutionEventPublisher.EVENT_OCCURRED_AT);
+        });
+        SpanData workflow = admissionRejectionSpan();
+        assertThat(workflow.getStatus().getStatusCode()).isEqualTo(StatusCode.ERROR);
+        assertThat(workflow.getAttributes().get(AttributeKey.stringKey(
+                "gen_ai.request.model"))).isEqualTo("resolved-model");
+        assertThat(workflow.getAttributes().get(AttributeKey.stringKey(
+                "score.ai.model.alias"))).isEqualTo("model-alias");
+        assertThat(workflow.getAttributes().get(AttributeKey.stringKey(
+                "score.ai.admission.reason"))).isEqualTo("registry_capacity");
+        assertThat(workflow.getAttributes().get(AttributeKey.stringKey(
+                ExecutionEventPublisher.EVENT_ID))).isEqualTo(published.getFirst()
+                .attributes().get(ExecutionEventPublisher.EVENT_ID));
+        assertThat(workflow.getAttributes().get(AttributeKey.stringKey(
+                "score.event.end.id"))).isEqualTo(published.getLast()
+                .attributes().get(ExecutionEventPublisher.EVENT_ID));
+        assertThat(workflow.getStartEpochNanos()).isEqualTo(
+                published.getFirst().occurredAt().getEpochSecond() * 1_000_000_000L
+                        + published.getFirst().occurredAt().getNano());
+        assertThat(longMetric("score.ai.turn.requests")).isEqualTo(1L);
+        assertThat(longMetric("score.ai.admission.rejections")).isEqualTo(1L);
+        assertThat(metrics.collectAllMetrics()).filteredOn(metric ->
+                        metric.getName().equals("gen_ai.workflow.duration"))
+                .flatExtracting(metric -> metric.getHistogramData().getPoints())
+                .singleElement().satisfies(point -> {
+                    assertThat(point.getSum()).isGreaterThanOrEqualTo(0.01d);
+                    assertThat(point.getAttributes().get(AttributeKey.stringKey(
+                            "gen_ai.workflow.name"))).isEqualTo("assistant");
+                    assertThat(point.getAttributes().get(AttributeKey.stringKey(
+                            "error.type"))).isEqualTo(IllegalStateException.class.getName());
+                });
+        assertThat(workflow.getAttributes().asMap().values())
+                .doesNotContain("sensitive failure detail");
+    }
+
+    @Test
+    void recordsAdmissionRejectionWithoutPublisherRequesterOrConversation() {
+        ChatRequest request = new ChatRequest("private", "request-minimal-rejection", null,
+                null, null, List.of(), null, null, null, "ask");
+
+        observability.recordAdmissionRejection(request, null, null,
+                "unexpected unbounded reason", null, null, 0L);
+        observability.recordAdmissionRejection(null, null, null,
+                "registry_capacity", null, null, 0L);
+
+        SpanData workflow = admissionRejectionSpan();
+        assertThat(workflow.getAttributes().get(AttributeKey.stringKey(
+                "score.ai.conversation.id"))).isEqualTo("unknown");
+        assertThat(workflow.getAttributes().get(AttributeKey.stringKey(
+                "score.ai.admission.reason"))).isEqualTo("other");
+        assertThat(workflow.getAttributes().get(AttributeKey.stringKey(
+                ExecutionEventPublisher.EVENT_ID))).isNull();
+        assertThat(longMetric("score.ai.turn.requests")).isEqualTo(1L);
+        assertThat(longMetric("score.ai.admission.rejections")).isEqualTo(1L);
     }
 
     @Test
@@ -1319,6 +1406,14 @@ class ScoreAiObservabilityTest {
                         && (!("score.ai.turn".equals(name)) || turnEntrypoint(item))
                         && (!("score.ai.workflow".equals(name)) || !turnEntrypoint(item))
                         : item.getName().equals(name))
+                .findFirst().orElseThrow();
+    }
+
+    private SpanData admissionRejectionSpan() {
+        return spans.getFinishedSpanItems().stream()
+                .filter(item -> GenAiSemanticConventions.INVOKE_WORKFLOW.equals(operation(item)))
+                .filter(item -> "admission_rejected".equals(item.getAttributes().get(
+                        AttributeKey.stringKey("score.ai.outcome"))))
                 .findFirst().orElseThrow();
     }
 
