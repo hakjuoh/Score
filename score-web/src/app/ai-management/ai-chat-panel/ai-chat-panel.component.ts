@@ -23,6 +23,7 @@ import {AiChangeInteractionService} from './domain/ai-change-interaction.service
 import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.service';
 import {AiChatSettingsService} from './domain/ai-chat-settings.service';
 import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
+import {AiChatWorkspacePersistenceCoordinator} from './domain/ai-chat-workspace-persistence-coordinator';
 
 export {
   AI_CHAT_LAST_CONVERSATION_STORAGE_KEY_PREFIX,
@@ -58,7 +59,8 @@ export {
     AiChangeInteractionService,
     AiChatPanelViewportService,
     AiChatSettingsService,
-    AiChatWindowCoordinatorService
+    AiChatWindowCoordinatorService,
+    AiChatWorkspacePersistenceCoordinator
   ]
 })
 export class AiChatPanelComponent extends AiChatPanelLifecycleController
