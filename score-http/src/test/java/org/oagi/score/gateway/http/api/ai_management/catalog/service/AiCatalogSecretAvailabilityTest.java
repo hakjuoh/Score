@@ -12,9 +12,11 @@ import org.jooq.tools.jdbc.MockDataProvider;
 import org.jooq.tools.jdbc.MockResult;
 import org.jooq.types.ULong;
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiProviderRecord;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -54,7 +56,7 @@ class AiCatalogSecretAvailabilityTest {
         when(secrets.isEncryptionConfigured()).thenReturn(false);
         ScoreAiProperties properties = bootstrapProperties();
 
-        new AiCatalogBootstrap(dsl, properties, secrets).bootstrapNow();
+        new AiCatalogBootstrap(new RepositoryFactory(dsl), properties, secrets).bootstrapNow();
 
         assertThat(database.sql).noneMatch(statement -> statement.startsWith("insert into"));
         verify(secrets, never()).create(org.mockito.ArgumentMatchers.any(),
@@ -72,7 +74,8 @@ class AiCatalogSecretAvailabilityTest {
                 org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any())).thenReturn(ULong.valueOf(99));
 
-        new AiCatalogBootstrap(dsl, bootstrapProperties(), secrets).bootstrapNow();
+        new AiCatalogBootstrap(new RepositoryFactory(dsl), bootstrapProperties(), secrets)
+                .bootstrapNow();
 
         assertThat(database.sql).anyMatch(statement -> statement.startsWith("insert into")
                 && statement.contains("ai_provider"));
@@ -81,6 +84,12 @@ class AiCatalogSecretAvailabilityTest {
         verify(secrets).create(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.contains("ai-provider/provider/api-key"),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void waitsForDatabaseInitializationBeforeCatalogAccess() {
+        assertThat(AiCatalogBootstrap.class.isAnnotationPresent(
+                DependsOnDatabaseInitialization.class)).isTrue();
     }
 
     private ScoreAiProperties bootstrapProperties() {
