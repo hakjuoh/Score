@@ -17,12 +17,7 @@ import {AiChatConversationSummary} from './domain/ai-chat-panel.model';
   standalone: false,
   selector: 'score-ai-chat-history-list',
   templateUrl: './ai-chat-history-list.component.html',
-  styleUrls: [
-    './ai-chat-panel.component.css',
-    './ai-chat-panel-history.css',
-    './ai-chat-panel-messages.css',
-    './ai-chat-panel-composer.css'
-  ]
+  styleUrl: './ai-chat-history.component.css'
 })
 export class AiChatHistoryListComponent implements AfterViewInit, OnChanges {
 

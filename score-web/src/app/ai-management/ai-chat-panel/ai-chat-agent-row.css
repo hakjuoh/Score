@@ -1,0 +1,82 @@
+.agent-group-row,
+.agent-list-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 6px;
+  min-height: 22px;
+  padding: 1px 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #52525b;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-group-row:hover,
+.agent-group-row:focus-visible,
+.agent-list-row:hover,
+.agent-list-row:focus-visible {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.agent-row-status,
+.agent-list-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 14px;
+  min-height: 16px;
+  color: #52525b;
+}
+
+.agent-row-status mat-icon,
+.agent-list-status mat-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 14px;
+}
+
+.agent-terminal-warn .agent-row-status,
+.agent-terminal-warn .agent-list-status,
+.agent-focus-status.agent-terminal-warn {
+  color: #b45309;
+}
+
+.agent-row-name,
+.agent-list-name {
+  flex: 0 0 auto;
+  color: #18181b;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.agent-row-role,
+.agent-list-role {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: #71717a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-row-snippet,
+.agent-list-snippet {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-row-elapsed,
+.agent-list-elapsed {
+  flex: 0 0 auto;
+  color: #a1a1aa;
+  white-space: nowrap;
+}

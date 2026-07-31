@@ -1,0 +1,67 @@
+.agents-status-strip {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 12px 4px;
+  box-sizing: border-box;
+  border-top: 1px solid #e4e4e7;
+  background: #fafafa;
+  color: #52525b;
+  font: 11px/16px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.agents-strip-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agents-strip-button:hover,
+.agents-strip-button:focus-visible {
+  color: #18181b;
+}
+
+.agents-strip-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.agents-strip-button mat-icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 14px;
+}
+
+.agents-strip-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-list-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  width: 100%;
+  max-height: 132px;
+  min-width: 0;
+  padding: 4px 10px;
+  box-sizing: border-box;
+  border-top: 1px solid #e4e4e7;
+  background: #fafafa;
+  color: #52525b;
+  font: 11px/16px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  overflow-y: auto;
+}
