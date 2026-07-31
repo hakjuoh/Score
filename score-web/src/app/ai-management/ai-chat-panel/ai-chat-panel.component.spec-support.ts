@@ -38,6 +38,7 @@ import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.servic
 import {AiChatSettingsService} from './domain/ai-chat-settings.service';
 import {AiChatTransportService} from './domain/ai-chat-transport.service';
 import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
+import {AiChatWorkspacePersistenceCoordinator} from './domain/ai-chat-workspace-persistence-coordinator';
 import {AiChangeInteractionService} from './domain/ai-change-interaction.service';
 import {
   AiCancellationResponse,
@@ -226,6 +227,7 @@ export function setupAiChatPanelSpec(): void {
       AiChatSettingsService,
       {provide: AiChatTransportService, useValue: transport},
       {provide: AiChatWindowCoordinatorService, useValue: windowCoordinator},
+      AiChatWorkspacePersistenceCoordinator,
       {provide: DomSanitizer, useValue: {bypassSecurityTrustHtml: (value: string) => value}},
       {provide: WebPageInfoService, useValue: {brand: undefined}},
       {provide: AuthService, useValue: {getUserToken: () => ({username: currentUsername})}},
