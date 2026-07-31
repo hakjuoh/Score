@@ -1,3 +1,7 @@
+/**
+ * Verifies agent-event classification, timeline upserts, terminal guards, and display summaries.
+ */
+
 import {
   AiAgentActivity,
   agentActivityElapsedLabel,

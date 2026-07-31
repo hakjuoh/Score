@@ -1,3 +1,7 @@
+/**
+ * Owns template-facing context, viewport, focus, and link-navigation behavior.
+ */
+
 import {AiChatPanelEventController} from './ai-chat-panel-event.controller';
 import {AiContextBudgetDialogComponent} from './ai-context-budget-dialog.component';
 import {AiContextBudgetData} from './ai-context-budget-chart.model';

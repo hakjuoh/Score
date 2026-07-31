@@ -1,3 +1,7 @@
+/**
+ * Verifies AI Change Approval Batch Coordinator coordination, state transitions, and edge cases.
+ */
+
 import {AiChangeApprovalBatchCoordinator} from './ai-change-approval-batch-coordinator';
 import {AiChatPanelState} from './ai-chat-panel-state';
 import {AiChatSocketEvent} from './ai-chat-panel.model';

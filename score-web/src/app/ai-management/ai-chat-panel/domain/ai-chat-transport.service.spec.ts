@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Chat Transport service contract, failure handling, and edge cases.
+ */
+
 import {TestBed} from '@angular/core/testing';
 import {RxStompState} from '@stomp/rx-stomp';
 import {Subject, of} from 'rxjs';

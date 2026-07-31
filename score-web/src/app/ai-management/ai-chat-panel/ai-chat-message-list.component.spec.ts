@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Chat Message List component's rendering and interaction contract.
+ */
+
 import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {ComponentFixture, TestBed} from '@angular/core/testing';

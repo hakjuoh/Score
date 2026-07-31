@@ -1,3 +1,7 @@
+/**
+ * Normalizes tool names and derives user-facing tool lifecycle content.
+ */
+
 import type {AiChatToolStatus} from './ai-chat-panel.model';
 
 const TOOL_SEARCH_TOOL_NAME = 'toolSearchTool';

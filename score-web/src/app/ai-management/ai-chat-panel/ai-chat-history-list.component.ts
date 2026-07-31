@@ -1,3 +1,7 @@
+/**
+ * Renders conversation history and emits selection, deletion, retry, and scroll-state changes.
+ */
+
 import {
   AfterViewInit,
   Component,

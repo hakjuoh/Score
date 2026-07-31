@@ -1,3 +1,7 @@
+/**
+ * Routes admitted socket events to the matching chat, approval, elicitation, or restore workflow.
+ */
+
 import {Message} from '@stomp/stompjs';
 import {AiChatPanelUiController} from './ai-chat-panel-ui.controller';
 import {

@@ -1,3 +1,7 @@
+/**
+ * Derives route-aware page context and resolves resource links for AI requests.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {Router} from '@angular/router';
 import {AI_RESOURCE_ROUTES} from './resource-routes/ai-resource-routes';

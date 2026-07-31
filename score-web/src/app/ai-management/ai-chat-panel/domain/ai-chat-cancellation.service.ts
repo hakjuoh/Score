@@ -1,3 +1,7 @@
+/**
+ * Coordinates the idempotent HTTP-first cancellation handshake and socket fallback.
+ */
+
 import {HttpErrorResponse} from '@angular/common/http';
 import {Injectable, OnDestroy, inject} from '@angular/core';
 import {Subscription} from 'rxjs';

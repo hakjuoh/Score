@@ -1,3 +1,7 @@
+/**
+ * Registers context-management resources and their query and detail routes.
+ */
+
 import {AiResourceRoute} from '../ai-chat-panel.model';
 import {
   AUTHENTICATED_ROLES,

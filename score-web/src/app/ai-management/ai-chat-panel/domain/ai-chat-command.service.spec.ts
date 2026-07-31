@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Chat Command service contract, failure handling, and edge cases.
+ */
+
 import {AiChatCommandService} from './ai-chat-command.service';
 
 describe('AiChatCommandService', () => {

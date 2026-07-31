@@ -1,3 +1,7 @@
+/**
+ * Restores draft attachments and persists only meaningful workspace changes.
+ */
+
 import {Injectable} from '@angular/core';
 import {AiChatPanelState} from './ai-chat-panel-state';
 import {AiChatSessionPersistenceService} from './ai-chat-session-persistence.service';

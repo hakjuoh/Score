@@ -1,3 +1,7 @@
+/**
+ * Validates uploaded files, converts them to chat attachments, and builds attachment summaries.
+ */
+
 import {Injectable} from '@angular/core';
 import {
   SUPPORTED_ATTACHMENT_TYPES,

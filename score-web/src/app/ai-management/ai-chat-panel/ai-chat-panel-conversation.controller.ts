@@ -1,3 +1,7 @@
+/**
+ * Coordinates conversation history loading, selection, deletion, and active-request recovery.
+ */
+
 import {HttpErrorResponse} from '@angular/common/http';
 import {forkJoin, map, of, tap} from 'rxjs';
 import {take} from 'rxjs/operators';

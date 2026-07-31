@@ -1,3 +1,7 @@
+/**
+ * Provides shared fixtures and setup for the AI Chat Panel specifications.
+ */
+
 import {DestroyRef} from '@angular/core';
 import {HttpErrorResponse, HttpHeaders} from '@angular/common/http';
 import {TestBed} from '@angular/core/testing';

@@ -1,3 +1,7 @@
+/**
+ * Validates change-confirmation notices, authorizations, denials, and replay boundaries.
+ */
+
 import {
   AiChatSocketEvent,
   AiChatRestResponse,

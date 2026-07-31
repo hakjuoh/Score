@@ -1,3 +1,7 @@
+/**
+ * Pairs provider failures with retry events and derives root-request recovery actions.
+ */
+
 import {primaryContent, providerRetrySemantics} from './ai-chat-event-semantics';
 import {AiChatSocketEvent} from './ai-chat-panel.model';
 

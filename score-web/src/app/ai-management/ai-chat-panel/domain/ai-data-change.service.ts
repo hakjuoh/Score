@@ -1,3 +1,7 @@
+/**
+ * Publishes typed data-change notifications to interested application views.
+ */
+
 import {Injectable} from '@angular/core';
 import {Observable, Subject} from 'rxjs';
 

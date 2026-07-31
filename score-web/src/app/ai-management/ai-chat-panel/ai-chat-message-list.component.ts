@@ -1,3 +1,7 @@
+/**
+ * Renders chat messages, workflow activity, tool calls, approvals, and elicitation interactions.
+ */
+
 import {
   AfterViewChecked,
   Component,

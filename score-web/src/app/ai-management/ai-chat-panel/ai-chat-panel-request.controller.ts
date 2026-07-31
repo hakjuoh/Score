@@ -1,3 +1,7 @@
+/**
+ * Dispatches chat requests and reconciles their REST and socket response paths.
+ */
+
 import {HttpErrorResponse} from '@angular/common/http';
 import {Message} from '@stomp/stompjs';
 import {take, timeout} from 'rxjs/operators';

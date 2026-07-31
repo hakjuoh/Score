@@ -1,3 +1,7 @@
+/**
+ * Verifies event text, usage, tool lifecycle, terminal error, and reconciliation semantics.
+ */
+
 import {
   contextUsageValue,
   exactOptionalText,

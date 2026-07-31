@@ -1,3 +1,7 @@
+/**
+ * Serializes attachment reads and applies only results from the current draft selection.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {AiChatAttachmentService} from './ai-chat-attachment.service';
 import {

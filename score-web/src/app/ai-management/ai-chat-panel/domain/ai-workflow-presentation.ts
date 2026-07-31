@@ -1,3 +1,7 @@
+/**
+ * Derives workflow types and their chat presentation modes from socket events.
+ */
+
 import {AiChatSocketEvent, AiWorkflowType} from './ai-chat-panel.model';
 
 export type AiWorkflowPresentation = 'hidden' | 'box' | 'message';

@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's settings and active-request recovery behavior.
+ */
+
 import {
   AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY,
   AiChatCommandService,
