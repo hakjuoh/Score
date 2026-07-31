@@ -211,8 +211,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.settleAgentActivity('cancelled');
     this.clearTimers();
     this.clearStatusMessage();
-    this.state.elicitation = undefined;
-    this.state.elicitationBusy = false;
+    this.elicitationCoordinator.clear(this.state);
     this.clearChangeApprovalBatch();
     this.confirmedChangeRequests.cancel(this.activeRequestId);
     this.clearChangeRepeatDraft(this.activeRequestId);
@@ -236,8 +235,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
-    this.state.elicitation = undefined;
-    this.state.elicitationBusy = false;
+    this.elicitationCoordinator.clear(this.state);
     this.clearChangeApprovalBatch();
     this.confirmedChangeRequests.cancel(this.activeRequestId);
     this.clearChangeRepeatDraft(this.activeRequestId);
@@ -266,8 +264,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
-    this.state.elicitation = undefined;
-    this.state.elicitationBusy = false;
+    this.elicitationCoordinator.clear(this.state);
     this.clearChangeApprovalBatch();
     this.confirmedChangeRequests.cancel(this.activeRequestId);
     this.clearChangeRepeatDraft(this.activeRequestId);

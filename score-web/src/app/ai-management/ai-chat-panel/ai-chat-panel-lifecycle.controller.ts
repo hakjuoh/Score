@@ -49,14 +49,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.clearRequestStatusWatchdog();
     this.clearResponseTimeout();
     this.clearProviderRecoveryState();
-    if (this.changeApprovalExpiryTimeout !== undefined) {
-      window.clearTimeout(this.changeApprovalExpiryTimeout);
-      this.changeApprovalExpiryTimeout = undefined;
-    }
-    if (this.changeApprovalAcknowledgementTimeout !== undefined) {
-      window.clearTimeout(this.changeApprovalAcknowledgementTimeout);
-      this.changeApprovalAcknowledgementTimeout = undefined;
-    }
+    this.changeApprovalBatches.clearTimers();
     if (this.acknowledgementTimeout) {
       window.clearTimeout(this.acknowledgementTimeout);
       this.acknowledgementTimeout = undefined;
@@ -243,8 +236,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
-    this.state.elicitation = undefined;
-    this.state.elicitationBusy = false;
+    this.elicitationCoordinator.clear(this.state);
     this.clearChangeApprovalBatch();
     this.clearChangeRepeatDraft(this.activeRequestId);
     this.activeRequestId = undefined;
@@ -334,8 +326,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     this.settleAgentActivity('completed');
     this.clearTimers();
     this.clearStatusMessage();
-    this.state.elicitation = undefined;
-    this.state.elicitationBusy = false;
+    this.elicitationCoordinator.clear(this.state);
     this.clearChangeApprovalBatch();
     this.confirmedChangeRequests.cancel(requestId);
     this.clearChangeRepeatDraft(requestId);

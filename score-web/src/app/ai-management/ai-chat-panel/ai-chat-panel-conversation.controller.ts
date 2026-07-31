@@ -426,8 +426,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
     this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
-    this.state.elicitation = undefined;
-    this.state.elicitationBusy = false;
+    this.elicitationCoordinator.clear(this.state);
     this.clearChangeApprovalBatch();
     this.clearChangeRepeatDraft(requestId);
     this.requestSubscription?.unsubscribe();

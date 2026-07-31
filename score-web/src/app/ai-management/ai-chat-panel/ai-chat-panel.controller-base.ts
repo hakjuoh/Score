@@ -24,6 +24,8 @@ import {
 import {AiChatCommandService, AiLocalCommand} from './domain/ai-chat-command.service';
 import {AiChatContextService} from './domain/ai-chat-context.service';
 import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
+import {AiChangeApprovalBatchCoordinator} from './domain/ai-change-approval-batch-coordinator';
+import {AiElicitationCoordinator} from './domain/ai-elicitation-coordinator';
 import {
   AiConversationRestoreCallbacks,
   AiConversationRestoreService
@@ -90,6 +92,8 @@ export abstract class AiChatPanelControllerBase {
   protected cancellationService = inject(AiChatCancellationService);
   protected commandService = inject(AiChatCommandService);
   protected confirmedChangeRequests = inject(AiConfirmedChangeRequestCoordinator);
+  protected changeApprovalBatches = inject(AiChangeApprovalBatchCoordinator);
+  protected elicitationCoordinator = inject(AiElicitationCoordinator);
   protected readonly destroyRef = inject(DestroyRef);
   protected contextService = inject(AiChatContextService);
   protected conversationRestoreService = inject(AiConversationRestoreService);
@@ -122,8 +126,6 @@ export abstract class AiChatPanelControllerBase {
   protected deferredNewChatTab?: AiChatPanelTab;
   protected responseTimeout?: number;
   protected acknowledgementTimeout?: number;
-  protected changeApprovalExpiryTimeout?: number;
-  protected changeApprovalAcknowledgementTimeout?: number;
   protected resizeState?: ResizeState;
   protected activeRequestPublished = false;
   protected activeRestoreRequestId?: string;
@@ -245,17 +247,7 @@ export abstract class AiChatPanelControllerBase {
   }
 
   protected clearChangeApprovalBatch(): void {
-    if (this.changeApprovalExpiryTimeout !== undefined) {
-      window.clearTimeout(this.changeApprovalExpiryTimeout);
-      this.changeApprovalExpiryTimeout = undefined;
-    }
-    if (this.changeApprovalAcknowledgementTimeout !== undefined) {
-      window.clearTimeout(this.changeApprovalAcknowledgementTimeout);
-      this.changeApprovalAcknowledgementTimeout = undefined;
-    }
-    this.state.changeApprovalBatch = undefined;
-    this.state.changeApprovalBatchQueue = [];
-    this.state.changeApprovalBatchBusy = false;
+    this.changeApprovalBatches.clear(this.state);
   }
 
   protected settleAgentActivity(status: Extract<AiAgentExecutionStatus,

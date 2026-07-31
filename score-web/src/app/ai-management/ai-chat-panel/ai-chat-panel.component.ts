@@ -12,6 +12,8 @@ import {AiChatPanelLifecycleController} from './ai-chat-panel-lifecycle.controll
 import {AiChatAttachmentQueueService} from './domain/ai-chat-attachment-queue.service';
 import {AiActiveRequestRecoveryService} from './domain/ai-active-request-recovery.service';
 import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
+import {AiChangeApprovalBatchCoordinator} from './domain/ai-change-approval-batch-coordinator';
+import {AiElicitationCoordinator} from './domain/ai-elicitation-coordinator';
 import {AiConversationRestoreService} from './domain/ai-conversation-restore.service';
 import {AiConversationProjector} from './domain/ai-conversation-projector';
 import {AiConversationRestoreRenderer} from './domain/ai-conversation-restore-renderer';
@@ -48,6 +50,8 @@ export {
     AiConversationRestoreRenderer,
     AiConversationRestoreService,
     AiConfirmedChangeRequestCoordinator,
+    AiChangeApprovalBatchCoordinator,
+    AiElicitationCoordinator,
     AiChatMessageTrackerService,
     AiChangeInteractionService,
     AiChatPanelViewportService,

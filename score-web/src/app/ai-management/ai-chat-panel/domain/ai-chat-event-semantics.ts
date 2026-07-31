@@ -172,6 +172,11 @@ export function primaryContent(event: AiChatSocketEvent): string {
   return event.content || event.response || event.message || '';
 }
 
+/** Preserves a correlation value only when transport whitespace is exact. */
+export function exactOptionalText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() === value ? value : undefined;
+}
+
 /**
  * Removes a model-authored imitation of a tool call from visible assistant
  * text. Only correlated tool_call lifecycle events are execution evidence and

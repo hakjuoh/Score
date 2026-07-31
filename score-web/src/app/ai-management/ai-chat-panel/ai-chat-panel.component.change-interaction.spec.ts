@@ -320,7 +320,7 @@ describe('AiChatPanelComponent elicitation and change interaction', () => {
 
     expect(component.state.cancellation.phase).not.toBe('idle');
     expect(component.changeApprovalControlsBusy).toBe(true);
-    expect((component as any).changeApprovalExpiryTimeout).toBeDefined();
+    expect((component as any).changeApprovalBatches.expiryTimeout).toBeDefined();
     expect(transport.publish).not.toHaveBeenCalledWith(
       '/app/ai/chat/change-approval', expect.anything()
     );

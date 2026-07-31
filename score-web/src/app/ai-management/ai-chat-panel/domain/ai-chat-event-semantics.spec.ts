@@ -1,5 +1,6 @@
 import {
   contextUsageValue,
+  exactOptionalText,
   isReconciliationRequired,
   legacyRecoverableToolName,
   primaryContent,
@@ -9,6 +10,12 @@ import {
 import {AiChatSocketEvent} from './ai-chat-panel.model';
 
 describe('AI chat event semantics', () => {
+  it('preserves only transport text with exact whitespace', () => {
+    expect(exactOptionalText('conversation-1')).toBe('conversation-1');
+    expect(exactOptionalText(' conversation-1')).toBeUndefined();
+    expect(exactOptionalText(null)).toBeUndefined();
+  });
+
   it('uses content, response, then message as the canonical event text precedence', () => {
     const event: AiChatSocketEvent = {
       requestId: 'request-1', type: 'system', content: 'content',

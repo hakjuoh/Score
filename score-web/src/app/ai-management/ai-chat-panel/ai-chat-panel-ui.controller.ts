@@ -66,8 +66,7 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     this.destroyed$.complete();
     this.clearChangeRepeatDraft();
     this.changeInteractions.destroy(this.state);
-    this.state.elicitation = undefined;
-    this.state.elicitationBusy = false;
+    this.elicitationCoordinator.clear(this.state);
     this.clearChangeApprovalBatch();
     this.invalidateAttachmentReads();
     this.requestSubscription?.unsubscribe();
