@@ -1,3 +1,7 @@
+/**
+ * Decides which live, replayed, and side-channel events each request path may process.
+ */
+
 import {
   isExecutionActivityEvent,
   isSpecialistToolEvent

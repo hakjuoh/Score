@@ -1,3 +1,7 @@
+/**
+ * Verifies strict parsing of bound, unexpired JSON Schema elicitation notices.
+ */
+
 import {describe, expect, it} from 'vitest';
 import {elicitationNotice} from './ai-elicitation';
 

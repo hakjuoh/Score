@@ -1,3 +1,7 @@
+/**
+ * Persists panel preferences and workspaces in browser storage and draft attachments in IndexedDB.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {AuthService} from '../../../authentication/auth.service';
 import {AiChatPanelState} from './ai-chat-panel-state';

@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's change and elicitation interaction behavior.
+ */
+
 import {
   api,
   component,

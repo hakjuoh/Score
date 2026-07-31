@@ -1,3 +1,7 @@
+/**
+ * Navigates AI-generated resource links and refreshes pages affected by data changes.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {Router} from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';

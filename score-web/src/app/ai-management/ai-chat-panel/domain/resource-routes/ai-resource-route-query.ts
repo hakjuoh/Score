@@ -1,3 +1,7 @@
+/**
+ * Defines shared role, paging, alias, and encoded-query helpers for resource routes.
+ */
+
 export const AUTHENTICATED_ROLES = ['admin', 'developer', 'end-user'];
 export const ADMIN_ROLES = ['admin'];
 

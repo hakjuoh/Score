@@ -1,3 +1,7 @@
+/**
+ * Builds the role-filtered UI route manifest supplied to the AI assistant.
+ */
+
 import {inject, Injectable} from '@angular/core';
 import {AI_RESOURCE_ROUTES} from './resource-routes/ai-resource-routes';
 import {AiResourceRoute, AiUiRouteManifest} from './ai-chat-panel.model';

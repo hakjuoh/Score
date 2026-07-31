@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's tool-event behavior.
+ */
+
 import {
   AiChatRestResponse,
   AiConversationRestoreService,

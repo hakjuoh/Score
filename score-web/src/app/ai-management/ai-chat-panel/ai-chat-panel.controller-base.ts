@@ -1,3 +1,7 @@
+/**
+ * Defines the shared state, dependencies, and lifecycle foundation for the chat controller hierarchy.
+ */
+
 import {DestroyRef, Directive, ElementRef, inject} from '@angular/core';
 import {ConnectedPosition} from '@angular/cdk/overlay';
 import {DomSanitizer} from '@angular/platform-browser';

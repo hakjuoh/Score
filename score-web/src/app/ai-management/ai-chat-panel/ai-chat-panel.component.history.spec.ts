@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's streaming and conversation-history behavior.
+ */
+
 import {
   AiChatConversationSummary,
   Subject,

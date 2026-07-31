@@ -1,3 +1,7 @@
+/**
+ * Extracts compact visible page content for inclusion in AI request context.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {Router} from '@angular/router';
 import {AiResourceRoute} from './ai-chat-panel.model';

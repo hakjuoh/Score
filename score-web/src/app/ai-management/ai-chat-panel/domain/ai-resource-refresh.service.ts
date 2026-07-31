@@ -1,3 +1,7 @@
+/**
+ * Selects resource-specific refresh strategies after AI-driven data changes.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {AiChatSocketEvent, AiResourceRoute} from './ai-chat-panel.model';
 import {AiDataChangeService} from './ai-data-change.service';

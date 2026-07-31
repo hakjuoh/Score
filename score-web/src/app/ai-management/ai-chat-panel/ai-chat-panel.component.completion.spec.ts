@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's request completion and recovery behavior.
+ */
+
 import {
   AiCancellationResponse,
   AiChatConversationDetails,

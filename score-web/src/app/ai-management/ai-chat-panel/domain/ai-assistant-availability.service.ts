@@ -1,3 +1,7 @@
+/**
+ * Loads assistant availability and branding and polls for recovery after transient failures.
+ */
+
 import {HttpClient, HttpContext} from '@angular/common/http';
 import {Injectable, OnDestroy, inject} from '@angular/core';
 import {Subscription, of, timer} from 'rxjs';
