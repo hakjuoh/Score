@@ -8,6 +8,7 @@ import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiQuotaExc
 import org.oagi.score.gateway.http.common.model.AccessControlException;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
 import org.oagi.score.gateway.http.common.model.base.ScoreDataAccessException;
+import org.oagi.score.gateway.http.security.secret.ApplicationSecretUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -127,6 +128,13 @@ public class ScoreResponseEntityExceptionHandler extends ResponseEntityException
             IllegalArgumentException ex, WebRequest webRequest) {
         logger.debug(ex.getMessage(), ex);
         return errorResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(ApplicationSecretUnavailableException.class)
+    public ResponseEntity<String> handleApplicationSecretUnavailableException(
+            ApplicationSecretUnavailableException ex, WebRequest webRequest) {
+        logger.debug(ex.getMessage(), ex);
+        return errorResponse(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     @ExceptionHandler(IllegalStateException.class)

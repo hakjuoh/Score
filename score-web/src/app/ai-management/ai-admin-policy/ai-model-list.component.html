@@ -1,0 +1,42 @@
+<div class="context-section ai-admin-page">
+  <div class="ps-2 pe-2">
+    <mat-toolbar class="bg-white">
+      <span class="title">AI Model Catalog</span>
+      <span class="flex-11-auto"></span>
+      <a mat-raised-button class="ms-2" color="primary" routerLink="/ai-admin/models/new">Add Model</a>
+    </mat-toolbar>
+  </div>
+
+  <mat-card class="pt-3">
+    <score-search-bar placeholder="Search by Model Name" [(model)]="filter"
+      [advancedSearch]="false" (searchTriggered)="onSearch()"/>
+
+    <mat-card-content class="mat-card-container">
+      @if (loading) {
+        <div class="loading-container"><mat-spinner [diameter]="40"></mat-spinner></div>
+      } @else if (loadFailed) {
+        <div class="load-error" role="alert">Models could not be loaded.
+          <button mat-stroked-button (click)="load()">Retry</button>
+        </div>
+      } @else {
+        <div class="table-container">
+          <div class="score-column-container align-items-center">
+            <score-column-selector [columns]="columns"
+              (columnsChange)="onColumnsChange($event)" (onReset)="onColumnsReset()"/>
+          </div>
+          <div class="mat-elevation-z1 table-wrapper mt-3">
+            <table mat-table [dataSource]="filteredModels">
+              <ng-container matColumnDef="model"><th mat-header-cell *matHeaderCellDef>Model</th><td mat-cell *matCellDef="let model"><a [routerLink]="['/ai-admin/models', model.aiModelId]">{{model.displayName}}</a><small class="d-block">{{model.modelKey}}</small></td></ng-container>
+              <ng-container matColumnDef="provider"><th mat-header-cell *matHeaderCellDef>Provider</th><td mat-cell *matCellDef="let model">{{model.provider}}</td></ng-container>
+              <ng-container matColumnDef="status"><th mat-header-cell *matHeaderCellDef>Status</th><td mat-cell *matCellDef="let model"><span class="status-pill" [class.disabled]="!model.enabled">{{model.enabled ? 'Enabled' : 'Disabled'}}</span>@if (model.defaultModel) { <small>Default</small> }</td></ng-container>
+              <ng-container matColumnDef="defaultEffort"><th mat-header-cell *matHeaderCellDef>Default Effort</th><td mat-cell *matCellDef="let model">{{defaultEffort(model)}}</td></ng-container>
+              <ng-container matColumnDef="efforts"><th mat-header-cell *matHeaderCellDef>Efforts</th><td mat-cell *matCellDef="let model">{{effortNames(model)}}</td></ng-container>
+              <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+            </table>
+          </div>
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

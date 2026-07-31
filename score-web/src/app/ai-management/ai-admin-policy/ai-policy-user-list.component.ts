@@ -19,6 +19,19 @@ export class AiPolicyUserListComponent implements OnInit {
   inheritanceFilter = 'ALL';
   quotaFilter = 'ALL';
   multiAgentFilter = 'ALL';
+  columns = this.defaultColumns();
+
+  get displayedColumns(): string[] {
+    const columnNames = new Map([
+      ['Login ID', 'loginId'], ['Name', 'name'], ['Organization', 'organization'],
+      ['AI Access', 'access'], ['Models', 'models'], ['Multi-agent', 'multiAgent'],
+      ['Quota', 'quota'], ['Active', 'active'], ['Last Policy Change', 'lastPolicyChange']
+    ]);
+    return this.columns.filter(column => column.selected)
+      .map(column => columnNames.get(column.name))
+      .filter((name): name is string => !!name)
+      .concat('actions');
+  }
 
   ngOnInit(): void {
     this.load();
@@ -39,6 +52,18 @@ export class AiPolicyUserListComponent implements OnInit {
     });
   }
 
+  onSearch(): void {
+    this.filter = this.filter.trim();
+  }
+
+  onColumnsChange(columns: {name: string; selected: boolean}[]): void {
+    this.columns = [...columns];
+  }
+
+  onColumnsReset(): void {
+    this.columns = this.defaultColumns();
+  }
+
   get filteredUsers(): AiPolicyUserSummary[] {
     const query = this.filter.trim().toLowerCase();
     return this.users.filter(user => (!query || [user.loginId, user.name, user.organization]
@@ -54,5 +79,10 @@ export class AiPolicyUserListComponent implements OnInit {
     const used = user.quotaConsumedTokens + user.quotaReservedTokens;
     if (this.quotaFilter === 'EXHAUSTED') return used >= user.quotaLimitTokens;
     return used >= user.quotaLimitTokens * 0.8 && used < user.quotaLimitTokens;
+  }
+
+  private defaultColumns(): {name: string; selected: boolean}[] {
+    return ['Login ID', 'Name', 'Organization', 'AI Access', 'Models', 'Multi-agent',
+      'Quota', 'Active', 'Last Policy Change'].map(name => ({name, selected: true}));
   }
 }
