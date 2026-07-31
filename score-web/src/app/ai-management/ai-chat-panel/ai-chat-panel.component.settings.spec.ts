@@ -414,6 +414,20 @@ describe('AiChatPanelComponent settings and active recovery', () => {
     expect(component.state.messages.at(-1)?.content).toContain('disabled');
   });
 
+  it.each([
+    '/compact',
+    '/compact preserve import IDs'
+  ])('forwards %s to the backend as a chat request', prompt => {
+    (component as any).commandService = new AiChatCommandService();
+    component.state.prompt = prompt;
+
+    component.send();
+    transport.publishWhenConnected.mock.calls[0][0].publish();
+
+    expect(transport.publish).toHaveBeenCalledWith('/app/ai/chat',
+      expect.objectContaining({prompt}));
+  });
+
   it('refreshes and reports the configured MCP servers through the mcp command', () => {
     (component as any).commandService = new AiChatCommandService();
     api.getMcpStatus.mockReturnValueOnce(of({

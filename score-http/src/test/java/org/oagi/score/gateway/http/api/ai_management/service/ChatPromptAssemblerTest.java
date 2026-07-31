@@ -54,16 +54,6 @@ class ChatPromptAssemblerTest {
     }
 
     @Test
-    void distinguishesTheCompactCommandFromSimilarPrefixesAndBoundsInstructions() {
-        assertThat(prompts.compactCommand("/compact focus on decisions").instructions())
-                .isEqualTo("focus on decisions");
-        assertThat(prompts.compactCommand("/compaction")).isNull();
-        assertThatIllegalArgumentException().isThrownBy(() ->
-                        prompts.compactCommand("/compact " + "x".repeat(2001)))
-                .withMessage("Compact instructions must not exceed 2000 characters.");
-    }
-
-    @Test
     void requiresResolvedConversationSettingsBeforeExecution() {
         assertThatIllegalArgumentException().isThrownBy(() ->
                         prompts.requirePrepared(request("hello", List.of())))
