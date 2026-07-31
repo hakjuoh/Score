@@ -38,8 +38,19 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Acc.AccP
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifestTag.AccManifestTagPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdList.AgencyIdListPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue.AgencyIdListValuePath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiCatalogAudit.AiCatalogAuditPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModel.AiModelPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelCatalogConfig.AiModelCatalogConfigPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiProvider.AiProviderPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenQuotaAdjustment.AiTokenQuotaAdjustmentPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenRequestUsage.AiTokenRequestUsagePath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsageLedger.AiTokenUsageLedgerPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsagePeriod.AiTokenUsagePeriodPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicy.AiUserPolicyPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicyAudit.AiUserPolicyAuditPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppOauth2User.AppOauth2UserPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppSecret.AppSecretPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbie.AsbiePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbiep.AsbiepPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Ascc.AsccPath;
@@ -447,6 +458,19 @@ public class AppUser extends TableImpl<AppUserRecord> {
         return _agencyIdListValueOwnerUserIdFk;
     }
 
+    private transient AiCatalogAuditPath _aiCatalogAudit;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_catalog_audit</code> table
+     */
+    public AiCatalogAuditPath aiCatalogAudit() {
+        if (_aiCatalogAudit == null)
+            _aiCatalogAudit = new AiCatalogAuditPath(this, null, Keys.AI_CATALOG_AUDIT_ACTOR_FK.getInverseKey());
+
+        return _aiCatalogAudit;
+    }
+
     private transient AiChatConversationPath _aiChatConversation;
 
     /**
@@ -460,6 +484,178 @@ public class AppUser extends TableImpl<AppUserRecord> {
         return _aiChatConversation;
     }
 
+    private transient AiModelCatalogConfigPath _aiModelCatalogConfig;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_model_catalog_config</code> table
+     */
+    public AiModelCatalogConfigPath aiModelCatalogConfig() {
+        if (_aiModelCatalogConfig == null)
+            _aiModelCatalogConfig = new AiModelCatalogConfigPath(this, null, Keys.AI_MODEL_CATALOG_CONFIG_LAST_UPDATED_BY_FK.getInverseKey());
+
+        return _aiModelCatalogConfig;
+    }
+
+    private transient AiModelPath _aiModelCreatedByFk;
+
+    /**
+     * Get the implicit to-many join path to the <code>oagi.ai_model</code>
+     * table, via the <code>ai_model_created_by_fk</code> key
+     */
+    public AiModelPath aiModelCreatedByFk() {
+        if (_aiModelCreatedByFk == null)
+            _aiModelCreatedByFk = new AiModelPath(this, null, Keys.AI_MODEL_CREATED_BY_FK.getInverseKey());
+
+        return _aiModelCreatedByFk;
+    }
+
+    private transient AiModelPath _aiModelLastUpdatedByFk;
+
+    /**
+     * Get the implicit to-many join path to the <code>oagi.ai_model</code>
+     * table, via the <code>ai_model_last_updated_by_fk</code> key
+     */
+    public AiModelPath aiModelLastUpdatedByFk() {
+        if (_aiModelLastUpdatedByFk == null)
+            _aiModelLastUpdatedByFk = new AiModelPath(this, null, Keys.AI_MODEL_LAST_UPDATED_BY_FK.getInverseKey());
+
+        return _aiModelLastUpdatedByFk;
+    }
+
+    private transient AiProviderPath _aiProviderCreatedByFk;
+
+    /**
+     * Get the implicit to-many join path to the <code>oagi.ai_provider</code>
+     * table, via the <code>ai_provider_created_by_fk</code> key
+     */
+    public AiProviderPath aiProviderCreatedByFk() {
+        if (_aiProviderCreatedByFk == null)
+            _aiProviderCreatedByFk = new AiProviderPath(this, null, Keys.AI_PROVIDER_CREATED_BY_FK.getInverseKey());
+
+        return _aiProviderCreatedByFk;
+    }
+
+    private transient AiProviderPath _aiProviderLastUpdatedByFk;
+
+    /**
+     * Get the implicit to-many join path to the <code>oagi.ai_provider</code>
+     * table, via the <code>ai_provider_last_updated_by_fk</code> key
+     */
+    public AiProviderPath aiProviderLastUpdatedByFk() {
+        if (_aiProviderLastUpdatedByFk == null)
+            _aiProviderLastUpdatedByFk = new AiProviderPath(this, null, Keys.AI_PROVIDER_LAST_UPDATED_BY_FK.getInverseKey());
+
+        return _aiProviderLastUpdatedByFk;
+    }
+
+    private transient AiTokenQuotaAdjustmentPath _aiTokenQuotaAdjustment;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_token_quota_adjustment</code> table
+     */
+    public AiTokenQuotaAdjustmentPath aiTokenQuotaAdjustment() {
+        if (_aiTokenQuotaAdjustment == null)
+            _aiTokenQuotaAdjustment = new AiTokenQuotaAdjustmentPath(this, null, Keys.AI_TOKEN_QUOTA_ADJUSTMENT_ACTOR_FK.getInverseKey());
+
+        return _aiTokenQuotaAdjustment;
+    }
+
+    private transient AiTokenRequestUsagePath _aiTokenRequestUsage;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_token_request_usage</code> table
+     */
+    public AiTokenRequestUsagePath aiTokenRequestUsage() {
+        if (_aiTokenRequestUsage == null)
+            _aiTokenRequestUsage = new AiTokenRequestUsagePath(this, null, Keys.AI_TOKEN_REQUEST_USAGE_USER_FK.getInverseKey());
+
+        return _aiTokenRequestUsage;
+    }
+
+    private transient AiTokenUsageLedgerPath _aiTokenUsageLedger;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_token_usage_ledger</code> table
+     */
+    public AiTokenUsageLedgerPath aiTokenUsageLedger() {
+        if (_aiTokenUsageLedger == null)
+            _aiTokenUsageLedger = new AiTokenUsageLedgerPath(this, null, Keys.AI_TOKEN_USAGE_LEDGER_USER_FK.getInverseKey());
+
+        return _aiTokenUsageLedger;
+    }
+
+    private transient AiTokenUsagePeriodPath _aiTokenUsagePeriod;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_token_usage_period</code> table
+     */
+    public AiTokenUsagePeriodPath aiTokenUsagePeriod() {
+        if (_aiTokenUsagePeriod == null)
+            _aiTokenUsagePeriod = new AiTokenUsagePeriodPath(this, null, Keys.AI_TOKEN_USAGE_PERIOD_USER_FK.getInverseKey());
+
+        return _aiTokenUsagePeriod;
+    }
+
+    private transient AiUserPolicyAuditPath _aiUserPolicyAudit;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_user_policy_audit</code> table
+     */
+    public AiUserPolicyAuditPath aiUserPolicyAudit() {
+        if (_aiUserPolicyAudit == null)
+            _aiUserPolicyAudit = new AiUserPolicyAuditPath(this, null, Keys.AI_USER_POLICY_AUDIT_ACTOR_FK.getInverseKey());
+
+        return _aiUserPolicyAudit;
+    }
+
+    private transient AiUserPolicyPath _aiUserPolicyCreatedByFk;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_user_policy</code> table, via the
+     * <code>ai_user_policy_created_by_fk</code> key
+     */
+    public AiUserPolicyPath aiUserPolicyCreatedByFk() {
+        if (_aiUserPolicyCreatedByFk == null)
+            _aiUserPolicyCreatedByFk = new AiUserPolicyPath(this, null, Keys.AI_USER_POLICY_CREATED_BY_FK.getInverseKey());
+
+        return _aiUserPolicyCreatedByFk;
+    }
+
+    private transient AiUserPolicyPath _aiUserPolicyLastUpdatedByFk;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_user_policy</code> table, via the
+     * <code>ai_user_policy_last_updated_by_fk</code> key
+     */
+    public AiUserPolicyPath aiUserPolicyLastUpdatedByFk() {
+        if (_aiUserPolicyLastUpdatedByFk == null)
+            _aiUserPolicyLastUpdatedByFk = new AiUserPolicyPath(this, null, Keys.AI_USER_POLICY_LAST_UPDATED_BY_FK.getInverseKey());
+
+        return _aiUserPolicyLastUpdatedByFk;
+    }
+
+    private transient AiUserPolicyPath _aiUserPolicyUserFk;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>oagi.ai_user_policy</code> table, via the
+     * <code>ai_user_policy_user_fk</code> key
+     */
+    public AiUserPolicyPath aiUserPolicyUserFk() {
+        if (_aiUserPolicyUserFk == null)
+            _aiUserPolicyUserFk = new AiUserPolicyPath(this, null, Keys.AI_USER_POLICY_USER_FK.getInverseKey());
+
+        return _aiUserPolicyUserFk;
+    }
+
     private transient AppOauth2UserPath _appOauth2User;
 
     /**
@@ -471,6 +667,32 @@ public class AppUser extends TableImpl<AppUserRecord> {
             _appOauth2User = new AppOauth2UserPath(this, null, Keys.APP_OAUTH2_USER_APP_USER_ID_FK.getInverseKey());
 
         return _appOauth2User;
+    }
+
+    private transient AppSecretPath _appSecretCreatedByFk;
+
+    /**
+     * Get the implicit to-many join path to the <code>oagi.app_secret</code>
+     * table, via the <code>app_secret_created_by_fk</code> key
+     */
+    public AppSecretPath appSecretCreatedByFk() {
+        if (_appSecretCreatedByFk == null)
+            _appSecretCreatedByFk = new AppSecretPath(this, null, Keys.APP_SECRET_CREATED_BY_FK.getInverseKey());
+
+        return _appSecretCreatedByFk;
+    }
+
+    private transient AppSecretPath _appSecretLastUpdatedByFk;
+
+    /**
+     * Get the implicit to-many join path to the <code>oagi.app_secret</code>
+     * table, via the <code>app_secret_last_updated_by_fk</code> key
+     */
+    public AppSecretPath appSecretLastUpdatedByFk() {
+        if (_appSecretLastUpdatedByFk == null)
+            _appSecretLastUpdatedByFk = new AppSecretPath(this, null, Keys.APP_SECRET_LAST_UPDATED_BY_FK.getInverseKey());
+
+        return _appSecretLastUpdatedByFk;
     }
 
     private transient AsbiePath _asbieCreatedByFk;
