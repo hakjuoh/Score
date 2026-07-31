@@ -16,6 +16,7 @@ import org.oagi.score.gateway.http.api.ai_management.middleware.MiddlewareState;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalScope;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.provider.AiProviderRetryExecutor;
+import org.oagi.score.gateway.http.api.ai_management.policy.service.AiUsageAccountingService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
 import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
@@ -44,6 +45,7 @@ import java.util.Objects;
 public final class AiChatExecutor {
 
     private final AiChatAgentRuntime runtime;
+    private final AiChatModelInvoker modelInvoker;
 
     @Autowired
     public AiChatExecutor(ScoreAiModelRegistry models, ConnectCenterMcpClientFactory mcpClients,
@@ -77,6 +79,7 @@ public final class AiChatExecutor {
                 new AiModelInputGuard(modelInputGuardrails, resolvedObservability);
         AiChatModelInvoker modelInvoker = new AiChatModelInvoker(
                 providerRetry, requests, resolvedInstructions, inputGuard);
+        this.modelInvoker = modelInvoker;
         boolean toolSearchEnabled = properties == null
                 || properties.getTools().getToolSearch().isEnabled();
         AiChatToolSessionFactory toolSessions = new AiChatToolSessionFactory(
@@ -91,6 +94,12 @@ public final class AiChatExecutor {
         this.runtime = new AiChatAgentRuntime(models, mcpClients, optionsFactory,
                 springAiToolAdapter, modelInputGuardrails, requests, observer,
                 resolvedObservability, conversations, providerRetry);
+    }
+
+    @Autowired(required = false)
+    void configureUsageAccounting(AiUsageAccountingService accounting) {
+        modelInvoker.accounting(accounting);
+        runtime.accounting(accounting);
     }
 
     /** Compatibility constructor for callers predating configurable middleware. */

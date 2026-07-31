@@ -117,6 +117,18 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
     public final TableField<AiTokenUsageLedgerRecord, ULong> RESERVED_TOKENS = createField(DSL.name("reserved_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of tokens reserved before the provider call");
 
     /**
+     * The column <code>oagi.ai_token_usage_ledger.quota_period_start</code>.
+     * Exact inclusive quota window start reserved by this call
+     */
+    public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> QUOTA_PERIOD_START = createField(DSL.name("quota_period_start"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Exact inclusive quota window start reserved by this call");
+
+    /**
+     * The column <code>oagi.ai_token_usage_ledger.quota_period_end</code>.
+     * Exact exclusive quota window end reserved by this call
+     */
+    public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> QUOTA_PERIOD_END = createField(DSL.name("quota_period_end"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Exact exclusive quota window end reserved by this call");
+
+    /**
      * The column <code>oagi.ai_token_usage_ledger.prompt_tokens</code>.
      * Normalized input tokens reported by the provider
      */
@@ -239,7 +251,7 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
 
     @Override
     public List<Index> getIndexes() {
-        return Arrays.asList(Indexes.AI_TOKEN_USAGE_LEDGER_AI_TOKEN_USAGE_LEDGER_REQUEST_IDX, Indexes.AI_TOKEN_USAGE_LEDGER_AI_TOKEN_USAGE_LEDGER_USER_TIME_IDX);
+        return Arrays.asList(Indexes.AI_TOKEN_USAGE_LEDGER_AI_TOKEN_USAGE_LEDGER_REQUEST_IDX, Indexes.AI_TOKEN_USAGE_LEDGER_AI_TOKEN_USAGE_LEDGER_STALE_RESERVATION_IDX, Indexes.AI_TOKEN_USAGE_LEDGER_AI_TOKEN_USAGE_LEDGER_USER_TIME_IDX);
     }
 
     @Override

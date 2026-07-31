@@ -65,6 +65,15 @@ final class AiTrajectoryInteractions {
                 AiExecutionEvent.detail("assistant_message_recorded", "", Map.of()), false);
     }
 
+    void policyNotice(AiExecutionEvent notice) {
+        if (notice == null || !"policy_notice".equals(notice.subtype())) return;
+        Map<String, Object> extra = trace(notice.metadata());
+        persist(new AiChatTrajectoryStep(
+                        requestId, "system", "policy_notice", "visible", notice.content(), null,
+                        modelName, reasoningEffort, null, null, null, extra, 0, null, null),
+                notice, false);
+    }
+
     void settledFanOutUsage(String fanoutId, String executionKind,
                             List<AiUsageSnapshot> agents) {
         List<AiUsageSnapshot> settled = agents != null

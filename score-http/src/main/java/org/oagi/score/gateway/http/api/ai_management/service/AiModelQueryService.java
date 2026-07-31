@@ -26,6 +26,9 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardr
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrailChain;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
+import org.oagi.score.gateway.http.api.ai_management.policy.service.AiPolicyService;
+import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
+import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
 import org.oagi.score.gateway.http.api.ai_management.workflow.AgentRunner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -36,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.time.Instant;
 import java.util.concurrent.CancellationException;
 import java.util.stream.Collectors;
 
@@ -53,6 +57,10 @@ public class AiModelQueryService {
     private final NameSuggesterAgent nameSuggester;
     private final ScoreAiObservability observability;
     private final PublicOutputDisclosureGate disclosureGate;
+    private final AiPolicyService policyService;
+    private volatile AiRequestRegistry requestRegistry;
+    private volatile ScoreAiProperties aiProperties;
+    private volatile ScoreAiModelRegistry runtimeModels;
 
     @Autowired
     public AiModelQueryService(RepositoryFactory repositoryFactory,
@@ -61,7 +69,8 @@ public class AiModelQueryService {
                                AgentOutputGuardrailChain outputGuardrails,
                                DefinitionGeneratorAgent definitionGenerator,
                                NameSuggesterAgent nameSuggester,
-                               ScoreAiObservability observability) {
+                               ScoreAiObservability observability,
+                               AiPolicyService policyService) {
         this.repositoryFactory = Objects.requireNonNull(repositoryFactory);
         this.runner = Objects.requireNonNull(runner);
         this.models = Objects.requireNonNull(models);
@@ -69,8 +78,28 @@ public class AiModelQueryService {
         this.definitionGenerator = Objects.requireNonNull(definitionGenerator);
         this.nameSuggester = Objects.requireNonNull(nameSuggester);
         this.observability = Objects.requireNonNull(observability);
+        this.policyService = policyService;
         this.disclosureGate = new PublicOutputDisclosureGate(
                 this.outputGuardrails, this.observability);
+    }
+
+    @Autowired(required = false)
+    void configureAdmission(AiRequestRegistry requestRegistry, ScoreAiProperties aiProperties,
+                            ScoreAiModelRegistry runtimeModels) {
+        this.requestRegistry = requestRegistry;
+        this.aiProperties = aiProperties;
+        this.runtimeModels = runtimeModels;
+    }
+
+    public AiModelQueryService(RepositoryFactory repositoryFactory,
+                               AgentRunner runner,
+                               AiModelCatalog models,
+                               AgentOutputGuardrailChain outputGuardrails,
+                               DefinitionGeneratorAgent definitionGenerator,
+                               NameSuggesterAgent nameSuggester,
+                               ScoreAiObservability observability) {
+        this(repositoryFactory, runner, models, outputGuardrails, definitionGenerator,
+                nameSuggester, observability, null);
     }
 
     AiModelQueryService(RepositoryFactory repositoryFactory,
@@ -80,11 +109,18 @@ public class AiModelQueryService {
                         DefinitionGeneratorAgent definitionGenerator,
                         NameSuggesterAgent nameSuggester) {
         this(repositoryFactory, runner, models, outputGuardrails, definitionGenerator,
-                nameSuggester, ScoreAiObservability.noop());
+                nameSuggester, ScoreAiObservability.noop(), null);
     }
 
     public List<String> getAvailableModels() {
         return models.available().stream().map(model -> model.id().value()).toList();
+    }
+
+    public List<String> getAvailableModels(ScoreUser requester) {
+        if (policyService == null) return getAvailableModels();
+        var policy = policyService.resolve(requester);
+        if (!policy.aiEnabled()) return List.of();
+        return policy.availableModels().stream().map(model -> model.descriptor().name()).toList();
     }
 
     public String generateDefinition(
@@ -203,6 +239,8 @@ public class AiModelQueryService {
     String run(AgentDefinition definition, ScoreUser requester,
                String modelId, String prompt, String executionKind,
                String traceparent, String tracestate) {
+        var policy = policyService != null ? policyService.resolve(requester) : null;
+        if (policy != null) policy.requireModelAllowed(modelId);
         String correlation = UUID.randomUUID().toString();
         String requesterId = requester != null && requester.userId() != null
                 ? requester.userId().value().toString()
@@ -211,6 +249,24 @@ public class AiModelQueryService {
         ExecutionScope scope = new ExecutionScope("ai-query-" + correlation,
                 "ai-query-" + correlation, requesterId, 0L,
                 ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        AiRequestRegistry.Entry admission = null;
+        if (requestRegistry != null) {
+            int maximum = policy != null ? policy.maxActiveRequests() : 8;
+            java.time.Duration timeout = aiProperties != null
+                    ? aiProperties.getRequestInactivityTimeout() : java.time.Duration.ofMinutes(2);
+            admission = requestRegistry.register(scope.requestId(), scope.conversationId(),
+                    requester, Instant.now().plus(timeout), maximum);
+            if (policyService != null) policyService.snapshot(scope.requestId(), policy);
+            if (runtimeModels != null) runtimeModels.snapshot(scope.requestId());
+            if (!requestRegistry.start(admission)) {
+                requestRegistry.fail(admission, new CancellationException(
+                        "Standalone AI execution stopped during admission."));
+                if (policyService != null) policyService.clearSnapshot(scope.requestId());
+                if (runtimeModels != null) runtimeModels.clearSnapshot(scope.requestId());
+                throw new CancellationException(
+                        "Standalone AI execution stopped during admission.");
+            }
+        }
         ScoreAiObservability.Turn turn = observability.startExecution(
                 new ScoreAiObservability.ExecutionDescriptor(scope.requestId(),
                         scope.conversationId(), modelId, executionKind, "none"),
@@ -248,8 +304,13 @@ public class AiModelQueryService {
             turn.complete("COMPLETED", null);
             return generated;
         } catch (RuntimeException failure) {
+            if (admission != null) requestRegistry.fail(admission, failure);
             turn.complete(failure instanceof CancellationException ? "CANCELLED" : "FAILED", failure);
             throw failure;
+        } finally {
+            if (admission != null) requestRegistry.complete(admission);
+            if (policyService != null) policyService.clearSnapshot(scope.requestId());
+            if (runtimeModels != null) runtimeModels.clearSnapshot(scope.requestId());
         }
     }
 

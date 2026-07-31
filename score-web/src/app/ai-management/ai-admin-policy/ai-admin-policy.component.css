@@ -1,0 +1,20 @@
+.ai-admin-page { min-height: 100%; background: #f7f8fa; }
+.ai-admin-page .title { font-weight: 600; }
+.ai-policy-search { width: min(480px, 100%); }
+.status-pill, .policy-badge { display: inline-block; border-radius: 999px; padding: .2rem .65rem; margin-right: .4rem; background: #e5f5eb; color: #146c43; font-size: .8rem; }
+.status-pill.disabled { background: #fde8e8; color: #b42318; }
+.policy-badge { margin-left: 1rem; background: #eef2ff; color: #3730a3; }
+.policy-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.operations-card { grid-column: 1 / -1; }
+.radio-row, .field-row, .model-list { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+.model-list { flex-direction: column; align-items: flex-start; margin: 1rem 0; }
+.field-row mat-form-field { min-width: 230px; }
+.reason-field { width: 100%; }
+.hint, small { color: #667085; }
+.actions { display: flex; gap: .75rem; }
+@media (max-width: 900px) { .policy-grid { grid-template-columns: 1fr; } }
+.admin-fieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}

@@ -1131,9 +1131,13 @@ class AiChatExecutorTest {
             ScoreAiModelRegistry.ModelConfiguration model =
                     mock(ScoreAiModelRegistry.ModelConfiguration.class);
             when(models.clientBuilder("configured-model")).thenReturn(builder);
+            when(models.clientBuilder(eq("configured-model"), anyString())).thenReturn(builder);
             when(models.modelConfiguration("configured-model")).thenReturn(model);
+            when(models.modelConfiguration(eq("configured-model"), anyString())).thenReturn(model);
             when(models.resolveReasoningEffort("configured-model", null)).thenReturn("high");
             when(optionsFactory.create("configured-model", "high", null))
+                    .thenReturn(AnthropicChatOptions.builder().model("configured-model").build());
+            when(optionsFactory.create(eq("configured-model"), eq("high"), eq(null), anyString()))
                     .thenReturn(AnthropicChatOptions.builder().model("configured-model").build());
             when(builder.defaultAdvisors(any(Advisor[].class))).thenReturn(builder);
             when(builder.defaultTools(any(Object[].class))).thenReturn(builder);

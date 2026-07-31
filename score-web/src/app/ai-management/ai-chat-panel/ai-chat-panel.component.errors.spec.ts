@@ -6,6 +6,7 @@ import {
   AiCancellationResponse,
   Subject,
   Subscription,
+  throwError,
   api,
   cancellationResponse,
   component,
@@ -248,6 +249,27 @@ describe('AiChatPanelComponent terminal errors and data changes', () => {
     });
     expect(component.state.pending).toBe(false);
     expect(component.state.currentStatus).toBe('Ready');
+  });
+
+  it('blocks the composer while the self-service policy is loading', () => {
+    const policy = new Subject<any>();
+    (api as any).getPolicy = vi.fn(() => policy);
+
+    (component as any).loadPolicy();
+
+    expect(component.state.policyLoading).toBe(true);
+    expect(component.commandInputBlocked).toBe(true);
+    expect(component.composerPlaceholder).toBe('Loading AI policy');
+  });
+
+  it('fails closed when the self-service policy cannot be loaded', () => {
+    (api as any).getPolicy = vi.fn(() => throwError(() => new Error('unavailable')));
+
+    (component as any).loadPolicy();
+
+    expect(component.state.policyLoadFailed).toBe(true);
+    expect(component.commandInputBlocked).toBe(true);
+    expect(component.policyNotice).toContain('could not be loaded');
   });
 
 });

@@ -1,0 +1,80 @@
+<div class="context-section ai-admin-page">
+  <mat-toolbar class="bg-white">
+    <span class="title">AI Policy Administration</span>
+    <span class="flex-11-auto"></span>
+    <a mat-stroked-button class="me-2" routerLink="/ai-admin/providers">Provider catalog</a>
+    <a mat-stroked-button routerLink="/ai-admin/models">Model catalog</a>
+  </mat-toolbar>
+
+  <div class="p-3 container-fluid">
+    <mat-form-field appearance="outline" class="ai-policy-search">
+      <mat-label>Search users</mat-label>
+      <input matInput [(ngModel)]="filter" data-id="ai-policy-user-filter">
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>AI access</mat-label><mat-select [(ngModel)]="accessFilter">
+      <mat-option value="ALL">All</mat-option><mat-option value="ENABLED">Enabled</mat-option><mat-option value="DISABLED">Disabled</mat-option>
+    </mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Policy source</mat-label><mat-select [(ngModel)]="inheritanceFilter">
+      <mat-option value="ALL">All</mat-option><mat-option value="INHERITED">Inherited</mat-option><mat-option value="CUSTOM">Custom</mat-option>
+    </mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Quota</mat-label><mat-select [(ngModel)]="quotaFilter">
+      <mat-option value="ALL">All</mat-option><mat-option value="NEAR">Near limit</mat-option><mat-option value="EXHAUSTED">Exhausted</mat-option>
+    </mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Multi-agent</mat-label><mat-select [(ngModel)]="multiAgentFilter">
+      <mat-option value="ALL">All</mat-option><mat-option value="ENABLED">Enabled</mat-option><mat-option value="DISABLED">Disabled</mat-option>
+    </mat-select></mat-form-field>
+
+    <mat-card>
+      <mat-card-content>
+        @if (loading) {
+          <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+        } @else if (loadFailed) {
+          <p role="alert">Users could not be loaded.</p>
+          <button mat-stroked-button (click)="load()">Retry</button>
+        } @else {
+          <table class="table table-hover align-middle">
+            <thead>
+            <tr>
+              <th>Login ID</th>
+              <th>Name</th>
+              <th>Organization</th>
+              <th>AI access</th>
+              <th>Models</th>
+              <th>Multi-agent</th>
+              <th>Quota</th>
+              <th>Active</th>
+              <th>Last policy change</th>
+              <th></th>
+            </tr>
+            </thead>
+            <tbody>
+              @for (user of filteredUsers; track user.userId) {
+                <tr>
+                  <td>{{ user.loginId }}</td>
+                  <td>{{ user.name }}</td>
+                  <td>{{ user.organization }}</td>
+                  <td>
+                    <span class="status-pill" [class.disabled]="!user.enabled">
+                      {{ user.enabled ? 'Enabled' : 'Disabled' }}
+                    </span>
+                    @if (user.inherited) { <small>Inherited</small> }
+                  </td>
+                  <td>{{ user.allowedModelCount }}</td>
+                  <td>{{ user.multiAgentEnabled ? 'Enabled' : 'Single agent' }}</td>
+                  <td>@if (user.quotaLimitTokens != null) {
+                    {{user.quotaConsumedTokens + user.quotaReservedTokens | number}} / {{user.quotaLimitTokens | number}}
+                  } @else { Unlimited }</td>
+                  <td>{{user.activeRequests}}</td>
+                  <td>{{user.lastPolicyChange ? (user.lastPolicyChange | date:'short':'UTC') : 'Inherited'}}</td>
+                  <td><a mat-button color="primary"
+                         [routerLink]="['/ai-admin/users', user.userId]">Manage</a></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>

@@ -67,6 +67,30 @@ import static org.mockito.Mockito.when;
 class AiTrajectoryRecorderTest {
 
     @Test
+    void persistsPolicyNoticeMetadataWithoutEmittingItTwice() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+        List<AiExecutionEvent> realtime = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), mock(ScoreUser.class),
+                "conversation-1", "request-1", realtime::add);
+        AiExecutionEvent notice = AiExecutionEvent.detail("policy_notice", "Agents disabled.",
+                Map.of("policyNotice", true, "code", "AI_MULTI_AGENT_DISABLED",
+                        "requested", "agents", "effective", "assistant"));
+
+        recorder.recordPolicyNotice(notice);
+
+        ArgumentCaptor<AiChatTrajectoryStep> step =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq("conversation-1"), step.capture());
+        assertThat(step.getValue().messageKind()).isEqualTo("policy_notice");
+        assertThat(step.getValue().visibility()).isEqualTo("visible");
+        assertThat(step.getValue().extra()).containsAllEntriesOf(notice.metadata());
+        assertThat(realtime).isEmpty();
+    }
+
+    @Test
     void redactsSensitiveModelToolArgumentsBeforeTrajectoryPersistence() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))

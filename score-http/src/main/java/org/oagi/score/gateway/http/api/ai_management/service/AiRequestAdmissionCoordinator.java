@@ -16,7 +16,6 @@ import java.util.function.Supplier;
 final class AiRequestAdmissionCoordinator {
 
     private static final int MAX_REGISTRY_ENTRIES = 10_000;
-    private static final int MAX_ACTIVE_REQUESTS_PER_USER = 8;
     private static final Duration MAINTENANCE_LEASE = Duration.ofMinutes(5);
 
     private final AiRequestStateStore stateStore;
@@ -37,7 +36,12 @@ final class AiRequestAdmissionCoordinator {
     }
 
     AiSharedRequestState reserve(String requestId, String conversationId,
-                                 ScoreUser requester, Instant deadline) {
+                                 ScoreUser requester, Instant deadline,
+                                 int maxActiveRequests) {
+        if (maxActiveRequests < 1 || maxActiveRequests > 32) {
+            throw new IllegalArgumentException(
+                    "Maximum active AI requests must be between 1 and 32.");
+        }
         String appUserId = requester.userId().value().toString();
         long generation = ThreadLocalRandom.current().nextLong(1L, 1L << 53);
         Instant now = Instant.now();
@@ -55,8 +59,9 @@ final class AiRequestAdmissionCoordinator {
             long activeForUser = states.stream()
                     .filter(candidate -> appUserId.equals(candidate.appUserId()))
                     .filter(candidate -> policy.isLogicallyActive(candidate, now)).count();
-            if (activeForUser >= MAX_ACTIVE_REQUESTS_PER_USER) {
-                throw new IllegalStateException(
+            if (activeForUser >= maxActiveRequests) {
+                throw new org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException(
+                        org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode.AI_ACTIVE_REQUEST_LIMIT,
                         "Too many AI requests are already active for this user.");
             }
             if (storage.get(requestId) != null) {

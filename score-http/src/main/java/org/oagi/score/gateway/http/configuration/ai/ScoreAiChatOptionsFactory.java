@@ -28,7 +28,14 @@ public final class ScoreAiChatOptionsFactory {
 
     public ChatOptions create(String modelName, String reasoningEffort,
                               AiUiRouteManifest routeManifest) {
-        ScoreAiModelRegistry.ModelConfiguration model = models.modelConfiguration(modelName);
+        return create(modelName, reasoningEffort, routeManifest, null);
+    }
+
+    public ChatOptions create(String modelName, String reasoningEffort,
+                              AiUiRouteManifest routeManifest, String requestId) {
+        ScoreAiModelRegistry.ModelConfiguration model = requestId != null
+                ? models.modelConfiguration(modelName, requestId)
+                : models.modelConfiguration(modelName);
         return switch (model.providerType()) {
             case "anthropic" -> anthropicOptions(model, reasoningEffort);
             case "openai", "azure-openai" -> openAiOptions(model, reasoningEffort, routeManifest);

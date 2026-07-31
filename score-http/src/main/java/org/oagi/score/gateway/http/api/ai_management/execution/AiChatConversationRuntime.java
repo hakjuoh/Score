@@ -12,6 +12,7 @@ import org.oagi.score.gateway.http.configuration.ai.ConnectCenterMcpClientFactor
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiChatOptionsFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
 import org.oagi.score.gateway.http.configuration.ai.TrajectoryRecordingAdvisor;
+import org.oagi.score.gateway.http.configuration.ai.ProviderCallAccountingAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -59,17 +60,22 @@ final class AiChatConversationRuntime {
         var request = context.request();
         AiTrajectoryRecorder recorder = context.recorder();
         ChatOptions options = optionsFactory.create(
-                request.modelName(), request.reasoningEffort(), request.routeManifest());
+                request.modelName(), request.reasoningEffort(), request.routeManifest(),
+                request.requestId());
         ScoreAiModelRegistry.ModelConfiguration model =
-                models.modelConfiguration(request.modelName());
+                models.modelConfiguration(request.modelName(), request.requestId());
         recorder.useModelProvider(model.providerType(), model.model());
         recordMcpTelemetry(recorder, mcp);
         long toolOutputTokenLimit = model.contextBudget() != null
                 && model.contextBudget().toolOutputTokenLimit() != null
                 ? model.contextBudget().toolOutputTokenLimit() : Long.MAX_VALUE;
-        ChatClient.Builder builder = models.clientBuilder(request.modelName())
-                .defaultAdvisors(new TrajectoryRecordingAdvisor(recorder, observability));
         ExecutionScope scope = executionScope(context);
+        ChatClient.Builder builder = models.clientBuilder(request.modelName(), request.requestId());
+        if (modelInvoker.accounting() != null) {
+            builder.defaultAdvisors(new ProviderCallAccountingAdvisor(
+                    modelInvoker.accounting(), request, scope, null, model.providerType()));
+        }
+        builder.defaultAdvisors(new TrajectoryRecordingAdvisor(recorder, observability));
         AiChatToolSetup tools = toolSessions.prepare(context, mcp, executionState, progress,
                 runControl, recorder, builder, toolOutputTokenLimit, scope);
         Agent.Instruction runtimeInstruction = tools.directToolCatalog().isEmpty()

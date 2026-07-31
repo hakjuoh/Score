@@ -21,6 +21,7 @@ import {
   AiChatRestResponse,
   AiConversationModelResponse,
   normalizeAiReasoningEffort
+  , AiSelfPolicy
 } from './ai-chat-panel.model';
 
 interface AiChatModelWire {
@@ -127,6 +128,10 @@ export class AiChatApiService {
         emergencyHeadroomTokens: this.nonNegativeIntegerOrNull(model.emergencyHeadroomTokens)
       })))
     );
+  }
+
+  getPolicy(): Observable<AiSelfPolicy> {
+    return this.http.get<AiSelfPolicy>('/api/ai/policy/me', this.localErrorHandling());
   }
 
   getMcpStatus(): Observable<AiMcpStatusResponse> {

@@ -87,7 +87,8 @@ final class ChatTurnOrchestrator {
     }
 
     ChatResponse chat(ChatRequest request, ScoreUser requester,
-                      Consumer<AiExecutionEvent> progress, long generation) {
+                      Consumer<AiExecutionEvent> progress, long generation,
+                      AiExecutionEvent policyNotice) {
         ChatRequest prepared = prompts.requirePrepared(request);
         AiChatConversationRepository repository = conversations.repository(requester);
         List<String> progressMessages = new ArrayList<>();
@@ -125,6 +126,7 @@ final class ChatTurnOrchestrator {
                 requester, prepared.conversationId(), prepared.requestId(), prepared.modelName(),
                 prepared.reasoningEffort(), progress, budget.orElse(null), projectedInputTokens,
                 traceContext, turnScope, observer, observability);
+        if (policyNotice != null) recorder.recordPolicyNotice(policyNotice);
         budget.ifPresent(value -> recorder.contextUsage(value.usage(
                 initialProjectedInputTokens, true, "preflight_estimate")));
         Consumer<String> collectingProgress = message -> {

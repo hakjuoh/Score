@@ -140,6 +140,12 @@
           [disabled]="updateDisabled">
           Update
         </button>
+        @if (isAdmin && account) {
+          <a mat-stroked-button color="primary"
+             [routerLink]="['/ai-admin/users', account.userId]">
+            Manage AI Policy
+          </a>
+        }
         @if (!!account && account.enabled) {
           <button mat-raised-button color="warn" (click)="setEnable(false)">
             Disable this account

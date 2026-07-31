@@ -176,6 +176,10 @@ public class AiChatController {
         ScoreAiObservability.Turn observation = admission.observation();
         List<AiChatSocketEvent> responseEvents = new CopyOnWriteArrayList<>();
         AtomicLong sequence = new AtomicLong();
+        if (admission.policyNotice() != null) {
+            responseEvents.add(socketEvent(prepared, sequence.incrementAndGet(),
+                    admission.policyNotice()));
+        }
         CompletableFuture<ChatResponse> future;
         try {
             future = CompletableFuture.supplyAsync(() -> {
@@ -249,8 +253,9 @@ public class AiChatController {
     }
 
     @GetMapping("/models")
-    public List<AiChatModelInfo> models() {
-        return chatService.availableModels();
+    public List<AiChatModelInfo> models(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        return chatService.availableModels(sessionService.asScoreUser(principal));
     }
 
     @GetMapping("/conversations/{conversationId}")
@@ -296,8 +301,10 @@ public class AiChatController {
     }
 
     @PostMapping("/availability/revalidate")
-    public Map<String, Boolean> revalidateAvailability() {
-        return Map.of("available", chatService.aiAssistantInfo().enabled());
+    public Map<String, Boolean> revalidateAvailability(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        return Map.of("available", chatService.aiAssistantInfo(
+                sessionService.asScoreUser(principal)).enabled());
     }
 
     @PostMapping("/{requestId}/cancel")
@@ -365,13 +372,17 @@ public class AiChatController {
         try {
             send(requester, destination, AiChatSocketEvent.accepted(
                     prepared.requestId(), prepared.conversationId(), entry.generation(), deadline));
+            if (admission.policyNotice() != null) {
+                send(requester, destination, socketEvent(prepared, 1L,
+                        admission.policyNotice()));
+            }
         } catch (RuntimeException failure) {
             finalizer.finishBeforeExecution(entry, prepared, requester, observation,
                     "transport_send_failed", failure);
             throw failure;
         }
 
-        AtomicLong sequence = new AtomicLong();
+        AtomicLong sequence = new AtomicLong(admission.policyNotice() != null ? 1L : 0L);
         CompletableFuture<ChatResponse> future;
         try {
             future = CompletableFuture.supplyAsync(() -> {
