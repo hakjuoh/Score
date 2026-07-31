@@ -1,13 +1,10 @@
-import {AiChatPanelEventController} from './ai-chat-panel-event.controller';
-import {AiContextBudgetDialogComponent} from './ai-context-budget-dialog.component';
-import {AiContextBudgetData} from './ai-context-budget-chart.model';
+import {AiChatPanelViewController} from './ai-chat-panel-view.controller';
 import {AiConversationRestoreCallbacks} from './domain/ai-conversation-restore.service';
 import {
   AiTerminalRequestErrorStatus,
-  contextUsageValue,
   isReconciliationRequired,
+  normalizedDisplayText,
   primaryContent,
-  providerRetrySemantics,
   terminalRequestErrorStatus
 } from './domain/ai-chat-event-semantics';
 import {requestEventAdmission} from './domain/ai-chat-event-admission';
@@ -31,10 +28,11 @@ import {
   workflowTerminalStatus
 } from './domain/ai-execution-composite';
 import {AiChatSocketEvent} from './domain/ai-chat-panel.model';
+import {AiProviderRecoveryCoordinator} from './domain/ai-provider-recovery-coordinator';
 
-export abstract class AiChatPanelMessageController extends AiChatPanelEventController {
+export abstract class AiChatPanelMessageController extends AiChatPanelViewController {
   private readonly liveExecution = new AiExecutionComposite();
-  private pendingProviderError?: {requestId: string; content: string};
+  private readonly providerRecovery = new AiProviderRecoveryCoordinator();
 
   protected handleSystemEvent(event: AiChatSocketEvent): void {
     const content = primaryContent(event);
@@ -187,16 +185,20 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
 
   /** Renders a recoverable provider failure without terminating the active request. */
   protected handleProviderErrorEvent(event: AiChatSocketEvent): boolean {
-    const content = primaryContent(event).trim();
-    if (!content) return false;
-    if (this.state.cancellation.phase !== 'idle') return true;
-    if (isSpecialistActivityEvent(event) && !this.liveExecution.isPlainEvent(event)) {
+    const action = this.providerRecovery.handleError(
+      event, {
+        cancelling: this.state.cancellation.phase !== 'idle',
+        specialist: isSpecialistActivityEvent(event) && !this.liveExecution.isPlainEvent(event)
+      }
+    );
+    if (action.kind === 'unhandled') return false;
+    if (action.kind === 'ignored') return true;
+    if (action.kind === 'specialist') {
       upsertAgentProviderErrorEvent(this.agentActivitiesFor(event), event);
       return true;
     }
-    this.clearProviderRecoveryState();
-    this.pendingProviderError = {requestId: event.requestId, content};
-    this.showStatus(content, true, {eventType: 'provider_retry', tone: 'error'});
+    this.clearStatusMessage('provider_retry');
+    this.showStatus(action.content, true, {eventType: 'provider_retry', tone: 'error'});
     this.scrollToBottom();
     return true;
   }
@@ -281,38 +283,32 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
    * row, so retries are ignored entirely.
    */
   protected handleProviderRetryEvent(event: AiChatSocketEvent): boolean {
-    const retry = providerRetrySemantics(event);
-    if (!retry) {
-      return false;
-    }
-    if (this.state.cancellation.phase !== 'idle') {
-      return true;
-    }
-    if (isSpecialistActivityEvent(event) && !this.liveExecution.isPlainEvent(event)) {
+    const action = this.providerRecovery.handleRetry(
+      event, {
+        cancelling: this.state.cancellation.phase !== 'idle',
+        specialist: isSpecialistActivityEvent(event) && !this.liveExecution.isPlainEvent(event)
+      }
+    );
+    if (action.kind === 'unhandled') return false;
+    if (action.kind === 'ignored') return true;
+    if (action.kind === 'specialist') {
       upsertAgentRetryEvent(this.agentActivitiesFor(event), event);
       return true;
     }
-    const pendingReason = this.pendingProviderError?.requestId === event.requestId
-      ? this.pendingProviderError.content : undefined;
-    this.clearProviderRecoveryState();
+    this.clearStatusMessage('provider_retry');
     if (this.messageTracker.removeStreamedSegment(this.state, event.requestId)) {
       this.assistantMessageIndexesByRequestId.delete(event.requestId);
     }
-    const retryMessage = primaryContent(event).trim()
-      || `The model provider request failed; retrying (attempt ${retry.attempt} of ${retry.maxAttempts}).`;
-    const reason = pendingReason || (typeof event.metadata?.['reason'] === 'string'
-      ? event.metadata['reason'].trim() : '');
-    const reasonWithStop = reason && !/[.!?]$/.test(reason) ? `${reason}.` : reason;
-    this.showStatus(reasonWithStop || retryMessage, true, {
+    this.showStatus(action.reason || action.retryMessage, true, {
       eventType: 'provider_retry', tone: 'error',
-      ...(reasonWithStop ? {suffix: retryMessage} : {})
+      ...(action.reason ? {suffix: action.retryMessage} : {})
     });
     this.state.currentStatus = 'Retrying';
     return true;
   }
 
   protected clearProviderRecoveryState(): void {
-    this.pendingProviderError = undefined;
+    this.providerRecovery.clear();
     this.clearStatusMessage('provider_retry');
   }
 
@@ -470,62 +466,6 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     };
   }
 
-  requestManualCompact(): void {
-    if (!this.state.conversationId || this.interactionBlocked) return;
-    if (this.attachmentQueue.pending) {
-      this.snackBar.open('Wait for attachments to finish loading.', 'Dismiss', {duration: 3000});
-      return;
-    }
-    const draft = this.state.prompt;
-    const attachments = [...this.state.attachments];
-    this.startChatRequest('/compact', []);
-    this.state.prompt = draft;
-    this.state.attachments = attachments;
-    this.resizePromptInput();
-  }
-
-  openContextBudgetDialog(): void {
-    const data = this.contextBudgetData();
-    if (!data) return;
-    this.closeContextBudgetHover(true);
-    this.dialog.open(AiContextBudgetDialogComponent, {
-      data,
-      width: '408px',
-      maxWidth: 'calc(100vw - 24px)',
-      autoFocus: false,
-      restoreFocus: true,
-      ariaLabel: 'Context budget details'
-    });
-  }
-
-  contextBudgetData(): AiContextBudgetData | undefined {
-    const usage = this.state.contextUsage;
-    if (!usage) return undefined;
-    const model = this.state.selectedModel();
-    const reservedTokens = Math.max(0, usage.contextWindow - usage.safeInputLimit);
-    const emergencyHeadroomTokens = Math.max(0, model?.emergencyHeadroomTokens || 0);
-    const outputReserveTokens = Math.max(0, model?.outputReserveTokens
-      ?? reservedTokens - emergencyHeadroomTokens);
-    return {usage, outputReserveTokens, emergencyHeadroomTokens};
-  }
-
-  showContextBudgetHover(): void {
-    this.viewport.showContextBudgetHover(() => !!this.state.contextUsage);
-  }
-
-  keepContextBudgetHoverOpen(): void {
-    this.viewport.keepContextBudgetHoverOpen();
-  }
-
-  closeContextBudgetHover(immediately = false): void {
-    this.viewport.closeContextBudgetHover(immediately);
-  }
-
-  protected applyContextEvent(event: AiChatSocketEvent): void {
-    const usage = contextUsageValue(event.metadata?.['contextUsage'], this.state.selectedModelName);
-    this.state.setContextUsage(usage);
-  }
-
   protected applyFormattedResponse(event: AiChatSocketEvent): void {
     if (!event.response) {
       return;
@@ -538,7 +478,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       return;
     }
     const previousContent = this.state.messages[messageIndex].content;
-    if (this.normalizedDisplayText(previousContent) === this.normalizedDisplayText(event.response)) {
+    if (normalizedDisplayText(previousContent) === normalizedDisplayText(event.response)) {
       return;
     }
     this.state.messages[messageIndex] = {
@@ -556,87 +496,6 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
         };
       }
     }, 900);
-  }
-
-  protected normalizedDisplayText(value?: string): string {
-    return (value || '').trim().replace(/\s+/g, ' ');
-  }
-
-  scrollChatToBottom(event?: MouseEvent): void {
-    event?.preventDefault();
-    event?.stopPropagation();
-    this.scrollToBottom(true);
-    this.focusPrompt();
-  }
-
-  onChatPaneScroll(): void {
-    const element = this.chatTerminalPane?.nativeElement;
-    if (element) this.state.chatScrollTop = element.scrollTop;
-    this.viewport.onChatPaneScroll(this.state, element);
-  }
-
-  onHistoryScrollTopChange(scrollTop: number): void {
-    this.state.historyScrollTop = scrollTop;
-  }
-
-  protected scrollToBottom(force = false): void {
-    this.viewport.scrollToBottom(
-      this.state, () => this.chatTerminalPane?.nativeElement, force
-    );
-  }
-
-  protected restoreChatScrollPosition(consumePending = true): void {
-    const scrollTop = this.state.chatScrollTop;
-    window.setTimeout(() => {
-      window.requestAnimationFrame(() => {
-        const element = this.chatTerminalPane?.nativeElement;
-        if (!element) return;
-        element.scrollTop = Math.min(
-          scrollTop, Math.max(0, element.scrollHeight - element.clientHeight)
-        );
-        this.state.chatScrollTop = element.scrollTop;
-        this.state.shouldFollowChatScroll =
-          element.scrollHeight - element.scrollTop - element.clientHeight <= 48;
-        this.updateScrollToBottomButton();
-      });
-    });
-    if (consumePending) this.restoreChatScrollPending = false;
-  }
-
-  protected updateScrollToBottomButton(): void {
-    this.viewport.updateScrollButton(this.state, this.chatTerminalPane?.nativeElement);
-  }
-
-  focusPrompt(): void {
-    this.composer?.focus();
-  }
-
-  focusPromptIfNoSelection(): void {
-    setTimeout(() => {
-      const selection = window.getSelection();
-      if (selection && selection.toString()) {
-        return;
-      }
-      this.composer?.focus();
-    });
-  }
-
-  onPanelClick(event: MouseEvent): void {
-    event.stopPropagation();
-    this.focusPromptIfNoSelection();
-  }
-
-  protected resizePromptInput(): void {
-    this.composer?.resize();
-  }
-
-  onMessageListClick(event: MouseEvent): void {
-    event.stopPropagation();
-    const target = event.target as HTMLElement | null;
-    const link = target?.closest('a[href]') as HTMLAnchorElement | null;
-    if (link && this.navigationService.navigateLink(link)) {
-      event.preventDefault();
-    }
   }
 
 }

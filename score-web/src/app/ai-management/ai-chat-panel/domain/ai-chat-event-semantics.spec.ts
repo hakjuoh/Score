@@ -3,6 +3,7 @@ import {
   exactOptionalText,
   isReconciliationRequired,
   legacyRecoverableToolName,
+  normalizedDisplayText,
   primaryContent,
   terminalRequestErrorStatus,
   toolCallEventSemantics
@@ -25,6 +26,11 @@ describe('AI chat event semantics', () => {
     expect(primaryContent({...event, content: ''})).toBe('response');
     expect(primaryContent({...event, content: '', response: ''})).toBe('message');
     expect(primaryContent({...event, content: '', response: '', message: ''})).toBe('');
+  });
+
+  it('normalizes display whitespace before comparing formatted responses', () => {
+    expect(normalizedDisplayText('  First\n\tsecond  ')).toBe('First second');
+    expect(normalizedDisplayText()).toBe('');
   });
 
   it('accepts only internally consistent context usage snapshots', () => {
