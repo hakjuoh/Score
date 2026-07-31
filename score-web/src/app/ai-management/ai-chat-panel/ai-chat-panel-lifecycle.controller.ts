@@ -97,8 +97,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
       && this.changeRepeatDraft?.requestId === identity.requestId
       && this.pendingChangeConfirmation.conversationId
         !== identity.conversationId) {
-      this.pendingChangeConfirmation = undefined;
-      this.rejectedChangeConfirmationRequestId = identity.requestId;
+      this.changeRepeats.reject(identity.requestId);
     }
     this.updateActiveIdentity(identity);
     this.cancellationService.updateIdentity(identity);

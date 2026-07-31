@@ -26,6 +26,8 @@ import {AiChatCancellationService} from './domain/ai-chat-cancellation.service';
 import {AiChatCommandService} from './domain/ai-chat-command.service';
 import {AiChatContextService} from './domain/ai-chat-context.service';
 import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
+import {AiChangeRepeatCoordinator} from './domain/ai-change-repeat-coordinator';
+import {AiRequestDispatchCoordinator} from './domain/ai-request-dispatch-coordinator';
 import {AiChangeApprovalBatchCoordinator} from './domain/ai-change-approval-batch-coordinator';
 import {AiElicitationCoordinator} from './domain/ai-elicitation-coordinator';
 import {AiRequestTerminalCoordinator} from './domain/ai-request-terminal-coordinator';
@@ -204,6 +206,8 @@ export function setupAiChatPanelSpec(): void {
       {provide: AiChatAttachmentService, useValue: attachmentService},
       {provide: AiChatCommandService, useValue: {decide: () => ({kind: 'none'}), suggestions: () => []}},
       AiConfirmedChangeRequestCoordinator,
+      AiChangeRepeatCoordinator,
+      AiRequestDispatchCoordinator,
       AiChangeApprovalBatchCoordinator,
       AiElicitationCoordinator,
       AiRequestTerminalCoordinator,
