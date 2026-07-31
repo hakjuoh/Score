@@ -1,7 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.execution;
 
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
-import org.oagi.score.gateway.http.api.ai_management.model.AiApprovedExecution;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangePermissionMode;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalResolution;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalScope;
@@ -47,7 +46,6 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -91,6 +89,7 @@ public final class AiChatExecutor {
     private final SpringAiCallbackToolSetAdapter callbackToolAdapter;
     private final SpringAiToolAdapter springAiToolAdapter;
     private final AgentInputGuardrailChain modelInputGuardrails;
+    private final AiModelInputGuard modelInputGuard;
     private final AiRequestRegistry requests;
     private final AiExecutionInstructions instructions;
     private final ExecutionObserver observer;
@@ -133,6 +132,7 @@ public final class AiChatExecutor {
         this.requests = requests;
         this.instructions = Objects.requireNonNull(instructions, "instructions");
         this.observability = observability != null ? observability : ScoreAiObservability.noop();
+        this.modelInputGuard = new AiModelInputGuard(modelInputGuardrails, this.observability);
         this.middleware = middleware != null ? middleware : AiMiddlewareChain.none();
         this.platformTools = platformTools;
         this.toolSearchEnabled = properties == null
@@ -695,7 +695,7 @@ public final class AiChatExecutor {
             messages.add(context.userMessage());
             if (guardedSession != null && executableTools != null) {
                 guardedSession.executeApproved(executableTools)
-                        .ifPresent(execution -> addApprovedExecution(
+                        .ifPresent(execution -> AiApprovedChangeMessages.append(
                                 messages, execution, recorder, toolOutputTokenLimit));
             }
             ChatClient assistant = assistantBuilder.build();
@@ -769,7 +769,7 @@ public final class AiChatExecutor {
                 deniedChangeCount += denied;
                 failedChangeCount += resolutions.size() - executed - denied;
                 approvalMessages.add(new AssistantMessage(answer));
-                resolutions.forEach(resolution -> addResolvedChange(
+                resolutions.forEach(resolution -> AiApprovedChangeMessages.append(
                         approvalMessages, resolution, recorder, toolOutputTokenLimit));
                 approvalMessages.add(new UserMessage(instructions.render(
                         AiExecutionInstructions.Template.APPROVAL_CONTINUATION).value()));
@@ -785,7 +785,7 @@ public final class AiChatExecutor {
                 List<Message> continuationMessages = new ArrayList<>(context.history());
                 continuationMessages.add(context.userMessage());
                 guardedSession.completedChanges()
-                        .forEach(execution -> addApprovedExecution(
+                        .forEach(execution -> AiApprovedChangeMessages.append(
                                 continuationMessages, execution, recorder, toolOutputTokenLimit));
                 continuationMessages.add(new AssistantMessage(answer));
                 continuationMessages.add(new UserMessage(instructions.render(
@@ -902,7 +902,7 @@ public final class AiChatExecutor {
         String stableSystemPrompt = instruction.value();
         List<Message> requestMessages = new ArrayList<>(messages.size() + 1);
         requestMessages.addAll(messages);
-        int guardedUserIndex = lastUserMessageIndex(requestMessages);
+        int guardedUserIndex = modelInputGuard.lastUserMessageIndex(requestMessages);
         // Keep volatile page data out of every system block. Appending it as
         // untrusted turn context preserves the stable system-prompt prefix for
         // provider caching, matching Claude Code's user-context path.
@@ -910,7 +910,7 @@ public final class AiChatExecutor {
             requestMessages.add(new UserMessage(AiSensitiveDataRedactor.redactText(
                     requestScopedInput(request, instructions))));
         }
-        requestMessages = guardModelInput(request, requestMessages, guardedUserIndex, scope);
+        requestMessages = modelInputGuard.apply(request, requestMessages, guardedUserIndex, scope);
         ChatClient.ChatClientRequestSpec prompt = assistant.prompt()
                     .options(options.mutate());
         prompt = prompt.system(system -> system.text(stableSystemPrompt));
@@ -945,33 +945,6 @@ public final class AiChatExecutor {
         return answer.toString();
     }
 
-    private List<Message> guardModelInput(ChatRequest request, List<Message> messages,
-                                          int guardedUserIndex, ExecutionScope scope) {
-        if (modelInputGuardrails == null) return messages;
-        List<AiMessage> assembled = messages.stream().map(SpringAiMessageAdapter::toCore).toList();
-        AiMessage.User input = guardedUserIndex >= 0
-                ? (AiMessage.User) assembled.get(guardedUserIndex) : new AiMessage.User("");
-        AgentInputGuardrailChain.Outcome outcome = modelInputGuardrails.evaluate(
-                new AgentInputGuardrail.Request(AgentInputGuardrail.Scope.MODEL,
-                        input, assembled, scope, Map.of("model", request.modelName())));
-        observability.recordGuardrails(scope.requestId(), "model_input",
-                outcome.decisions(), outcome.refusal());
-        if (!outcome.allowed()) {
-            throw new AgentInputRefusedException(outcome.refusal());
-        }
-        if (guardedUserIndex < 0) return messages;
-        List<Message> rewritten = new ArrayList<>(messages);
-        rewritten.set(guardedUserIndex, SpringAiUserMessageAdapter.toSpring(outcome.input()));
-        return List.copyOf(rewritten);
-    }
-
-    private int lastUserMessageIndex(List<Message> messages) {
-        for (int index = messages.size() - 1; index >= 0; index--) {
-            if (messages.get(index) instanceof UserMessage) return index;
-        }
-        return -1;
-    }
-
     private boolean isTextualToolCallPlaceholder(String answer) {
         return StringUtils.hasText(answer)
                 && TEXTUAL_TOOL_CALL_PLACEHOLDER.matcher(answer).find();
@@ -987,33 +960,6 @@ public final class AiChatExecutor {
                 ? request.pageContext() : "Not provided";
         return instructions.render(AiExecutionInstructions.Template.REQUEST_SCOPED_INPUT,
                 Map.of("pageContext", pageContext)).value();
-    }
-
-    private void addApprovedExecution(List<Message> messages,
-                                      AiApprovedExecution execution,
-                                      AiTrajectoryRecorder recorder, long toolOutputTokenLimit) {
-        String callId = "approved-" + UUID.randomUUID();
-        messages.add(AssistantMessage.builder().content("").toolCalls(List.of(
-                new AssistantMessage.ToolCall(callId, "function", execution.toolName(),
-                        execution.arguments()))).build());
-        messages.add(ToolResponseMessage.builder().responses(List.of(
-                new ToolResponseMessage.ToolResponse(callId, execution.toolName(),
-                        recorder.limitToolOutput(execution.result(), toolOutputTokenLimit,
-                                execution.toolName())))).build());
-    }
-
-    private void addResolvedChange(List<Message> messages,
-                                     AiResolvedChange resolution,
-                                     AiTrajectoryRecorder recorder,
-                                     long toolOutputTokenLimit) {
-        String callId = "approved-" + UUID.randomUUID();
-        messages.add(AssistantMessage.builder().content("").toolCalls(List.of(
-                new AssistantMessage.ToolCall(callId, "function", resolution.toolName(),
-                        resolution.arguments()))).build());
-        messages.add(ToolResponseMessage.builder().responses(List.of(
-                new ToolResponseMessage.ToolResponse(callId, resolution.toolName(),
-                        recorder.limitToolOutput(resolution.result(), toolOutputTokenLimit,
-                                resolution.toolName())))).build());
     }
 
     record Context(ChatRequest request, List<Message> history, UserMessage userMessage,

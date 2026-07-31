@@ -61,6 +61,30 @@ import static org.mockito.Mockito.when;
 class AiTrajectoryRecorderTest {
 
     @Test
+    void redactsSensitiveModelToolArgumentsBeforeTrajectoryPersistence() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), mock(ScoreUser.class),
+                "conversation-1", "request-1", ignored -> { });
+        AssistantMessage.ToolCall call = new AssistantMessage.ToolCall(
+                "call-sensitive", "function", "lookup",
+                "{\"password\":\"hunter2\",\"nested\":{\"api_key\":\"secret\"}}");
+
+        recorder.recordModelResponse(new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder().toolCalls(List.of(call)).build()))), "assistant");
+
+        ArgumentCaptor<AiChatTrajectoryStep> step =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq("conversation-1"), step.capture());
+        assertThat(step.getValue().toolCalls()).singleElement().satisfies(tool -> {
+            assertThat(tool.toString()).doesNotContain("hunter2", "secret");
+            assertThat(tool.toString()).contains("[REDACTED]");
+        });
+    }
+
+    @Test
     void persistsExactlyTheCanonicalIdentityDeliveredToExternalListeners() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))

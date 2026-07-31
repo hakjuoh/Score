@@ -1,7 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.trajectory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiContextUsageInfo;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
@@ -10,7 +9,6 @@ import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecy
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
-import org.oagi.score.gateway.http.api.ai_management.execution.SpringAiResponseContent;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.model.AiBoundedToolOutput;
@@ -39,9 +37,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
-import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
@@ -76,7 +72,6 @@ public final class AiTrajectoryRecorder {
     public static final String PHASE_CONTEXT_KEY = "score.ai.trajectory.phase";
     /** Stable trajectory wire value recognized by external verifiers. */
     public static final String FANOUT_USAGE_STEP_KIND = "fanout_usage";
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final int MAX_AUDIT_TEXT_CHARS = 32_768;
 
     private final AiChatConversationRepository repository;
@@ -722,7 +717,8 @@ public final class AiTrajectoryRecorder {
         if (response == null || response.getResults().isEmpty()) {
             return null;
         }
-        AiMetricsSnapshot metricsSnapshot = metrics(response, streaming);
+        AiMetricsSnapshot metricsSnapshot = AiModelResponseProjection.metrics(response, streaming,
+                promptTokenNormalizer, estimatedInputFloor, subagentScope);
         if (sealed) {
             if (!usageAccountingSealed) recordOwnUsage(metricsSnapshot);
             return null;
@@ -730,10 +726,12 @@ public final class AiTrajectoryRecorder {
         ModelCallRecording activeCall = call != null ? call : ModelCallRecording.noop();
         String normalizedPhase = StringUtils.hasText(activeCall.phase())
                 ? activeCall.phase() : "model";
-        boolean reasoningPresent = StringUtils.hasText(reasoning(response.getResults()));
-        String message = visibleMessage(response.getResults());
-        List<Map<String, Object>> toolCalls = toolCalls(response.getResults());
-        List<Map<String, Object>> auditedToolCalls = auditToolCalls(toolCalls);
+        AiModelResponseProjection.Content content = AiModelResponseProjection.content(
+                response.getResults(), objectMapper, this::boundedRedactedValue);
+        boolean reasoningPresent = StringUtils.hasText(content.reasoning());
+        String message = content.visible();
+        List<Map<String, Object>> toolCalls = content.toolCalls();
+        List<Map<String, Object>> auditedToolCalls = content.auditedToolCalls();
         Map<String, Object> metrics = metricsSnapshot != null ? metricsSnapshot.metrics() : null;
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("phase", normalizedPhase);
@@ -1005,83 +1003,8 @@ public final class AiTrajectoryRecorder {
         estimatedInputFloor.set(Math.max(0L, inputTokens));
     }
 
-    private String reasoning(List<Generation> generations) {
-        return SpringAiResponseContent.reasoning(generations);
-    }
-
-    private String visibleMessage(List<Generation> generations) {
-        return SpringAiResponseContent.visibleStored(generations);
-    }
-
-    private List<Map<String, Object>> toolCalls(List<Generation> generations) {
-        List<Map<String, Object>> calls = new ArrayList<>();
-        for (Generation generation : generations) {
-            for (AssistantMessage.ToolCall call : generation.getOutput().getToolCalls()) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("tool_call_id", StringUtils.hasText(call.id()) ? call.id() : UUID.randomUUID().toString());
-                item.put("function_name", call.name());
-                item.put("arguments", arguments(call.arguments()));
-                calls.add(item);
-            }
-        }
-        return calls;
-    }
-
-    private List<Map<String, Object>> auditToolCalls(List<Map<String, Object>> toolCalls) {
-        return toolCalls.stream().map(call -> {
-            Map<String, Object> audited = new LinkedHashMap<>(call);
-            audited.put("arguments", boundedRedactedValue(call.get("arguments")));
-            return Map.copyOf(audited);
-        }).toList();
-    }
-
     private Map<String, Object> arguments(String json) {
-        if (!StringUtils.hasText(json)) {
-            return Map.of();
-        }
-        try {
-            return objectMapper.readValue(json, MAP_TYPE);
-        } catch (JsonProcessingException exception) {
-            return Map.of("raw", json);
-        }
-    }
-
-    private AiMetricsSnapshot metrics(ChatResponse response, boolean streaming) {
-        Usage usage = response.getMetadata().getUsage();
-        if (usage == null) {
-            return null;
-        }
-        Map<String, Object> metrics = new LinkedHashMap<>();
-        ProviderPromptTokenNormalizer.Snapshot prompt =
-                promptTokenNormalizer.normalize(usage, streaming);
-        long contextInputTokens = Math.max(prompt.inclusiveTokens(), estimatedInputFloor.get());
-        boolean contextEstimated = !prompt.complete()
-                || contextInputTokens > prompt.inclusiveTokens();
-        if (!prompt.complete()) {
-            // Spring AI's Anthropic streaming adapter can lose cache usage reported on
-            // message_start. ATIF prompt_tokens must include that cached prefix, so the
-            // incomplete provider value is retained only as diagnostic metadata.
-            metrics.put("provider_reported_prompt_tokens", prompt.providerReportedTokens());
-            metrics.put("prompt_tokens_complete", false);
-            metrics.put("prompt_token_accounting", promptTokenNormalizer.wireValue());
-        } else {
-            metrics.put("prompt_tokens", prompt.inclusiveTokens());
-            metrics.put("prompt_tokens_complete", true);
-            metrics.put("prompt_token_accounting", promptTokenNormalizer.wireValue());
-        }
-        putIfPresent(metrics, "completion_tokens", usage.getCompletionTokens());
-        putIfPresent(metrics, "cached_tokens", usage.getCacheReadInputTokens());
-        if (usage.getCacheWriteInputTokens() != null) {
-            metrics.put("extra", Map.of("cache_creation_input_tokens", usage.getCacheWriteInputTokens()));
-        }
-        estimatedInputFloor.accumulateAndGet(contextInputTokens, Math::max);
-        metrics.put("context_input_tokens", contextInputTokens);
-        metrics.put("context_estimated", contextEstimated);
-        if (subagentScope) {
-            // Marks the row so the conversation's latest-usage lookup skips it.
-            metrics.put("context_scope", "subagent");
-        }
-        return new AiMetricsSnapshot(Map.copyOf(metrics), contextInputTokens, contextEstimated);
+        return AiModelResponseProjection.arguments(json, objectMapper);
     }
 
     private void emitContextUsage(AiContextUsageInfo usage) {
@@ -1365,12 +1288,6 @@ public final class AiTrajectoryRecorder {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             return Objects.toString(value);
-        }
-    }
-
-    private void putIfPresent(Map<String, Object> target, String key, Object value) {
-        if (value != null) {
-            target.put(key, value);
         }
     }
 
