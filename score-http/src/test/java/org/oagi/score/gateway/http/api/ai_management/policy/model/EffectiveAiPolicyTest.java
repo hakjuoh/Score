@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.policy.model;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiCatalogModel;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
@@ -19,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class EffectiveAiPolicyTest {
 
     private static AiCatalogModel model(long id, String key, boolean defaultModel) {
-        return new AiCatalogModel(id, new ScoreAiModelRegistry.ModelDescriptor(
+        return new AiCatalogModel(AiModelId.from(id), new ScoreAiModelRegistry.ModelDescriptor(
                 key, key, "", "provider", defaultModel, "medium",
                 List.of(new ScoreAiModelRegistry.ReasoningEffortDescriptor(
                                 "low", "Low", ""),
@@ -47,7 +48,7 @@ class EffectiveAiPolicyTest {
     @Test
     void rejectsRestrictedReasoningEffortAndClampsAgents() {
         EffectiveAiPolicy policy = policy(true, List.of(model(1, "allowed", true)),
-                Map.of(1L, Set.of("low")));
+                Map.of(AiModelId.from(1L), Set.of("low")));
 
         assertThatThrownBy(() -> policy.requireReasoningEffortAllowed("allowed", "medium"))
                 .isInstanceOfSatisfying(AiPolicyViolationException.class,
@@ -68,7 +69,7 @@ class EffectiveAiPolicyTest {
     }
 
     private static EffectiveAiPolicy policy(boolean enabled, List<AiCatalogModel> models,
-                                            Map<Long, Set<String>> efforts) {
+                                            Map<AiModelId, Set<String>> efforts) {
         return new EffectiveAiPolicy(new UserId(BigInteger.ONE), false, enabled,
                 models, "allowed", true, 2, 8, null, null,
                 null, null, 1, efforts);

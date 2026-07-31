@@ -6,6 +6,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSet
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatLatestUsage;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryData;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 
@@ -57,12 +58,12 @@ public interface AiChatConversationRepository {
     AiChatStoredStep append(String conversationId, AiChatTrajectoryStep step);
 
     /** Completes a model-call row whose sequence was reserved when the provider call began. */
-    void updateModelCall(String conversationId, long stepId, AiChatTrajectoryStep step);
+    void updateModelCall(String conversationId, AiChatStepId stepId, AiChatTrajectoryStep step);
 
     /**
      * Updates the observation associated with an owned trajectory step.
      */
-    void updateObservation(String conversationId, long stepId,
+    void updateObservation(String conversationId, AiChatStepId stepId,
                            Map<String, Object> observation);
 
     /**

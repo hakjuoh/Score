@@ -2,7 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.model;
 
 import java.util.List;
 
-public record AiModelCatalogUpdate(Long expectedVersion, long providerId, String modelKey,
+public record AiModelCatalogUpdate(Long expectedVersion, AiProviderId providerId, String modelKey,
                                    boolean enabled, boolean defaultModel, int sortOrder,
                                    Integer maxTokens, long contextWindow,
                                    Long outputReserveTokens, Long autoCompactThresholdTokens,

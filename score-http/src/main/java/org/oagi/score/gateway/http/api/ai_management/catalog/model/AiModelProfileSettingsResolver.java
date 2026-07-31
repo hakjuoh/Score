@@ -1,6 +1,5 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.service;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model;
 
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.CapabilityConstraint;
@@ -8,11 +7,11 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.Decim
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.NumericConstraint;
 
 /** Resolves nullable admin settings to the exact values validated, persisted, and run. */
-final class AiModelProfileSettingsResolver {
+public final class AiModelProfileSettingsResolver {
 
     private AiModelProfileSettingsResolver() {}
 
-    static ResolvedSettings resolve(AiModelProfile profile, AiModelCatalogUpdate input) {
+    public static ResolvedSettings resolve(AiModelProfile profile, AiModelCatalogUpdate input) {
         AiModelProfileView view = AiModelProfileView.from(profile);
         AiModelProfileView.ModelConfigurationConstraints values = view.configurationConstraints();
         AiModelProfileView.ModelCapabilityConstraints capabilities = view.capabilityConstraints();
@@ -32,30 +31,30 @@ final class AiModelProfileSettingsResolver {
                 capability(input.temperatureSupported(), capabilities.temperature()));
     }
 
-    static Long number(Number value, NumericConstraint constraint) {
+    private static Long number(Number value, NumericConstraint constraint) {
         if (value != null) return value.longValue();
         return constraint.defaultValue();
     }
 
-    static Integer integer(Number value, NumericConstraint constraint) {
+    private static Integer integer(Number value, NumericConstraint constraint) {
         Long resolved = number(value, constraint);
         return resolved != null ? Math.toIntExact(resolved) : null;
     }
 
-    static Double decimal(Number value, DecimalConstraint constraint) {
+    private static Double decimal(Number value, DecimalConstraint constraint) {
         if (value != null) return value.doubleValue();
         return constraint.defaultValue();
     }
 
-    static boolean capability(Boolean value, CapabilityConstraint constraint) {
+    private static boolean capability(Boolean value, CapabilityConstraint constraint) {
         return value != null ? value : constraint.defaultEnabled();
     }
 
-    record ResolvedSettings(Integer maxTokens, long contextWindow,
-                            Long outputReserveTokens, Long autoCompactThresholdTokens,
-                            long emergencyHeadroomTokens, long toolOutputTokenLimit,
-                            boolean providerCompactionEnabled, Double temperature,
-                            Integer thinkingBudgetTokens, boolean adaptiveThinking,
-                            boolean reasoningOptionsEnabled, boolean outputEffortEnabled,
-                            boolean verbosityEnabled, boolean temperatureEnabled) {}
+    public record ResolvedSettings(Integer maxTokens, long contextWindow,
+                                   Long outputReserveTokens, Long autoCompactThresholdTokens,
+                                   long emergencyHeadroomTokens, long toolOutputTokenLimit,
+                                   boolean providerCompactionEnabled, Double temperature,
+                                   Integer thinkingBudgetTokens, boolean adaptiveThinking,
+                                   boolean reasoningOptionsEnabled, boolean outputEffortEnabled,
+                                   boolean verbosityEnabled, boolean temperatureEnabled) {}
 }

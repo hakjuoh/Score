@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeRule;
+import org.oagi.score.gateway.http.api.ai_management.model.AiOwnedEntityId;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChangeOwnershipQueryRepository;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeOwnershipPolicy;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeRiskCatalog;
@@ -66,7 +67,7 @@ public class AiChangeOwnershipService implements AiChangeOwnershipPolicy {
         }
         try {
             return queryRepository(requester)
-                    .findOwner(rule.targetKind(), targetId.get())
+                    .findOwner(rule.targetKind(), new AiOwnedEntityId(targetId.get()))
                     .filter(owner -> Objects.equals(owner, requester.userId()))
                     .isPresent();
         } catch (RuntimeException exception) {

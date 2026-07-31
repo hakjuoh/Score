@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.controller;
 
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiModelCatalogAdminService;
@@ -27,11 +28,11 @@ public class AiModelCatalogController {
         return models.create(sessions.asScoreUser(p), input);
     }
     @GetMapping("/{id}") public AiModelCatalogView get(@AuthenticationPrincipal AuthenticatedPrincipal p,
-                                                        @PathVariable long id) {
+                                                        @PathVariable AiModelId id) {
         return models.get(sessions.asScoreUser(p), id);
     }
     @PutMapping("/{id}") public AiModelCatalogView update(@AuthenticationPrincipal AuthenticatedPrincipal p,
-                                                           @PathVariable long id,
+                                                           @PathVariable AiModelId id,
                                                            @RequestBody AiModelCatalogUpdate input) {
         return models.update(sessions.asScoreUser(p), id, input);
     }

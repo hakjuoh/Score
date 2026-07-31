@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.policy.service;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiCatalogModel;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiModelCatalogService;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiModelAccessMode;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiUserPolicy;
@@ -48,8 +49,9 @@ class AiPolicyServiceTest {
         Fixture fixture = fixture(true);
         when(fixture.policies.find(fixture.user.userId())).thenReturn(Optional.of(
                 new AiUserPolicy(fixture.user.userId(), true, AiModelAccessMode.ALLOW_LIST,
-                        999L, true, 2, 3, 200L, 500L, null, null, 7L,
-                        Set.of(2L, 999L), Map.of(2L, Set.of("low")))));
+                        AiModelId.from(999L), true, 2, 3, 200L, 500L, null, null, 7L,
+                        Set.of(AiModelId.from(2L), AiModelId.from(999L)),
+                        Map.of(AiModelId.from(2L), Set.of("low")))));
 
         var resolved = fixture.service.resolve(fixture.user);
 
@@ -57,7 +59,8 @@ class AiPolicyServiceTest {
         assertThat(resolved.availableModels()).extracting(model -> model.descriptor().name())
                 .containsExactly("fallback");
         assertThat(resolved.defaultModelKey()).isEqualTo("fallback");
-        assertThat(resolved.allowedReasoningEfforts()).containsEntry(2L, Set.of("low"));
+        assertThat(resolved.allowedReasoningEfforts())
+                .containsEntry(AiModelId.from(2L), Set.of("low"));
     }
 
     @Test
@@ -94,7 +97,7 @@ class AiPolicyServiceTest {
     }
 
     private static AiCatalogModel model(long id, String key, boolean defaultModel) {
-        return new AiCatalogModel(id, new ScoreAiModelRegistry.ModelDescriptor(
+        return new AiCatalogModel(AiModelId.from(id), new ScoreAiModelRegistry.ModelDescriptor(
                 key, key, "", "provider", defaultModel, "medium",
                 List.of(new ScoreAiModelRegistry.ReasoningEffortDescriptor(
                         "low", "Low", "")),

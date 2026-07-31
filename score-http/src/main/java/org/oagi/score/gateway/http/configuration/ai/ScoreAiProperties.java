@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiTool;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -270,7 +271,7 @@ public class ScoreAiProperties {
     }
 
     public static class Model {
-        private Long catalogId;
+        private AiModelId catalogId;
         private String displayName;
         private String description;
         private String provider;
@@ -287,8 +288,8 @@ public class ScoreAiProperties {
         private String cacheStrategy;
         private ModelCapabilities modelCapabilities = new ModelCapabilities();
 
-        public Long getCatalogId() { return catalogId; }
-        public void setCatalogId(Long catalogId) { this.catalogId = catalogId; }
+        public AiModelId getCatalogId() { return catalogId; }
+        public void setCatalogId(AiModelId catalogId) { this.catalogId = catalogId; }
         public String getDisplayName() { return displayName; }
         public void setDisplayName(String displayName) { this.displayName = displayName; }
         public String getDescription() { return description; }

@@ -6,12 +6,14 @@ import org.jooq.DSLContext;
 import org.jooq.types.UByte;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyVersionConflictException;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiModelAccessMode;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiQuotaPeriod;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiUserPolicy;
 import org.oagi.score.gateway.http.api.ai_management.policy.repository.AiPolicyCommandRepository;
 import org.oagi.score.gateway.http.api.ai_management.policy.repository.AiPolicyQueryRepository;
+import org.oagi.score.gateway.http.common.model.Id;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -49,13 +51,13 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
                 .where(AI_USER_POLICY.APP_USER_ID.eq(id)).fetchOne();
         if (row == null) return Optional.empty();
 
-        Set<Long> allowedModels = tx.select(AI_USER_MODEL_ACCESS.AI_MODEL_ID)
+        Set<AiModelId> allowedModels = tx.select(AI_USER_MODEL_ACCESS.AI_MODEL_ID)
                 .from(AI_USER_MODEL_ACCESS)
                 .where(AI_USER_MODEL_ACCESS.APP_USER_ID.eq(id))
                 .fetch(AI_USER_MODEL_ACCESS.AI_MODEL_ID).stream()
-                .map(ULong::longValue)
+                .map(value -> new AiModelId(value.toBigInteger()))
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        Map<Long, Set<String>> reasoning = new LinkedHashMap<>();
+        Map<AiModelId, Set<String>> reasoning = new LinkedHashMap<>();
         tx.select(AI_USER_MODEL_REASONING_ACCESS.AI_MODEL_ID,
                         AI_USER_MODEL_REASONING_ACCESS.REASONING_EFFORT)
                 .from(AI_USER_MODEL_REASONING_ACCESS)
@@ -63,14 +65,16 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
                 .orderBy(AI_USER_MODEL_REASONING_ACCESS.AI_MODEL_ID,
                         AI_USER_MODEL_REASONING_ACCESS.REASONING_EFFORT)
                 .forEach(record -> reasoning.computeIfAbsent(
-                                record.get(AI_USER_MODEL_REASONING_ACCESS.AI_MODEL_ID).longValue(),
+                                new AiModelId(record.get(
+                                        AI_USER_MODEL_REASONING_ACCESS.AI_MODEL_ID).toBigInteger()),
                                 ignored -> new LinkedHashSet<>())
                         .add(record.get(AI_USER_MODEL_REASONING_ACCESS.REASONING_EFFORT)));
 
         return Optional.of(new AiUserPolicy(userId,
                 row.getAiEnabled() != 0,
                 AiModelAccessMode.valueOf(row.getModelAccessMode()),
-                row.getDefaultAiModelId() != null ? row.getDefaultAiModelId().longValue() : null,
+                row.getDefaultAiModelId() != null
+                        ? new AiModelId(row.getDefaultAiModelId().toBigInteger()) : null,
                 row.getMultiAgentEnabled() != 0,
                 row.getMaxAgentsPerRequest().intValue(),
                 row.getMaxActiveRequests().intValue(),
@@ -172,11 +176,11 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
                 .where(AI_USER_MODEL_ACCESS.APP_USER_ID.eq(target)).execute();
         policy.allowedModels().forEach(modelId -> tx.insertInto(AI_USER_MODEL_ACCESS)
                 .set(AI_USER_MODEL_ACCESS.APP_USER_ID, target)
-                .set(AI_USER_MODEL_ACCESS.AI_MODEL_ID, ULong.valueOf(modelId)).execute());
+                .set(AI_USER_MODEL_ACCESS.AI_MODEL_ID, unsigned(modelId)).execute());
         policy.allowedReasoningEfforts().forEach((modelId, efforts) -> efforts.forEach(effort ->
                 tx.insertInto(AI_USER_MODEL_REASONING_ACCESS)
                         .set(AI_USER_MODEL_REASONING_ACCESS.APP_USER_ID, target)
-                        .set(AI_USER_MODEL_REASONING_ACCESS.AI_MODEL_ID, ULong.valueOf(modelId))
+                        .set(AI_USER_MODEL_REASONING_ACCESS.AI_MODEL_ID, unsigned(modelId))
                         .set(AI_USER_MODEL_REASONING_ACCESS.REASONING_EFFORT, effort)
                         .execute()));
     }
@@ -226,7 +230,7 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
         return (byte) (value ? 1 : 0);
     }
 
-    private static ULong unsigned(UserId id) {
+    private static ULong unsigned(Id id) {
         return id != null ? ULong.valueOf(id.value()) : null;
     }
 

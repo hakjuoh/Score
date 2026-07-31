@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.common.repository.jooq;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
 import org.oagi.score.gateway.http.api.account_management.repository.AccountCommandRepository;
 import org.oagi.score.gateway.http.api.account_management.repository.AccountQueryRepository;
@@ -16,7 +17,13 @@ import org.oagi.score.gateway.http.api.application_management.repository.Configu
 import org.oagi.score.gateway.http.api.application_management.repository.jooq.JooqConfigurationCommandRepository;
 import org.oagi.score.gateway.http.api.application_management.repository.jooq.JooqConfigurationQueryRepository;
 import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiCatalogBootstrapRepository;
+import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiDatabaseCatalogRepository;
+import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiModelCatalogRepository;
+import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiProviderCatalogRepository;
 import org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq.JooqAiCatalogBootstrapRepository;
+import org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq.JooqAiDatabaseCatalogRepository;
+import org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq.JooqAiModelCatalogRepository;
+import org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq.JooqAiProviderCatalogRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMaintenanceRepository;
@@ -114,6 +121,20 @@ public class RepositoryFactory {
     public AiCatalogBootstrapRepository aiCatalogBootstrapRepository(
             ApplicationSecretService secrets) {
         return new JooqAiCatalogBootstrapRepository(dslContext, this, secrets);
+    }
+
+    public AiDatabaseCatalogRepository aiDatabaseCatalogRepository(
+            ApplicationSecretService secrets, ObjectMapper mapper) {
+        return new JooqAiDatabaseCatalogRepository(dslContext, this, secrets, mapper);
+    }
+
+    public AiModelCatalogRepository aiModelCatalogRepository(ObjectMapper mapper) {
+        return new JooqAiModelCatalogRepository(dslContext, this, mapper);
+    }
+
+    public AiProviderCatalogRepository aiProviderCatalogRepository(
+            ApplicationSecretService secrets, ObjectMapper mapper) {
+        return new JooqAiProviderCatalogRepository(dslContext, this, secrets, mapper);
     }
 
     public AiChatConversationRepository aiChatConversationRepository(

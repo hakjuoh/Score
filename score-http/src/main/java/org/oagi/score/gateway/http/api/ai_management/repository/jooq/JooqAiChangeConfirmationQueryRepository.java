@@ -2,7 +2,8 @@ package org.oagi.score.gateway.http.api.ai_management.repository.jooq;
 
 import org.jooq.DSLContext;
 import org.jooq.Record;
-import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationState;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChangeConfirmationQueryRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -60,7 +61,7 @@ public class JooqAiChangeConfirmationQueryRepository extends JooqBaseRepository
         return selectState()
                 .where(AI_CHAT_CHANGE_CONFIRMATION.GUID.eq(confirmationRequestId)
                         .and(AI_CHAT_CONVERSATION.GUID.eq(conversationId))
-                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId())));
+                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(valueOf(userId()))));
     }
 
     @Override
@@ -72,7 +73,7 @@ public class JooqAiChangeConfirmationQueryRepository extends JooqBaseRepository
             Instant now) {
         return selectState()
                 .where(AI_CHAT_CONVERSATION.GUID.eq(conversationId)
-                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId()))
+                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(valueOf(userId())))
                         .and(AI_CHAT_CHANGE_CONFIRMATION.REQUEST_ID.eq(requestId))
                         .and(AI_CHAT_CHANGE_CONFIRMATION.TOOL_NAME.eq(toolName))
                         .and(AI_CHAT_CHANGE_CONFIRMATION.ARGUMENTS_DIGEST.eq(argumentsDigest))
@@ -106,7 +107,8 @@ public class JooqAiChangeConfirmationQueryRepository extends JooqBaseRepository
 
     private AiChangeConfirmationState state(Record record) {
         return new AiChangeConfirmationState(
-                record.get(AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID).longValue(),
+                new AiChangeConfirmationId(record.get(
+                        AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID).toBigInteger()),
                 record.get(AI_CHAT_CHANGE_CONFIRMATION.GUID),
                 record.get(AI_CHAT_CHANGE_CONFIRMATION.REQUEST_ID),
                 record.get(AI_CHAT_CHANGE_CONFIRMATION.STATUS),
@@ -120,8 +122,8 @@ public class JooqAiChangeConfirmationQueryRepository extends JooqBaseRepository
                 record.get(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST));
     }
 
-    private ULong userId() {
-        return ULong.valueOf(requester().userId().value());
+    private UserId userId() {
+        return requester().userId();
     }
 
     private LocalDateTime localDateTime(Instant value) {

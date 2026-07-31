@@ -8,6 +8,7 @@ import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservat
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
@@ -382,9 +383,10 @@ public final class AiTrajectoryRecorder {
         return modelCalls.fail(call, failure);
     }
 
-    public record ModelCallRecording(long stepId, String phase, ExecutionEventIdentity started) {
+    public record ModelCallRecording(
+            AiChatStepId stepId, String phase, ExecutionEventIdentity started) {
         public static ModelCallRecording noop() {
-            return new ModelCallRecording(-1L, "model", null);
+            return new ModelCallRecording(AiChatStepId.NONE, "model", null);
         }
     }
 
