@@ -1,7 +1,8 @@
 package org.oagi.score.gateway.http.api.ai_management.repository.jooq;
 
 import org.jooq.DSLContext;
-import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatMemoryEntry;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMemoryStorageRepository;
@@ -49,7 +50,7 @@ public class JooqAiChatMemoryStorageRepository extends JooqBaseRepository
                 .from(AI_CHAT_MEMORY)
                 .join(AI_CHAT_CONVERSATION).on(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
                         .eq(AI_CHAT_MEMORY.AI_CHAT_CONVERSATION_ID))
-                .where(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId()))
+                .where(AI_CHAT_CONVERSATION.APP_USER_ID.eq(valueOf(userId())))
                 .orderBy(AI_CHAT_CONVERSATION.GUID)
                 .limit(1000)
                 .fetch(AI_CHAT_CONVERSATION.GUID);
@@ -64,7 +65,7 @@ public class JooqAiChatMemoryStorageRepository extends JooqBaseRepository
                 .join(AI_CHAT_CONVERSATION).on(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
                         .eq(AI_CHAT_MEMORY.AI_CHAT_CONVERSATION_ID))
                 .where(AI_CHAT_CONVERSATION.GUID.eq(conversationId)
-                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId())))
+                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(valueOf(userId()))))
                 .orderBy(AI_CHAT_MEMORY.MEMORY_SEQUENCE)
                 .fetch(record -> new AiChatMemoryEntry(
                         record.get(AI_CHAT_MEMORY.MESSAGE_TYPE),
@@ -79,15 +80,15 @@ public class JooqAiChatMemoryStorageRepository extends JooqBaseRepository
         if (entries.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("entries must not contain null elements");
         }
-        ULong internalConversationId = internalConversationId(conversationId);
+        AiChatConversationId internalConversationId = internalConversationId(conversationId);
         dslContext().deleteFrom(AI_CHAT_MEMORY)
-                .where(AI_CHAT_MEMORY.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
+                .where(AI_CHAT_MEMORY.AI_CHAT_CONVERSATION_ID.eq(valueOf(internalConversationId)))
                 .execute();
         Instant now = Instant.now();
         for (int index = 0; index < entries.size(); index++) {
             AiChatMemoryEntry entry = entries.get(index);
             AiChatMemoryRecord record = new AiChatMemoryRecord();
-            record.setAiChatConversationId(internalConversationId);
+            record.setAiChatConversationId(valueOf(internalConversationId));
             record.setMemorySequence((long) index);
             record.setMessageType(entry.messageType());
             record.setContent(Objects.requireNonNullElse(entry.content(), ""));
@@ -103,19 +104,22 @@ public class JooqAiChatMemoryStorageRepository extends JooqBaseRepository
         dslContext().select(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID)
                 .from(AI_CHAT_CONVERSATION)
                 .where(AI_CHAT_CONVERSATION.GUID.eq(conversationId)
-                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId())))
+                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(valueOf(userId()))))
                 .fetchOptional(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID)
+                .map(id -> new AiChatConversationId(id.toBigInteger()))
                 .ifPresent(internalConversationId -> dslContext().deleteFrom(AI_CHAT_MEMORY)
-                        .where(AI_CHAT_MEMORY.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
+                        .where(AI_CHAT_MEMORY.AI_CHAT_CONVERSATION_ID
+                                .eq(valueOf(internalConversationId)))
                         .execute());
     }
 
-    private ULong internalConversationId(String conversationId) {
+    private AiChatConversationId internalConversationId(String conversationId) {
         return dslContext().select(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID)
                 .from(AI_CHAT_CONVERSATION)
                 .where(AI_CHAT_CONVERSATION.GUID.eq(conversationId)
-                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId())))
+                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(valueOf(userId()))))
                 .fetchOptional(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID)
+                .map(id -> new AiChatConversationId(id.toBigInteger()))
                 .orElseThrow(() -> new IllegalArgumentException("AI conversation does not exist."));
     }
 
@@ -125,8 +129,8 @@ public class JooqAiChatMemoryStorageRepository extends JooqBaseRepository
         }
     }
 
-    private ULong userId() {
-        return ULong.valueOf(requester().userId().value());
+    private UserId userId() {
+        return requester().userId();
     }
 
 }

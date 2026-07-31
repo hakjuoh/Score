@@ -17,7 +17,9 @@ import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryData;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatHistoryMessage;
@@ -68,10 +70,13 @@ class JooqAiChatConversationRepositoryTest {
     void ownershipAccessAlwaysScopesGuidByRequesterAndFailsClosed() {
         OwnershipProvider owned = new OwnershipProvider(true);
         JooqAiChatConversationAccess access = new JooqAiChatConversationAccess(
-                DSL.using(new MockConnection(owned), SQLDialect.MYSQL), ULong.valueOf(9));
+                DSL.using(new MockConnection(owned), SQLDialect.MYSQL),
+                new UserId(BigInteger.valueOf(9)));
 
-        assertThat(access.ownedId("conversation-1")).isEqualTo(ULong.valueOf(42));
-        assertThat(access.lockOwned("conversation-1")).isEqualTo(ULong.valueOf(42));
+        assertThat(access.ownedId("conversation-1"))
+                .isEqualTo(AiChatConversationId.from(42L));
+        assertThat(access.lockOwned("conversation-1"))
+                .isEqualTo(AiChatConversationId.from(42L));
         assertThat(owned.sql).hasSize(2).allSatisfy(sql ->
                 assertThat(sql).contains("where (`oagi`.`ai_chat_conversation`.`guid` = ?"
                         + " and `oagi`.`ai_chat_conversation`.`app_user_id` = ?)"));
@@ -83,7 +88,8 @@ class JooqAiChatConversationRepositoryTest {
 
         OwnershipProvider missing = new OwnershipProvider(false);
         JooqAiChatConversationAccess denied = new JooqAiChatConversationAccess(
-                DSL.using(new MockConnection(missing), SQLDialect.MYSQL), ULong.valueOf(9));
+                DSL.using(new MockConnection(missing), SQLDialect.MYSQL),
+                new UserId(BigInteger.valueOf(9)));
         assertThatThrownBy(() -> denied.ownedId("missing"))
                 .isInstanceOf(AccessDeniedException.class);
         assertThatThrownBy(() -> denied.lockOwned("missing"))
@@ -165,7 +171,8 @@ class JooqAiChatConversationRepositoryTest {
 
         AiChatStoredStep stored = repository.append("conversation-1", step);
 
-        assertThat(stored).isEqualTo(new AiChatStoredStep(77L, 5L, createdAt));
+        assertThat(stored).isEqualTo(
+                new AiChatStoredStep(AiChatStepId.from(77L), 5L, createdAt));
         assertThat(provider.sql).anyMatch(sql -> sql.contains("for update"));
         assertThat(provider.sql).anyMatch(sql -> sql.contains("max(")
                 && sql.contains("step_sequence"));
@@ -250,11 +257,11 @@ class JooqAiChatConversationRepositoryTest {
                 Instant.parse("2026-07-20T17:43:30Z"));
 
         assertThatThrownBy(() -> repository.updateObservation(
-                "conversation-1", 77L, Map.of("status", "done")))
+                "conversation-1", AiChatStepId.from(77L), Map.of("status", "done")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("trajectory step");
         assertThatThrownBy(() -> repository.updateModelCall(
-                "conversation-1", 77L, modelCall))
+                "conversation-1", AiChatStepId.from(77L), modelCall))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("model-call trajectory step");
         assertThat(provider.sql.stream()

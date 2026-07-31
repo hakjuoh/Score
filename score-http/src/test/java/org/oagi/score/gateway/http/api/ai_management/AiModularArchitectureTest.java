@@ -25,6 +25,12 @@ class AiModularArchitectureTest {
             "org.oagi.score.gateway.http.api.ai_management.tool.AiToolFailureMessage",
             "org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowIntent");
 
+    private static final Set<String> REPOSITORY_BACKED_CATALOG_SERVICES = Set.of(
+            "org.oagi.score.gateway.http.api.ai_management.catalog.service.AiDatabaseCatalogLoader",
+            "org.oagi.score.gateway.http.api.ai_management.catalog.service.AiModelCatalogAdminService",
+            "org.oagi.score.gateway.http.api.ai_management.catalog.service.AiModelCatalogService",
+            "org.oagi.score.gateway.http.api.ai_management.catalog.service.AiProviderCatalogService");
+
     private static final DescribedPredicate<JavaClass> PROTOCOL_NEUTRAL_TYPES =
             DescribedPredicate.describe("established protocol-neutral AI types", type -> {
                 String packageName = type.getPackageName();
@@ -35,6 +41,10 @@ class AiModularArchitectureTest {
                         || packageName.endsWith(".workflow");
                 return semanticPackage && !COMPATIBILITY_ADAPTERS.contains(topLevelName(type));
             });
+
+    private static final DescribedPredicate<JavaClass> CATALOG_SERVICES =
+            DescribedPredicate.describe("repository-backed catalog services",
+                    type -> REPOSITORY_BACKED_CATALOG_SERVICES.contains(topLevelName(type)));
 
     private static String topLevelName(JavaClass type) {
         int nestedType = type.getName().indexOf('$');
@@ -106,4 +116,11 @@ class AiModularArchitectureTest {
                             "org.oagi.score.gateway.http.api.ai_management.execution.AiChatExecutor")
                     .because("application services use AgentRunner and AgentIdentityProvider, "
                             + "never the provider execution adapter");
+
+    @ArchTest
+    static final ArchRule catalog_services_do_not_access_jooq_directly =
+            noClasses().that(CATALOG_SERVICES)
+                    .should().dependOnClassesThat().resideInAPackage("org.jooq..")
+                    .because("catalog services obtain persistence repositories from "
+                            + "RepositoryFactory");
 }

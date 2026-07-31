@@ -47,7 +47,7 @@ public class AiPolicyService {
                 ? active : active.stream()
                 .filter(model -> stored.allowedModels().contains(model.id())).toList();
         String defaultKey = stored.defaultModelId() != null
-                ? allowed.stream().filter(model -> model.id() == stored.defaultModelId())
+                ? allowed.stream().filter(model -> model.id().equals(stored.defaultModelId()))
                 .map(model -> model.descriptor().name()).findFirst().orElse(null) : null;
         if (defaultKey == null && allowed.stream().anyMatch(model ->
                 model.descriptor().name().equals(catalog.defaultModelKey()))) {

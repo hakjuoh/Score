@@ -2,12 +2,12 @@ package org.oagi.score.gateway.http.api.ai_management.repository.jooq;
 
 import org.jooq.DSLContext;
 import org.jooq.Record;
-import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatContextMessage;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationDetails;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationSummary;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatHistoryMessage;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatLatestUsage;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryData;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
@@ -54,10 +54,11 @@ final class JooqAiChatConversationQueries {
         return latestSettings(access.ownedId(conversationId));
     }
 
-    AiChatConversationSettings latestSettings(ULong internalConversationId) {
+    AiChatConversationSettings latestSettings(AiChatConversationId internalConversationId) {
         return dslContext.select(AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.REASONING_EFFORT)
                 .from(AI_CHAT_STEP)
-                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
+                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId))
                         .and(AI_CHAT_STEP.MESSAGE_KIND.eq("settings_change")))
                 .orderBy(AI_CHAT_STEP.STEP_SEQUENCE.desc())
                 .limit(1)
@@ -75,10 +76,11 @@ final class JooqAiChatConversationQueries {
         return latestActiveWorkflow(access.ownedId(conversationId));
     }
 
-    private Optional<String> latestActiveWorkflow(ULong internalConversationId) {
+    private Optional<String> latestActiveWorkflow(AiChatConversationId internalConversationId) {
         return dslContext.select(AI_CHAT_STEP.EXTRA_JSON)
                 .from(AI_CHAT_STEP)
-                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
+                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId))
                         .and(AI_CHAT_STEP.MESSAGE_KIND.eq("workflow_preference")))
                 .orderBy(AI_CHAT_STEP.STEP_SEQUENCE.desc())
                 .limit(1)
@@ -90,11 +92,12 @@ final class JooqAiChatConversationQueries {
     }
 
     Optional<AiChatLatestUsage> latestUsage(String conversationId) {
-        ULong internalConversationId = access.ownedId(conversationId);
+        AiChatConversationId internalConversationId = access.ownedId(conversationId);
         return dslContext.select(AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.METRICS_JSON,
                         AI_CHAT_STEP.CREATED_AT)
                 .from(AI_CHAT_STEP)
-                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
+                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId))
                         .and(AI_CHAT_STEP.METRICS_JSON.isNotNull())
                         .and(AI_CHAT_STEP.METRICS_JSON.notLike("%\"context_scope\"%")))
                 .orderBy(AI_CHAT_STEP.STEP_SEQUENCE.desc())
@@ -120,7 +123,7 @@ final class JooqAiChatConversationQueries {
                 .from(AI_CHAT_CONVERSATION)
                 .leftJoin(AI_CHAT_STEP).on(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
                         .eq(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID))
-                .where(AI_CHAT_CONVERSATION.APP_USER_ID.eq(access.userId())
+                .where(AI_CHAT_CONVERSATION.APP_USER_ID.eq(access.valueOf(access.userId()))
                         .and(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID.isNull()))
                 .groupBy(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID,
                         AI_CHAT_CONVERSATION.GUID, AI_CHAT_CONVERSATION.TITLE,
@@ -136,19 +139,24 @@ final class JooqAiChatConversationQueries {
     }
 
     ChatConversationDetails get(String conversationId) {
-        ULong internalConversationId = access.ownedId(conversationId);
+        AiChatConversationId internalConversationId = access.ownedId(conversationId);
         Header header = dslContext.select(AI_CHAT_CONVERSATION.TITLE,
                         AI_CHAT_CONVERSATION.UPDATED_AT)
                 .from(AI_CHAT_CONVERSATION)
-                .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
+                .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId)))
                 .fetchSingle(record -> new Header(record.get(AI_CHAT_CONVERSATION.TITLE),
                         instant(record.get(AI_CHAT_CONVERSATION.UPDATED_AT))));
         AiChatConversationSettings settings = latestSettings(internalConversationId);
         String permissionMode = latestPermissionMode(internalConversationId);
-        List<ULong> childIds = dslContext.select(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID)
+        List<AiChatConversationId> childIds = dslContext
+                .select(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID)
                 .from(AI_CHAT_CONVERSATION)
-                .where(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
-                .fetch(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+                .where(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId)))
+                .fetch(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID).stream()
+                .map(id -> new AiChatConversationId(id.toBigInteger()))
+                .toList();
         var visibleChildKinds = AI_CHAT_STEP.MESSAGE_KIND.in(
                 "agent_lifecycle", "tool_call", "tool_call_update", "guide",
                 "provider_error", "provider_retry");
@@ -160,9 +168,11 @@ final class JooqAiChatConversationQueries {
                         AI_CHAT_STEP.OBSERVATION_JSON, AI_CHAT_STEP.EXTRA_JSON,
                         AI_CHAT_STEP.CREATED_AT)
                 .from(AI_CHAT_STEP)
-                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
+                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId))
                         .or(childIds.isEmpty() ? org.jooq.impl.DSL.falseCondition()
-                                : AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.in(childIds)
+                                : AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.in(
+                                                childIds.stream().map(access::valueOf).toList())
                                         .and(visibleChildKinds)))
                 .orderBy(AI_CHAT_STEP.CREATED_AT.desc(), AI_CHAT_STEP.AI_CHAT_STEP_ID.desc())
                 .fetch(this::historyMessage);
@@ -179,24 +189,28 @@ final class JooqAiChatConversationQueries {
     }
 
     AiChatTrajectoryData getTrajectoryData(String conversationId) {
-        ULong internalConversationId = access.ownedId(conversationId);
+        AiChatConversationId internalConversationId = access.ownedId(conversationId);
         List<ChildTrajectoryHeader> childHeaders = dslContext.select(
                         AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID,
                         AI_CHAT_CONVERSATION.GUID, AI_CHAT_CONVERSATION.CONVERSATION_KIND,
                         AI_CHAT_CONVERSATION.AGENT_ID, AI_CHAT_CONVERSATION.PARENT_REQUEST_ID)
                 .from(AI_CHAT_CONVERSATION)
-                .where(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
+                .where(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId)))
                 .fetch(record -> new ChildTrajectoryHeader(
-                        record.get(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID),
+                        new AiChatConversationId(record.get(
+                                AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID).toBigInteger()),
                         record.get(AI_CHAT_CONVERSATION.GUID),
                         record.get(AI_CHAT_CONVERSATION.CONVERSATION_KIND),
                         record.get(AI_CHAT_CONVERSATION.AGENT_ID),
                         record.get(AI_CHAT_CONVERSATION.PARENT_REQUEST_ID)));
-        List<ULong> childIds = childHeaders.stream()
+        List<AiChatConversationId> childIds = childHeaders.stream()
                 .map(ChildTrajectoryHeader::internalId).toList();
-        var conversationScope = AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
+        var conversationScope = AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
+                .eq(access.valueOf(internalConversationId))
                 .or(childIds.isEmpty() ? org.jooq.impl.DSL.falseCondition()
-                        : AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.in(childIds));
+                        : AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.in(
+                                childIds.stream().map(access::valueOf).toList()));
         List<TrajectoryRow> rows = dslContext.select(
                         AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID,
                         AI_CHAT_STEP.STEP_SEQUENCE, AI_CHAT_STEP.REQUEST_ID, AI_CHAT_STEP.SOURCE,
@@ -301,7 +315,8 @@ final class JooqAiChatConversationQueries {
         String modelName = record.get(AI_CHAT_STEP.MODEL_NAME);
         String reasoningEffort = record.get(AI_CHAT_STEP.REASONING_EFFORT);
         validateStoredSettingsChange(messageKind, modelName, reasoningEffort);
-        return new TrajectoryRow(record.get(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID),
+        return new TrajectoryRow(new AiChatConversationId(
+                record.get(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID).toBigInteger()),
                 record.get(AI_CHAT_STEP.STEP_SEQUENCE), record.get(AI_CHAT_STEP.REQUEST_ID),
                 AiChatTrajectoryStep.normalizeSource(record.get(AI_CHAT_STEP.SOURCE)), messageKind,
                 AiChatTrajectoryStep.normalizeVisibility(record.get(AI_CHAT_STEP.VISIBILITY)),
@@ -326,10 +341,11 @@ final class JooqAiChatConversationQueries {
         }
     }
 
-    private String latestPermissionMode(ULong internalConversationId) {
+    private String latestPermissionMode(AiChatConversationId internalConversationId) {
         return dslContext.select(AI_CHAT_STEP.EXTRA_JSON)
                 .from(AI_CHAT_STEP)
-                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)
+                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId))
                         .and(AI_CHAT_STEP.MESSAGE_KIND.eq("user")))
                 .orderBy(AI_CHAT_STEP.STEP_SEQUENCE.desc())
                 .limit(1)
@@ -367,10 +383,11 @@ final class JooqAiChatConversationQueries {
 
     private record Header(String title, Instant updatedAt) { }
 
-    private record ChildTrajectoryHeader(ULong internalId, String guid, String conversationKind,
+    private record ChildTrajectoryHeader(AiChatConversationId internalId, String guid,
+                                         String conversationKind,
                                          String agentId, String parentRequestId) { }
 
-    private record TrajectoryRow(ULong conversationId, long sequence,
+    private record TrajectoryRow(AiChatConversationId conversationId, long sequence,
                                  String requestId, String source, String messageKind,
                                  String visibility, String message, String reasoningContent,
                                  String modelName, String reasoningEffort,

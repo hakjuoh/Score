@@ -2,10 +2,10 @@ package org.oagi.score.gateway.http.configuration.ai;
 
 import com.anthropic.models.messages.OutputConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.jooq.DSLContext;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
 import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiCatalogBootstrap;
 import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiDatabaseCatalogLoader;
+import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
 import org.springframework.ai.anthropic.AnthropicCacheOptions;
 import org.springframework.ai.anthropic.AnthropicCacheStrategy;
@@ -43,13 +43,14 @@ public class ScoreAiConfiguration {
     public Map<String, ChatModel> scoreAiChatModels(ScoreAiProperties properties,
                                                     AnthropicChatProperties anthropicProperties,
                                                     OpenAiChatProperties openAiProperties,
-                                                    DSLContext dsl,
+                                                    RepositoryFactory repositoryFactory,
                                                     ApplicationSecretService secrets,
                                                     ObjectMapper objectMapper,
                                                     ObjectProvider<AiCatalogBootstrap> bootstrap) {
         AiCatalogBootstrap initializer = bootstrap.getIfAvailable();
         if (initializer != null) initializer.bootstrapNow();
-        new AiDatabaseCatalogLoader(dsl, secrets, objectMapper).loadInto(properties);
+        new AiDatabaseCatalogLoader(repositoryFactory, secrets, objectMapper)
+                .loadInto(properties);
         try {
             return createChatModelsFromProperties(properties, anthropicProperties, openAiProperties);
         } finally {

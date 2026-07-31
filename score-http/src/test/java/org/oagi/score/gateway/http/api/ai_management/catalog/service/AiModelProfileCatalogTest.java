@@ -1,8 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.jooq.SQLDialect;
-import org.jooq.impl.DSL;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeFable5Profile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeHaiku45Profile;
@@ -29,8 +27,9 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.Tempe
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ThinkingModesModelProfile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.VerbosityModelProfile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelProfileSettingsResolver;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
-import org.oagi.score.gateway.http.api.ai_management.policy.service.AiAdminPolicyService;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -44,14 +43,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AiModelProfileCatalogTest {
-
-    @Test
-    void databaseLoaderPreservesANullTemperatureWhenNoProfileDefaultExists() {
-        assertThat(AiDatabaseCatalogLoader.decimal(null, null)).isNull();
-        assertThat(AiDatabaseCatalogLoader.decimal(null, 0.7)).isEqualTo(0.7);
-        assertThat(AiDatabaseCatalogLoader.decimal(
-                java.math.BigDecimal.valueOf(0.3), 0.7)).isEqualTo(0.3);
-    }
 
     @Test
     void exposesEachSupportedModelThroughItsOwnProfileClass() {
@@ -330,52 +321,41 @@ class AiModelProfileCatalogTest {
     }
 
     @Test
-    void mapsEditableSettingsWithinProfileLimitsIntoTheSharedPersistenceRecord() {
-        var service = new AiModelCatalogAdminService(DSL.using(SQLDialect.MARIADB),
-                mock(AiAdminPolicyService.class), new ObjectMapper());
+    void resolvesEditableSettingsWithinProfileLimitsForPersistence() {
         var profile = new ClaudeHaiku45Profile();
-        var update = new AiModelCatalogUpdate(null, 1L, profile.getModelKey(),
+        var update = new AiModelCatalogUpdate(null, AiProviderId.from(1L), profile.getModelKey(),
                 true, false, 0, 32_000, 100_000L, 32_000L, 60_000L,
                 4_096L, 16_000L, false, null, 2_048, false,
                 null, "conversation-history", null, false, null, false,
                 java.util.List.of("disabled"), "disabled", java.util.List.of());
 
         AiModelProfileSettingsValidator.validate(profile, update);
-        var record = service.configurationRecord(
-                DSL.using(SQLDialect.MARIADB), profile, update);
+        var settings = AiModelProfileSettingsResolver.resolve(profile, update);
 
-        assertThat(record.getProviderModelName()).isEqualTo("claude-haiku-4-5");
-        assertThat(record.getDisplayName()).isEqualTo("Claude Haiku 4.5");
-        assertThat(record.getContextWindow().longValue()).isEqualTo(100_000L);
-        assertThat(record.getMaxTokens().intValue()).isEqualTo(32_000);
-        assertThat(record.getOutputReserveTokens().longValue()).isEqualTo(32_000L);
-        assertThat(record.getAutoCompactThresholdTokens().longValue()).isEqualTo(60_000L);
-        assertThat(record.getThinkingBudgetTokens().intValue()).isEqualTo(2_048);
-        assertThat(record.getAdaptiveThinking()).isZero();
-        assertThat(record.getOutputEffort()).isNull();
-        assertThat(record.getThinkingModesJson()).isEqualTo("[\"disabled\"]");
-        assertThat(record.getDefaultThinking()).isEqualTo("disabled");
+        assertThat(settings.contextWindow()).isEqualTo(100_000L);
+        assertThat(settings.maxTokens()).isEqualTo(32_000);
+        assertThat(settings.outputReserveTokens()).isEqualTo(32_000L);
+        assertThat(settings.autoCompactThresholdTokens()).isEqualTo(60_000L);
+        assertThat(settings.thinkingBudgetTokens()).isEqualTo(2_048);
+        assertThat(settings.adaptiveThinking()).isFalse();
     }
 
     @Test
     void normalizesOptionalNullSettingsToProfileDefaultsBeforePersistence() {
-        var service = new AiModelCatalogAdminService(DSL.using(SQLDialect.MARIADB),
-                mock(AiAdminPolicyService.class), new ObjectMapper());
         var profile = new ClaudeHaiku45Profile();
-        var update = new AiModelCatalogUpdate(null, 1L, profile.getModelKey(),
+        var update = new AiModelCatalogUpdate(null, AiProviderId.from(1L), profile.getModelKey(),
                 true, false, 0, null, 200_000L, null, null,
                 8_192L, 32_000L, false, null, null, false,
                 null, "conversation-history", null, false, null, false,
                 java.util.List.of("enabled", "disabled"), "enabled", java.util.List.of());
 
         AiModelProfileSettingsValidator.validate(profile, update);
-        var record = service.configurationRecord(
-                DSL.using(SQLDialect.MARIADB), profile, update);
+        var settings = AiModelProfileSettingsResolver.resolve(profile, update);
 
-        assertThat(record.getMaxTokens().intValue()).isEqualTo(64_000);
-        assertThat(record.getOutputReserveTokens().longValue()).isEqualTo(64_000L);
-        assertThat(record.getAutoCompactThresholdTokens().longValue()).isEqualTo(120_000L);
-        assertThat(record.getThinkingBudgetTokens().intValue()).isEqualTo(4_096);
+        assertThat(settings.maxTokens()).isEqualTo(64_000);
+        assertThat(settings.outputReserveTokens()).isEqualTo(64_000L);
+        assertThat(settings.autoCompactThresholdTokens()).isEqualTo(120_000L);
+        assertThat(settings.thinkingBudgetTokens()).isEqualTo(4_096);
     }
 
     private static Set<String> fieldNames(com.fasterxml.jackson.databind.JsonNode node) {

@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.tool;
 
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingTool;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -28,7 +29,8 @@ public final class AiToolRetryTracker {
             return Optional.empty();
         }
         FailedAttempt retryOf = failures.stream()
-                .filter(failure -> failure.modelStepId() != tool.observations().stepId())
+                .filter(failure -> !Objects.equals(
+                        failure.modelStepId(), tool.observations().stepId()))
                 .findFirst()
                 .orElse(null);
         if (retryOf == null) {
@@ -45,7 +47,7 @@ public final class AiToolRetryTracker {
                 !Objects.equals(retryOf.arguments(), tool.arguments())));
     }
 
-    private record FailedAttempt(long modelStepId, Object arguments) {
+    private record FailedAttempt(AiChatStepId modelStepId, Object arguments) {
     }
 
     public record RetryNotice(String toolName, boolean argumentsCorrected) {

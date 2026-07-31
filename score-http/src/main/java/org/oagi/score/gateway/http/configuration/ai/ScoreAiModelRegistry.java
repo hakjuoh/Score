@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -311,7 +312,8 @@ public class ScoreAiModelRegistry {
 
     public record ReasoningEffortDescriptor(String name, String displayName, String description) {}
 
-    public record ModelConfiguration(Long catalogId, String name, String model, String providerType,
+    public record ModelConfiguration(AiModelId catalogId, String name, String model,
+                               String providerType,
                                Integer maxTokens, Double temperature,
                                Integer thinkingBudgetTokens, boolean adaptiveThinking,
                                String outputEffort, String cacheStrategy,

@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.service;
 
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelProfileSettingsResolver;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.CapabilityConstraint;

@@ -5,13 +5,13 @@ import org.jooq.SelectConditionStep;
 import org.jooq.Record1;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.model.AiOwnedEntityId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiOwnedEntityKind;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChangeOwnershipQueryRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 
-import java.math.BigInteger;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -70,101 +70,102 @@ public class JooqAiChangeOwnershipQueryRepository extends JooqBaseRepository
     }
 
     @Override
-    public Optional<UserId> findOwner(AiOwnedEntityKind kind, BigInteger id) {
-        if (kind == null || id == null || id.signum() <= 0) {
+    public Optional<UserId> findOwner(AiOwnedEntityKind kind, AiOwnedEntityId id) {
+        if (kind == null || id == null || id.value() == null || id.value().signum() <= 0) {
             return Optional.empty();
         }
-        return owner(kind, ULong.valueOf(id)).fetchOptional()
+        return owner(kind, id).fetchOptional()
                 .map(Record1::value1)
                 .map(ULong::toBigInteger)
                 .map(UserId::new);
     }
 
-    private SelectConditionStep<Record1<ULong>> owner(AiOwnedEntityKind kind, ULong id) {
+    private SelectConditionStep<Record1<ULong>> owner(
+            AiOwnedEntityKind kind, AiOwnedEntityId id) {
         return switch (kind) {
             case TOP_LEVEL_ASBIEP -> dslContext().select(TOP_LEVEL_ASBIEP.OWNER_USER_ID)
                     .from(TOP_LEVEL_ASBIEP)
-                    .where(TOP_LEVEL_ASBIEP.TOP_LEVEL_ASBIEP_ID.eq(id));
+                    .where(TOP_LEVEL_ASBIEP.TOP_LEVEL_ASBIEP_ID.eq(valueOf(id)));
             case ABIE -> dslContext().select(TOP_LEVEL_ASBIEP.OWNER_USER_ID)
                     .from(ABIE)
                     .join(TOP_LEVEL_ASBIEP)
                     .on(TOP_LEVEL_ASBIEP.TOP_LEVEL_ASBIEP_ID.eq(ABIE.OWNER_TOP_LEVEL_ASBIEP_ID))
-                    .where(ABIE.ABIE_ID.eq(id));
+                    .where(ABIE.ABIE_ID.eq(valueOf(id)));
             case ASBIE -> dslContext().select(TOP_LEVEL_ASBIEP.OWNER_USER_ID)
                     .from(ASBIE)
                     .join(TOP_LEVEL_ASBIEP)
                     .on(TOP_LEVEL_ASBIEP.TOP_LEVEL_ASBIEP_ID.eq(ASBIE.OWNER_TOP_LEVEL_ASBIEP_ID))
-                    .where(ASBIE.ASBIE_ID.eq(id));
+                    .where(ASBIE.ASBIE_ID.eq(valueOf(id)));
             case BBIE -> dslContext().select(TOP_LEVEL_ASBIEP.OWNER_USER_ID)
                     .from(BBIE)
                     .join(TOP_LEVEL_ASBIEP)
                     .on(TOP_LEVEL_ASBIEP.TOP_LEVEL_ASBIEP_ID.eq(BBIE.OWNER_TOP_LEVEL_ASBIEP_ID))
-                    .where(BBIE.BBIE_ID.eq(id));
+                    .where(BBIE.BBIE_ID.eq(valueOf(id)));
             case BBIE_SC -> dslContext().select(TOP_LEVEL_ASBIEP.OWNER_USER_ID)
                     .from(BBIE_SC)
                     .join(TOP_LEVEL_ASBIEP)
                     .on(TOP_LEVEL_ASBIEP.TOP_LEVEL_ASBIEP_ID.eq(BBIE_SC.OWNER_TOP_LEVEL_ASBIEP_ID))
-                    .where(BBIE_SC.BBIE_SC_ID.eq(id));
+                    .where(BBIE_SC.BBIE_SC_ID.eq(valueOf(id)));
             case ACC_MANIFEST -> dslContext().select(ACC.OWNER_USER_ID)
                     .from(ACC_MANIFEST)
                     .join(ACC).on(ACC.ACC_ID.eq(ACC_MANIFEST.ACC_ID))
-                    .where(ACC_MANIFEST.ACC_MANIFEST_ID.eq(id));
+                    .where(ACC_MANIFEST.ACC_MANIFEST_ID.eq(valueOf(id)));
             case ASCCP_MANIFEST -> dslContext().select(ASCCP.OWNER_USER_ID)
                     .from(ASCCP_MANIFEST)
                     .join(ASCCP).on(ASCCP.ASCCP_ID.eq(ASCCP_MANIFEST.ASCCP_ID))
-                    .where(ASCCP_MANIFEST.ASCCP_MANIFEST_ID.eq(id));
+                    .where(ASCCP_MANIFEST.ASCCP_MANIFEST_ID.eq(valueOf(id)));
             case BCCP_MANIFEST -> dslContext().select(BCCP.OWNER_USER_ID)
                     .from(BCCP_MANIFEST)
                     .join(BCCP).on(BCCP.BCCP_ID.eq(BCCP_MANIFEST.BCCP_ID))
-                    .where(BCCP_MANIFEST.BCCP_MANIFEST_ID.eq(id));
+                    .where(BCCP_MANIFEST.BCCP_MANIFEST_ID.eq(valueOf(id)));
             case ASCC_MANIFEST -> dslContext().select(ASCC.OWNER_USER_ID)
                     .from(ASCC_MANIFEST)
                     .join(ASCC).on(ASCC.ASCC_ID.eq(ASCC_MANIFEST.ASCC_ID))
-                    .where(ASCC_MANIFEST.ASCC_MANIFEST_ID.eq(id));
+                    .where(ASCC_MANIFEST.ASCC_MANIFEST_ID.eq(valueOf(id)));
             case BCC_MANIFEST -> dslContext().select(BCC.OWNER_USER_ID)
                     .from(BCC_MANIFEST)
                     .join(BCC).on(BCC.BCC_ID.eq(BCC_MANIFEST.BCC_ID))
-                    .where(BCC_MANIFEST.BCC_MANIFEST_ID.eq(id));
+                    .where(BCC_MANIFEST.BCC_MANIFEST_ID.eq(valueOf(id)));
             case DT_MANIFEST -> dslContext().select(DT.OWNER_USER_ID)
                     .from(DT_MANIFEST)
                     .join(DT).on(DT.DT_ID.eq(DT_MANIFEST.DT_ID))
-                    .where(DT_MANIFEST.DT_MANIFEST_ID.eq(id));
+                    .where(DT_MANIFEST.DT_MANIFEST_ID.eq(valueOf(id)));
             case DT_SC_MANIFEST -> dslContext().select(DT_SC.OWNER_USER_ID)
                     .from(DT_SC_MANIFEST)
                     .join(DT_SC).on(DT_SC.DT_SC_ID.eq(DT_SC_MANIFEST.DT_SC_ID))
-                    .where(DT_SC_MANIFEST.DT_SC_MANIFEST_ID.eq(id));
+                    .where(DT_SC_MANIFEST.DT_SC_MANIFEST_ID.eq(valueOf(id)));
             case CODE_LIST_MANIFEST -> dslContext().select(CODE_LIST.OWNER_USER_ID)
                     .from(CODE_LIST_MANIFEST)
                     .join(CODE_LIST).on(CODE_LIST.CODE_LIST_ID.eq(CODE_LIST_MANIFEST.CODE_LIST_ID))
-                    .where(CODE_LIST_MANIFEST.CODE_LIST_MANIFEST_ID.eq(id));
+                    .where(CODE_LIST_MANIFEST.CODE_LIST_MANIFEST_ID.eq(valueOf(id)));
             case CODE_LIST_VALUE_MANIFEST -> dslContext().select(CODE_LIST_VALUE.OWNER_USER_ID)
                     .from(CODE_LIST_VALUE_MANIFEST)
                     .join(CODE_LIST_VALUE).on(CODE_LIST_VALUE.CODE_LIST_VALUE_ID
                             .eq(CODE_LIST_VALUE_MANIFEST.CODE_LIST_VALUE_ID))
-                    .where(CODE_LIST_VALUE_MANIFEST.CODE_LIST_VALUE_MANIFEST_ID.eq(id));
+                    .where(CODE_LIST_VALUE_MANIFEST.CODE_LIST_VALUE_MANIFEST_ID.eq(valueOf(id)));
             case BIZ_CTX -> dslContext().select(BIZ_CTX.CREATED_BY)
                     .from(BIZ_CTX)
-                    .where(BIZ_CTX.BIZ_CTX_ID.eq(id));
+                    .where(BIZ_CTX.BIZ_CTX_ID.eq(valueOf(id)));
             case BIZ_CTX_VALUE -> dslContext().select(BIZ_CTX.CREATED_BY)
                     .from(BIZ_CTX_VALUE)
                     .join(BIZ_CTX).on(BIZ_CTX.BIZ_CTX_ID.eq(BIZ_CTX_VALUE.BIZ_CTX_ID))
-                    .where(BIZ_CTX_VALUE.BIZ_CTX_VALUE_ID.eq(id));
+                    .where(BIZ_CTX_VALUE.BIZ_CTX_VALUE_ID.eq(valueOf(id)));
             case CTX_CATEGORY -> dslContext().select(CTX_CATEGORY.CREATED_BY)
                     .from(CTX_CATEGORY)
-                    .where(CTX_CATEGORY.CTX_CATEGORY_ID.eq(id));
+                    .where(CTX_CATEGORY.CTX_CATEGORY_ID.eq(valueOf(id)));
             case CTX_SCHEME -> dslContext().select(CTX_SCHEME.CREATED_BY)
                     .from(CTX_SCHEME)
-                    .where(CTX_SCHEME.CTX_SCHEME_ID.eq(id));
+                    .where(CTX_SCHEME.CTX_SCHEME_ID.eq(valueOf(id)));
             case CTX_SCHEME_VALUE -> dslContext().select(CTX_SCHEME.CREATED_BY)
                     .from(CTX_SCHEME_VALUE)
                     .join(CTX_SCHEME).on(CTX_SCHEME.CTX_SCHEME_ID.eq(CTX_SCHEME_VALUE.OWNER_CTX_SCHEME_ID))
-                    .where(CTX_SCHEME_VALUE.CTX_SCHEME_VALUE_ID.eq(id));
+                    .where(CTX_SCHEME_VALUE.CTX_SCHEME_VALUE_ID.eq(valueOf(id)));
             case NAMESPACE -> dslContext().select(NAMESPACE.OWNER_USER_ID)
                     .from(NAMESPACE)
-                    .where(NAMESPACE.NAMESPACE_ID.eq(id));
+                    .where(NAMESPACE.NAMESPACE_ID.eq(valueOf(id)));
             case LIBRARY -> dslContext().select(LIBRARY.CREATED_BY)
                     .from(LIBRARY)
-                    .where(LIBRARY.LIBRARY_ID.eq(id));
+                    .where(LIBRARY.LIBRARY_ID.eq(valueOf(id)));
         };
     }
 

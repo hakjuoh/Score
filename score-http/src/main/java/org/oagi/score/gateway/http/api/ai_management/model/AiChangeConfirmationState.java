@@ -23,7 +23,7 @@ import java.util.Set;
  * @param grantDigest digest of the active one-time grant
  */
 public record AiChangeConfirmationState(
-        long id,
+        AiChangeConfirmationId id,
         String guid,
         String requestId,
         String status,

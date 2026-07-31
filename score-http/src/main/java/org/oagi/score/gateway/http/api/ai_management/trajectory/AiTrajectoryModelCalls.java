@@ -7,6 +7,7 @@ import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventIde
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
@@ -137,13 +138,14 @@ final class AiTrajectoryModelCalls {
                         requestId, "agent", "model_call", "debug", "", null,
                         modelName, reasoningEffort, null, null, null, extra, 1, null, null),
                 modelEvent("started", normalizedPhase), false);
-        return new AiTrajectoryRecorder.ModelCallRecording(stored != null ? stored.id() : -1L,
+        return new AiTrajectoryRecorder.ModelCallRecording(
+                stored != null ? stored.id() : AiChatStepId.NONE,
                 normalizedPhase, legacy(eventWriter.lastIdentity()));
     }
 
     AiTrajectoryRecorder.ExecutionEventIdentity recordLegacy(ChatResponse response, String phase,
                                                               boolean streaming) {
-        return record(new AiTrajectoryRecorder.ModelCallRecording(-1L,
+        return record(new AiTrajectoryRecorder.ModelCallRecording(AiChatStepId.NONE,
                 StringUtils.hasText(phase) ? phase : "model", null), response, streaming);
     }
 
@@ -171,14 +173,15 @@ final class AiTrajectoryModelCalls {
                 extra, 1, null, null);
         AiChatStoredStep legacyStored = null;
         AiTrajectoryRecorder.ExecutionEventIdentity completion;
-        if (activeCall.stepId() > 0) {
+        if (activeCall.stepId().isPersisted()) {
             completion = complete(activeCall, completed, "completed");
         } else {
             legacyStored = eventWriter.persist(completed, modelEvent("completed", phase), false);
             completion = legacy(eventWriter.lastIdentity());
         }
-        long observationStepId = activeCall.stepId() > 0
-                ? activeCall.stepId() : legacyStored != null ? legacyStored.id() : 0L;
+        AiChatStepId observationStepId = activeCall.stepId().isPersisted()
+                ? activeCall.stepId()
+                : legacyStored != null ? legacyStored.id() : AiChatStepId.NONE;
         enqueueTools(content.toolCalls(), new AiObservationAccumulator(
                 observationStepId, content.toolCalls()));
         recordUsage(metricsSnapshot);
@@ -192,7 +195,7 @@ final class AiTrajectoryModelCalls {
 
     AiTrajectoryRecorder.ExecutionEventIdentity fail(
             AiTrajectoryRecorder.ModelCallRecording call, Throwable failure) {
-        if (call == null || call.stepId() <= 0 || sealed.getAsBoolean()) return null;
+        if (call == null || !call.stepId().isPersisted() || sealed.getAsBoolean()) return null;
         Map<String, Object> extra = eventWriter.traceMetadata(Map.of(
                 "phase", call.phase(), "status", "failed",
                 "failure_type", failure != null ? failure.getClass().getName() : "unknown"));
@@ -220,7 +223,7 @@ final class AiTrajectoryModelCalls {
     private AiTrajectoryRecorder.ExecutionEventIdentity complete(
             AiTrajectoryRecorder.ModelCallRecording call, AiChatTrajectoryStep step,
             String outcome) {
-        if (call.stepId() <= 0) return null;
+        if (!call.stepId().isPersisted()) return null;
         if (executionScope == null) {
             repository.updateModelCall(conversationId, call.stepId(), step);
             return null;

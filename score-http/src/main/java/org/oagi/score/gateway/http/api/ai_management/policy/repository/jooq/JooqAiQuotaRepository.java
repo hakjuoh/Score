@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.policy.repository.jooq;
 import org.jooq.DSLContext;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiQuotaExceededException;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiCallReservation;
@@ -31,7 +32,7 @@ public class JooqAiQuotaRepository {
     }
 
     public AiCallReservation reserve(UUID callId, String requestId, UserId userId,
-                                     long modelId, String conversationId,
+                                     AiModelId modelId, String conversationId,
                                      String executionKind, String agentId,
                                      long estimatedInputTokens, int requestedMaxOutput,
                                      boolean enforceOutputLimit, Long requestLimit,
@@ -89,7 +90,7 @@ public class JooqAiQuotaRepository {
                     .set(AI_TOKEN_USAGE_LEDGER.REQUEST_ID, requestId)
                     .set(AI_TOKEN_USAGE_LEDGER.CONVERSATION_GUID, conversationId)
                     .set(AI_TOKEN_USAGE_LEDGER.APP_USER_ID, owner)
-                    .set(AI_TOKEN_USAGE_LEDGER.AI_MODEL_ID, ULong.valueOf(modelId))
+                    .set(AI_TOKEN_USAGE_LEDGER.AI_MODEL_ID, ULong.valueOf(modelId.value()))
                     .set(AI_TOKEN_USAGE_LEDGER.EXECUTION_KIND, executionKind)
                     .set(AI_TOKEN_USAGE_LEDGER.AGENT_ID, agentId)
                     .set(AI_TOKEN_USAGE_LEDGER.RESERVED_TOKENS, ULong.valueOf(reserved))

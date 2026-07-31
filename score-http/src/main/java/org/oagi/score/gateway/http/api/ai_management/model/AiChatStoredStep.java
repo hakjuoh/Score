@@ -9,5 +9,5 @@ import java.time.Instant;
  * @param sequence zero-based sequence within the conversation
  * @param createdAt persistence timestamp
  */
-public record AiChatStoredStep(long id, long sequence, Instant createdAt) {
+public record AiChatStoredStep(AiChatStepId id, long sequence, Instant createdAt) {
 }

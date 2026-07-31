@@ -41,7 +41,8 @@ class AiCatalogSecretAvailabilityTest {
         when(secrets.isEncryptionConfigured()).thenReturn(false);
         ScoreAiProperties properties = new ScoreAiProperties();
 
-        new AiDatabaseCatalogLoader(dsl, secrets, new ObjectMapper()).loadInto(properties);
+        new AiDatabaseCatalogLoader(new RepositoryFactory(dsl), secrets, new ObjectMapper())
+                .loadInto(properties);
 
         verify(secrets, never()).decrypt(dsl, ULong.valueOf(99));
         assertThat(properties.getProviders()).isEmpty();

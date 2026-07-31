@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
@@ -123,7 +124,7 @@ class TrajectoryRecordingAdvisorTest {
     void doesNotPublishIncompleteAnthropicPromptTokensAfterStreamAggregation() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(1L), 1L, Instant.now()));
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
                 repository, new ObjectMapper(), mock(ScoreUser.class),
                 "conversation-1", "request-1", "claude-fable-5", "high",
@@ -144,7 +145,8 @@ class TrajectoryRecordingAdvisorTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> step =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository).updateModelCall(eq("conversation-1"), eq(1L), step.capture());
+        verify(repository).updateModelCall(
+                eq("conversation-1"), eq(AiChatStepId.from(1L)), step.capture());
         assertThat(step.getValue().metrics())
                 .doesNotContainKey("prompt_tokens")
                 .containsEntry("provider_reported_prompt_tokens", 2L)

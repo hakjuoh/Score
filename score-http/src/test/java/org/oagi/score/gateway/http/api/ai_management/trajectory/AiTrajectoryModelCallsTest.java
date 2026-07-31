@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
@@ -43,12 +44,12 @@ class AiTrajectoryModelCallsTest {
     void startedCallPersistsItsNormalizedPhaseAndStoredCorrelation() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 1L, Instant.now()));
         Fixture fixture = fixture(repository, false, false, Map.of());
 
         AiTrajectoryRecorder.ModelCallRecording recording = fixture.calls.begin("  ");
 
-        assertThat(recording.stepId()).isEqualTo(42L);
+        assertThat(recording.stepId()).isEqualTo(AiChatStepId.from(42L));
         assertThat(recording.phase()).isEqualTo("model");
         var step = org.mockito.ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
         verify(repository).append(eq("conversation-1"), step.capture());

@@ -11,7 +11,9 @@ import org.jooq.tools.jdbc.MockDataProvider;
 import org.jooq.tools.jdbc.MockResult;
 import org.jooq.types.ULong;
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.policy.service.AiAdminPolicyService;
+import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
@@ -26,14 +28,14 @@ class AiProviderModelProfileServiceTest {
 
     @Test
     void authorizesAndMapsAnthropicAndOpenAiAliasesToProfiles() {
-        assertThat(service("anthropic").modelProfiles(actor(), 1))
+        assertThat(service("anthropic").modelProfiles(actor(), AiProviderId.from(1L)))
                 .extracting(profile -> profile.modelKey())
                 .containsExactly("claude-fable-5", "claude-opus-5",
                         "claude-sonnet-5", "claude-haiku-4_5");
-        assertThat(service("openai").modelProfiles(actor(), 1))
+        assertThat(service("openai").modelProfiles(actor(), AiProviderId.from(1L)))
                 .extracting(profile -> profile.modelKey())
                 .containsExactly("gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna");
-        assertThat(service("azure-openai").modelProfiles(actor(), 1))
+        assertThat(service("azure-openai").modelProfiles(actor(), AiProviderId.from(1L)))
                 .extracting(profile -> profile.modelKey())
                 .containsExactly("gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna");
     }
@@ -44,7 +46,7 @@ class AiProviderModelProfileServiceTest {
         ScoreUser actor = actor();
         AiProviderCatalogService service = service(null, authorization);
 
-        assertThatThrownBy(() -> service.modelProfiles(actor, 99))
+        assertThatThrownBy(() -> service.modelProfiles(actor, AiProviderId.from(99L)))
                 .isInstanceOf(NotFoundException.class);
         verify(authorization).requireAdministrator(actor);
     }
@@ -56,7 +58,8 @@ class AiProviderModelProfileServiceTest {
     private AiProviderCatalogService service(String providerType,
                                               AiAdminPolicyService authorization) {
         DSLContext dsl = DSL.using(new MockConnection(provider(providerType)), SQLDialect.MARIADB);
-        return new AiProviderCatalogService(dsl, mock(ApplicationSecretService.class),
+        return new AiProviderCatalogService(new RepositoryFactory(dsl),
+                mock(ApplicationSecretService.class),
                 authorization, new ObjectMapper(), mock(AiProviderConnectionTester.class));
     }
 

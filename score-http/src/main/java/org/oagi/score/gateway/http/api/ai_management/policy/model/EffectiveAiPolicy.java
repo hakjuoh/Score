@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.policy.model;
 
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiCatalogModel;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
@@ -28,7 +29,7 @@ public record EffectiveAiPolicy(
         AiQuotaPeriod quotaPeriod,
         Long quotaTokens,
         long policyVersion,
-        Map<Long, Set<String>> allowedReasoningEfforts) {
+        Map<AiModelId, Set<String>> allowedReasoningEfforts) {
 
     public EffectiveAiPolicy {
         availableModels = availableModels != null ? List.copyOf(availableModels) : List.of();

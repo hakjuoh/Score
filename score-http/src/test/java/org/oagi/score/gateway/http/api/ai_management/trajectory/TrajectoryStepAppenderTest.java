@@ -7,6 +7,7 @@ import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPub
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -36,7 +37,7 @@ class TrajectoryStepAppenderTest {
         when(repository.append(eq("conversation-1"), any()))
                 .thenAnswer(ignored -> {
                     writeCompleted.set(true);
-                    return new AiChatStoredStep(1L, 1L, Instant.now());
+                    return new AiChatStoredStep(AiChatStepId.from(1L), 1L, Instant.now());
                 });
         AtomicReference<ExecutionObservation> observed = new AtomicReference<>();
         ExecutionEventPublisher publisher = ExecutionEventPublisher.forListeners(
@@ -88,7 +89,7 @@ class TrajectoryStepAppenderTest {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
                 .thenThrow(new IllegalStateException("write failed"))
-                .thenReturn(new AiChatStoredStep(2L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(2L), 1L, Instant.now()));
         AtomicReference<ExecutionObservation> observed = new AtomicReference<>();
         TrajectoryStepAppender appender = new TrajectoryStepAppender(
                 ExecutionEventPublisher.forListeners(List.of(observed::set)));
@@ -109,7 +110,7 @@ class TrajectoryStepAppenderTest {
     void propagatesCompletionFailureOnlyAfterTheDurableWrite() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(1L), 1L, Instant.now()));
         TrajectoryStepAppender appender = new TrajectoryStepAppender(ExecutionObserver.noop());
 
         assertThatThrownBy(() -> appender.append(command(repository, requester(),

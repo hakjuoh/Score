@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiOwnedEntityKind;
+import org.oagi.score.gateway.http.api.ai_management.model.AiOwnedEntityId;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChangeOwnershipQueryRepository;
 import org.oagi.score.gateway.http.common.model.ScoreRole;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -116,11 +117,11 @@ class AiChangeOwnershipServiceTest {
         private RuntimeException failure;
 
         @Override
-        public Optional<UserId> findOwner(AiOwnedEntityKind kind, BigInteger id) {
+        public Optional<UserId> findOwner(AiOwnedEntityKind kind, AiOwnedEntityId id) {
             if (failure != null) {
                 throw failure;
             }
-            lookups.add(kind + " " + id);
+            lookups.add(kind + " " + id.value());
             return owner;
         }
     }

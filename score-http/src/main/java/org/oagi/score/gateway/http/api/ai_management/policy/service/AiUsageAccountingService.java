@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.policy.service;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiCallReservation;
@@ -71,9 +72,9 @@ public class AiUsageAccountingService {
                         "The AI model is missing from the usage catalog."));
         ScoreAiModelRegistry.ModelConfiguration configuration = models.modelConfiguration(
                 request.modelName(), scope.requestId());
-        long modelId = configuration.catalogId() != null
+        AiModelId modelId = configuration.catalogId() != null
                 ? configuration.catalogId() : policyModel.id();
-        if (modelId <= 0) {
+        if (modelId == null || modelId.value() == null || modelId.value().signum() <= 0) {
             throw new AiPolicyViolationException(AiPolicyErrorCode.AI_PROVIDER_NOT_CONFIGURED,
                     "The AI model catalog has not been initialized.");
         }
