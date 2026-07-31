@@ -45,4 +45,16 @@ describe('AiPolicyUserListComponent', () => {
     component.inheritanceFilter = 'CUSTOM'; component.multiAgentFilter = 'DISABLED';
     expect(component.filteredUsers.map(item => item.userId)).toEqual(['bob']);
   });
+
+  it('updates and resets visible table columns', () => {
+    TestBed.configureTestingModule({providers: [{provide: AiAdminPolicyService, useValue: {users: () => of([])}}]});
+    const component = TestBed.runInInjectionContext(() => new AiPolicyUserListComponent());
+    component.onColumnsChange(component.columns.map(column => ({
+      ...column, selected: column.name !== 'Organization'
+    })));
+    expect(component.displayedColumns).not.toContain('organization');
+    expect(component.displayedColumns).toContain('actions');
+    component.onColumnsReset();
+    expect(component.displayedColumns).toContain('organization');
+  });
 });

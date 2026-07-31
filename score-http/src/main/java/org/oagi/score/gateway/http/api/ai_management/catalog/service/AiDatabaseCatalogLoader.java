@@ -39,6 +39,7 @@ public final class AiDatabaseCatalogLoader {
                 .orderBy(AI_PROVIDER.AI_PROVIDER_ID).fetch()) {
             ULong secretId = row.get(AI_PROVIDER.API_KEY_SECRET_ID);
             if (secretId == null) continue;
+            if (!secrets.isEncryptionConfigured()) continue;
             char[] plaintext = secrets.decrypt(dsl, secretId);
             try {
                 ScoreAiProperties.Provider provider = new ScoreAiProperties.Provider();

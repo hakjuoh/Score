@@ -126,6 +126,10 @@
           @if (isTenantEnabled) {
             <button mat-menu-item routerLink="tenant">Tenant</button>
           }
+          <mat-divider></mat-divider>
+          <button mat-menu-item routerLink="ai-admin/providers">View/Edit AI Model Provider</button>
+          <button mat-menu-item routerLink="ai-admin/models">View/Edit AI Model Catalog</button>
+          <button mat-menu-item routerLink="ai-admin/users">View/Edit AI Assistant Policy</button>
         </ng-template>
       </mat-menu>
     }
@@ -343,6 +347,10 @@
               @if (isTenantEnabled) {
                 <button mat-button class="drawer-item" routerLink="tenant" (click)="closeDrawer()">Tenant</button>
               }
+              <mat-divider></mat-divider>
+              <button mat-button class="drawer-item" routerLink="ai-admin/providers" (click)="closeDrawer()">View/Edit AI Model Provider</button>
+              <button mat-button class="drawer-item" routerLink="ai-admin/models" (click)="closeDrawer()">View/Edit AI Model Catalog</button>
+              <button mat-button class="drawer-item" routerLink="ai-admin/users" (click)="closeDrawer()">View/Edit AI Assistant Policy</button>
             </div>
           </mat-expansion-panel>
         }
