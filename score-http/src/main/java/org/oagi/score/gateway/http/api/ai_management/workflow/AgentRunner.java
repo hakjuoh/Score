@@ -15,7 +15,6 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentRunResult;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentResponseContext;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentSession;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentToolBinding;
-import org.oagi.score.gateway.http.api.ai_management.agent.AgentToolPolicy;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentWorkflowContext;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
 import org.oagi.score.gateway.http.api.ai_management.agent.AgentInstructions;
@@ -266,7 +265,8 @@ public final class AgentRunner implements AgentIdentityProvider {
                 AgentRunRequest guarded = policies.applyInput(agent, current, attempt);
                 if (resolvedBinding == null) resolvedBinding = ownedTools(agent, current);
                 AgentToolBinding attemptBinding = executionBinding(guarded, resolvedBinding);
-                ToolActivity toolActivityBefore = toolActivity(current, guarded);
+                AgentRetrySafety.Activity toolActivityBefore =
+                        AgentRetrySafety.snapshot(current, guarded);
                 current.checkpoint();
                 executionRecorder(current, guarded).verifyActive();
                 AgentRunResult result = executeRequest(agent, current, guarded, attemptBinding,
@@ -290,8 +290,9 @@ public final class AgentRunner implements AgentIdentityProvider {
                 current.progress();
                 if (checked.retryFeedback() != null) {
                     AgentDecision.Complete candidate = (AgentDecision.Complete) handled;
-                    if (toolActivityChanged(toolActivityBefore, toolActivity(current, guarded))
-                            || retryWouldReplayTools(attemptBinding, guarded)) {
+                    if (AgentRetrySafety.changed(toolActivityBefore,
+                            AgentRetrySafety.snapshot(current, guarded))
+                            || AgentRetrySafety.wouldReplay(attemptBinding, guarded)) {
                         throw new AgentOutputRetryHandoffException(agent.id(),
                                 candidate.result().content(), checked.retryFeedback(),
                                 candidate.result().metadata());
@@ -473,40 +474,11 @@ public final class AgentRunner implements AgentIdentityProvider {
                 ? AgentToolBinding.none() : selected;
     }
 
-    private boolean retryWouldReplayTools(AgentToolBinding binding,
-                                          AgentRunRequest request) {
-        if (request instanceof AgentRunRequest.Model) {
-            return !binding.transportInherited() && !binding.tools().isEmpty();
-        }
-        if (request instanceof AgentRunRequest.Chat chat) {
-            return (!binding.transportInherited() && !binding.tools().isEmpty())
-                    || chat.context().toolsEnabled()
-                    || chat.context().toolPolicy() != AgentToolPolicy.NONE;
-        }
-        return false;
-    }
-
-    private ToolActivity toolActivity(AgentWorkflowContext context, AgentRunRequest request) {
-        AgentExecutionRecorder recorder = executionRecorder(context, request);
-        return new ToolActivity(recorder.completedToolCallCount(),
-                recorder.executedDomainToolCallCount(), recorder.pendingApprovalCount());
-    }
-
     private AgentExecutionRecorder executionRecorder(AgentWorkflowContext context,
                                                       AgentRunRequest request) {
         return request instanceof AgentRunRequest.Chat chat
                 ? chat.context().recorder() : context.execution().recorder();
     }
-
-    private boolean toolActivityChanged(ToolActivity before, ToolActivity after) {
-        return after.completedCalls() > before.completedCalls()
-                || after.executedDomainCalls() > before.executedDomainCalls()
-                || after.pendingApprovals() > before.pendingApprovals()
-                || after.pendingApprovals() > 0L;
-    }
-
-    private record ToolActivity(long completedCalls, long executedDomainCalls,
-                                long pendingApprovals) { }
 
     private record PreparedRequest(AgentWorkflowContext context, AgentRunRequest request) { }
 
