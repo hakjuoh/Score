@@ -39,11 +39,11 @@ export {
   selector: 'score-ai-chat-panel',
   templateUrl: './ai-chat-panel.component.html',
   styleUrls: [
-    './ai-chat-panel.component.css',
-    './ai-chat-panel-history.css',
-    './ai-chat-panel-messages.css',
-    './ai-chat-panel-agents.css',
-    './ai-chat-panel-composer.css'
+    './ai-chat-shell.component.css',
+    './ai-chat-agent-list.css',
+    './ai-chat-agent-row.css',
+    './ai-chat-progress-spinner.css',
+    './ai-chat-overlay.css'
   ],
   providers: [
     AiActiveRequestRecoveryService,
