@@ -1,0 +1,7 @@
+.message-progress-spinner {
+  display: inline-flex;
+}
+
+::ng-deep score-ai-chat-panel .message-progress-spinner circle {
+  stroke: #71717a;
+}

@@ -8,13 +8,7 @@ const MAX_COMPOSER_HEIGHT_PX = 72;
   standalone: false,
   selector: 'score-ai-chat-composer',
   templateUrl: './ai-chat-composer.component.html',
-  styleUrls: [
-    './ai-chat-panel.component.css',
-    './ai-chat-panel-history.css',
-    './ai-chat-panel-messages.css',
-    './ai-chat-panel-agents.css',
-    './ai-chat-panel-composer.css'
-  ]
+  styleUrl: './ai-chat-composer.component.css'
 })
 export class AiChatComposerComponent {
 

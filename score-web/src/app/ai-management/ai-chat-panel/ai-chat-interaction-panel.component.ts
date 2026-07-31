@@ -34,10 +34,8 @@ interface SchemaField {
   selector: 'score-ai-chat-interaction-panel',
   templateUrl: './ai-chat-interaction-panel.component.html',
   styleUrls: [
-    './ai-chat-panel.component.css',
-    './ai-chat-panel-history.css',
-    './ai-chat-panel-messages.css',
-    './ai-chat-panel-composer.css'
+    './ai-chat-interaction-form.css',
+    './ai-chat-settings-panel.css'
   ]
 })
 export class AiChatInteractionPanelComponent implements OnChanges {

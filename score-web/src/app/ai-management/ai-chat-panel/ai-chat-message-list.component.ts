@@ -58,11 +58,13 @@ type AiChatMessageDisplayItem =
   selector: 'score-ai-chat-message-list',
   templateUrl: './ai-chat-message-list.component.html',
   styleUrls: [
-    './ai-chat-panel.component.css',
-    './ai-chat-panel-history.css',
-    './ai-chat-panel-messages.css',
-    './ai-chat-panel-agents.css',
-    './ai-chat-panel-composer.css'
+    './ai-chat-message-base.css',
+    './ai-chat-message-content.css',
+    './ai-chat-agent-message.css',
+    './ai-chat-agent-row.css',
+    './ai-chat-message-attachments.css',
+    './ai-chat-settings-panel.css',
+    './ai-chat-progress-spinner.css'
   ]
 })
 export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {

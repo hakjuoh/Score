@@ -1,0 +1,189 @@
+.message-list {
+  flex: 0 0 auto;
+  width: 100%;
+  overflow: visible;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 8px 6px 8px;
+  background: #ffffff;
+  color: #18181b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+:host {
+  display: flex;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: min-content;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: visible;
+  background: #ffffff;
+}
+
+.terminal-flow {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.message-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.message-turn {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+.message-turn.history-expanded > .message-row.user {
+  margin-bottom: 4px;
+}
+
+.message-row.user {
+  justify-content: flex-start;
+}
+
+.message-row.assistant,
+.message-row.progress,
+.message-row.tool_group,
+.message-row.tool_call,
+.message-row.error,
+.message-row.debug {
+  justify-content: flex-start;
+}
+
+.message-bubble {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #18181b;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.message-prefix {
+  color: #71717a;
+  white-space: pre;
+}
+
+.message-prefix-icon {
+  width: 16px;
+  height: 18px;
+  font-size: 16px;
+  line-height: 18px;
+}
+
+.message-text,
+.message-markdown {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.message-text {
+  white-space: pre-wrap;
+}
+
+.message-markdown {
+  white-space: normal;
+}
+
+.message-row.user .message-bubble {
+  background: #f4f4f5;
+  color: #18181b;
+  font-weight: 400;
+}
+
+.message-history-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: start;
+  width: 16px;
+  height: 18px;
+  min-width: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.message-history-toggle:hover {
+  background: #e4e4e7;
+  color: #18181b;
+}
+
+.message-history-toggle mat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 18px;
+  font-size: 16px;
+  line-height: 18px;
+}
+
+.message-history-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 6px 0;
+}
+
+.message-history-panel .message-row {
+  margin-bottom: 6px;
+}
+
+.message-history-panel .message-row:last-child {
+  margin-bottom: 0;
+}
+
+.message-history-panel .message-bubble {
+  padding-right: 6px;
+}
+
+.message-row.assistant .message-prefix {
+  color: #18181b;
+}
+
+.message-row.assistant .message-bubble {
+  white-space: normal;
+}
+
+:host-context(.ai-chat-panel.drag-active) .message-list {
+  background: #f8fdff;
+}

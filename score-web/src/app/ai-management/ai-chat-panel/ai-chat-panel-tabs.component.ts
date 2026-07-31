@@ -5,12 +5,7 @@ import {AiChatPanelTab} from './domain/ai-chat-panel.model';
   standalone: false,
   selector: 'score-ai-chat-panel-tabs',
   templateUrl: './ai-chat-panel-tabs.component.html',
-  styleUrls: [
-    './ai-chat-panel.component.css',
-    './ai-chat-panel-history.css',
-    './ai-chat-panel-messages.css',
-    './ai-chat-panel-composer.css'
-  ]
+  styleUrl: './ai-chat-tabs.component.css'
 })
 export class AiChatPanelTabsComponent {
 

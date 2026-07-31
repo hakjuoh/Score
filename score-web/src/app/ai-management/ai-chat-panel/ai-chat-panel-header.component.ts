@@ -6,12 +6,7 @@ import {AiChatDock} from './domain/ai-chat-panel.model';
   standalone: false,
   selector: 'score-ai-chat-panel-header',
   templateUrl: './ai-chat-panel-header.component.html',
-  styleUrls: [
-    './ai-chat-panel.component.css',
-    './ai-chat-panel-history.css',
-    './ai-chat-panel-messages.css',
-    './ai-chat-panel-composer.css'
-  ]
+  styleUrl: './ai-chat-header.component.css'
 })
 export class AiChatPanelHeaderComponent {
 

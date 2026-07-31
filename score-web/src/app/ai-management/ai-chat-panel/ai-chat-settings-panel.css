@@ -1,0 +1,134 @@
+.model-command-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px 12px;
+  box-sizing: border-box;
+  width: calc(100% - 8px);
+  margin: 8px 4px;
+  padding: 10px;
+  border: 1px solid #d4d4d8;
+  border-radius: 5px;
+  background: #fafafa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+.model-command-title {
+  color: #18181b;
+  font-weight: 600;
+}
+
+.model-command-section {
+  min-width: 0;
+}
+
+.model-command-section h4 {
+  margin: 0 0 5px;
+  color: #3f3f46;
+  font: inherit;
+  font-weight: 600;
+}
+
+.model-command-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.model-command-option {
+  display: grid;
+  grid-template-columns: 13px minmax(0, 1fr);
+  gap: 3px;
+  align-items: start;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 4px 4px 1px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #52525b;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.model-command-option:hover:not(:disabled) {
+  background: #f0f0f2;
+  box-shadow: inset 0 0 0 1px #e4e4e7;
+}
+
+.model-command-option.selected {
+  background: transparent;
+  color: inherit;
+}
+
+.model-command-caret {
+  color: transparent;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 17px;
+}
+
+.model-command-caret.visible {
+  color: #0891b2;
+}
+
+.model-command-option.selected .model-command-caret {
+  color: #0891b2;
+}
+
+.model-command-option-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.model-command-option-name {
+  color: #27272a;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.model-command-option.selected .model-command-option-name {
+  color: #27272a;
+}
+
+.model-command-option-name > span {
+  white-space: nowrap;
+}
+
+.model-command-option-description {
+  color: #71717a;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.model-command-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.model-command-actions button {
+  min-height: 26px;
+  padding: 3px 9px;
+  border: 1px solid #d4d4d8;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #3f3f46;
+  font: inherit;
+  cursor: pointer;
+}
+
+.model-command-actions button.primary {
+  border-color: #0369a1;
+  background: #0369a1;
+  color: #ffffff;
+}
+
+.model-command-actions button:disabled,
+.model-command-option:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
