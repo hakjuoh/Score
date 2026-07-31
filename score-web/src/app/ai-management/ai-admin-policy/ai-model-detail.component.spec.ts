@@ -36,6 +36,7 @@ describe('AiModelDetailComponent', () => {
     ]});
     const component = TestBed.runInInjectionContext(() => new AiModelDetailComponent());
     component.ngOnInit();
+    component.form.displayName = 'Updated Model';
     component.form.reason = 'Update model catalog';
     expect(component.invalid).toBe(false);
 
@@ -73,5 +74,24 @@ describe('AiModelDetailComponent', () => {
     component.form.enabled = false; component.form.defaultModel = false;
     component.form.reason = 'Disable model now'; component.save();
     expect(component.message).toBe('Model is referenced by a policy.'); expect(component.form.enabled).toBe(false);
+  });
+
+  it('enables Update only for changed model properties and resets the hash after saving', () => {
+    const updated = {...model, displayName: 'Updated Model'};
+    const service = {providers: () => of([provider]), model: () => of(model),
+      updateModel: vi.fn(() => of(updated))};
+    TestBed.configureTestingModule({providers: [
+      {provide: AiAdminPolicyService, useValue: service},
+      {provide: ActivatedRoute, useValue: {snapshot: {paramMap: convertToParamMap({id: '9'})}}},
+      {provide: Router, useValue: {navigate: vi.fn()}}, {provide: MatSnackBar, useValue: {open: vi.fn()}}
+    ]});
+    const component = TestBed.runInInjectionContext(() => new AiModelDetailComponent());
+    component.ngOnInit();
+    expect(component.isChanged).toBe(false);
+    component.form.displayName = 'Updated Model';
+    component.form.reason = 'Rename this model';
+    expect(component.isChanged).toBe(true);
+    component.save();
+    expect(component.isChanged).toBe(false);
   });
 });

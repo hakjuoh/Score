@@ -1,179 +1,276 @@
 <div class="context-section ai-admin-page">
-  <mat-toolbar class="bg-white">
-    <a mat-icon-button routerLink="/ai-admin/users" aria-label="Back to AI policy users">
-      <mat-icon>arrow_back</mat-icon>
-    </a>
-    <span class="title">Manage AI Policy</span>
-    @if (policy) {
-      <span class="policy-badge">{{ policy.inherited ? 'Inherited' : 'Custom' }}</span>
-    }
-  </mat-toolbar>
+  @if (!policy && !loadFailed) {
+    <div class="loading-container">
+      <mat-spinner [diameter]="40"/>
+    </div>
+  }
+
+  <div class="ps-2 pe-2">
+    <mat-toolbar class="bg-white">
+      <span class="title">User AI Assistant Policy</span>
+      <span class="flex-11-auto"></span>
+    </mat-toolbar>
+  </div>
 
   @if (loadFailed) {
-    <div class="p-3" role="alert">The AI policy could not be loaded.
-      <button mat-stroked-button (click)="reloadPolicy()">Retry</button>
+    <div class="p-3">
+      <div class="detail-message" role="alert">
+        The AI policy could not be loaded.
+        <button mat-stroked-button (click)="reloadPolicy()">Retry</button>
+      </div>
     </div>
-  } @else if (!policy) {
-    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-  } @else {
-    <fieldset [disabled]="saving" class="p-3 container-fluid policy-grid admin-fieldset">
-      <mat-card>
-        <mat-card-header><mat-card-title>AI Assistant Access</mat-card-title></mat-card-header>
-        <mat-card-content>
-          <mat-slide-toggle [(ngModel)]="policy.enabled" data-id="ai-policy-enabled">
-            {{ policy.enabled ? 'Enabled' : 'Disabled' }}
-          </mat-slide-toggle>
-          <p class="hint">Disabling access cancels the user's active AI requests.</p>
-        </mat-card-content>
-      </mat-card>
+  } @else if (policy) {
+    <div class="p-3 container-fluid">
+      <mat-card class="p-0">
+        <mat-tab-group animationDuration="0ms">
+          <mat-tab label="Policy Override">
+            <div class="detail-tab-content">
+              @if (policy.inherited && !editingOverride) {
+                <div class="policy-source-panel">
+                  <mat-icon>info</mat-icon>
+                  <div>
+                    <strong>Default policy applied</strong>
+                    <p class="mb-0">The effective settings are read-only until a user-specific override is created.</p>
+                  </div>
+                  <span class="flex-11-auto"></span>
+                  <button mat-raised-button color="primary" (click)="beginOverride()">
+                    Customize for This User
+                  </button>
+                </div>
+              } @else if (!policy.inherited) {
+                <div class="policy-source-panel custom-policy-panel">
+                  <mat-icon>person</mat-icon>
+                  <div>
+                    <strong>User-specific policy override</strong>
+                    <p class="mb-0">These settings replace the default policy for this user.</p>
+                  </div>
+                </div>
+              }
 
-      <mat-card>
-        <mat-card-header><mat-card-title>Models</mat-card-title></mat-card-header>
-        <mat-card-content>
-          <mat-radio-group [(ngModel)]="policy.modelAccessMode" class="radio-row">
-            <mat-radio-button value="ALL">All active models</mat-radio-button>
-            <mat-radio-button value="ALLOW_LIST">Allow list</mat-radio-button>
-          </mat-radio-group>
-          @if (policy.modelAccessMode === 'ALLOW_LIST') {
-            <div class="model-list">
-              @for (model of models; track model.modelKey) {
-                <mat-checkbox [checked]="modelChecked(model.modelKey)"
-                              (change)="setModel(model.modelKey, $event.checked)">
-                  {{ model.displayName }} <small>{{ model.provider }}</small>
-                </mat-checkbox>
-              }
-            </div>
-          }
-          <mat-form-field appearance="outline">
-            <mat-label>Default model</mat-label>
-            <mat-select [(ngModel)]="policy.effectiveDefaultModelKey">
-              @for (model of models; track model.modelKey) {
-                @if (policy.modelAccessMode === 'ALL' || modelChecked(model.modelKey)) {
-                  <mat-option [value]="model.modelKey">{{ model.displayName }}</mat-option>
-                }
-              }
-            </mat-select>
-          </mat-form-field>
-          <h4>Reasoning effort access</h4>
-          @for (model of models; track model.modelKey) {
-            @if (policy.modelAccessMode === 'ALL' || modelChecked(model.modelKey)) {
-              <div><strong>{{model.displayName}}</strong>
-                @for (effort of model.reasoningEfforts; track effort.name) {
-                  <mat-checkbox [checked]="effortChecked(model, effort.name)"
+              <fieldset [disabled]="saving || !editingOverride" class="admin-fieldset">
+                <section class="policy-section">
+                  <h3>Access and Models</h3>
+                  <div class="detail-form-grid detail-form-grid-3 align-items-center">
+                    <div>
+                      <mat-slide-toggle [(ngModel)]="policy.enabled" data-id="ai-policy-enabled">
+                        AI Assistant Access
+                      </mat-slide-toggle>
+                      <p class="hint mb-0">Disabling access cancels active AI requests.</p>
+                    </div>
+                    <mat-form-field>
+                      <mat-label>Model Access</mat-label>
+                      <mat-select [(ngModel)]="policy.modelAccessMode">
+                        <mat-option value="ALL">All active models</mat-option>
+                        <mat-option value="ALLOW_LIST">Selected models</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field>
+                      <mat-label>Default Model</mat-label>
+                      <mat-select [(ngModel)]="policy.effectiveDefaultModelKey">
+                        @for (model of models; track model.modelKey) {
+                          @if (policy.modelAccessMode === 'ALL' || modelChecked(model.modelKey)) {
+                            <mat-option [value]="model.modelKey">{{model.displayName}}</mat-option>
+                          }
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                  </div>
+
+                  @if (policy.modelAccessMode === 'ALLOW_LIST') {
+                    <div class="model-option-grid">
+                      @for (model of models; track model.modelKey) {
+                        <mat-checkbox [checked]="modelChecked(model.modelKey)"
+                          (change)="setModel(model.modelKey, $event.checked)">
+                          {{model.displayName}} <small>{{model.provider}}</small>
+                        </mat-checkbox>
+                      }
+                    </div>
+                  }
+
+                  <mat-expansion-panel class="mt-2">
+                    <mat-expansion-panel-header>
+                      <mat-panel-title>Reasoning Effort Access</mat-panel-title>
+                      <mat-panel-description>Optional restrictions by model</mat-panel-description>
+                    </mat-expansion-panel-header>
+                    @for (model of models; track model.modelKey) {
+                      @if (policy.modelAccessMode === 'ALL' || modelChecked(model.modelKey)) {
+                        <div class="effort-access-row">
+                          <strong>{{model.displayName}}</strong>
+                          <div>
+                            @for (effort of model.reasoningEfforts; track effort.name) {
+                              <mat-checkbox [checked]="effortChecked(model, effort.name)"
                                 (change)="setEffort(model, effort.name, $event.checked)">
-                    {{effort.displayName}}
-                  </mat-checkbox>
+                                {{effort.displayName}}
+                              </mat-checkbox>
+                            }
+                          </div>
+                        </div>
+                      }
+                    }
+                  </mat-expansion-panel>
+                </section>
+
+                <section class="policy-section">
+                  <h3>Execution Limits</h3>
+                  <div class="detail-form-grid detail-form-grid-3 align-items-center">
+                    <mat-slide-toggle [(ngModel)]="policy.multiAgentEnabled">
+                      Multi-agent Workflows
+                    </mat-slide-toggle>
+                    <mat-form-field>
+                      <mat-label>Maximum Agents per Request</mat-label>
+                      <input matInput type="number" min="1" max="4"
+                        [(ngModel)]="policy.maxAgentsPerRequest" [disabled]="!policy.multiAgentEnabled">
+                    </mat-form-field>
+                    <mat-form-field>
+                      <mat-label>Maximum Active Requests</mat-label>
+                      <input matInput type="number" min="1" max="32" [(ngModel)]="policy.maxActiveRequests">
+                    </mat-form-field>
+                    <div class="limit-control">
+                      <mat-checkbox [checked]="policy.maxOutputTokensPerCall === null"
+                        (change)="setOutputUnlimited($event.checked)">Unlimited Output per Call</mat-checkbox>
+                      <mat-form-field>
+                        <mat-label>Maximum Output per Call</mat-label>
+                        <input matInput type="number" min="1" [(ngModel)]="policy.maxOutputTokensPerCall"
+                          [disabled]="policy.maxOutputTokensPerCall === null">
+                      </mat-form-field>
+                    </div>
+                    <div class="limit-control">
+                      <mat-checkbox [checked]="policy.maxTotalTokensPerRequest === null"
+                        (change)="setRequestUnlimited($event.checked)">Unlimited Total per Request</mat-checkbox>
+                      <mat-form-field>
+                        <mat-label>Maximum Total per Request</mat-label>
+                        <input matInput type="number" min="1" [(ngModel)]="policy.maxTotalTokensPerRequest"
+                          [disabled]="policy.maxTotalTokensPerRequest === null">
+                      </mat-form-field>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="policy-section">
+                  <h3>Period Quota</h3>
+                  <div class="detail-form-grid detail-form-grid-3 align-items-center">
+                    <mat-slide-toggle [checked]="quotaEnabled" (change)="setQuotaEnabled($event.checked)">
+                      Enable Period Quota
+                    </mat-slide-toggle>
+                    @if (quotaEnabled) {
+                      <mat-form-field class="policy-quota-field">
+                        <mat-label>Quota Period</mat-label>
+                        <mat-select [(ngModel)]="policy.quota.period">
+                          <mat-option value="DAILY">Daily (UTC)</mat-option>
+                          <mat-option value="MONTHLY">Monthly (UTC)</mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                      <mat-form-field class="policy-quota-field">
+                        <mat-label>Quota Tokens</mat-label>
+                        <input matInput type="number" min="1" [(ngModel)]="policy.quota.limitTokens">
+                      </mat-form-field>
+                    }
+                  </div>
+                </section>
+
+                @if (editingOverride) {
+                  <section class="policy-section policy-actions-section">
+                    <mat-form-field class="w-100">
+                      <mat-label>Policy Change Reason</mat-label>
+                      <textarea matInput rows="2" maxlength="500" [(ngModel)]="policyReason"></textarea>
+                    </mat-form-field>
+                  </section>
                 }
+              </fieldset>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Usage and Operations">
+            <div class="detail-tab-content">
+              <div class="usage-summary-grid">
+                <div class="usage-stat"><span>Active Requests</span><strong>{{usage?.activeRequests ?? 0}}</strong></div>
+                <div class="usage-stat"><span>Consumed Tokens</span><strong>{{usage?.quota?.consumedTokens ?? 0 | number}}</strong></div>
+                <div class="usage-stat"><span>Reserved Tokens</span><strong>{{usage?.quota?.reservedTokens ?? 0 | number}}</strong></div>
+                <div class="usage-stat"><span>Remaining Tokens</span><strong>{{usage?.quota?.remainingTokens == null ? 'Unlimited' : (usage?.quota?.remainingTokens | number)}}</strong></div>
               </div>
+
+              @if (usage?.quota?.limitTokens) {
+                <mat-card class="mt-3">
+                  <mat-card-content class="mat-card-container">
+                    <div class="d-flex justify-content-between">
+                      <strong>Current {{usage?.quota?.period | lowercase}} quota</strong>
+                      <span>{{usage?.quota?.consumedTokens ?? 0 | number}} / {{usage?.quota?.limitTokens | number}}</span>
+                    </div>
+                    <mat-progress-bar class="mt-2" mode="determinate"
+                      [value]="100 * ((usage?.quota?.consumedTokens ?? 0) + (usage?.quota?.reservedTokens ?? 0)) / usage!.quota.limitTokens!"/>
+                    <p class="hint mb-0 mt-2">UTC period: {{usage?.quota?.periodStart | date:'medium':'UTC'}} – {{usage?.quota?.periodEnd | date:'medium':'UTC'}}</p>
+                  </mat-card-content>
+                </mat-card>
+              }
+
+              <mat-card class="mt-3">
+                <mat-card-header><mat-card-title>Operations</mat-card-title></mat-card-header>
+                <mat-card-content class="mat-card-container">
+                  <div class="operation-grid">
+                    <div>
+                      <p>Cancel all active AI requests for this user.</p>
+                      <button mat-stroked-button color="warn" (click)="cancelActive()"
+                        [disabled]="saving || !usage?.activeRequests">Cancel Active Requests</button>
+                    </div>
+                    @if (quotaAdjustmentAvailable) {
+                      <div class="quota-adjustment-grid">
+                        <mat-form-field>
+                          <mat-label>Quota Adjustment</mat-label>
+                          <input matInput type="number" [(ngModel)]="adjustment">
+                          <mat-hint>Positive consumes; negative credits.</mat-hint>
+                        </mat-form-field>
+                        <mat-form-field>
+                          <mat-label>Adjustment Reason</mat-label>
+                          <input matInput maxlength="500" [(ngModel)]="operationReason">
+                        </mat-form-field>
+                        <button mat-stroked-button (click)="adjustQuota()"
+                          [disabled]="saving || !adjustment || operationReason.trim().length < 10">
+                          Apply Adjustment
+                        </button>
+                      </div>
+                    }
+                  </div>
+                </mat-card-content>
+              </mat-card>
+
+              <mat-card class="mt-3">
+                <mat-card-header><mat-card-title>Recent Model Calls</mat-card-title></mat-card-header>
+                <mat-card-content class="mat-card-container">
+                  <div class="table-wrapper mat-elevation-z1">
+                    <table mat-table [dataSource]="usage?.recentCalls ?? []">
+                      <ng-container matColumnDef="time"><th mat-header-cell *matHeaderCellDef>Time</th><td mat-cell *matCellDef="let call">{{call.reservedAt | date:'short':'UTC'}}</td></ng-container>
+                      <ng-container matColumnDef="model"><th mat-header-cell *matHeaderCellDef>Model</th><td mat-cell *matCellDef="let call">{{call.modelKey}}</td></ng-container>
+                      <ng-container matColumnDef="kind"><th mat-header-cell *matHeaderCellDef>Kind</th><td mat-cell *matCellDef="let call">{{call.executionKind}}</td></ng-container>
+                      <ng-container matColumnDef="status"><th mat-header-cell *matHeaderCellDef>Status</th><td mat-cell *matCellDef="let call">{{call.status}}</td></ng-container>
+                      <ng-container matColumnDef="charged"><th mat-header-cell *matHeaderCellDef>Charged</th><td mat-cell *matCellDef="let call">{{call.chargedTokens | number}}</td></ng-container>
+                      <tr mat-header-row *matHeaderRowDef="usageColumns"></tr>
+                      <tr mat-row *matRowDef="let row; columns: usageColumns;"></tr>
+                    </table>
+                  </div>
+                </mat-card-content>
+              </mat-card>
+            </div>
+          </mat-tab>
+        </mat-tab-group>
+      </mat-card>
+    </div>
+
+    <div class="row action-group m-0">
+      <div class="col-12 actions-wrap">
+        <div class="actions">
+          <a mat-raised-button routerLink="/ai-admin/users">Back</a>
+          @if (editingOverride) {
+            <button mat-raised-button color="primary" (click)="save()"
+              [disabled]="saving || invalid || !isChanged" data-id="save-ai-policy">Update</button>
+            @if (!policy.inherited) {
+              <button mat-stroked-button color="warn" (click)="reset()"
+                [disabled]="saving || policyReason.trim().length < 10">
+                Restore Default Policy
+              </button>
             }
           }
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card>
-        <mat-card-header><mat-card-title>Current usage and operations</mat-card-title></mat-card-header>
-        <mat-card-content>
-          <p>Active requests: {{usage?.activeRequests ?? 0}}</p>
-          <button mat-stroked-button color="warn" (click)="cancelActive()"
-                  [disabled]="!usage?.activeRequests">Cancel active requests</button>
-          @if (quotaEnabled) {
-            <div class="field-row mt-3"><mat-form-field appearance="outline">
-              <mat-label>Quota adjustment (+ consume / − credit)</mat-label>
-              <input matInput type="number" [(ngModel)]="adjustment">
-            </mat-form-field>
-            <button mat-stroked-button (click)="adjustQuota()"
-                    [disabled]="!adjustment || reason.trim().length < 10">Apply adjustment</button></div>
-          }
-          @if (usage?.recentCalls?.length) {
-            <table class="table"><thead><tr><th>Time</th><th>Model</th><th>Kind</th><th>Status</th><th>Charged</th></tr></thead>
-              <tbody>@for(call of usage!.recentCalls; track call.callId){<tr><td>{{call.reservedAt | date:'short':'UTC'}}</td>
-                <td>{{call.modelKey}}</td><td>{{call.executionKind}}</td><td>{{call.status}}</td><td>{{call.chargedTokens | number}}</td></tr>}</tbody></table>
-          }
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card>
-        <mat-card-header><mat-card-title>Multi-agent and concurrency</mat-card-title></mat-card-header>
-        <mat-card-content class="field-row">
-          <mat-slide-toggle [(ngModel)]="policy.multiAgentEnabled">
-            Multi-agent workflows
-          </mat-slide-toggle>
-          <mat-form-field appearance="outline">
-            <mat-label>Maximum agents per request</mat-label>
-            <input matInput type="number" min="1" max="4"
-                   [(ngModel)]="policy.maxAgentsPerRequest"
-                   [disabled]="!policy.multiAgentEnabled">
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Maximum active requests</mat-label>
-            <input matInput type="number" min="1" max="32"
-                   [(ngModel)]="policy.maxActiveRequests">
-          </mat-form-field>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card>
-        <mat-card-header><mat-card-title>Token limits</mat-card-title></mat-card-header>
-        <mat-card-content class="field-row">
-          <mat-checkbox [checked]="policy.maxOutputTokensPerCall === null"
-                        (change)="setOutputUnlimited($event.checked)">Unlimited output per call</mat-checkbox>
-          <mat-form-field appearance="outline">
-            <mat-label>Maximum output per call</mat-label>
-            <input matInput type="number" min="1" [(ngModel)]="policy.maxOutputTokensPerCall"
-                   [disabled]="policy.maxOutputTokensPerCall === null" placeholder="Unlimited">
-          </mat-form-field>
-          <mat-checkbox [checked]="policy.maxTotalTokensPerRequest === null"
-                        (change)="setRequestUnlimited($event.checked)">Unlimited total per request</mat-checkbox>
-          <mat-form-field appearance="outline">
-            <mat-label>Maximum total per request</mat-label>
-            <input matInput type="number" min="1" [(ngModel)]="policy.maxTotalTokensPerRequest"
-                   [disabled]="policy.maxTotalTokensPerRequest === null" placeholder="Unlimited">
-          </mat-form-field>
-          <mat-slide-toggle [checked]="quotaEnabled"
-                            (change)="setQuotaEnabled($event.checked)">Period quota</mat-slide-toggle>
-          @if (quotaEnabled) {
-            <mat-form-field appearance="outline">
-              <mat-label>Quota period</mat-label>
-              <mat-select [(ngModel)]="policy.quota.period">
-                <mat-option value="DAILY">Daily (UTC)</mat-option>
-                <mat-option value="MONTHLY">Monthly (UTC)</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Quota tokens</mat-label>
-              <input matInput type="number" min="1" [(ngModel)]="policy.quota.limitTokens">
-            </mat-form-field>
-          }
-          @if (policy.quota.limitTokens) {
-            <p>Consumed {{ policy.quota.consumedTokens | number }} · Reserved
-              {{ policy.quota.reservedTokens | number }} · Remaining
-              {{ policy.quota.remainingTokens | number }}</p>
-            <mat-progress-bar mode="determinate"
-              [value]="100 * (policy.quota.consumedTokens + policy.quota.reservedTokens) / policy.quota.limitTokens">
-            </mat-progress-bar>
-            <p class="hint">UTC period: {{policy.quota.periodStart | date:'medium':'UTC'}} –
-              {{policy.quota.periodEnd | date:'medium':'UTC'}}</p>
-          }
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card class="operations-card">
-        <mat-card-header><mat-card-title>Save and reset</mat-card-title></mat-card-header>
-        <mat-card-content>
-          <mat-form-field appearance="outline" class="reason-field">
-            <mat-label>Change reason</mat-label>
-            <textarea matInput rows="2" maxlength="500" [(ngModel)]="reason"></textarea>
-          </mat-form-field>
-          <div class="actions">
-            <button mat-raised-button color="primary" (click)="save()"
-                    [disabled]="saving || invalid" data-id="save-ai-policy">Save policy</button>
-            <button mat-stroked-button color="warn" (click)="reset()"
-                    [disabled]="saving || policy.inherited || reason.trim().length < 10">
-              Reset to inherited
-            </button>
-          </div>
-        </mat-card-content>
-      </mat-card>
-    </fieldset>
+        </div>
+      </div>
+    </div>
   }
 </div>

@@ -16,7 +16,6 @@ export class AiPolicyUserListComponent implements OnInit {
   loading = true;
   loadFailed = false;
   accessFilter = 'ALL';
-  inheritanceFilter = 'ALL';
   quotaFilter = 'ALL';
   multiAgentFilter = 'ALL';
   columns = this.defaultColumns();
@@ -29,8 +28,7 @@ export class AiPolicyUserListComponent implements OnInit {
     ]);
     return this.columns.filter(column => column.selected)
       .map(column => columnNames.get(column.name))
-      .filter((name): name is string => !!name)
-      .concat('actions');
+      .filter((name): name is string => !!name);
   }
 
   ngOnInit(): void {
@@ -69,7 +67,6 @@ export class AiPolicyUserListComponent implements OnInit {
     return this.users.filter(user => (!query || [user.loginId, user.name, user.organization]
       .some(value => value?.toLowerCase().includes(query)))
       && (this.accessFilter === 'ALL' || user.enabled === (this.accessFilter === 'ENABLED'))
-      && (this.inheritanceFilter === 'ALL' || user.inherited === (this.inheritanceFilter === 'INHERITED'))
       && (this.multiAgentFilter === 'ALL' || user.multiAgentEnabled === (this.multiAgentFilter === 'ENABLED'))
       && (this.quotaFilter === 'ALL' || this.matchesQuota(user)));
   }

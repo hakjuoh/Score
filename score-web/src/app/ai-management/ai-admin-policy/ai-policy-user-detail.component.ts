@@ -1,10 +1,11 @@
 import {Component, OnInit, inject} from '@angular/core';
-import {ActivatedRoute, Router} from '@angular/router';
+import {ActivatedRoute} from '@angular/router';
 import {forkJoin} from 'rxjs';
 import {finalize} from 'rxjs/operators';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiAdminModel, AiAdminUsage, AiPolicyUpdate, AiPolicyView} from './domain/ai-admin-policy';
+import {hashCode} from '../../common/utility';
 
 @Component({
   standalone: false,
@@ -15,19 +16,22 @@ import {AiAdminModel, AiAdminUsage, AiPolicyUpdate, AiPolicyView} from './domain
 export class AiPolicyUserDetailComponent implements OnInit {
   private readonly service = inject(AiAdminPolicyService);
   private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
   userId = '';
   models: AiAdminModel[] = [];
   policy?: AiPolicyView;
   saving = false;
-  reason = '';
+  policyReason = '';
+  operationReason = '';
+  editingOverride = false;
   selectedModels = new Set<string>();
   quotaEnabled = false;
   usage?: AiAdminUsage;
   adjustment = 0;
   loadFailed = false;
+  private baselineHash = '';
+  readonly usageColumns = ['time', 'model', 'kind', 'status', 'charged'];
 
   ngOnInit(): void {
     this.userId = this.route.snapshot.paramMap.get('id') ?? '';
@@ -52,6 +56,12 @@ export class AiPolicyUserDetailComponent implements OnInit {
     this.policy = policy;
     this.selectedModels = new Set(policy.effectiveAllowedModelKeys);
     this.quotaEnabled = !!policy.quota.period;
+    this.editingOverride = !policy.inherited;
+    this.baselineHash = hashCode(this.editableState());
+  }
+
+  beginOverride(): void {
+    this.editingOverride = true;
   }
 
   modelChecked(modelKey: string): boolean {
@@ -92,6 +102,14 @@ export class AiPolicyUserDetailComponent implements OnInit {
       ? null : this.policy.maxTotalTokensPerRequest ?? 100000;
   }
 
+  get quotaAdjustmentAvailable(): boolean {
+    return !!this.usage?.quota?.period;
+  }
+
+  get isChanged(): boolean {
+    return !!this.policy && this.baselineHash !== hashCode(this.editableState());
+  }
+
   effortChecked(model: AiAdminModel, effort: string): boolean {
     const restricted = this.policy?.allowedReasoningEfforts[model.modelKey];
     return !restricted || restricted.includes(effort);
@@ -117,12 +135,13 @@ export class AiPolicyUserDetailComponent implements OnInit {
   }
 
   adjustQuota(): void {
-    if (this.saving || !Number.isSafeInteger(this.adjustment) || this.adjustment === 0 || this.reason.trim().length < 10) return;
+    if (this.saving || !Number.isSafeInteger(this.adjustment) || this.adjustment === 0
+      || this.operationReason.trim().length < 10) return;
     this.saving = true;
-    this.service.adjustQuota(this.userId, this.adjustment, this.reason.trim())
+    this.service.adjustQuota(this.userId, this.adjustment, this.operationReason.trim())
       .pipe(finalize(() => this.saving = false)).subscribe({next: usage => {
-        this.usage = usage; if (this.policy) this.policy.quota = usage.quota;
-        this.adjustment = 0; this.reason = '';
+        this.usage = usage;
+        this.adjustment = 0; this.operationReason = '';
         this.snackBar.open('Quota adjusted.', '', {duration: 3000});
       }, error: () => this.snackBar.open('Quota could not be adjusted.', '', {duration: 5000})});
   }
@@ -151,7 +170,7 @@ export class AiPolicyUserDetailComponent implements OnInit {
   }
 
   save(): void {
-    if (!this.policy || this.invalid) return;
+    if (!this.policy || !this.editingOverride || this.invalid || !this.isChanged) return;
     const selectedModels = this.policy.modelAccessMode === 'ALL'
       ? new Set(this.models.map(model => model.modelKey)) : this.selectedModels;
     const allowedReasoningEfforts = Object.fromEntries(
@@ -173,14 +192,14 @@ export class AiPolicyUserDetailComponent implements OnInit {
       maxTotalTokensPerRequest: this.policy.maxTotalTokensPerRequest,
       quotaPeriod: this.quotaEnabled ? this.policy.quota.period : null,
       quotaTokens: this.quotaEnabled ? this.policy.quota.limitTokens : null,
-      reason: this.reason.trim() || null
+      reason: this.policyReason.trim() || null
     };
     this.saving = true;
     this.service.save(this.userId, update).pipe(finalize(() => this.saving = false))
       .subscribe({
         next: policy => {
           this.apply(policy);
-          this.reason = '';
+          this.policyReason = '';
           this.snackBar.open('AI policy saved.', '', {duration: 3000});
         },
         error: error => {
@@ -198,14 +217,40 @@ export class AiPolicyUserDetailComponent implements OnInit {
   }
 
   reset(): void {
-    if (!this.policy || this.policy.inherited || this.reason.trim().length < 10) return;
+    if (!this.policy || this.policy.inherited || this.policyReason.trim().length < 10) return;
     this.saving = true;
-    this.service.reset(this.userId, this.policy.policyVersion, this.reason.trim())
+    this.service.reset(this.userId, this.policy.policyVersion, this.policyReason.trim())
       .pipe(finalize(() => this.saving = false)).subscribe({
       next: () => {
-        this.snackBar.open('Inherited AI policy restored.', '', {duration: 3000});
-        this.router.navigate(['/ai-admin/users']);
+        this.policyReason = '';
+        this.snackBar.open('Default AI policy restored.', '', {duration: 3000});
+        this.reloadPolicy();
       }, error: () => this.snackBar.open('The AI policy could not be reset.', '', {duration: 5000})
     });
+  }
+
+  private editableState(): object {
+    if (!this.policy) return {};
+    const selectedModels = [...this.selectedModels].sort();
+    const allowedReasoningEfforts = Object.fromEntries(
+      Object.entries(this.policy.allowedReasoningEfforts)
+        .filter(([modelKey]) => selectedModels.includes(modelKey))
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([modelKey, efforts]) => [modelKey, [...efforts].sort()])
+    );
+    return {
+      enabled: this.policy.enabled,
+      modelAccessMode: this.policy.modelAccessMode,
+      defaultModelKey: this.policy.effectiveDefaultModelKey || null,
+      allowedModelKeys: selectedModels,
+      allowedReasoningEfforts,
+      multiAgentEnabled: this.policy.multiAgentEnabled,
+      maxAgentsPerRequest: this.policy.multiAgentEnabled ? this.policy.maxAgentsPerRequest : 1,
+      maxActiveRequests: this.policy.maxActiveRequests,
+      maxOutputTokensPerCall: this.policy.maxOutputTokensPerCall,
+      maxTotalTokensPerRequest: this.policy.maxTotalTokensPerRequest,
+      quotaPeriod: this.quotaEnabled ? this.policy.quota.period : null,
+      quotaTokens: this.quotaEnabled ? this.policy.quota.limitTokens : null
+    };
   }
 }

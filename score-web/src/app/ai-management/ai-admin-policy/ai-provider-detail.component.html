@@ -1,0 +1,94 @@
+<div class="context-section ai-admin-page">
+  @if (loading) {
+    <div class="loading-container">
+      <mat-spinner [diameter]="40"/>
+    </div>
+  }
+
+  <div class="ps-2 pe-2">
+    <mat-toolbar class="bg-white">
+      <span class="title">{{isNew ? 'Add AI Model Provider' : 'AI Model Provider'}}</span>
+      <span class="flex-11-auto"></span>
+    </mat-toolbar>
+  </div>
+
+  <fieldset [disabled]="loading || saving" class="admin-fieldset">
+    <div class="p-3 container-fluid">
+      @if (message) {
+        <div class="detail-message mb-3" role="status">{{message}}</div>
+      }
+
+      <div class="row g-3">
+        <div class="col-12">
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>Provider Settings</mat-card-title>
+            </mat-card-header>
+            <mat-card-content class="mat-card-container">
+              <div class="detail-form-grid">
+                <mat-form-field>
+                  <mat-label>Provider Name</mat-label>
+                  <input matInput required maxlength="120" [(ngModel)]="form.providerName">
+                </mat-form-field>
+                <mat-form-field>
+                  <mat-label>Provider Type</mat-label>
+                  <mat-select [(ngModel)]="form.providerType">
+                    <mat-option value="anthropic">Anthropic</mat-option>
+                    <mat-option value="azure-openai">Azure OpenAI</mat-option>
+                    <mat-option value="openai">OpenAI</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field class="detail-span-2">
+                  <mat-label>Base URL</mat-label>
+                  <input matInput maxlength="1000" [(ngModel)]="form.baseUrl">
+                </mat-form-field>
+                <mat-form-field class="detail-span-2">
+                  <mat-label>Messages URL</mat-label>
+                  <input matInput maxlength="1000" [(ngModel)]="form.messagesUrl">
+                </mat-form-field>
+                <mat-form-field>
+                  <mat-label>Anthropic Version</mat-label>
+                  <input matInput maxlength="64" [(ngModel)]="form.anthropicVersion">
+                </mat-form-field>
+                <mat-form-field>
+                  <mat-label>API Version</mat-label>
+                  <input matInput maxlength="64" [(ngModel)]="form.apiVersion">
+                </mat-form-field>
+                <div class="detail-span-2 api-key-field">
+                  <mat-form-field class="w-100">
+                    <mat-label>API Key{{isNew ? ' (optional)' : ''}}</mat-label>
+                    <input matInput type="password" autocomplete="new-password" [(ngModel)]="apiKey">
+                    @if (!isNew) {
+                      <mat-hint>Keep the masked value, enter a replacement, or clear it to remove the key.</mat-hint>
+                    }
+                  </mat-form-field>
+                </div>
+              </div>
+              <mat-slide-toggle [(ngModel)]="form.enabled">Enabled</mat-slide-toggle>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </div>
+
+      <mat-card class="mt-3">
+        <mat-card-content class="mat-card-container">
+          <mat-form-field class="w-100">
+            <mat-label>Change Reason</mat-label>
+            <textarea matInput rows="2" maxlength="500" [(ngModel)]="form.reason"></textarea>
+            <mat-hint>At least 10 characters are required.</mat-hint>
+          </mat-form-field>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <div class="row action-group m-0">
+      <div class="col-12 actions-wrap">
+        <div class="actions">
+          <a mat-raised-button routerLink="/ai-admin/providers">Back</a>
+          <button mat-raised-button color="primary" (click)="save()"
+            [disabled]="loading || saving || invalid || !isChanged">{{isNew ? 'Create' : 'Update'}}</button>
+        </div>
+      </div>
+    </div>
+  </fieldset>
+</div>

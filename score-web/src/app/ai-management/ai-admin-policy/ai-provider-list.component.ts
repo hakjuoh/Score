@@ -30,8 +30,7 @@ export class AiProviderListComponent implements OnInit {
     ]);
     return this.columns.filter(column => column.selected)
       .map(column => columnNames.get(column.name))
-      .filter((name): name is string => !!name)
-      .concat('actions');
+      .filter((name): name is string => !!name);
   }
 
   ngOnInit(): void {

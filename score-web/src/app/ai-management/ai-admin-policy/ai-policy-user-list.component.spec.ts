@@ -37,12 +37,12 @@ describe('AiPolicyUserListComponent', () => {
     expect(attempts).toBe(2);
   });
 
-  it('combines search, access, inheritance, and multi-agent filters', () => {
+  it('combines search, access, and multi-agent filters', () => {
     const users = [user('alice', 0, 100), user('bob', 0, 100, {enabled: false, inherited: false, multiAgentEnabled: false})];
     TestBed.configureTestingModule({providers: [{provide: AiAdminPolicyService, useValue: {users: () => of(users)}}]});
     const component = TestBed.runInInjectionContext(() => new AiPolicyUserListComponent());
     component.ngOnInit(); component.filter = 'bob'; component.accessFilter = 'DISABLED';
-    component.inheritanceFilter = 'CUSTOM'; component.multiAgentFilter = 'DISABLED';
+    component.multiAgentFilter = 'DISABLED';
     expect(component.filteredUsers.map(item => item.userId)).toEqual(['bob']);
   });
 
@@ -53,7 +53,6 @@ describe('AiPolicyUserListComponent', () => {
       ...column, selected: column.name !== 'Organization'
     })));
     expect(component.displayedColumns).not.toContain('organization');
-    expect(component.displayedColumns).toContain('actions');
     component.onColumnsReset();
     expect(component.displayedColumns).toContain('organization');
   });

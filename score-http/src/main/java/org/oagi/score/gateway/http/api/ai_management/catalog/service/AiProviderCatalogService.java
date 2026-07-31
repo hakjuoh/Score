@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
 import org.jooq.Record;
 import org.jooq.types.ULong;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderKeyUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderView;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
@@ -106,6 +105,7 @@ public class AiProviderCatalogService {
                     .where(AI_PROVIDER.AI_PROVIDER_ID.eq(id)).forUpdate().fetchOne();
             if (existing == null) throw new NotFoundException();
             AiProviderView before = view(existing);
+            if (before.catalogVersion() != input.expectedVersion()) throw conflict();
             if (!input.enabled() && before.enabled() && tx.fetchExists(tx.selectOne()
                     .from(AI_MODEL).where(AI_MODEL.PROVIDER_ID.eq(id))
                     .and(AI_MODEL.ENABLED.eq((byte) 1)))) {
@@ -113,6 +113,9 @@ public class AiProviderCatalogService {
                         "Disable the provider's active models before disabling the provider.");
             }
             ULong actorId = actorId(actor);
+            ULong oldSecretId = existing.get(AI_PROVIDER.API_KEY_SECRET_ID);
+            ULong nextSecretId = updateSecret(tx, oldSecretId, input.providerName(),
+                    input.apiKey(), actorId);
             int changed = tx.update(AI_PROVIDER)
                     .set(AI_PROVIDER.PROVIDER_NAME, input.providerName().strip())
                     .set(AI_PROVIDER.PROVIDER_TYPE, input.providerType().strip().toLowerCase())
@@ -120,6 +123,7 @@ public class AiProviderCatalogService {
                     .set(AI_PROVIDER.MESSAGES_URL, nullable(input.messagesUrl()))
                     .set(AI_PROVIDER.ANTHROPIC_VERSION, nullable(input.anthropicVersion()))
                     .set(AI_PROVIDER.API_VERSION, nullable(input.apiVersion()))
+                    .set(AI_PROVIDER.API_KEY_SECRET_ID, nextSecretId)
                     .set(AI_PROVIDER.ENABLED, flag(input.enabled()))
                     .set(AI_PROVIDER.CATALOG_VERSION, AI_PROVIDER.CATALOG_VERSION.plus(1))
                     .set(AI_PROVIDER.LAST_UPDATED_BY, actorId)
@@ -128,75 +132,39 @@ public class AiProviderCatalogService {
                     .and(AI_PROVIDER.CATALOG_VERSION.eq(ULong.valueOf(input.expectedVersion())))
                     .execute();
             if (changed != 1) throw conflict();
+            if (input.apiKey() != null && !StringUtils.hasText(input.apiKey())
+                    && oldSecretId != null) {
+                secrets.delete(tx, oldSecretId);
+            }
             AiProviderView after = view(tx.selectFrom(AI_PROVIDER)
                     .where(AI_PROVIDER.AI_PROVIDER_ID.eq(id)).fetchOne());
-            audit(tx, id, actorId, after.enabled() ? "UPDATE" : "DISABLE",
+            audit(tx, id, actorId, auditAction(input.apiKey(), oldSecretId != null, after.enabled()),
                     before, after, input.reason());
             return after;
         });
     }
 
-    public AiProviderView rotateKey(ScoreUser actor, long providerId,
-                                    AiProviderKeyUpdate input) {
-        authorization.requireAdministrator(actor);
-        if (input == null || !StringUtils.hasText(input.apiKey())) {
-            throw new IllegalArgumentException("A provider API key is required.");
+    ULong updateSecret(DSLContext tx, ULong oldSecretId, String providerName,
+                       String requestedKey, ULong actorId) {
+        if (requestedKey == null) return oldSecretId;
+        char[] key = chars(requestedKey);
+        try {
+            if (key == null) return null;
+            if (oldSecretId == null) {
+                return secrets.create(tx, "ai-provider/" + providerName.strip() + "/api-key",
+                        key, actorId);
+            }
+            secrets.replace(tx, oldSecretId, key, actorId);
+            return oldSecretId;
+        } finally {
+            ApplicationSecretService.clear(key);
         }
-        requireReason(input.reason());
-        return keyChange(actor, providerId, input.expectedVersion(), input.reason(), input.apiKey());
     }
 
-    public AiProviderView removeKey(ScoreUser actor, long providerId,
-                                    long expectedVersion, String reason) {
-        authorization.requireAdministrator(actor);
-        requireReason(reason);
-        return keyChange(actor, providerId, expectedVersion, reason, null);
-    }
-
-    private AiProviderView keyChange(ScoreUser actor, long providerId, long expectedVersion,
-                                     String reason, String newKey) {
-        return dsl.transactionResult(configuration -> {
-            DSLContext tx = org.jooq.impl.DSL.using(configuration);
-            ULong id = ULong.valueOf(providerId);
-            Record existing = tx.selectFrom(AI_PROVIDER)
-                    .where(AI_PROVIDER.AI_PROVIDER_ID.eq(id)).forUpdate().fetchOne();
-            if (existing == null) throw new NotFoundException();
-            if (existing.get(AI_PROVIDER.CATALOG_VERSION).longValue() != expectedVersion) {
-                throw conflict();
-            }
-            ULong actorId = actorId(actor);
-            ULong oldSecretId = existing.get(AI_PROVIDER.API_KEY_SECRET_ID);
-            ULong nextSecretId = oldSecretId;
-            char[] key = chars(newKey);
-            try {
-                if (key != null) {
-                    if (oldSecretId == null) {
-                        nextSecretId = secrets.create(tx, "ai-provider/"
-                                + existing.get(AI_PROVIDER.PROVIDER_NAME) + "/api-key", key, actorId);
-                    } else {
-                        secrets.replace(tx, oldSecretId, key, actorId);
-                    }
-                } else {
-                    nextSecretId = null;
-                }
-            } finally {
-                ApplicationSecretService.clear(key);
-            }
-            int changed = tx.update(AI_PROVIDER)
-                    .set(AI_PROVIDER.API_KEY_SECRET_ID, nextSecretId)
-                    .set(AI_PROVIDER.CATALOG_VERSION, AI_PROVIDER.CATALOG_VERSION.plus(1))
-                    .set(AI_PROVIDER.LAST_UPDATED_BY, actorId)
-                    .set(AI_PROVIDER.LAST_UPDATED_AT, LocalDateTime.now(ZoneOffset.UTC))
-                    .where(AI_PROVIDER.AI_PROVIDER_ID.eq(id))
-                    .and(AI_PROVIDER.CATALOG_VERSION.eq(ULong.valueOf(expectedVersion))).execute();
-            if (changed != 1) throw conflict();
-            if (key == null && oldSecretId != null) secrets.delete(tx, oldSecretId);
-            AiProviderView after = view(tx.selectFrom(AI_PROVIDER)
-                    .where(AI_PROVIDER.AI_PROVIDER_ID.eq(id)).fetchOne());
-            audit(tx, id, actorId, key != null ? "ROTATE_KEY" : "DELETE_KEY",
-                    view(existing), after, reason);
-            return after;
-        });
+    static String auditAction(String requestedKey, boolean hadStoredKey, boolean enabled) {
+        if (StringUtils.hasText(requestedKey)) return "ROTATE_KEY";
+        if (requestedKey != null && hadStoredKey) return "DELETE_KEY";
+        return enabled ? "UPDATE" : "DISABLE";
     }
 
     private void validate(AiProviderUpdate input, boolean update) {
