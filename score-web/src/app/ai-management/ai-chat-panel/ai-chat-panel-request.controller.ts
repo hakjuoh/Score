@@ -201,8 +201,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         // canonical response settles them even when they were replayed from REST.
         this.clearProviderRecoveryState();
         this.settleAgentActivity('completed');
-        this.state.elicitation = undefined;
-        this.state.elicitationBusy = false;
+        this.elicitationCoordinator.clear(this.state);
         this.clearChangeApprovalBatch();
         this.activeRequestId = undefined;
         this.clearToolCallTracking();
@@ -250,8 +249,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         if (!confirmationConversationId) {
           this.clearChangeRepeatDraft(requestId);
         }
-        this.state.elicitation = undefined;
-        this.state.elicitationBusy = false;
+        this.elicitationCoordinator.clear(this.state);
         this.clearChangeApprovalBatch();
         this.activeRequestId = undefined;
         this.clearToolCallTracking();
@@ -318,8 +316,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     this.settleAgentActivity('failed');
     this.clearTimers();
     this.clearStatusMessage();
-    this.state.elicitation = undefined;
-    this.state.elicitationBusy = false;
+    this.elicitationCoordinator.clear(this.state);
     this.clearChangeApprovalBatch();
     this.clearChangeRepeatDraft(requestId);
     this.confirmedChangeRequests.cancel(requestId);

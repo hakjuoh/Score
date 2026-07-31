@@ -385,14 +385,14 @@ describe('AiChatPanelComponent change lifecycle', () => {
     }];
     component.state.changeApprovalBatchBusy = true;
     (component as any).scheduleChangeApprovalExpiry();
-    expect((component as any).changeApprovalExpiryTimeout).toBeDefined();
+    expect((component as any).changeApprovalBatches.expiryTimeout).toBeDefined();
 
     (component as any).completeUnknownConfirmedRequest('request-1');
 
     expect(component.state.changeApprovalBatch).toBeUndefined();
     expect(component.state.changeApprovalBatchQueue).toEqual([]);
     expect(component.state.changeApprovalBatchBusy).toBe(false);
-    expect((component as any).changeApprovalExpiryTimeout).toBeUndefined();
+    expect((component as any).changeApprovalBatches.expiryTimeout).toBeUndefined();
     expect(component.state.pending).toBe(false);
     expect(component.state.reconciliationRequired).toBe(true);
     expect(component.state.currentStatus).toBe('Review needed');

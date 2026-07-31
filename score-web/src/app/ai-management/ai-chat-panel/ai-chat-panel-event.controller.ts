@@ -1,6 +1,5 @@
 import {Message} from '@stomp/stompjs';
 import {AiChatPanelUiController} from './ai-chat-panel-ui.controller';
-import {elicitationNotice} from './domain/ai-elicitation';
 import {
   isUnexpiredChangeConfirmation,
   changeConfirmationNotice
@@ -21,13 +20,9 @@ import {
   withoutTextualToolCallPlaceholder
 } from './domain/ai-chat-event-semantics';
 import {
-  changeApprovalBatchStatus,
-  isUnexpiredChangeApprovalBatch,
-  changeApprovalBatchNotice
-} from './domain/ai-change-approval-batch';
-
-const MAX_TIMER_DELAY_MS = 2_147_000_000;
-const CHANGE_APPROVAL_ACK_TIMEOUT_MS = 15_000;
+  AiChangeApprovalBatchCallbacks
+} from './domain/ai-change-approval-batch-coordinator';
+import {AiElicitationCallbacks} from './domain/ai-elicitation-coordinator';
 
 export abstract class AiChatPanelEventController extends AiChatPanelUiController {
   protected handleSocketEvent(event: AiChatSocketEvent): void {
@@ -166,289 +161,61 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
   }
 
   protected handleElicitationRequired(event: AiChatSocketEvent): void {
-    const requestId = this.activeRequestId;
-    const eventConversationId = typeof event.conversationId === 'string'
-      && event.conversationId.trim() === event.conversationId
-      ? event.conversationId : undefined;
-    const expectedConversationId = this.state.activeRequest?.conversationId
-      || this.state.conversationId || eventConversationId;
-    if (!requestId) {
-      return;
-    }
-    const notice = elicitationNotice(
-      event, requestId, expectedConversationId, this.state.activeRequest?.generation
+    this.elicitationCoordinator.handleRequired(
+      this.state, event, this.activeRequestId, this.elicitationCallbacks()
     );
-    if (!notice || (this.state.elicitation
-      && this.state.elicitation.elicitationId !== notice.elicitationId)) {
-      return;
-    }
-    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
-    this.completeProgressMessages();
-    this.clearStatusMessage();
-    this.state.elicitation = notice;
-    this.state.elicitationBusy = false;
-    this.state.currentStatus = 'Waiting for your input';
   }
 
   protected handleChangeApprovalBatchRequired(event: AiChatSocketEvent): void {
-    const requestId = this.activeRequestId;
-    if (!requestId) return;
-    const eventConversationId = typeof event.conversationId === 'string'
-      && event.conversationId.trim() === event.conversationId
-      ? event.conversationId : undefined;
-    const expectedConversationId = this.state.activeRequest?.conversationId
-      || this.state.conversationId || eventConversationId;
-    const notice = changeApprovalBatchNotice(event, requestId, expectedConversationId);
-    if (!notice) {
-      return;
-    }
-    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
-    const active = this.state.changeApprovalBatch;
-    if (active?.batchId === notice.batchId
-      || this.state.changeApprovalBatchQueue.some(batch => batch.batchId === notice.batchId)) {
-      return;
-    }
-    this.state.messages.push({
-      role: 'guide',
-      content: notice.items.length === 1
-        ? 'Approval requested for one change.'
-        : `Approval requested for ${notice.items.length} changes.`
-    });
-    if (active) {
-      this.state.changeApprovalBatchQueue.push(notice);
-      return;
-    }
-    this.completeProgressMessages();
-    this.clearStatusMessage();
-    this.state.changeApprovalBatch = notice;
-    this.state.changeApprovalBatchBusy = false;
-    this.scheduleChangeApprovalExpiry();
-    this.state.currentStatus = changeApprovalBatchStatus(notice);
+    this.changeApprovalBatches.handleRequired(
+      this.state, event, this.activeRequestId, this.changeApprovalCallbacks()
+    );
   }
 
   protected handleChangeApprovalDecisionEvent(event: AiChatSocketEvent): void {
-    const active = this.state.changeApprovalBatch;
-    if (!active || event.requestId !== active.requestId
-      || event.conversationId !== active.conversationId
-      || event.metadata?.['batchId'] !== active.batchId) {
-      return;
-    }
-    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
-    this.clearChangeApprovalAcknowledgementTimeout();
-    if (event.subtype === 'change_approval_decision_accepted') {
-      this.state.changeApprovalBatch = this.nextChangeApprovalBatch();
-      this.state.changeApprovalBatchBusy = false;
-      this.scheduleChangeApprovalExpiry();
-      this.state.currentStatus = this.state.changeApprovalBatch
-        ? changeApprovalBatchStatus(this.state.changeApprovalBatch) : 'Working';
-      this.state.messages.push({
-        role: 'guide',
-        content: primaryContent(event).trim()
-          || 'Approval decision recorded. Continuing the active request.'
-      });
-      return;
-    }
-    this.state.changeApprovalBatchBusy = false;
-    if (!isUnexpiredChangeApprovalBatch(active)) {
-      this.expireChangeApprovalBatch(active.batchId);
-      return;
-    }
-    this.state.currentStatus = changeApprovalBatchStatus(active);
-    this.state.messages.push({
-      role: 'error',
-      content: primaryContent(event).trim()
-        || 'The assistant could not accept that approval decision. Please try again.'
-    });
-  }
-
-  private nextChangeApprovalBatch() {
-    let expired = 0;
-    while (this.state.changeApprovalBatchQueue.length > 0) {
-      const next = this.state.changeApprovalBatchQueue.shift();
-      if (next && isUnexpiredChangeApprovalBatch(next)) {
-        this.reportExpiredQueuedApprovals(expired);
-        return next;
-      }
-      if (next) expired += 1;
-    }
-    this.reportExpiredQueuedApprovals(expired);
-    return undefined;
-  }
-
-  private reportExpiredQueuedApprovals(expired: number): void {
-    if (expired > 0) {
-      this.state.messages.push({
-        role: 'error',
-        content: expired === 1
-          ? 'A queued approval request expired before it could be shown.'
-          : `${expired} queued approval requests expired before they could be shown.`
-      });
-    }
+    this.changeApprovalBatches.handleDecision(
+      this.state, event, this.changeApprovalCallbacks()
+    );
   }
 
   protected scheduleChangeApprovalExpiry(): void {
-    if (this.changeApprovalExpiryTimeout !== undefined) {
-      window.clearTimeout(this.changeApprovalExpiryTimeout);
-      this.changeApprovalExpiryTimeout = undefined;
-    }
-    const active = this.state.changeApprovalBatch;
-    if (!active) return;
-    const remaining = Date.parse(active.expiresAt) - Date.now();
-    if (remaining <= 0) {
-      this.expireChangeApprovalBatch(active.batchId);
-      return;
-    }
-    this.changeApprovalExpiryTimeout = window.setTimeout(() => {
-      this.changeApprovalExpiryTimeout = undefined;
-      const current = this.state.changeApprovalBatch;
-      if (!current || current.batchId !== active.batchId) return;
-      if (isUnexpiredChangeApprovalBatch(current)) {
-        this.scheduleChangeApprovalExpiry();
-      } else {
-        this.expireChangeApprovalBatch(current.batchId);
-      }
-    }, Math.min(remaining, MAX_TIMER_DELAY_MS));
-  }
-
-  private expireChangeApprovalBatch(batchId: string): void {
-    const active = this.state.changeApprovalBatch;
-    if (!active || active.batchId !== batchId) return;
-    const acknowledgementMissing = this.state.changeApprovalBatchBusy;
-    this.clearChangeApprovalAcknowledgementTimeout();
-    this.state.changeApprovalBatch = this.nextChangeApprovalBatch();
-    this.state.changeApprovalBatchBusy = false;
-    this.state.currentStatus = this.state.changeApprovalBatch
-      ? changeApprovalBatchStatus(this.state.changeApprovalBatch) : 'Approval expired';
-    this.state.messages.push({
-      role: 'error',
-      content: this.state.changeApprovalBatch
-        ? 'The previous approval request expired. Showing the next pending approval.'
-        : acknowledgementMissing
-          ? 'No acknowledgement was received before this approval request expired.'
-          : 'This approval request expired before a decision was sent.'
-    });
-    this.scheduleChangeApprovalExpiry();
-    this.scrollToBottom();
+    this.changeApprovalBatches.scheduleExpiry(this.state, this.changeApprovalCallbacks());
   }
 
   decideChangeApprovalBatch(
     decision: 'APPROVE' | 'DENY' | AiChangeApprovalBatchDecision[]
   ): void {
-    const active = this.state.changeApprovalBatch;
-    if (!active || this.state.changeApprovalBatchBusy || !this.state.pending
-      || this.activeRequestId !== active.requestId
-      || this.state.cancellation.phase !== 'idle') {
-      return;
-    }
-    if (!isUnexpiredChangeApprovalBatch(active)) {
-      this.expireChangeApprovalBatch(active.batchId);
-      return;
-    }
-    this.state.changeApprovalBatchBusy = true;
-    this.state.currentStatus = 'Sending approval decision';
-    try {
-      this.transportService.publish('/app/ai/chat/change-approval', {
-        requestId: active.requestId,
-        conversationId: active.conversationId,
-        batchId: active.batchId,
-        decisions: Array.isArray(decision) ? decision : active.items.map(item => ({
-          confirmationRequestId: item.confirmationRequestId, decision
-        }))
-      });
-      this.scheduleChangeApprovalAcknowledgementTimeout(active.batchId);
-    } catch {
-      this.state.changeApprovalBatchBusy = false;
-      this.state.currentStatus = changeApprovalBatchStatus(active);
-      this.state.messages.push({
-        role: 'error', content: 'Could not send the approval decision.'
-      });
-      this.scrollToBottom();
-    }
-  }
-
-  private scheduleChangeApprovalAcknowledgementTimeout(batchId: string): void {
-    this.clearChangeApprovalAcknowledgementTimeout();
-    const active = this.state.changeApprovalBatch;
-    if (!active || active.batchId !== batchId) return;
-    const remaining = Date.parse(active.expiresAt) - Date.now();
-    const delay = Math.max(1, Math.min(CHANGE_APPROVAL_ACK_TIMEOUT_MS, remaining));
-    this.changeApprovalAcknowledgementTimeout = window.setTimeout(() => {
-      this.changeApprovalAcknowledgementTimeout = undefined;
-      const current = this.state.changeApprovalBatch;
-      if (!current || current.batchId !== batchId
-        || !this.state.changeApprovalBatchBusy) {
-        return;
-      }
-      this.state.changeApprovalBatchBusy = false;
-      if (!isUnexpiredChangeApprovalBatch(current)) {
-        this.expireChangeApprovalBatch(batchId);
-        return;
-      }
-      this.state.currentStatus = changeApprovalBatchStatus(current);
-      this.state.messages.push({
-        role: 'error',
-        content: 'No acknowledgement was received. You can retry the approval decision.'
-      });
-      this.scheduleChangeApprovalExpiry();
-      this.scrollToBottom();
-    }, delay);
-  }
-
-  private clearChangeApprovalAcknowledgementTimeout(): void {
-    if (this.changeApprovalAcknowledgementTimeout !== undefined) {
-      window.clearTimeout(this.changeApprovalAcknowledgementTimeout);
-      this.changeApprovalAcknowledgementTimeout = undefined;
-    }
+    this.changeApprovalBatches.decide(
+      this.state, decision, this.activeRequestId, this.changeApprovalCallbacks()
+    );
   }
 
   protected handleElicitationDecisionEvent(event: AiChatSocketEvent): void {
-    const active = this.state.elicitation;
-    if (!active || event.requestId !== active.requestId
-      || event.conversationId !== active.conversationId
-      || event.metadata?.['elicitationId'] !== active.elicitationId) {
-      return;
-    }
-    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
-    if (event.subtype === 'elicitation_decision_accepted') {
-      this.state.elicitation = undefined;
-      this.state.elicitationBusy = false;
-      this.state.currentStatus = 'Working';
-      this.showStatus('Response sent. Continuing.', true);
-      return;
-    }
-    this.showElicitationResponseError(
-      primaryContent(event).trim()
-      || 'The assistant could not accept that response. Please try again.'
+    this.elicitationCoordinator.handleDecision(
+      this.state, event, this.elicitationCallbacks()
     );
   }
 
   respondToElicitation(response: AiElicitationResponse): void {
-    const active = this.state.elicitation;
-    if (!active || this.state.elicitationBusy || !this.state.pending
-      || this.activeRequestId !== active.requestId) {
-      return;
-    }
-    this.state.elicitationBusy = true;
-    this.state.currentStatus = 'Sending your response';
-    try {
-      this.transportService.publish('/app/ai/chat/elicitation', {
-        requestId: active.requestId,
-        conversationId: active.conversationId,
-        elicitationId: active.elicitationId,
-        generation: active.generation,
-        action: response.action,
-        content: response.action === 'ACCEPT' ? response.content : {}
-      });
-    } catch {
-      this.showElicitationResponseError('Could not send your response.');
-      this.scrollToBottom();
-    }
+    this.elicitationCoordinator.respond(
+      this.state, response, this.activeRequestId, this.elicitationCallbacks()
+    );
   }
 
-  private showElicitationResponseError(content: string): void {
-    this.state.elicitationBusy = false;
-    this.state.currentStatus = 'Waiting for your input';
-    this.state.messages.push({role: 'error', content});
+  private changeApprovalCallbacks(): AiChangeApprovalBatchCallbacks {
+    return {
+      acknowledge: requestId => this.acknowledgeRecoveredRequestLiveEvent(requestId),
+      completeProgress: () => this.completeProgressMessages(),
+      clearStatus: () => this.clearStatusMessage(),
+      scrollToBottom: () => this.scrollToBottom()
+    };
+  }
+
+  private elicitationCallbacks(): AiElicitationCallbacks {
+    return {
+      ...this.changeApprovalCallbacks(),
+      showStatus: (content, inProgress) => this.showStatus(content, inProgress)
+    };
   }
 
   protected completeFinalEvent(event: AiChatSocketEvent): void {
@@ -458,8 +225,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     this.completeToolGroupMessages();
     this.clearTimers();
     this.clearStatusMessage();
-    this.state.elicitation = undefined;
-    this.state.elicitationBusy = false;
+    this.elicitationCoordinator.clear(this.state);
     this.clearChangeApprovalBatch();
     const confirmationConversationId =
       this.pendingChangeConfirmation?.conversationId;
