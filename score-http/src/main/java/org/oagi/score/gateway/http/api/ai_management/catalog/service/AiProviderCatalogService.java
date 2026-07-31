@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
 import org.jooq.Record;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderConnectionTestResult;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderView;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
@@ -16,16 +19,16 @@ import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.net.URI;
 
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CATALOG_AUDIT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_PROVIDER;
 
-/** Transactional provider catalog management with write-only encrypted credentials. */
+/** Provider catalog management with write-only encrypted credentials. */
 @Service
 public class AiProviderCatalogService {
 
@@ -33,14 +36,17 @@ public class AiProviderCatalogService {
     private final ApplicationSecretService secrets;
     private final AiAdminPolicyService authorization;
     private final ObjectMapper objectMapper;
+    private final AiProviderConnectionTester connectionTester;
 
     public AiProviderCatalogService(DSLContext dsl, ApplicationSecretService secrets,
                                     AiAdminPolicyService authorization,
-                                    ObjectMapper objectMapper) {
+                                    ObjectMapper objectMapper,
+                                    AiProviderConnectionTester connectionTester) {
         this.dsl = dsl;
         this.secrets = secrets;
         this.authorization = authorization;
         this.objectMapper = objectMapper;
+        this.connectionTester = connectionTester;
     }
 
     public List<AiProviderView> list(ScoreUser actor) {
@@ -55,6 +61,12 @@ public class AiProviderCatalogService {
                 .where(AI_PROVIDER.AI_PROVIDER_ID.eq(ULong.valueOf(providerId))).fetchOne();
         if (row == null) throw new NotFoundException();
         return view(row);
+    }
+
+    public List<AiModelProfileView> modelProfiles(ScoreUser actor, long providerId) {
+        AiProviderView provider = get(actor, providerId);
+        return AiModelProfileCatalog.modelsFor(provider.providerType()).stream()
+                .map(AiModelProfileView::from).toList();
     }
 
     public AiProviderView create(ScoreUser actor, AiProviderUpdate input) {
@@ -87,7 +99,7 @@ public class AiProviderCatalogService {
                     .returning(AI_PROVIDER.AI_PROVIDER_ID).fetchOne(AI_PROVIDER.AI_PROVIDER_ID);
             AiProviderView after = view(tx.selectFrom(AI_PROVIDER)
                     .where(AI_PROVIDER.AI_PROVIDER_ID.eq(id)).fetchOne());
-            audit(tx, id, actorId, "CREATE", null, after, input.reason());
+            audit(tx, id, actorId, "CREATE", null, after);
             return after;
             });
         } catch (org.jooq.exception.IntegrityConstraintViolationException exception) {
@@ -106,6 +118,7 @@ public class AiProviderCatalogService {
             if (existing == null) throw new NotFoundException();
             AiProviderView before = view(existing);
             if (before.catalogVersion() != input.expectedVersion()) throw conflict();
+            requireCompatibleProviderFamily(tx, id, before.providerType(), input.providerType());
             if (!input.enabled() && before.enabled() && tx.fetchExists(tx.selectOne()
                     .from(AI_MODEL).where(AI_MODEL.PROVIDER_ID.eq(id))
                     .and(AI_MODEL.ENABLED.eq((byte) 1)))) {
@@ -139,9 +152,68 @@ public class AiProviderCatalogService {
             AiProviderView after = view(tx.selectFrom(AI_PROVIDER)
                     .where(AI_PROVIDER.AI_PROVIDER_ID.eq(id)).fetchOne());
             audit(tx, id, actorId, auditAction(input.apiKey(), oldSecretId != null, after.enabled()),
-                    before, after, input.reason());
+                    before, after);
             return after;
         });
+    }
+
+    public AiProviderConnectionTestResult testConnection(ScoreUser actor, long providerId,
+                                                         AiProviderUpdate input) {
+        authorization.requireAdministrator(actor);
+        validate(input, true);
+        Record existing = dsl.selectFrom(AI_PROVIDER)
+                .where(AI_PROVIDER.AI_PROVIDER_ID.eq(ULong.valueOf(providerId))).fetchOne();
+        if (existing == null) throw new NotFoundException();
+        long catalogVersion = existing.get(AI_PROVIDER.CATALOG_VERSION).longValue();
+        if (catalogVersion != input.expectedVersion()) throw conflict();
+        if (input.apiKey() == null && !sameConnectionTarget(
+                existing.get(AI_PROVIDER.PROVIDER_TYPE), existing.get(AI_PROVIDER.BASE_URL),
+                existing.get(AI_PROVIDER.MESSAGES_URL), input)) {
+            throw new IllegalArgumentException(
+                    "A replacement API key is required to test a changed provider endpoint.");
+        }
+
+        char[] apiKey;
+        try {
+            apiKey = connectionTestKey(existing.get(AI_PROVIDER.API_KEY_SECRET_ID), input.apiKey());
+        } catch (IllegalStateException exception) {
+            return new AiProviderConnectionTestResult(false,
+                    "The stored API key cannot be opened by this server.", null);
+        }
+        try {
+            String modelName = "anthropic".equals(input.providerType().strip().toLowerCase())
+                    ? connectionTestModel(providerId) : null;
+            return connectionTester.test(input, apiKey, modelName);
+        } finally {
+            ApplicationSecretService.clear(apiKey);
+        }
+    }
+
+    char[] connectionTestKey(ULong storedSecretId, String requestedKey) {
+        if (requestedKey != null) return chars(requestedKey);
+        if (storedSecretId == null) return null;
+        if (!secrets.isEncryptionConfigured()) {
+            throw new IllegalStateException("Provider secret encryption is not configured.");
+        }
+        return secrets.decrypt(dsl, storedSecretId);
+    }
+
+    static boolean sameConnectionTarget(String providerType, String baseUrl, String messagesUrl,
+                                        AiProviderUpdate input) {
+        return sameText(providerType, input.providerType())
+                && sameText(baseUrl, input.baseUrl())
+                && sameText(messagesUrl, input.messagesUrl());
+    }
+
+    private static boolean sameText(String stored, String requested) {
+        return java.util.Objects.equals(nullable(stored), nullable(requested));
+    }
+
+    private String connectionTestModel(long providerId) {
+        return dsl.select(AI_MODEL.PROVIDER_MODEL_NAME).from(AI_MODEL)
+                .where(AI_MODEL.PROVIDER_ID.eq(ULong.valueOf(providerId)))
+                .orderBy(AI_MODEL.ENABLED.desc(), AI_MODEL.SORT_ORDER, AI_MODEL.AI_MODEL_ID)
+                .limit(1).fetchOne(AI_MODEL.PROVIDER_MODEL_NAME);
     }
 
     ULong updateSecret(DSLContext tx, ULong oldSecretId, String providerName,
@@ -185,7 +257,6 @@ public class AiProviderCatalogService {
         }
         validateEndpoint(input.baseUrl(), "base URL");
         validateEndpoint(input.messagesUrl(), "messages URL");
-        requireReason(input.reason());
     }
 
     private static void validateEndpoint(String value, String label) {
@@ -201,6 +272,15 @@ public class AiProviderCatalogService {
         }
     }
 
+    static void requireCompatibleProviderFamily(DSLContext tx, ULong providerId,
+                                                String currentType, String requestedType) {
+        if (AiProviderType.from(currentType) == AiProviderType.from(requestedType)) return;
+        if (tx.fetchCount(AI_MODEL, AI_MODEL.PROVIDER_ID.eq(providerId)) > 0) {
+            throw new IllegalArgumentException(
+                    "Remove the provider's models before changing its provider family.");
+        }
+    }
+
     private AiProviderView view(Record row) {
         return new AiProviderView(row.get(AI_PROVIDER.AI_PROVIDER_ID).longValue(),
                 row.get(AI_PROVIDER.PROVIDER_NAME), row.get(AI_PROVIDER.PROVIDER_TYPE),
@@ -212,7 +292,7 @@ public class AiProviderCatalogService {
     }
 
     private void audit(DSLContext tx, ULong entityId, ULong actorId, String action,
-                       AiProviderView before, AiProviderView after, String reason) {
+                       AiProviderView before, AiProviderView after) {
         tx.insertInto(AI_CATALOG_AUDIT)
                 .set(AI_CATALOG_AUDIT.ENTITY_TYPE, "PROVIDER")
                 .set(AI_CATALOG_AUDIT.ENTITY_ID, entityId)
@@ -220,7 +300,6 @@ public class AiProviderCatalogService {
                 .set(AI_CATALOG_AUDIT.ACTION, action)
                 .set(AI_CATALOG_AUDIT.BEFORE_JSON, json(before))
                 .set(AI_CATALOG_AUDIT.AFTER_JSON, json(after))
-                .set(AI_CATALOG_AUDIT.REASON, reason.strip())
                 .set(AI_CATALOG_AUDIT.CREATED_AT, LocalDateTime.now(ZoneOffset.UTC)).execute();
     }
 
@@ -230,12 +309,6 @@ public class AiProviderCatalogService {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Could not serialize the catalog audit snapshot.", exception);
-        }
-    }
-
-    private static void requireReason(String reason) {
-        if (reason == null || reason.strip().length() < 10) {
-            throw new IllegalArgumentException("A change reason of at least 10 characters is required.");
         }
     }
 

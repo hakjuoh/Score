@@ -1,4 +1,6 @@
-import {Component, OnInit, inject} from '@angular/core';
+import {Component, OnInit, ViewChild, inject} from '@angular/core';
+import {MatSort} from '@angular/material/sort';
+import {MatTableDataSource} from '@angular/material/table';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiAdminModel} from './domain/ai-admin-policy';
 
@@ -16,6 +18,24 @@ export class AiModelListComponent implements OnInit {
   loading = true;
   loadFailed = false;
   columns = this.defaultColumns();
+  readonly dataSource = new MatTableDataSource<AiAdminModel>();
+
+  @ViewChild(MatSort) set tableSort(sort: MatSort | undefined) {
+    if (sort) this.dataSource.sort = sort;
+  }
+
+  constructor() {
+    this.dataSource.sortingDataAccessor = (model, column) => {
+      switch (column) {
+        case 'model': return model.displayName.toLowerCase();
+        case 'provider': return model.provider.toLowerCase();
+        case 'status': return Number(model.enabled);
+        case 'defaultEffort': return this.defaultEffort(model).toLowerCase();
+        case 'efforts': return this.effortNames(model).toLowerCase();
+        default: return '';
+      }
+    };
+  }
 
   get filteredModels(): AiAdminModel[] {
     const query = this.filter.trim().toLowerCase();
@@ -43,6 +63,7 @@ export class AiModelListComponent implements OnInit {
     this.service.models().subscribe({
       next: models => {
         this.models = models;
+        this.refreshDataSource();
         this.loading = false;
       },
       error: () => {
@@ -54,6 +75,12 @@ export class AiModelListComponent implements OnInit {
 
   onSearch(): void {
     this.filter = this.filter.trim();
+    this.refreshDataSource();
+  }
+
+  onFilterChange(filter: string): void {
+    this.filter = filter;
+    this.refreshDataSource();
   }
 
   onColumnsChange(columns: {name: string; selected: boolean}[]): void {
@@ -75,5 +102,9 @@ export class AiModelListComponent implements OnInit {
   private defaultColumns(): {name: string; selected: boolean}[] {
     return ['Model', 'Provider', 'Status', 'Default Effort', 'Efforts']
       .map(name => ({name, selected: true}));
+  }
+
+  private refreshDataSource(): void {
+    this.dataSource.data = this.filteredModels;
   }
 }

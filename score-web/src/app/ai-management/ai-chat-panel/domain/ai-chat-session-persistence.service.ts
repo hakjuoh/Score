@@ -64,7 +64,7 @@ export class AiChatSessionPersistenceService {
     const requestedReasoningEffort = normalizeAiReasoningEffort(storedReasoningEffort);
     const reasoningEffort = model.reasoningEfforts
       .some(candidate => candidate.name === requestedReasoningEffort)
-      ? requestedReasoningEffort : model.defaultReasoningEffort;
+      ? requestedReasoningEffort : model.defaultReasoningEffort || '';
     const requestedPermissionMode = preference?.permissionMode;
 
     state.selectedModelName = model.name;
@@ -76,7 +76,7 @@ export class AiChatSessionPersistenceService {
   }
 
   persistSelection(state: AiChatPanelState): void {
-    if (!state.selectedModelName || !state.selectedReasoningEffort) {
+    if (!state.selectedModelName) {
       return;
     }
     const preference: AiChatSelectionPreference = {

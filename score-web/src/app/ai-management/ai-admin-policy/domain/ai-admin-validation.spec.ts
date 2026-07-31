@@ -4,7 +4,7 @@ import {httpErrorMessage, validModelUpdate, validProviderUpdate} from './ai-admi
 describe('AI admin validation', () => {
   const provider = (): AiProviderUpdate => ({expectedVersion: null, providerName: 'OpenAI',
     providerType: 'openai', baseUrl: 'https://api.openai.com', messagesUrl: null,
-    anthropicVersion: null, apiVersion: null, enabled: true, reason: 'Configure provider'});
+    anthropicVersion: null, apiVersion: null, enabled: true});
 
   const model = (): AiModelUpdate => ({expectedVersion: null, providerId: 1,
     modelKey: 'model', providerModelName: 'model', displayName: 'Model', description: '',
@@ -16,10 +16,11 @@ describe('AI admin validation', () => {
     reasoningModelSupported: true, outputEffortSupported: false, verbositySupported: false,
     temperatureSupported: true, thinkingModes: ['enabled'], defaultThinking: 'enabled',
     reasoningEfforts: [{name: 'high', displayName: 'High', description: '',
-      defaultEffort: true, sortOrder: 0}], reason: 'Configure model'});
+      defaultEffort: true, sortOrder: 0}]});
 
   it('requires a supported provider type and endpoint for enabled providers', () => {
     expect(validProviderUpdate(provider())).toBe(true);
+    expect(validProviderUpdate({...provider(), providerType: 'azure-openai'})).toBe(false);
     expect(validProviderUpdate({...provider(), providerType: 'custom'})).toBe(false);
     expect(validProviderUpdate({...provider(), baseUrl: null})).toBe(false);
     expect(validProviderUpdate({...provider(), baseUrl: 'file:///tmp/key'})).toBe(false);
@@ -38,6 +39,7 @@ describe('AI admin validation', () => {
     expect(validModelUpdate({...model(), reasoningEfforts: [
       {...model().reasoningEfforts[0], sortOrder: -1}
     ]})).toBe(false);
+    expect(validModelUpdate({...model(), reasoningEfforts: []})).toBe(true);
   });
 
   it('extracts only safe server error text', () => {

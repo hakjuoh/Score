@@ -16,10 +16,9 @@ export function positiveSafeInteger(value: number | null): boolean {
 }
 
 export function validProviderUpdate(form: AiProviderUpdate): boolean {
-  const supportedTypes = new Set(['anthropic', 'azure-openai', 'openai']);
+  const supportedTypes = new Set(['anthropic', 'openai']);
   return !!form.providerName.trim()
     && supportedTypes.has(form.providerType.trim().toLowerCase())
-    && form.reason.trim().length >= 10
     && validHttpUrl(form.baseUrl)
     && validHttpUrl(form.messagesUrl)
     && (!form.enabled || !!form.baseUrl?.trim() || !!form.messagesUrl?.trim());
@@ -29,13 +28,12 @@ export function validModelUpdate(form: AiModelUpdate): boolean {
   const positiveOptional = (value: number | null) => value === null || positiveSafeInteger(value);
   if (!positiveSafeInteger(form.providerId) || !form.modelKey.trim()
     || !form.providerModelName.trim() || !form.displayName.trim() || form.description === null
-    || form.reason.trim().length < 10 || !Number.isSafeInteger(form.sortOrder) || form.sortOrder < 0
+    || !Number.isSafeInteger(form.sortOrder) || form.sortOrder < 0
     || !positiveOptional(form.maxTokens) || !positiveSafeInteger(form.contextWindow)
     || !positiveOptional(form.outputReserveTokens) || !positiveOptional(form.autoCompactThresholdTokens)
     || !Number.isSafeInteger(form.emergencyHeadroomTokens) || form.emergencyHeadroomTokens < 0
     || !positiveSafeInteger(form.toolOutputTokenLimit)
-    || form.temperature !== null && (!Number.isFinite(form.temperature)
-      || form.temperature < 0 || form.temperature > 2)
+    || form.temperature !== null && !Number.isFinite(form.temperature)
     || !positiveOptional(form.thinkingBudgetTokens)) return false;
 
   const reserve = form.outputReserveTokens ?? form.maxTokens
@@ -53,8 +51,7 @@ export function validModelUpdate(form: AiModelUpdate): boolean {
 
   const efforts = form.reasoningEfforts;
   const effortNames = efforts.map(effort => effort.name.trim().toLowerCase());
-  return !(form.enabled && efforts.length === 0)
-    && (efforts.length === 0 || efforts.filter(effort => effort.defaultEffort).length === 1)
+  return (efforts.length === 0 || efforts.filter(effort => effort.defaultEffort).length === 1)
     && new Set(effortNames).size === effortNames.length
     && efforts.every(effort => !!effort.name.trim() && !!effort.displayName.trim()
       && effort.description !== null && Number.isSafeInteger(effort.sortOrder) && effort.sortOrder >= 0);

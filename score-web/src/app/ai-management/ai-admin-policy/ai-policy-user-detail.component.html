@@ -93,7 +93,8 @@
                       <mat-panel-description>Optional restrictions by model</mat-panel-description>
                     </mat-expansion-panel-header>
                     @for (model of models; track model.modelKey) {
-                      @if (policy.modelAccessMode === 'ALL' || modelChecked(model.modelKey)) {
+                      @if (model.reasoningEfforts.length > 0
+                        && (policy.modelAccessMode === 'ALL' || modelChecked(model.modelKey))) {
                         <div class="effort-access-row">
                           <strong>{{model.displayName}}</strong>
                           <div>
@@ -168,14 +169,6 @@
                   </div>
                 </section>
 
-                @if (editingOverride) {
-                  <section class="policy-section policy-actions-section">
-                    <mat-form-field class="w-100">
-                      <mat-label>Policy Change Reason</mat-label>
-                      <textarea matInput rows="2" maxlength="500" [(ngModel)]="policyReason"></textarea>
-                    </mat-form-field>
-                  </section>
-                }
               </fieldset>
             </div>
           </mat-tab>
@@ -219,12 +212,8 @@
                           <input matInput type="number" [(ngModel)]="adjustment">
                           <mat-hint>Positive consumes; negative credits.</mat-hint>
                         </mat-form-field>
-                        <mat-form-field>
-                          <mat-label>Adjustment Reason</mat-label>
-                          <input matInput maxlength="500" [(ngModel)]="operationReason">
-                        </mat-form-field>
                         <button mat-stroked-button (click)="adjustQuota()"
-                          [disabled]="saving || !adjustment || operationReason.trim().length < 10">
+                          [disabled]="saving || !adjustment">
                           Apply Adjustment
                         </button>
                       </div>
@@ -237,12 +226,13 @@
                 <mat-card-header><mat-card-title>Recent Model Calls</mat-card-title></mat-card-header>
                 <mat-card-content class="mat-card-container">
                   <div class="table-wrapper mat-elevation-z1">
-                    <table mat-table [dataSource]="usage?.recentCalls ?? []">
-                      <ng-container matColumnDef="time"><th mat-header-cell *matHeaderCellDef>Time</th><td mat-cell *matCellDef="let call">{{call.reservedAt | date:'short':'UTC'}}</td></ng-container>
-                      <ng-container matColumnDef="model"><th mat-header-cell *matHeaderCellDef>Model</th><td mat-cell *matCellDef="let call">{{call.modelKey}}</td></ng-container>
-                      <ng-container matColumnDef="kind"><th mat-header-cell *matHeaderCellDef>Kind</th><td mat-cell *matCellDef="let call">{{call.executionKind}}</td></ng-container>
-                      <ng-container matColumnDef="status"><th mat-header-cell *matHeaderCellDef>Status</th><td mat-cell *matCellDef="let call">{{call.status}}</td></ng-container>
-                      <ng-container matColumnDef="charged"><th mat-header-cell *matHeaderCellDef>Charged</th><td mat-cell *matCellDef="let call">{{call.chargedTokens | number}}</td></ng-container>
+                    <table mat-table matSort #usageSort="matSort" matSortStart="desc"
+                      [dataSource]="usageDataSource">
+                      <ng-container matColumnDef="time"><th mat-header-cell *matHeaderCellDef mat-sort-header>Time</th><td mat-cell *matCellDef="let call">{{call.reservedAt | date:'short':'UTC'}}</td></ng-container>
+                      <ng-container matColumnDef="model"><th mat-header-cell *matHeaderCellDef mat-sort-header>Model</th><td mat-cell *matCellDef="let call">{{call.modelKey}}</td></ng-container>
+                      <ng-container matColumnDef="kind"><th mat-header-cell *matHeaderCellDef mat-sort-header>Kind</th><td mat-cell *matCellDef="let call">{{call.executionKind}}</td></ng-container>
+                      <ng-container matColumnDef="status"><th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th><td mat-cell *matCellDef="let call">{{call.status}}</td></ng-container>
+                      <ng-container matColumnDef="charged"><th mat-header-cell *matHeaderCellDef mat-sort-header>Charged</th><td mat-cell *matCellDef="let call">{{call.chargedTokens | number}}</td></ng-container>
                       <tr mat-header-row *matHeaderRowDef="usageColumns"></tr>
                       <tr mat-row *matRowDef="let row; columns: usageColumns;"></tr>
                     </table>
@@ -261,10 +251,10 @@
           <a mat-raised-button routerLink="/ai-admin/users">Back</a>
           @if (editingOverride) {
             <button mat-raised-button color="primary" (click)="save()"
-              [disabled]="saving || invalid || !isChanged" data-id="save-ai-policy">Update</button>
+              [disabled]="updateDisabled" data-id="save-ai-policy">Update</button>
             @if (!policy.inherited) {
               <button mat-stroked-button color="warn" (click)="reset()"
-                [disabled]="saving || policyReason.trim().length < 10">
+                [disabled]="saving">
                 Restore Default Policy
               </button>
             }
