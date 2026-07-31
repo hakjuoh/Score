@@ -40,7 +40,8 @@ import {AiChatMessageTrackerService} from './domain/ai-chat-message-tracker.serv
 import {AiChatPanelState} from './domain/ai-chat-panel-state';
 import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.service';
 import {AiChatSessionPersistenceService} from './domain/ai-chat-session-persistence.service';
-import {AiChatSettingsService} from './domain/ai-chat-settings.service';
+import {AiPermissionSettingsService} from './domain/ai-permission-settings.service';
+import {AiModelSettingsCoordinator} from './domain/ai-model-settings-coordinator';
 import {AiChatTransportService} from './domain/ai-chat-transport.service';
 import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
 import {AiChatWorkspacePersistenceCoordinator} from './domain/ai-chat-workspace-persistence-coordinator';
@@ -94,7 +95,8 @@ export abstract class AiChatPanelControllerBase {
   protected changeInteractions = inject(AiChangeInteractionService);
   protected viewport = inject(AiChatPanelViewportService);
   protected sessionPersistence = inject(AiChatSessionPersistenceService);
-  protected settingsService = inject(AiChatSettingsService);
+  protected permissionSettings = inject(AiPermissionSettingsService);
+  protected modelSettings = inject(AiModelSettingsCoordinator);
   protected transportService = inject(AiChatTransportService);
   protected windowCoordinator = inject(AiChatWindowCoordinatorService);
   protected workspacePersistence = inject(AiChatWorkspacePersistenceCoordinator);
@@ -391,7 +393,6 @@ export abstract class AiChatPanelControllerBase {
     requestId: string, terminalConversationId: string | undefined
   ): void;
   protected abstract finishConversationRestore(): void;
-  protected abstract finishModelSettings(displayName: string, reasoningEffort: string): void;
   abstract focusPrompt(): void;
   protected abstract handleChangeConfirmationNotice(event: AiChatSocketEvent): void;
   protected abstract handleConversationRestoreEvent(event: AiChatSocketEvent): void;
@@ -401,7 +402,6 @@ export abstract class AiChatPanelControllerBase {
   protected abstract handleToolCallEvent(event: AiChatSocketEvent): void;
   protected abstract invalidateAttachmentReads(): void;
   protected abstract isRecognizedRequestEvent(event: AiChatSocketEvent): boolean;
-  protected abstract loadAvailableModels(): void;
   abstract loadConversationHistory(): void;
   protected abstract matchesActiveIdentity(identity: AiActiveRequestIdentity): boolean;
   protected abstract matchesTerminalIdentity(event: AiChatSocketEvent): boolean;
