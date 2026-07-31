@@ -85,18 +85,13 @@ public final class AiTrajectoryRecorder {
     private final ExecutionObservationContext observationContext;
     private final AiTrajectoryEventWriter eventWriter;
     private final AiTrajectoryAuditSanitizer auditSanitizer;
-    private volatile ProviderPromptTokenNormalizer promptTokenNormalizer;
+    private final AiTrajectoryModelCalls modelCalls;
     private final AtomicLong estimatedInputFloor;
     private final AtomicLong eventSequence;
     private final AtomicLong toolSequence;
     private final Map<String, Object> traceContext;
     private final boolean subagentScope;
     private final AiChatConversationKind conversationKind;
-    private volatile String modelProvider = "unknown";
-    private volatile String requestModelName;
-    private final AtomicLong ownPromptTokens = new AtomicLong();
-    private final AtomicLong ownCompletionTokens = new AtomicLong();
-    private final AtomicLong ownModelCalls = new AtomicLong();
     private final Map<String, ConcurrentLinkedQueue<AiPendingTool>> pendingTools = new ConcurrentHashMap<>();
     private final Set<String> completedToolCallIds = ConcurrentHashMap.newKeySet();
     private final Set<String> narratedToolCallIds = ConcurrentHashMap.newKeySet();
@@ -118,7 +113,6 @@ public final class AiTrajectoryRecorder {
     private volatile boolean sealed;
     private volatile boolean usageAccountingSealed;
     private volatile String lastGuideContent;
-    private volatile ExecutionEventIdentity lastEventIdentity;
     private final ThreadLocal<java.util.ArrayDeque<String>> activeAgentRuns =
             ThreadLocal.withInitial(java.util.ArrayDeque::new);
 
@@ -200,7 +194,6 @@ public final class AiTrajectoryRecorder {
         this.conversationId = conversationId;
         this.requestId = requestId;
         this.modelName = modelName;
-        this.requestModelName = modelName;
         this.reasoningEffort = reasoningEffort;
         this.realtimeEvents = events != null ? events : ignored -> {};
         this.contextBudget = contextBudget;
@@ -208,7 +201,6 @@ public final class AiTrajectoryRecorder {
         this.observer = observer != null ? observer : ExecutionObserver.noop();
         this.observationContext = observationContext != null
                 ? observationContext : ExecutionObservationContext.noop();
-        this.promptTokenNormalizer = promptTokenNormalizer;
         this.estimatedInputFloor = new AtomicLong(Math.max(0L, estimatedInputFloor));
         this.eventSequence = eventSequence;
         this.toolSequence = toolSequence;
@@ -221,6 +213,16 @@ public final class AiTrajectoryRecorder {
                 requestId, this.realtimeEvents, executionScope, this.observer,
                 this.traceContext, this::activeAgentRunId, () -> sealed);
         this.auditSanitizer = new AiTrajectoryAuditSanitizer(objectMapper);
+        this.modelCalls = new AiTrajectoryModelCalls(
+                repository, objectMapper, conversationId, requestId, modelName, reasoningEffort,
+                contextBudget, this.estimatedInputFloor, promptTokenNormalizer, executionScope,
+                this.observer, eventWriter, auditSanitizer::boundedValue,
+                (name, callId, arguments, observations) -> pendingTools
+                        .computeIfAbsent(name, ignored -> new ConcurrentLinkedQueue<>())
+                        .add(new AiPendingTool(callId, name, arguments, observations,
+                                toolSequence.getAndIncrement())),
+                this::emitContextUsage, () -> sealed, () -> usageAccountingSealed,
+                subagentScope, this.traceContext);
     }
 
     /**
@@ -234,7 +236,7 @@ public final class AiTrajectoryRecorder {
         AiTrajectoryRecorder child = new AiTrajectoryRecorder(
                 repository, objectMapper, requester, conversationId, requestId,
                 modelName, reasoningEffort, realtimeEvents, contextBudget,
-                estimatedInputFloor.get(), promptTokenNormalizer, eventSequence, toolSequence,
+                estimatedInputFloor.get(), modelCalls.promptTokenNormalizer(), eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovalIds, childContext,
                 executionScope, observer, observationContext, true, conversationKind);
         return child;
@@ -265,7 +267,7 @@ public final class AiTrajectoryRecorder {
         AiTrajectoryRecorder child = new AiTrajectoryRecorder(
                 repository, objectMapper, requester, childConversationId, requestId,
                 modelName, reasoningEffort, realtimeEvents, contextBudget,
-                estimatedInputFloor.get(), promptTokenNormalizer, eventSequence, toolSequence,
+                estimatedInputFloor.get(), modelCalls.promptTokenNormalizer(), eventSequence, toolSequence,
                 requestExecutedDomainToolCalls, requestPendingApprovalIds,
                 traceMetadata(childNamespace), childExecutionScope(childConversationId),
                 observer, observationContext,
@@ -304,8 +306,8 @@ public final class AiTrajectoryRecorder {
 
     public String requestId() { return requestId; }
     public String modelName() { return modelName; }
-    public String requestModelName() { return requestModelName; }
-    public String modelProvider() { return modelProvider; }
+    public String requestModelName() { return modelCalls.requestModelName(); }
+    public String modelProvider() { return modelCalls.provider(); }
     public long executionGeneration() {
         return executionScope != null ? executionScope.generation() : 0L;
     }
@@ -386,23 +388,17 @@ public final class AiTrajectoryRecorder {
 
     /** Selects the provider-specific mapping from Spring AI usage to ATIF prompt totals. */
     public void useModelProvider(String providerType) {
-        this.modelProvider = StringUtils.hasText(providerType) ? providerType.strip() : "unknown";
-        this.promptTokenNormalizer = ProviderPromptTokenNormalizer.forProvider(providerType);
+        modelCalls.useProvider(providerType);
     }
 
     /** Configures the exact model identifier sent to the provider for GenAI telemetry. */
     public void useModelProvider(String providerType, String requestModelName) {
-        useModelProvider(providerType);
-        this.requestModelName = StringUtils.hasText(requestModelName)
-                ? requestModelName.strip() : modelName;
+        modelCalls.useProvider(providerType, requestModelName);
     }
 
     /** Snapshot of the model usage this recorder observed, keyed by its fan-out namespace. */
     public AiUsageSnapshot usageSnapshot() {
-        return new AiUsageSnapshot(
-                traceContext.get("node_id") != null ? traceContext.get("node_id").toString() : null,
-                traceContext.get("agent_name") != null ? traceContext.get("agent_name").toString() : null,
-                ownPromptTokens.get(), ownCompletionTokens.get(), ownModelCalls.get());
+        return modelCalls.usageSnapshot();
     }
 
     /**
@@ -689,178 +685,32 @@ public final class AiTrajectoryRecorder {
     }
 
     public synchronized ModelCallRecording beginModelCall(String phase) {
-        if (sealed) return ModelCallRecording.noop();
-        String normalizedPhase = StringUtils.hasText(phase) ? phase : "model";
-        Map<String, Object> extra = traceMetadata(Map.of(
-                "phase", normalizedPhase, "status", "started"));
-        AiChatStoredStep stored = persistWithoutRealtime(new AiChatTrajectoryStep(
-                        requestId, "agent", "model_call", "debug", "", null,
-                        modelName, reasoningEffort, null, null, null, extra, 1, null, null),
-                AiExecutionEvent.detail("model_call_started", "", Map.of(
-                        "phase", normalizedPhase,
-                        "model", Objects.requireNonNullElse(requestModelName, "unknown"),
-                        "provider", Objects.requireNonNullElse(modelProvider, "unknown"))));
-        return new ModelCallRecording(stored != null ? stored.id() : -1L,
-                normalizedPhase, lastEventIdentity);
+        return modelCalls.begin(phase);
     }
 
     public synchronized ExecutionEventIdentity recordModelResponse(ChatResponse response, String phase) {
-        return recordModelResponse(new ModelCallRecording(-1L,
-                StringUtils.hasText(phase) ? phase : "model", null), response, false);
+        return modelCalls.recordLegacy(response, phase, false);
     }
 
     /** Records a response aggregated from streaming chunks with cache metadata loss in mind. */
     public synchronized ExecutionEventIdentity recordStreamingModelResponse(ChatResponse response, String phase) {
-        return recordModelResponse(new ModelCallRecording(-1L,
-                StringUtils.hasText(phase) ? phase : "model", null), response, true);
+        return modelCalls.recordLegacy(response, phase, true);
     }
 
     public synchronized ExecutionEventIdentity recordModelResponse(
             ModelCallRecording call, ChatResponse response, boolean streaming) {
-        if (response == null || response.getResults().isEmpty()) {
-            return null;
-        }
-        AiMetricsSnapshot metricsSnapshot = AiModelResponseProjection.metrics(response, streaming,
-                promptTokenNormalizer, estimatedInputFloor, subagentScope);
-        if (sealed) {
-            if (!usageAccountingSealed) recordOwnUsage(metricsSnapshot);
-            return null;
-        }
-        ModelCallRecording activeCall = call != null ? call : ModelCallRecording.noop();
-        String normalizedPhase = StringUtils.hasText(activeCall.phase())
-                ? activeCall.phase() : "model";
-        AiModelResponseProjection.Content content = AiModelResponseProjection.content(
-                response.getResults(), objectMapper, this::boundedRedactedValue);
-        boolean reasoningPresent = StringUtils.hasText(content.reasoning());
-        String message = content.visible();
-        List<Map<String, Object>> toolCalls = content.toolCalls();
-        List<Map<String, Object>> auditedToolCalls = content.auditedToolCalls();
-        Map<String, Object> metrics = metricsSnapshot != null ? metricsSnapshot.metrics() : null;
-        Map<String, Object> extra = new LinkedHashMap<>();
-        extra.put("phase", normalizedPhase);
-        if (StringUtils.hasText(response.getMetadata().getId())) {
-            extra.put("provider_response_id", response.getMetadata().getId());
-        }
-        if (StringUtils.hasText(response.getMetadata().getModel())) {
-            extra.put("provider_model", response.getMetadata().getModel());
-        }
-        if (reasoningPresent) {
-            extra.put("reasoning_present", true);
-        }
-        if (StringUtils.hasText(message)) {
-            // Raw model text is a private candidate until Agent Output Guardrails
-            // accept or rewrite it. The final safe answer is persisted by ChatService.
-            extra.put("candidate_content_suppressed", true);
-        }
-        extra = new LinkedHashMap<>(traceMetadata(extra));
-
-        AiChatTrajectoryStep completed = new AiChatTrajectoryStep(
-                        requestId, "agent", "model_call", "debug",
-                        "", null,
-                        StringUtils.hasText(modelName) ? modelName : response.getMetadata().getModel(),
-                        reasoningEffort,
-                        auditedToolCalls, null, metrics, extra, 1, null, null);
-        AiChatStoredStep legacyStored = null;
-        ExecutionEventIdentity completion;
-        if (activeCall.stepId() > 0) {
-            completion = completeModelCall(activeCall, completed, "completed");
-        } else {
-            legacyStored = persistWithoutRealtime(completed, AiExecutionEvent.detail(
-                    "model_call_completed", "", Map.of(
-                            "phase", normalizedPhase,
-                            "model", Objects.requireNonNullElse(requestModelName, "unknown"),
-                            "provider", Objects.requireNonNullElse(modelProvider, "unknown"))));
-            completion = lastEventIdentity;
-        }
-
-        long observationStepId = activeCall.stepId() > 0
-                ? activeCall.stepId() : legacyStored != null ? legacyStored.id() : 0L;
-        AiObservationAccumulator observations = new AiObservationAccumulator(
-                observationStepId, toolCalls);
-        for (Map<String, Object> toolCall : toolCalls) {
-            String name = Objects.toString(toolCall.get("function_name"), "tool");
-            String callId = Objects.toString(toolCall.get("tool_call_id"), UUID.randomUUID().toString());
-            pendingTools.computeIfAbsent(name, ignored -> new ConcurrentLinkedQueue<>())
-                    .add(new AiPendingTool(callId, name, toolCall.get("arguments"), observations,
-                            toolSequence.getAndIncrement()));
-        }
-        recordOwnUsage(metricsSnapshot);
-        // Subagent-scoped calls include transient fan-out prompts; only the container's
-        // settled aggregate may drive the conversation's visible context usage.
-        if (metricsSnapshot != null && contextBudget != null && !subagentScope) {
-            emitContextUsage(contextBudget.usage(metricsSnapshot.contextInputTokens(),
-                    metricsSnapshot.estimated(), metricsSnapshot.estimated() ? "estimate_floor" : "provider"));
-        }
-        return completion;
+        return modelCalls.record(call, response, streaming);
     }
 
     public synchronized ExecutionEventIdentity failModelCall(ModelCallRecording call,
                                                               Throwable failure) {
-        if (call == null || call.stepId() <= 0 || sealed) return null;
-        Map<String, Object> extra = new LinkedHashMap<>(traceMetadata(Map.of(
-                "phase", call.phase(), "status", "failed",
-                "failure_type", failure != null ? failure.getClass().getName() : "unknown")));
-        AiChatTrajectoryStep failed = new AiChatTrajectoryStep(
-                requestId, "agent", "model_call", "debug", "", null, modelName,
-                reasoningEffort, null, null, null, extra, 1, null, null);
-        return completeModelCall(call, failed, "failed");
-    }
-
-    private ExecutionEventIdentity completeModelCall(ModelCallRecording call,
-                                                       AiChatTrajectoryStep step,
-                                                       String outcome) {
-        if (call.stepId() <= 0) return null;
-        if (executionScope == null) {
-            repository.updateModelCall(conversationId, call.stepId(), step);
-            return null;
-        }
-        java.util.concurrent.atomic.AtomicReference<ExecutionEventIdentity> identity =
-                new java.util.concurrent.atomic.AtomicReference<>();
-        ExecutionObservation observation = AiExecutionLifecycle.from(AiExecutionEvent.detail(
-                "model_call_" + outcome, "", Map.of(
-                        "phase", call.phase(),
-                        "model", Objects.requireNonNullElse(requestModelName, "unknown"),
-                        "provider", Objects.requireNonNullElse(modelProvider, "unknown"))))
-                .observation(executionScope, Instant.now());
-        observer.publish(observation, event -> {
-            ExecutionEventIdentity terminal = ExecutionEventIdentity.from(event);
-            identity.set(terminal);
-            Map<String, Object> extra = new LinkedHashMap<>(
-                    step.extra() != null ? step.extra() : Map.of());
-            if (call.started() != null) {
-                call.started().putAttributes(extra);
-            }
-            if (terminal != null) {
-                extra.put("score.event.end.id", terminal.eventId());
-                extra.put("score.event.end.sequence", terminal.sequence());
-                extra.put("score.event.end.occurred_at", terminal.occurredAt().toString());
-            }
-            repository.updateModelCall(conversationId, call.stepId(),
-                    new AiChatTrajectoryStep(step.requestId(), step.source(), step.messageKind(),
-                            step.visibility(), step.message(), step.reasoningContent(),
-                            step.modelName(), step.reasoningEffort(), step.toolCalls(),
-                            step.observation(), step.metrics(), Map.copyOf(extra),
-                            step.llmCallCount(), step.isCopiedContext(), step.createdAt()));
-        });
-        return identity.get();
+        return modelCalls.fail(call, failure);
     }
 
     public record ModelCallRecording(long stepId, String phase, ExecutionEventIdentity started) {
         public static ModelCallRecording noop() {
             return new ModelCallRecording(-1L, "model", null);
         }
-    }
-
-    private void recordOwnUsage(AiMetricsSnapshot metricsSnapshot) {
-        if (metricsSnapshot == null) return;
-        ownModelCalls.incrementAndGet();
-        ownPromptTokens.addAndGet(longMetric(metricsSnapshot.metrics().get("prompt_tokens")));
-        ownCompletionTokens.addAndGet(longMetric(
-                metricsSnapshot.metrics().get("completion_tokens")));
-    }
-
-    private long longMetric(Object value) {
-        return value instanceof Number number ? Math.max(0L, number.longValue()) : 0L;
     }
 
     private boolean delegatedWorkerScope() {
@@ -1408,9 +1258,7 @@ public final class AiTrajectoryRecorder {
 
     private AiChatStoredStep persist(AiChatTrajectoryStep step, AiExecutionEvent event,
                                      boolean deliverRealtime) {
-        AiChatStoredStep stored = eventWriter.persist(step, event, deliverRealtime);
-        lastEventIdentity = ExecutionEventIdentity.from(eventWriter.lastIdentity());
-        return stored;
+        return eventWriter.persist(step, event, deliverRealtime);
     }
 
     /**
