@@ -1,7 +1,11 @@
+import {CommonModule} from '@angular/common';
+import {FormsModule} from '@angular/forms';
 import {TestBed} from '@angular/core/testing';
-import {ActivatedRoute, Router, convertToParamMap} from '@angular/router';
+import {NoopAnimationsModule} from '@angular/platform-browser/animations';
+import {ActivatedRoute, RouterModule, convertToParamMap} from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Subject, of, throwError} from 'rxjs';
+import {MaterialModule} from '../../material.module';
 import {AiPolicyUserDetailComponent} from './ai-policy-user-detail.component';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiAdminModel, AiPolicyView} from './domain/ai-admin-policy';
@@ -33,7 +37,7 @@ describe('AiPolicyUserDetailComponent', () => {
       remainingTokens: null, periodStart: null, periodEnd: null}
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     service = {
       models: vi.fn(() => of([model('active', true), model('disabled', false)])),
       policy: vi.fn(() => of(policy())), usage: vi.fn(() => of({quota: policy().quota,
@@ -41,12 +45,16 @@ describe('AiPolicyUserDetailComponent', () => {
       reset: vi.fn(), cancelActiveRequests: vi.fn(), adjustQuota: vi.fn()
     };
     snackBar = {open: vi.fn(() => ({onAction: () => new Subject<void>()}))};
-    TestBed.configureTestingModule({providers: [
-      {provide: AiAdminPolicyService, useValue: service},
-      {provide: ActivatedRoute, useValue: {snapshot: {paramMap: convertToParamMap({id: '17'})}}},
-      {provide: Router, useValue: {navigate: vi.fn()}},
-      {provide: MatSnackBar, useValue: snackBar}
-    ]});
+    await TestBed.configureTestingModule({
+      declarations: [AiPolicyUserDetailComponent],
+      imports: [CommonModule, FormsModule, MaterialModule, NoopAnimationsModule,
+        RouterModule.forRoot([])],
+      providers: [
+        {provide: AiAdminPolicyService, useValue: service},
+        {provide: ActivatedRoute, useValue: {snapshot: {paramMap: convertToParamMap({id: '17'})}}},
+        {provide: MatSnackBar, useValue: snackBar}
+      ]
+    }).compileComponents();
     component = TestBed.runInInjectionContext(() => new AiPolicyUserDetailComponent());
   });
 
@@ -66,7 +74,8 @@ describe('AiPolicyUserDetailComponent', () => {
     view.allowedReasoningEfforts.disabled = ['high'];
     component.models = [model('active', true)];
     component.apply(view);
-    component.reason = 'Save test policy';
+    component.policy!.maxActiveRequests = 9;
+    component.policyReason = 'Save test policy';
     component.save();
     expect(service.save.mock.calls[0][1].allowedReasoningEfforts).toEqual({active: ['high']});
   });
@@ -104,7 +113,8 @@ describe('AiPolicyUserDetailComponent', () => {
     component.setOutputUnlimited(true); component.setRequestUnlimited(true);
     expect(component.policy!.maxOutputTokensPerCall).toBeNull();
     expect(component.policy!.maxTotalTokensPerRequest).toBeNull();
-    component.reason = 'Save policy conflict'; component.save(); action.next();
+    component.policy!.enabled = false;
+    component.policyReason = 'Save policy conflict'; component.save(); action.next();
     expect(service.models).toHaveBeenCalledTimes(2);
     expect(service.policy).toHaveBeenCalledTimes(2);
     expect(service.usage).toHaveBeenCalledTimes(2);
@@ -116,8 +126,8 @@ describe('AiPolicyUserDetailComponent', () => {
     service.reset = vi.fn(() => throwError(() => new Error('reset')));
     component.apply(policy());
     component.cancelActive();
-    component.adjustment = 1; component.reason = 'Adjust quota test'; component.adjustQuota();
-    component.reason = 'Reset policy test'; component.reset();
+    component.adjustment = 1; component.operationReason = 'Adjust quota test'; component.adjustQuota();
+    component.policyReason = 'Reset policy test'; component.reset();
     expect(snackBar.open).toHaveBeenCalledWith('Active requests could not be cancelled.', '', {duration: 5000});
     expect(snackBar.open).toHaveBeenCalledWith('Quota could not be adjusted.', '', {duration: 5000});
     expect(snackBar.open).toHaveBeenCalledWith('The AI policy could not be reset.', '', {duration: 5000});
@@ -125,8 +135,94 @@ describe('AiPolicyUserDetailComponent', () => {
 
   it('reports an ordinary policy save server error without overwriting the form', () => {
     service.save = vi.fn(() => throwError(() => ({status: 500})));
-    component.apply(policy()); component.reason = 'Save policy server error'; component.save();
+    component.apply(policy()); component.policy!.enabled = false;
+    component.policyReason = 'Save policy server error'; component.save();
     expect(snackBar.open).toHaveBeenCalledWith('The AI policy could not be saved.', '', {duration: 5000});
     expect(component.policy!.policyVersion).toBe(3);
+  });
+
+  it('keeps the applied default policy read-only until a user override is started', () => {
+    const inheritedPolicy = policy();
+    inheritedPolicy.inherited = true;
+    component.apply(inheritedPolicy);
+    component.policyReason = 'Create user override';
+    component.save();
+    expect(service.save).not.toHaveBeenCalled();
+    component.beginOverride();
+    component.policy!.enabled = false;
+    component.save();
+    expect(service.save).toHaveBeenCalledOnce();
+  });
+
+  it('keeps policy and quota-operation reasons independent', () => {
+    component.userId = '17';
+    component.apply(policy());
+    component.policyReason = 'Update policy limits';
+    component.operationReason = 'Credit incorrect usage';
+    service.adjustQuota = vi.fn(() => of({quota: policy().quota, activeRequests: 0, recentCalls: []}));
+    component.adjustment = -10;
+    component.adjustQuota();
+    expect(service.adjustQuota).toHaveBeenCalledWith('17', -10, 'Credit incorrect usage');
+    expect(component.policyReason).toBe('Update policy limits');
+  });
+
+  it('keeps quota operations based on committed usage while the policy draft changes', () => {
+    const committedQuota = {...policy().quota, period: 'MONTHLY' as const,
+      limitTokens: 1000, remainingTokens: 1000};
+    component.usage = {quota: committedQuota, activeRequests: 0, recentCalls: []};
+    component.apply(policy());
+
+    expect(component.quotaAdjustmentAvailable).toBe(true);
+    component.setQuotaEnabled(true);
+    component.setQuotaEnabled(false);
+    expect(component.quotaAdjustmentAvailable).toBe(true);
+  });
+
+  it('renders policy quota fields from the draft and operations from committed usage', async () => {
+    const draft = policy();
+    draft.quota = {...draft.quota, period: 'MONTHLY', limitTokens: 2000};
+    service.policy = vi.fn(() => of(draft));
+    service.usage = vi.fn(() => of({quota: {...policy().quota, period: 'MONTHLY', limitTokens: 1000},
+      activeRequests: 0, recentCalls: []}));
+    const fixture = TestBed.createComponent(AiPolicyUserDetailComponent);
+    fixture.detectChanges(false);
+    await fixture.whenStable();
+    fixture.detectChanges(false);
+    expect(fixture.nativeElement.querySelectorAll('.policy-quota-field')).toHaveLength(2);
+
+    fixture.componentInstance.setQuotaEnabled(false);
+    fixture.changeDetectorRef.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.policy-quota-field')).toHaveLength(0);
+    const tabs = fixture.nativeElement.querySelectorAll('[role="tab"]') as NodeListOf<HTMLButtonElement>;
+    tabs[1].click();
+    await fixture.whenStable();
+    fixture.detectChanges(false);
+
+    expect(fixture.nativeElement.querySelector('.quota-adjustment-grid')).not.toBeNull();
+  });
+
+  it('enables Update only for changed policy properties and resets the hash after saving', () => {
+    component.apply(policy());
+    expect(component.isChanged).toBe(false);
+    component.policy!.enabled = false;
+    expect(component.isChanged).toBe(true);
+    component.save();
+    expect(component.isChanged).toBe(false);
+  });
+
+  it('does not overwrite an unsaved policy quota after an operational adjustment', () => {
+    component.userId = '17';
+    component.apply(policy());
+    component.setQuotaEnabled(true);
+    component.policy!.quota.limitTokens = 2000;
+    service.adjustQuota = vi.fn(() => of({quota: {...policy().quota, period: 'MONTHLY',
+      limitTokens: 1000}, activeRequests: 0, recentCalls: []}));
+
+    component.adjustment = 10;
+    component.operationReason = 'Correct quota usage';
+    component.adjustQuota();
+
+    expect(component.policy!.quota.limitTokens).toBe(2000);
+    expect(component.usage!.quota.limitTokens).toBe(1000);
   });
 });

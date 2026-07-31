@@ -15,6 +15,8 @@ import org.oagi.score.gateway.http.api.application_management.repository.Configu
 import org.oagi.score.gateway.http.api.application_management.repository.ConfigurationQueryRepository;
 import org.oagi.score.gateway.http.api.application_management.repository.jooq.JooqConfigurationCommandRepository;
 import org.oagi.score.gateway.http.api.application_management.repository.jooq.JooqConfigurationQueryRepository;
+import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiCatalogBootstrapRepository;
+import org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq.JooqAiCatalogBootstrapRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatMaintenanceRepository;
@@ -95,6 +97,7 @@ import org.oagi.score.gateway.http.api.tenant_management.repository.jooq.JooqTen
 import org.oagi.score.gateway.http.api.xbt_management.repository.XbtQueryRepository;
 import org.oagi.score.gateway.http.api.xbt_management.repository.jooq.JooqXbtQueryRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
+import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -106,6 +109,11 @@ public class RepositoryFactory {
 
     public RepositoryFactory(@Autowired DSLContext dslContext) {
         this.dslContext = dslContext;
+    }
+
+    public AiCatalogBootstrapRepository aiCatalogBootstrapRepository(
+            ApplicationSecretService secrets) {
+        return new JooqAiCatalogBootstrapRepository(dslContext, this, secrets);
     }
 
     public AiChatConversationRepository aiChatConversationRepository(
