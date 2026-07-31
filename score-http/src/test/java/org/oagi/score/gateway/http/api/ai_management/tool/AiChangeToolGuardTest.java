@@ -354,7 +354,7 @@ class AiChangeToolGuardTest {
     }
 
     @Test
-    void reportsWhyAnApprovedChangeFailedInsteadOfEndingTheTurn() {
+    void reportsAChangeFailureWithoutExposingItsRawCause() {
         AiChangeConfirmationNotice notice = new AiChangeConfirmationNotice(
                 "confirmation-1", "REQUESTED", Instant.now().plusSeconds(60),
                 "delete_business_context", "{\"id\":1}");
@@ -383,7 +383,8 @@ class AiChangeToolGuardTest {
             assertThat(result.executed()).isFalse();
             assertThat(result.result())
                     .contains("CHANGE_FAILED")
-                    .contains("It is still referenced by business context value records.");
+                    .contains(AiToolFailureMessage.GENERIC_MESSAGE)
+                    .doesNotContain("business context value records");
         });
         assertThat(session.completedChanges()).isEmpty();
         assertThat(session.changeCompleted()).isFalse();

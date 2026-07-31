@@ -4,7 +4,6 @@ import jakarta.annotation.PreDestroy;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancellationResponse;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiPublicExecutionRequestStatus;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiRequestStateStore;
-import org.oagi.score.gateway.http.api.ai_management.model.AiCancellationOutcome;
 import org.oagi.score.gateway.http.api.ai_management.model.AiRequestStopSignal;
 import org.oagi.score.gateway.http.api.ai_management.model.AiSharedRequestState;
 import org.oagi.score.gateway.http.api.ai_management.conversation.ConversationCommitFence;
@@ -14,54 +13,39 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.DependsOn;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
-/**
- * Multi-instance request lifecycle registry.
- *
- * Redis is authoritative for every transport-visible lifecycle field. The only
- * process-local fields are non-transferable execution handles (Thread and
- * ScheduledFuture), guarded exclusively by the local Entry monitor.
- */
 @Component
-// Spring destroys dependent singletons before their dependencies. This
-// lifecycle edge guarantees request terminalization can interrupt chat workers
-// before ExecutorService.close() waits for those workers to finish.
 @DependsOn("scoreAiChatExecutor")
 public class AiRequestRegistry implements ConversationCommitFence {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiRequestRegistry.class);
     private static final Duration TERMINAL_RETENTION = Duration.ofMinutes(30);
     private static final Duration DEFAULT_STOP_GRACE_PERIOD = Duration.ofSeconds(30);
-    private static final Duration DISTRIBUTED_RECONCILIATION_LAG = Duration.ofSeconds(1);
-    private static final Duration MAINTENANCE_LEASE = Duration.ofMinutes(5);
-    private static final int MAX_REGISTRY_ENTRIES = 10_000;
-    private static final int MAX_ACTIVE_REQUESTS_PER_USER = 8;
 
     private final Map<String, Entry> localRequests = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler;
     private final Duration stopGracePeriod;
     private final AiRequestStateStore stateStore;
     private final String instanceId;
+    private final AiRequestSharedStatePolicy sharedStatePolicy;
+    private final AiRequestAdmissionCoordinator admission;
+    private final AiRequestControl control;
+    private final AiRequestTimeoutCoordinator timeouts;
     private final Runnable beforeInactivityTimeoutTransition;
     private final Runnable afterChangeCountDecrement;
 
@@ -97,6 +81,16 @@ public class AiRequestRegistry implements ConversationCommitFence {
         this.beforeInactivityTimeoutTransition = beforeInactivityTimeoutTransition;
         this.afterChangeCountDecrement = afterChangeCountDecrement;
         this.instanceId = UUID.randomUUID().toString();
+        this.sharedStatePolicy = new AiRequestSharedStatePolicy(
+                stateStore, instanceId, stopGracePeriod);
+        this.admission = new AiRequestAdmissionCoordinator(stateStore, sharedStatePolicy,
+                instanceId, stopGracePeriod, TERMINAL_RETENTION);
+        this.control = new AiRequestControl(
+                stateStore, sharedStatePolicy, instanceId, this::progress);
+        this.timeouts = new AiRequestTimeoutCoordinator(localRequests, scheduler,
+                stopGracePeriod, TERMINAL_RETENTION, stateStore, sharedStatePolicy,
+                beforeInactivityTimeoutTransition, this::applyStopState,
+                this::markLocalTerminal, this::shutdownLocalEntry);
         this.stateStore.addStopListener(this::stopRequested);
     }
 
@@ -108,130 +102,43 @@ public class AiRequestRegistry implements ConversationCommitFence {
 
     @PreDestroy
     void terminalizeOwnedRequestsOnShutdown() {
-        Instant now = Instant.now();
-        for (Entry entry : List.copyOf(localRequests.values())) {
-            try {
-                stateStore.withRequestLock(entry.requestId, storage -> {
-                    AiSharedRequestState state = storage.get(entry.requestId);
-                    if (!matchesOwner(state, entry) || state.terminal()) {
-                        return null;
-                    }
-                    String terminalStatus = state.changeObserved()
-                            ? "UNKNOWN_RECONCILIATION_REQUIRED" : "FAILED";
-                    storage.put(state.terminal(
-                            terminalStatus, "WORKER_INSTANCE_SHUTDOWN", now));
-                    return null;
-                });
-            } catch (RuntimeException exception) {
-                LOGGER.error("Could not terminalize AI request {} while this instance was shutting down",
-                        entry.requestId, exception);
-            } finally {
-                interruptLocalWorker(entry);
-                clearLocalExecution(entry);
-                localRequests.remove(entry.requestId, entry);
-            }
-        }
+        timeouts.terminalizeOwnedRequests();
+    }
+
+    private void shutdownLocalEntry(Entry entry) {
+        interruptLocalWorker(entry);
+        clearLocalExecution(entry);
+        localRequests.remove(entry.requestId, entry);
     }
 
     public Entry register(String requestId, String conversationId, ScoreUser requester, Instant deadline) {
-        String appUserId = requester.userId().value().toString();
-        long generation = ThreadLocalRandom.current().nextLong(1L, 1L << 53);
-        Instant now = Instant.now();
-        Instant expiresAt = deadline.plus(stopGracePeriod).plus(TERMINAL_RETENTION);
-        AiSharedRequestState state = new AiSharedRequestState(
-                requestId, conversationId, appUserId, instanceId, generation,
-                deadline, expiresAt, now, now, null, null,
-                "REGISTERED", null, "CANCELLED", null, null, null,
-                0L, false, 0, false);
-
-        stateStore.withGlobalLock(storage -> {
-            var states = storage.values();
-            if (states.size() >= MAX_REGISTRY_ENTRIES) {
-                throw new IllegalStateException("The AI request registry is at capacity. Try again later.");
-            }
-            long activeForUser = states.stream()
-                    .filter(candidate -> appUserId.equals(candidate.appUserId()))
-                    .filter(candidate -> isLogicallyActive(candidate, now))
-                    .count();
-            if (activeForUser >= MAX_ACTIVE_REQUESTS_PER_USER) {
-                throw new IllegalStateException("Too many AI requests are already active for this user.");
-            }
-            if (storage.get(requestId) != null) {
-                throw new IllegalArgumentException("An AI request with this requestId already exists.");
-            }
-            if (conversationId != null && (storage.maintenanceOwner(conversationId) != null
-                    || states.stream().anyMatch(candidate -> conversationId.equals(candidate.conversationId())
-                    && isLogicallyActive(candidate, now)))) {
-                throw new IllegalStateException("This AI conversation already has an active request.");
-            }
-            storage.put(state);
-            return null;
-        });
-
-        Entry entry = new Entry(requestId, generation,
-                new AiRequestInactivityLease(Duration.between(now, deadline),
+        AiSharedRequestState state = admission.reserve(
+                requestId, conversationId, requester, deadline);
+        Entry entry = new Entry(requestId, state.generation(),
+                new AiRequestInactivityLease(Duration.between(state.createdAt(), deadline),
                         System.nanoTime()));
         if (localRequests.putIfAbsent(requestId, entry) != null) {
-            rollbackRegistration(state);
+            sharedStatePolicy.rollbackRegistration(state);
             throw new IllegalArgumentException("An AI request with this requestId already exists.");
         }
         try {
-            scheduleLeaseReview(entry, entry.inactivityLease.firstReviewNanos());
+            timeouts.scheduleInitial(entry);
         } catch (RejectedExecutionException exception) {
             localRequests.remove(requestId, entry);
-            rollbackRegistration(state);
+            sharedStatePolicy.rollbackRegistration(state);
             throw exception;
         }
         return entry;
     }
 
     public void bindConversation(Entry entry, String conversationId) {
-        if (conversationId == null || conversationId.isBlank()) {
-            throw new IllegalArgumentException("The prepared AI request must have a conversation ID.");
-        }
-        stateStore.withGlobalAndRequestLock(entry.requestId, storage -> {
-            AiSharedRequestState state = exactOwnerState(storage, entry);
-            if (!"REGISTERED".equals(state.status())) {
-                throw new IllegalStateException("The AI request stopped before preparation completed.");
-            }
-            if (state.conversationId() != null && !state.conversationId().equals(conversationId)) {
-                throw new IllegalStateException("The prepared AI conversation does not match its reservation.");
-            }
-            if (state.conversationId() == null) {
-                if (storage.maintenanceOwner(conversationId) != null
-                        || storage.values().stream().anyMatch(candidate -> !entry.requestId.equals(candidate.requestId())
-                        && conversationId.equals(candidate.conversationId())
-                        && isLogicallyActive(candidate, Instant.now()))) {
-                    throw new IllegalStateException("This AI conversation already has an active request.");
-                }
-                storage.put(state.withConversation(conversationId, Instant.now()));
-            }
-            return null;
-        });
+        admission.bind(entry, conversationId);
         progress(entry.requestId);
     }
 
     /** Prevents model changes or deletion from racing request admission on any instance. */
     public <T> T whileConversationIdle(String conversationId, Supplier<T> action) {
-        String token = instanceId + ":maintenance:" + UUID.randomUUID();
-        stateStore.withGlobalLock(storage -> {
-            Instant now = Instant.now();
-            if (storage.maintenanceOwner(conversationId) != null
-                    || storage.values().stream().anyMatch(state -> conversationId.equals(state.conversationId())
-                    && isLogicallyActive(state, now))) {
-                throw new IllegalStateException("Stop the active AI request before changing its conversation.");
-            }
-            storage.putMaintenance(conversationId, token, MAINTENANCE_LEASE);
-            return null;
-        });
-        try {
-            return action.get();
-        } finally {
-            stateStore.withGlobalLock(storage -> {
-                storage.removeMaintenance(conversationId, token);
-                return null;
-            });
-        }
+        return admission.whileConversationIdle(conversationId, action);
     }
 
     /**
@@ -241,43 +148,8 @@ public class AiRequestRegistry implements ConversationCommitFence {
      */
     public <T> T whileRequestAndConversationIdle(
             String requestId, String conversationId, Supplier<T> action) {
-        if (requestId == null || requestId.isBlank()
-                || conversationId == null || conversationId.isBlank() || action == null) {
-            throw new IllegalArgumentException("An AI request maintenance action is incomplete.");
-        }
-        String token = instanceId + ":maintenance:" + UUID.randomUUID();
-        Set<String> conversations = stateStore.withGlobalLock(storage -> {
-            Instant now = Instant.now();
-            AiSharedRequestState source = storage.get(requestId);
-            if (source != null && isLogicallyActive(source, now)) {
-                throw new IllegalStateException(
-                        "Stop the active AI request before deciding its change confirmation.");
-            }
-            Set<String> guarded = new LinkedHashSet<>();
-            guarded.add(conversationId);
-            if (source != null && source.conversationId() != null
-                    && !source.conversationId().isBlank()) {
-                guarded.add(source.conversationId());
-            }
-            if (guarded.stream().anyMatch(id -> storage.maintenanceOwner(id) != null)
-                    || storage.values().stream().anyMatch(state ->
-                    (requestId.equals(state.requestId())
-                            || guarded.contains(state.conversationId()))
-                            && isLogicallyActive(state, now))) {
-                throw new IllegalStateException(
-                        "Stop the active AI request before deciding its change confirmation.");
-            }
-            guarded.forEach(id -> storage.putMaintenance(id, token, MAINTENANCE_LEASE));
-            return Set.copyOf(guarded);
-        });
-        try {
-            return action.get();
-        } finally {
-            stateStore.withGlobalLock(storage -> {
-                conversations.forEach(id -> storage.removeMaintenance(id, token));
-                return null;
-            });
-        }
+        return admission.whileRequestAndConversationIdle(
+                requestId, conversationId, action);
     }
 
     public boolean start(Entry entry) {
@@ -288,7 +160,8 @@ public class AiRequestRegistry implements ConversationCommitFence {
             entry.workerThread = Thread.currentThread();
             boolean started = stateStore.withRequestLock(entry.requestId, storage -> {
                 AiSharedRequestState state = storage.get(entry.requestId);
-                if (!matchesOwner(state, entry) || !"REGISTERED".equals(state.status())) {
+                if (!sharedStatePolicy.matchesOwner(state, entry)
+                        || !"REGISTERED".equals(state.status())) {
                     return false;
                 }
                 storage.put(state.started(Instant.now()));
@@ -311,7 +184,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
     public String finish(Entry entry, Throwable throwable) {
         AiSharedRequestState terminal = stateStore.withRequestLock(entry.requestId, storage -> {
             AiSharedRequestState state = storage.get(entry.requestId);
-            if (!matchesOwner(state, entry)) {
+            if (!sharedStatePolicy.matchesOwner(state, entry)) {
                 return state;
             }
             if (state.terminal()) {
@@ -345,227 +218,11 @@ public class AiRequestRegistry implements ConversationCommitFence {
 
     /** Records observable work without extending the lease merely because it is being polled. */
     public void progress(String requestId) {
-        Entry entry = localRequests.get(requestId);
-        if (entry == null) return;
-        synchronized (entry) {
-            if (!entry.locallyTerminal) {
-                entry.activityEpoch.incrementAndGet();
-                entry.inactivityLease.progress(System.nanoTime());
-            }
-        }
-    }
-
-    private void reviewInactivity(Entry entry) {
-        long nowNanos = System.nanoTime();
-        long remainingNanos;
-        synchronized (entry) {
-            if (entry.locallyTerminal || entry.inactivityLease.expired()) return;
-            entry.leaseReviewTask = null;
-            remainingNanos = entry.inactivityLease.remainingNanos(nowNanos);
-        }
-        boolean definiteWorkInFlight = remainingNanos <= 0
-                && (interactionInFlight(entry) || changeInFlight(entry));
-        long reviewedActivityEpoch;
-        AiRequestInactivityLease.Review review;
-        synchronized (entry) {
-            reviewedActivityEpoch = entry.activityEpoch.get();
-            review = entry.inactivityLease.review(
-                    System.nanoTime(), definiteWorkInFlight);
-        }
-        if (review.expired()) {
-            beforeInactivityTimeoutTransition.run();
-            requestTimeout(entry, true, reviewedActivityEpoch);
-            return;
-        }
-        if (!publishLease(entry, review.remainingNanos())) return;
-        try {
-            scheduleLeaseReview(entry,
-                    entry.inactivityLease.nextReviewNanos(review.remainingNanos()));
-        } catch (RejectedExecutionException exception) {
-            LOGGER.error("Could not schedule the inactivity review for AI request {}",
-                    entry.requestId, exception);
-            lifecycleTaskFailed(entry, "inactivity review scheduling");
-        }
-    }
-
-    private boolean changeInFlight(Entry entry) {
-        return stateStore.withRequestLock(entry.requestId, storage -> {
-            AiSharedRequestState state = storage.get(entry.requestId);
-            return matchesOwner(state, entry) && !state.terminal()
-                    && !"CANCELLING".equals(state.status())
-                    && state.changeInFlight() > 0;
-        });
-    }
-
-    private boolean interactionInFlight(Entry entry) {
-        synchronized (entry) {
-            return !entry.locallyTerminal && entry.interactionsInFlight > 0;
-        }
-    }
-
-    private boolean publishLease(Entry entry, long remainingNanos) {
-        Instant now = Instant.now();
-        long remainingMillis = Math.max(1L,
-                TimeUnit.NANOSECONDS.toMillis(remainingNanos));
-        Instant deadline = now.plusMillis(remainingMillis);
-        Instant expiresAt = deadline.plus(stopGracePeriod).plus(TERMINAL_RETENTION);
-        return stateStore.withRequestLock(entry.requestId, storage -> {
-            AiSharedRequestState state = storage.get(entry.requestId);
-            if (!matchesOwner(state, entry) || state.terminal()
-                    || "CANCELLING".equals(state.status())) {
-                return false;
-            }
-            storage.put(state.leaseRenewed(deadline, expiresAt, now));
-            return true;
-        });
-    }
-
-    private void scheduleLeaseReview(Entry entry, long delayNanos) {
-        ScheduledFuture<?> review = scheduler.schedule(
-                () -> dispatch(entry, "inactivity review", () -> reviewInactivity(entry)),
-                Math.max(1L, delayNanos), TimeUnit.NANOSECONDS);
-        synchronized (entry) {
-            if (entry.locallyTerminal || entry.inactivityLease.expired()) {
-                review.cancel(false);
-            } else {
-                entry.leaseReviewTask = review;
-            }
-        }
-    }
-
-    private void requestTimeout(Entry entry, boolean interruptCurrentWorker) {
-        requestTimeout(entry, interruptCurrentWorker, null);
-    }
-
-    private void requestTimeout(Entry entry, boolean interruptCurrentWorker,
-                                Long reviewedActivityEpoch) {
-        TimeoutTransition transition;
-        synchronized (entry) {
-            boolean workerPresent = entry.workerThread != null;
-            transition = stateStore.withRequestLock(entry.requestId, storage -> {
-                AiSharedRequestState current = storage.get(entry.requestId);
-                if (!matchesOwner(current, entry) || current.terminal()
-                        || "CANCELLING".equals(current.status())) {
-                    return new TimeoutTransition(null, false);
-                }
-                boolean activitySinceReview = reviewedActivityEpoch != null
-                        && entry.activityEpoch.get() != reviewedActivityEpoch;
-                if (activitySinceReview || current.changeInFlight() > 0) {
-                    return new TimeoutTransition(current, true);
-                }
-                AiSharedRequestState timed = current.timingOut(Instant.now(), workerPresent);
-                storage.put(timed);
-                return new TimeoutTransition(timed, false);
-            });
-        }
-        if (transition.definiteWorkInFlight()) {
-            renewAfterDefiniteWork(entry);
-            return;
-        }
-        applyStopState(entry, transition.state(), interruptCurrentWorker);
-    }
-
-    private void renewAfterDefiniteWork(Entry entry) {
-        long nowNanos = System.nanoTime();
-        synchronized (entry) {
-            if (entry.locallyTerminal) return;
-            entry.inactivityLease.renew(nowNanos);
-        }
-        long remainingNanos = entry.inactivityLease.remainingNanos(nowNanos);
-        if (!publishLease(entry, remainingNanos)) return;
-        try {
-            scheduleLeaseReview(entry,
-                    entry.inactivityLease.nextReviewNanos(remainingNanos));
-        } catch (RejectedExecutionException exception) {
-            LOGGER.error("Could not reschedule the inactivity review for AI request {}",
-                    entry.requestId, exception);
-            lifecycleTaskFailed(entry, "inactivity review rescheduling");
-        }
-    }
-
-    private void scheduleStopWatchdog(Entry entry) {
-        synchronized (entry) {
-            if (entry.stopWatchdogTask != null) {
-                entry.stopWatchdogTask.cancel(false);
-            }
-            try {
-                entry.stopWatchdogTask = scheduler.schedule(
-                        () -> dispatch(entry, "stop watchdog", () -> stopWatchdog(entry)),
-                        stopGracePeriod.toMillis(), TimeUnit.MILLISECONDS);
-            } catch (RejectedExecutionException exception) {
-                LOGGER.error("Could not schedule the AI stop watchdog for request {}; reconciling immediately",
-                        entry.requestId, exception);
-                dispatch(entry, "stop watchdog fallback", () -> stopWatchdog(entry));
-            }
-        }
-    }
-
-    private void stopWatchdog(Entry entry) {
-        Thread worker;
-        synchronized (entry) {
-            worker = entry.workerThread;
-            entry.workerThread = null;
-        }
-        if (worker == null) {
-            return;
-        }
-        worker.interrupt();
-        AiSharedRequestState state = stateStore.withRequestLock(entry.requestId, storage -> {
-            AiSharedRequestState current = storage.get(entry.requestId);
-            if (!matchesOwner(current, entry) || !"CANCELLING".equals(current.status())) {
-                return current;
-            }
-            AiSharedRequestState reconciled = current.terminal(
-                    "UNKNOWN_RECONCILIATION_REQUIRED", "WORKER_STOP_TIMEOUT", Instant.now());
-            storage.put(reconciled);
-            return reconciled;
-        });
-        if (state != null && state.terminal()) {
-            markLocalTerminal(entry);
-        }
+        timeouts.progress(requestId);
     }
 
     void dispatch(Entry entry, String operation, Runnable task) {
-        try {
-            Thread.startVirtualThread(() -> {
-                try {
-                    task.run();
-                } catch (Throwable failure) {
-                    LOGGER.error("AI request {} lifecycle {} task failed",
-                            entry.requestId, operation, failure);
-                    lifecycleTaskFailed(entry, operation);
-                }
-            });
-        } catch (RuntimeException | Error failure) {
-            LOGGER.error("Could not dispatch AI request {} lifecycle {} task",
-                    entry.requestId, operation, failure);
-            lifecycleTaskFailed(entry, operation);
-        }
-    }
-
-    private void lifecycleTaskFailed(Entry entry, String operation) {
-        Thread worker;
-        synchronized (entry) {
-            worker = entry.workerThread;
-            entry.workerThread = null;
-        }
-        if (worker != null) {
-            worker.interrupt();
-        }
-        AiSharedRequestState state = stateStore.withRequestLock(entry.requestId, storage -> {
-            AiSharedRequestState current = storage.get(entry.requestId);
-            if (!matchesOwner(current, entry) || current.terminal()) {
-                return current;
-            }
-            String reason = operation.toUpperCase(java.util.Locale.ROOT).replace(' ', '_') + "_FAILED";
-            AiSharedRequestState failed = current.terminal(
-                    "UNKNOWN_RECONCILIATION_REQUIRED", reason, Instant.now());
-            storage.put(failed);
-            return failed;
-        });
-        if (state != null && state.terminal()) {
-            markLocalTerminal(entry);
-        }
+        timeouts.dispatch(entry, operation, task);
     }
 
     public boolean changeStarted(String requestId) {
@@ -573,7 +230,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
         if (entry == null) return false;
         boolean started = stateStore.withRequestLock(requestId, storage -> {
             AiSharedRequestState state = storage.get(requestId);
-            if (!matchesOwner(state, entry)
+            if (!sharedStatePolicy.matchesOwner(state, entry)
                     || !"RUNNING".equals(state.status())) {
                 return false;
             }
@@ -643,7 +300,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
         Entry entry = localRequests.get(requestId);
         boolean decremented = stateStore.withRequestLock(requestId, storage -> {
             AiSharedRequestState state = storage.get(requestId);
-            if (entry != null && matchesOwner(state, entry)) {
+            if (entry != null && sharedStatePolicy.matchesOwner(state, entry)) {
                 storage.put(state.changeFinished(Instant.now()));
                 entry.activityEpoch.incrementAndGet();
                 return true;
@@ -655,20 +312,11 @@ public class AiRequestRegistry implements ConversationCommitFence {
     }
 
     public boolean hasActiveConversation(String conversationId) {
-        return stateStore.withGlobalLock(storage -> {
-            Instant now = Instant.now();
-            return storage.maintenanceOwner(conversationId) != null
-                    || storage.values().stream().anyMatch(state -> conversationId.equals(state.conversationId())
-                    && isLogicallyActive(state, now));
-        });
+        return admission.hasActiveConversation(conversationId);
     }
 
     public boolean shouldDiscardResult(String requestId) {
-        return stateStore.withRequestLock(requestId, storage -> {
-            AiSharedRequestState state = storage.get(requestId);
-            return state == null || "CANCELLING".equals(state.status())
-                    || state.terminal() && !"COMPLETED".equals(state.status());
-        });
+        return control.shouldDiscardResult(requestId);
     }
 
     /**
@@ -677,22 +325,13 @@ public class AiRequestRegistry implements ConversationCommitFence {
      * admitted before a later stop signal; a stop that wins the lock rejects it.
      */
     public void admitToolExecution(String requestId) {
-        boolean admitted = stateStore.withRequestLock(requestId, storage -> {
-            AiSharedRequestState state = storage.get(requestId);
-            return state != null && instanceId.equals(state.workerInstanceId())
-                    && "RUNNING".equals(state.status());
-        });
-        if (!admitted) {
-            throw new java.util.concurrent.CancellationException(
-                    "The assistant request stopped before Tool execution.");
-        }
-        progress(requestId);
+        control.admitToolExecution(requestId);
     }
 
     /** Applies the registry's normal timeout fence when a nested execution budget expires. */
     public void timeoutExecution(String requestId) {
         Entry entry = localRequests.get(requestId);
-        if (entry != null) requestTimeout(entry, false);
+        if (entry != null) timeouts.timeout(entry, false);
     }
 
     /** Atomically fences cluster-wide cancellation/inactivity against final persistence. */
@@ -705,7 +344,8 @@ public class AiRequestRegistry implements ConversationCommitFence {
         synchronized (entry) {
             committed = stateStore.withRequestLock(requestId, storage -> {
                 AiSharedRequestState state = storage.get(requestId);
-                if (!matchesOwner(state, entry) || !"RUNNING".equals(state.status())) {
+                if (!sharedStatePolicy.matchesOwner(state, entry)
+                        || !"RUNNING".equals(state.status())) {
                     return false;
                 }
                 persistence.run();
@@ -722,43 +362,8 @@ public class AiRequestRegistry implements ConversationCommitFence {
     public AiCancellationResponse cancel(String requestId, String cancellationRequestId,
                                          String conversationId, Long expectedGeneration,
                                          ScoreUser requester) {
-        String appUserId = requester.userId().value().toString();
-        AiCancellationOutcome outcome = stateStore.withRequestLock(requestId, storage -> {
-            AiSharedRequestState state = ownedState(storage, requestId, appUserId);
-            state = reconcileOverdue(storage, state, Instant.now());
-            if (conversationId != null || expectedGeneration != null) {
-                if (!java.util.Objects.equals(state.conversationId(), conversationId)
-                        || expectedGeneration == null || expectedGeneration != state.generation()) {
-                    return new AiCancellationOutcome(cancellationResponse(state, cancellationRequestId,
-                            "STALE_GENERATION", false), false);
-                }
-            }
-            if (state.terminal()) {
-                return new AiCancellationOutcome(cancellationResponse(state, cancellationRequestId,
-                        "ALREADY_TERMINAL", false), false);
-            }
-            if ("CANCELLING".equals(state.status())) {
-                return new AiCancellationOutcome(cancellationResponse(state, cancellationRequestId,
-                        "ALREADY_CANCELLING", true), true);
-            }
-            Instant now = Instant.now();
-            AiSharedRequestState cancelling = state.cancelling(
-                    cancellationRequestId, "CANCELLED", now);
-            if ("REGISTERED".equals(state.status())) {
-                cancelling = cancelling.terminal("CANCELLED", null, now);
-                storage.put(cancelling);
-                return new AiCancellationOutcome(cancellationResponse(cancelling, cancellationRequestId,
-                        "CANCELLED", true), true);
-            }
-            storage.put(cancelling);
-            return new AiCancellationOutcome(cancellationResponse(cancelling, cancellationRequestId,
-                    "ACKNOWLEDGED", true), true);
-        });
-        if (outcome.signalOwner()) {
-            stateStore.publishStop(requestId,
-                    outcome.response().generation() != null ? outcome.response().generation() : -1L);
-        }
-        return outcome.response();
+        return control.cancel(requestId, cancellationRequestId,
+                conversationId, expectedGeneration, requester);
     }
 
     public AiCancellationResponse cancel(String requestId, String cancellationRequestId,
@@ -767,23 +372,11 @@ public class AiRequestRegistry implements ConversationCommitFence {
     }
 
     public AiPublicExecutionRequestStatus status(String requestId, ScoreUser requester) {
-        String appUserId = requester.userId().value().toString();
-        return stateStore.withRequestLock(requestId, storage -> {
-            AiSharedRequestState state = ownedState(storage, requestId, appUserId);
-            return reconcileOverdue(storage, state, Instant.now()).snapshot();
-        });
+        return control.status(requestId, requester);
     }
 
     public Optional<AiPublicExecutionRequestStatus> active(ScoreUser requester) {
-        String appUserId = requester.userId().value().toString();
-        return stateStore.withGlobalLock(storage -> {
-            Instant now = Instant.now();
-            return storage.values().stream()
-                    .filter(state -> appUserId.equals(state.appUserId()))
-                    .filter(state -> isLogicallyActive(state, now))
-                    .max(Comparator.comparing(AiSharedRequestState::createdAt))
-                    .map(AiSharedRequestState::snapshot);
-        });
+        return control.active(requester);
     }
 
     public String cancellationRequestId(Entry entry) {
@@ -823,7 +416,7 @@ public class AiRequestRegistry implements ConversationCommitFence {
             worker.interrupt();
         }
         if (watchdog) {
-            scheduleStopWatchdog(entry);
+            timeouts.scheduleStopWatchdog(entry);
         }
         if (state.terminal()) {
             markLocalTerminal(entry);
@@ -878,99 +471,16 @@ public class AiRequestRegistry implements ConversationCommitFence {
                 entry.requestId, storage -> storage.get(entry.requestId)));
     }
 
-    private void rollbackRegistration(AiSharedRequestState expected) {
-        stateStore.withRequestLock(expected.requestId(), storage -> {
-            AiSharedRequestState current = storage.get(expected.requestId());
-            if (current != null && current.generation() == expected.generation()
-                    && instanceId.equals(current.workerInstanceId())) {
-                storage.remove(expected.requestId());
-            }
-            return null;
-        });
-    }
-
-    private AiSharedRequestState exactOwnerState(AiRequestStateStore.Storage storage, Entry entry) {
-        AiSharedRequestState state = storage.get(entry.requestId);
-        if (!matchesOwner(state, entry)) {
-            throw new IllegalStateException("The AI request reservation is no longer owned by this instance.");
-        }
-        return state;
-    }
-
-    private boolean matchesOwner(AiSharedRequestState state, Entry entry) {
-        return state != null && state.generation() == entry.generation
-                && instanceId.equals(state.workerInstanceId());
-    }
-
-    private AiSharedRequestState ownedState(AiRequestStateStore.Storage storage,
-                                             String requestId, String appUserId) {
-        AiSharedRequestState state = storage.get(requestId);
-        if (state == null || !appUserId.equals(state.appUserId())) {
-            throw new AccessDeniedException(
-                    "AI request does not exist or is not owned by the signed-in user.");
-        }
-        return state;
-    }
-
-    private AiSharedRequestState reconcileOverdue(AiRequestStateStore.Storage storage,
-                                                   AiSharedRequestState state, Instant now) {
-        Instant reconciliationAt = reconciliationAt(state);
-        if (state.terminal() || now.isBefore(reconciliationAt)) {
-            return state;
-        }
-        String terminalStatus;
-        String reason;
-        if ("CANCELLING".equals(state.status())) {
-            terminalStatus = state.changeOutcomeUncertain()
-                    ? "UNKNOWN_RECONCILIATION_REQUIRED" : state.terminalTarget();
-            reason = state.changeOutcomeUncertain()
-                    ? "CHANGE_OUTCOME_UNCERTAIN" : "WORKER_INSTANCE_UNAVAILABLE";
-        } else {
-            terminalStatus = state.changeObserved()
-                    ? "UNKNOWN_RECONCILIATION_REQUIRED" : "TIMED_OUT";
-            reason = "WORKER_INSTANCE_UNAVAILABLE";
-        }
-        AiSharedRequestState reconciled = state.terminal(terminalStatus, reason, now);
-        storage.put(reconciled);
-        return reconciled;
-    }
-
-    private boolean isLogicallyActive(AiSharedRequestState state, Instant now) {
-        return !state.terminal() && now.isBefore(reconciliationAt(state));
-    }
-
-    private Instant reconciliationAt(AiSharedRequestState state) {
-        Instant localWatchdogAt = "CANCELLING".equals(state.status()) && state.cancellationRequestedAt() != null
-                ? state.cancellationRequestedAt().plus(stopGracePeriod)
-                : state.deadline().plus(stopGracePeriod);
-        // Give the owning instance's watchdog a deterministic opportunity to report a
-        // stuck live worker before another instance treats the owner as unavailable.
-        return localWatchdogAt.plus(DISTRIBUTED_RECONCILIATION_LAG);
-    }
-
-    private AiCancellationResponse cancellationResponse(
-            AiSharedRequestState state, String requestedCancellationId,
-            String disposition, boolean acknowledged) {
-        return new AiCancellationResponse(state.requestId(), state.conversationId(), state.generation(),
-                requestedCancellationId, state.cancellationRequestId(), disposition, state.status(),
-                acknowledged, state.terminal(), state.lastEventSequence(),
-                state.cancellationRequestedAt(), state.cancellationAcknowledgedAt(),
-                state.deadline(), state.terminalAt());
-    }
-
-    private record TimeoutTransition(AiSharedRequestState state,
-                                     boolean definiteWorkInFlight) { }
-
     public static final class Entry {
-        private final String requestId;
-        private final long generation;
-        private final AiRequestInactivityLease inactivityLease;
-        private final AtomicLong activityEpoch = new AtomicLong();
-        private Thread workerThread;
-        private ScheduledFuture<?> leaseReviewTask;
-        private ScheduledFuture<?> stopWatchdogTask;
-        private int interactionsInFlight;
-        private boolean locallyTerminal;
+        final String requestId;
+        final long generation;
+        final AiRequestInactivityLease inactivityLease;
+        final AtomicLong activityEpoch = new AtomicLong();
+        Thread workerThread;
+        ScheduledFuture<?> leaseReviewTask;
+        ScheduledFuture<?> stopWatchdogTask;
+        int interactionsInFlight;
+        boolean locallyTerminal;
 
         private Entry(String requestId, long generation,
                       AiRequestInactivityLease inactivityLease) {
