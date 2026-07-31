@@ -17,6 +17,7 @@ import {
   isSpecialistToolEvent
 } from './domain/ai-agent-activity';
 import {isWorkflowLifecycleEvent} from './domain/ai-execution-composite';
+import {AiRequestDispatchIntent} from './domain/ai-request-dispatch-coordinator';
 
 const CHANGE_APPROVAL_EVENT_SUBTYPES = new Set([
   'change_approval_batch_required',
@@ -33,21 +34,11 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
   protected startChatRequest(prompt: string, attachments: AiChatAttachment[]): void {
     this.invalidateDraftAttachmentRestore();
     this.restoreChatScrollPending = false;
-    this.state.activePanelTab = 'chat';
     const requestId = this.createRequestId();
-    this.beginChangeRepeatDraft(requestId, prompt, attachments);
-    this.activeRequestId = requestId;
-    this.activeRequestPublished = false;
-    this.clearToolCallTracking();
-    this.state.resetAgentActivity();
+    this.prepareRequestDispatch(requestId, prompt, attachments, {
+      kind: 'normal'
+    });
     const destination = '/user/queue/ai/chat/' + requestId;
-    this.state.pending = true;
-    this.state.currentStatus = 'Sending request';
-    this.state.prompt = '';
-    this.state.attachments = [];
-    this.flushWorkspacePersistence();
-    this.resizePromptInput();
-    this.state.messages.push({role: 'user', content: this.attachmentService.userMessageContent(prompt, attachments)});
 
     if (attachments.length > 0) {
       this.sendHttpChat(prompt, attachments);
@@ -63,6 +54,27 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     });
 
     this.connectAndPublishWhenReady(requestId, prompt, attachments);
+  }
+
+  protected prepareRequestDispatch(
+    requestId: string, prompt: string, attachments: AiChatAttachment[],
+    intent: AiRequestDispatchIntent
+  ): void {
+    this.requestDispatch.prepare(this.state, {
+      requestId, prompt, attachments, intent
+    }, {
+      activate: activeRequestId => {
+        this.activeRequestId = activeRequestId;
+        this.activeRequestPublished = false;
+      },
+      beginChangeRepeat: (id, value, files) =>
+        this.beginChangeRepeatDraft(id, value, files),
+      clearToolTracking: () => this.clearToolCallTracking(),
+      resizePrompt: () => this.resizePromptInput(),
+      flushWorkspace: () => this.flushWorkspacePersistence(),
+      userMessageContent: (value, files) =>
+        this.attachmentService.userMessageContent(value, files)
+    });
   }
 
   protected sendHttpChat(
