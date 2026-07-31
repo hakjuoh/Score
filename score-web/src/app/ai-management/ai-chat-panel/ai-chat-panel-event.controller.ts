@@ -219,36 +219,36 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
   }
 
   protected completeFinalEvent(event: AiChatSocketEvent): void {
-    this.clearCompletedPayloadRecovery();
-    this.cancellationService.reset();
-    this.completeProgressMessages();
-    this.completeToolGroupMessages();
-    this.clearTimers();
-    this.clearStatusMessage();
-    this.elicitationCoordinator.clear(this.state);
-    this.clearChangeApprovalBatch();
     const confirmationConversationId =
       this.pendingChangeConfirmation?.conversationId;
-    if (confirmationConversationId
-      && event.conversationId !== confirmationConversationId) {
+    const conflictingConfirmation = !!confirmationConversationId
+      && event.conversationId !== confirmationConversationId;
+    if (conflictingConfirmation) {
+      this.state.conversationId = this.state.activeRequest?.conversationId
+        || this.state.conversationId || confirmationConversationId;
+    }
+    this.transitionActiveRequest({
+      agentStatus: conflictingConfirmation ? 'failed' : 'completed',
+      reconciliationRequired: conflictingConfirmation,
+      cancellation: 'reset', completedPayload: 'clear', toolGroups: 'complete',
+      confirmedChange: {kind: 'cancel', requestId: event.requestId},
+      changeRepeat: conflictingConfirmation
+        ? {kind: 'clear-request', requestId: event.requestId}
+        : {kind: 'preserve'}
+    });
+    if (conflictingConfirmation) {
       this.completeConflictingChangeConfirmationFinal(
-        event.requestId, confirmationConversationId
+        event.requestId, confirmationConversationId!
       );
       return;
     }
-    this.settleAgentActivity('completed');
     this.state.conversationId = confirmationConversationId
       || event.conversationId || this.state.conversationId;
     this.sessionPersistence.rememberLastConversation(this.state.conversationId);
-    this.confirmedChangeRequests.cancel(event.requestId);
-    this.activeRequestId = undefined;
     const content = withoutTextualToolCallPlaceholder(primaryContent(event));
     if (content) {
       this.commitAssistantMessage(event.requestId, content, event.files);
     }
-    this.clearToolCallTracking();
-    this.state.pending = false;
-    this.state.reconciliationRequired = false;
     this.state.currentStatus = event.continuationRequired ? 'More processing is needed' : 'Ready';
     if (this.runDeferredNewChat()) {
       return;
@@ -362,22 +362,14 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     requestId: string,
     confirmationConversationId: string
   ): void {
-    this.settleAgentActivity('failed');
     this.pendingChangeConfirmation = undefined;
-    this.confirmedChangeRequests.cancel(requestId);
-    this.clearChangeRepeatDraft(requestId);
     this.state.conversationId = this.state.activeRequest?.conversationId
       || this.state.conversationId || confirmationConversationId;
-    this.activeRequestId = undefined;
-    this.clearToolCallTracking();
     this.state.messages.push({
       role: 'error',
       content: 'The request returned a conflicting conversation identity and requires reconciliation.'
     });
-    this.state.pending = false;
-    this.state.reconciliationRequired = true;
     this.state.currentStatus = 'Review needed';
-    this.requestSubscription?.unsubscribe();
     this.loadConversationHistory();
     this.scrollToBottom();
   }
