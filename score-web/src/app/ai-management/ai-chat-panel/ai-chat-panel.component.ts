@@ -13,6 +13,8 @@ import {AiChatAttachmentQueueService} from './domain/ai-chat-attachment-queue.se
 import {AiActiveRequestRecoveryService} from './domain/ai-active-request-recovery.service';
 import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
 import {AiConversationRestoreService} from './domain/ai-conversation-restore.service';
+import {AiConversationProjector} from './domain/ai-conversation-projector';
+import {AiConversationRestoreRenderer} from './domain/ai-conversation-restore-renderer';
 import {AiChatMessageTrackerService} from './domain/ai-chat-message-tracker.service';
 import {AiChangeInteractionService} from './domain/ai-change-interaction.service';
 import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.service';
@@ -42,6 +44,8 @@ export {
   providers: [
     AiActiveRequestRecoveryService,
     AiChatAttachmentQueueService,
+    AiConversationProjector,
+    AiConversationRestoreRenderer,
     AiConversationRestoreService,
     AiConfirmedChangeRequestCoordinator,
     AiChatMessageTrackerService,

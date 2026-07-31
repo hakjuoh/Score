@@ -1,4 +1,5 @@
 import {AiConversationRestoreCallbacks, AiConversationRestoreService} from './ai-conversation-restore.service';
+import {AiConversationProjector} from './ai-conversation-projector';
 import {AiChatMessage, AiChatSocketEvent} from './ai-chat-panel.model';
 
 const TOKEN_1 = '00000000-0000-4000-8000-000000000001';
@@ -7,6 +8,7 @@ const TOKEN_3 = '00000000-0000-4000-8000-000000000003';
 
 describe('AiConversationRestoreService', () => {
   let service: AiConversationRestoreService;
+  let projector: AiConversationProjector;
   let messages: AiChatMessage[];
   let callbacks: AiConversationRestoreCallbacks;
   let finished: ReturnType<typeof vi.fn>;
@@ -19,7 +21,8 @@ describe('AiConversationRestoreService', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    service = new AiConversationRestoreService();
+    projector = new AiConversationProjector();
+    service = new AiConversationRestoreService(projector);
     messages = [];
     finished = vi.fn();
     callbacks = {
@@ -141,7 +144,7 @@ describe('AiConversationRestoreService', () => {
   });
 
   it('coalesces legacy Workflow results in synchronous history projection', () => {
-    const projected = service.projectStoredMessages([
+    const projected = projector.projectStoredMessages([
       {index: 0, role: 'user', content: 'Run the checks.', requestId: 'r1'},
       {
         index: 1, role: 'assistant', content: 'First synthesis.',
@@ -545,7 +548,7 @@ describe('AiConversationRestoreService', () => {
   });
 
   it('never restores model-authored textual tool markers as executed calls', () => {
-    const projected = service.projectStoredMessages([
+    const projected = projector.projectStoredMessages([
       {index: 0, role: 'user', content: 'add values'},
       {
         index: 1, role: 'assistant',
@@ -652,7 +655,7 @@ describe('AiConversationRestoreService', () => {
   });
 
   it('does not reconstruct removed parallel compatibility events as a workflow box', () => {
-    const projected = service.projectStoredMessages([
+    const projected = projector.projectStoredMessages([
       {index: 0, role: 'user', content: 'Compare two BODs.'},
       {index: 1, role: 'guide', content: 'I’ll review both BODs independently.'},
       {
@@ -713,7 +716,7 @@ describe('AiConversationRestoreService', () => {
       node_id: 'request-1:find-extenders', agent_name: 'Evidence researcher',
       conversation_kind: 'SUBAGENT', depth: 1
     };
-    const projected = service.projectStoredMessages([
+    const projected = projector.projectStoredMessages([
       {index: 0, role: 'user', content: 'Check every extender.'},
       {index: 1, role: 'guide', content: 'I’ll check the current structures.'},
       {
@@ -751,7 +754,7 @@ describe('AiConversationRestoreService', () => {
   it('does not reconstruct removed composed compatibility events as a workflow box', () => {
     const fanout = 'request-1:composed';
     const worker = `${fanout}:worker:research`;
-    const projected = service.projectStoredMessages([
+    const projected = projector.projectStoredMessages([
       {index: 0, role: 'user', content: 'Check the structures.'},
       {
         index: 1, role: 'agent_event', requestId: 'request-1',
@@ -824,7 +827,7 @@ describe('AiConversationRestoreService', () => {
   });
 
   it('keeps composed workflow iterations and requests in separate restored groups', () => {
-    const projected = service.projectStoredMessages([
+    const projected = projector.projectStoredMessages([
       {
         index: 0, role: 'agent_event', requestId: 'request-1',
         subtype: 'workflow_started', content: 'First workflow started.', metadata: {
@@ -924,7 +927,7 @@ describe('AiConversationRestoreService', () => {
     ['workflow_stalled', 'failed'],
     ['workflow_refused', 'failed']
   ] as const)('restores %s as a terminal Workflow', (subtype, expectedStatus) => {
-    const projected = service.projectStoredMessages([{
+    const projected = projector.projectStoredMessages([{
       index: 0, role: 'agent_event', requestId: 'request-1',
       subtype: 'workflow_started', content: 'I’m checking the request.', metadata: {
         node_id: 'main:1:workflow', parent_node_id: 'main', depth: 1,
@@ -942,7 +945,7 @@ describe('AiConversationRestoreService', () => {
   });
 
   it('restores an unknown workflow type as ordinary messages without duplication', () => {
-    const projected = service.projectStoredMessages([{
+    const projected = projector.projectStoredMessages([{
       index: 0, role: 'agent_event', requestId: 'request-1',
       subtype: 'workflow_started', content: 'Starting a future execution mode.', metadata: {
         node_id: 'main:future', parent_node_id: 'main', depth: 1,
@@ -984,7 +987,7 @@ describe('AiConversationRestoreService', () => {
     const root = 'main:root';
     const owner = root + ':agent:owner';
     const unknown = owner + ':future';
-    const projected = service.projectStoredMessages([{
+    const projected = projector.projectStoredMessages([{
       index: 0, role: 'agent_event', requestId: 'request-1',
       subtype: 'workflow_started', content: 'Starting root.', metadata: {
         node_id: root, parent_node_id: 'main', depth: 1, workflow_type: 'sequential'
@@ -1014,7 +1017,7 @@ describe('AiConversationRestoreService', () => {
     const root = 'main:1:root';
     const parent = root + ':agent:parent';
     const nested = parent + ':delegated';
-    const projected = service.projectStoredMessages([
+    const projected = projector.projectStoredMessages([
       {
         index: 0, role: 'agent_event', requestId: 'request-1',
         subtype: 'workflow_started', content: 'Starting root.', metadata: {
@@ -1054,7 +1057,7 @@ describe('AiConversationRestoreService', () => {
   it('ignores removed durable fan-out compatibility lifecycle', () => {
     const fanout = 'request-1:composed';
     const worker = `${fanout}:worker:research`;
-    const projected = service.projectStoredMessages([
+    const projected = projector.projectStoredMessages([
       {index: 0, role: 'user', content: 'Check the structures.'},
       {
         index: 1, role: 'agent_event', requestId: 'request-1',

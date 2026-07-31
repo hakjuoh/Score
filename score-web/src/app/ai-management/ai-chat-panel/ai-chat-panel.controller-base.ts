@@ -28,6 +28,7 @@ import {
   AiConversationRestoreCallbacks,
   AiConversationRestoreService
 } from './domain/ai-conversation-restore.service';
+import {AiConversationProjector} from './domain/ai-conversation-projector';
 import {AiChatNavigationService} from './domain/ai-chat-navigation.service';
 import {AiChatPanelLayoutService} from './domain/ai-chat-panel-layout.service';
 import {AiChatMessageTrackerService} from './domain/ai-chat-message-tracker.service';
@@ -92,6 +93,7 @@ export abstract class AiChatPanelControllerBase {
   protected readonly destroyRef = inject(DestroyRef);
   protected contextService = inject(AiChatContextService);
   protected conversationRestoreService = inject(AiConversationRestoreService);
+  protected conversationProjector = inject(AiConversationProjector);
   protected navigationService = inject(AiChatNavigationService);
   protected layoutService = inject(AiChatPanelLayoutService);
   protected messageTracker = inject(AiChatMessageTrackerService);

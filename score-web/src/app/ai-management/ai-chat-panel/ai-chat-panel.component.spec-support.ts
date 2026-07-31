@@ -27,6 +27,7 @@ import {AiChatCommandService} from './domain/ai-chat-command.service';
 import {AiChatContextService} from './domain/ai-chat-context.service';
 import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
 import {AiConversationRestoreService} from './domain/ai-conversation-restore.service';
+import {AiConversationProjector} from './domain/ai-conversation-projector';
 import {AiChatNavigationService} from './domain/ai-chat-navigation.service';
 import {AiChatPanelLayoutService} from './domain/ai-chat-panel-layout.service';
 import {AiChatMessageTrackerService} from './domain/ai-chat-message-tracker.service';
@@ -199,16 +200,13 @@ export function setupAiChatPanelSpec(): void {
       {provide: AiChatAttachmentService, useValue: attachmentService},
       {provide: AiChatCommandService, useValue: {decide: () => ({kind: 'none'}), suggestions: () => []}},
       AiConfirmedChangeRequestCoordinator,
+      AiConversationProjector,
       {provide: AiChatContextService, useValue: {
         nextContextUpdate: () => ({routeManifest: {schemaVersion: 1, routes: []}})
       }},
       {provide: AiConversationRestoreService, useValue: {
         reset: vi.fn(), cancel: vi.fn(), expectAttempt: vi.fn(),
-        isRestoreEvent: () => false, isLegacyRestoreAdmission: () => false,
-        projectStoredMessage: (message: any) => ({role: message.role, content: message.content}),
-        projectStoredMessages: (messages: any[]) => messages.map(message => ({
-          role: message.role, content: message.content
-        }))
+        isRestoreEvent: () => false, isLegacyRestoreAdmission: () => false
       }},
       {provide: AiChatNavigationService, useValue: navigation},
       {provide: AiChatPanelLayoutService, useValue: {
