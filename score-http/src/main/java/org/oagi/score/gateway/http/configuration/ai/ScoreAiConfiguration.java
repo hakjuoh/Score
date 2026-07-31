@@ -23,7 +23,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.util.StringUtils;
 
-import java.net.URI;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -39,8 +38,6 @@ import java.util.concurrent.ScheduledExecutorService;
 public class ScoreAiConfiguration {
 
     private static final Duration NO_ABSOLUTE_PROVIDER_TIMEOUT = Duration.ZERO;
-
-    private static final String DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 
     @Bean("scoreAiChatModels")
     public Map<String, ChatModel> scoreAiChatModels(ScoreAiProperties properties,
@@ -227,7 +224,7 @@ public class ScoreAiConfiguration {
                                                     OpenAiChatProperties chatProperties) {
         String deploymentName = StringUtils.hasText(model.getModel()) ? model.getModel() : configuredName;
         OpenAiChatOptions.Builder options = OpenAiChatOptions.builder()
-                .baseUrl(trimTrailingSlashes(provider.getBaseUrl()))
+                .baseUrl(AiProviderEndpointResolver.trimTrailingSlashes(provider.getBaseUrl()))
                 .apiKey(provider.getKey())
                 .model(deploymentName);
         boolean reasoningModel = openAiReasoningModel(model, deploymentName);
@@ -298,36 +295,11 @@ public class ScoreAiConfiguration {
     }
 
     private String baseUrl(ScoreAiProperties.Provider provider) {
-        if (StringUtils.hasText(provider.getBaseUrl())) {
-            String baseUrl = trimTrailingSlashes(provider.getBaseUrl());
-            URI uri = URI.create(baseUrl);
-            String path = uri.getPath();
-            if (uri.getHost() != null && uri.getHost().endsWith(".services.ai.azure.com")
-                    && (!StringUtils.hasText(path) || "/".equals(path))) {
-                return baseUrl + "/anthropic";
-            }
-            return baseUrl;
-        }
-        if (!StringUtils.hasText(provider.getMessagesUrl())) {
-            return null;
-        }
-        URI uri = URI.create(provider.getMessagesUrl());
-        String path = uri.getPath();
-        if (path == null || !path.endsWith("/v1/messages")) {
-            throw new IllegalArgumentException("Anthropic messages URL must end in /v1/messages");
-        }
-        String basePath = path.substring(0, path.length() - "/v1/messages".length());
-        return uri.getScheme() + "://" + uri.getAuthority() + basePath;
-    }
-
-    private String trimTrailingSlashes(String value) {
-        return StringUtils.hasText(value) ? value.replaceAll("/+$", "") : null;
+        return AiProviderEndpointResolver.anthropicBaseUrl(
+                provider.getBaseUrl(), provider.getMessagesUrl());
     }
 
     private String responsesBaseUrl(ScoreAiProperties.Provider provider, boolean azure) {
-        String baseUrl = trimTrailingSlashes(provider.getBaseUrl());
-        if (!StringUtils.hasText(baseUrl)) return DEFAULT_OPENAI_BASE_URL;
-        if (!azure || baseUrl.endsWith("/openai/v1")) return baseUrl;
-        return baseUrl + "/openai/v1";
+        return AiProviderEndpointResolver.openAiResponsesBaseUrl(provider.getBaseUrl(), azure);
     }
 }

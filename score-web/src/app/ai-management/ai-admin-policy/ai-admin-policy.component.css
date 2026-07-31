@@ -90,13 +90,73 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.model-status-row {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  min-height: 3.5rem;
+}
+
+.model-sort-order {
+  width: 7rem;
+}
+
 .reasoning-effort-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 2fr 8rem auto auto;
+  grid-template-columns: minmax(8rem, 1fr) 3fr auto;
   gap: 1rem;
   align-items: center;
   padding-top: .5rem;
   border-bottom: 1px solid rgba(0, 0, 0, .12);
+}
+
+mat-radio-group {
+  display: block;
+}
+
+.capability-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.capability-select-grid {
+  padding-top: .5rem;
+}
+
+.unsupported-capabilities {
+  color: #667085;
+  font-size: 12px;
+  margin: 0 0 .75rem;
+}
+
+.thinking-mode-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  min-height: 3.5rem;
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.field-label {
+  color: #667085;
+  flex-basis: 100%;
+  font-size: 12px;
+}
+
+.model-validation-summary ul {
+  margin: .5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.default-effort {
+  color: #3f51b5;
+  font-size: 12px;
 }
 
 .detail-tab-content {
@@ -137,12 +197,6 @@
   font-size: 1rem;
   font-weight: 500;
   margin-bottom: 1rem;
-}
-
-.policy-actions-section {
-  border-bottom: 0;
-  margin-bottom: 0;
-  padding-bottom: 0;
 }
 
 .model-option-grid {
@@ -204,13 +258,14 @@ small {
 
 .quota-adjustment-grid {
   display: grid;
-  grid-template-columns: 1fr 2fr auto;
+  grid-template-columns: minmax(16rem, 1fr) auto;
   gap: 1rem;
   align-items: start;
 }
 
 @media (max-width: 1199px) {
   .detail-form-grid-4,
+  .capability-editor-grid,
   .usage-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -224,6 +279,7 @@ small {
   .detail-form-grid,
   .detail-form-grid-3,
   .detail-form-grid-4,
+  .capability-editor-grid,
   .toggle-grid,
   .toggle-grid-3,
   .model-option-grid,
@@ -242,5 +298,11 @@ small {
   .policy-source-panel {
     align-items: flex-start;
     flex-wrap: wrap;
+  }
+
+  .model-status-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
   }
 }

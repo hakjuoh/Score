@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.oagi.score.gateway.http.api.ai_management.agent.AssistantAgent;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiAgentCatalog;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiModelProfileCatalog;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiTool;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeToolGuard;
 import org.springframework.ai.anthropic.AnthropicChatModel;
@@ -54,7 +55,21 @@ class ScoreAiConfigurationTest {
                 .bind("spring.ai.mcp.client", ScoreMcpClientProperties.class)
                 .orElseThrow(() -> new IllegalStateException("MCP client configuration was not bound"));
 
+        assertThat(properties.getModels()).isEmpty();
+        AiModelProfileCatalog.install(properties);
         assertThat(properties.getModels()).hasSize(7).containsKey("claude-opus-5");
+        assertThat(properties.getModels().get("claude-haiku-4_5").getReasoningEfforts())
+                .isEmpty();
+        assertThat(properties.getModels().get("claude-haiku-4_5").getThinkingBudgetTokens())
+                .isEqualTo(4096);
+        assertThat(properties.getModels().get("claude-opus-5").getReasoningEfforts())
+                .extracting(ScoreAiProperties.ReasoningEffort::getName)
+                .containsExactly("low", "medium", "high", "xhigh", "max");
+        assertThat(properties.getModels().get("gpt-5_6-sol").getReasoningEfforts())
+                .extracting(ScoreAiProperties.ReasoningEffort::getName)
+                .containsExactly("disabled", "low", "medium", "high", "xhigh", "max");
+        assertThat(properties.getModels().get("gpt-5_6-sol").getContextWindow())
+                .isEqualTo(1_050_000L);
         assertThat(properties.getTools().getToolSearch().isEnabled()).isTrue();
         assertThat(properties.getTools().getFiles().getStorage().getProvider()).isEqualTo("local");
         assertThat(properties.getTools().getConnectCenterMcp().getConnectionName())
@@ -281,9 +296,8 @@ class ScoreAiConfigurationTest {
         provider.setKey("test-key");
         ScoreAiProperties.Model configured = properties.getModels().get("claude-haiku-4_5");
         configured.setModel("claude-haiku-4-5");
-        configured.setReasoningEffort("default");
-        configured.setReasoningEfforts(List.of(reasoningEffort(
-                "default", "Default", "Uses the model's built-in response behavior.")));
+        configured.setReasoningEffort(null);
+        configured.setReasoningEfforts(List.of());
 
         Map<String, ChatModel> models = chatModels(properties);
 
@@ -307,18 +321,19 @@ class ScoreAiConfigurationTest {
                 .bind("score.ai", ScoreAiProperties.class)
                 .orElseThrow(() -> new IllegalStateException("score.ai configuration was not bound"));
 
+        AiModelProfileCatalog.install(properties);
         assertEquals(Set.of(
                         "claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-4_5",
                         "gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna"),
                 properties.getModels().keySet());
         assertEquals("claude-opus-5", properties.getModels().get("claude-opus-5").getModel());
         assertEquals("claude-haiku-4-5", properties.getModels().get("claude-haiku-4_5").getModel());
-        assertEquals("default", properties.getModels().get("claude-haiku-4_5").getReasoningEffort());
+        assertNull(properties.getModels().get("claude-haiku-4_5").getReasoningEffort());
         assertEquals("gpt-5.6-terra", properties.getModels().get("gpt-5_6-terra").getModel());
         assertEquals("gpt-5.6-luna", properties.getModels().get("gpt-5_6-luna").getModel());
-        assertEquals(16000, properties.getModels().get("claude-fable-5").getMaxTokens());
-        assertNull(properties.getModels().get("gpt-5_6-sol").getMaxTokens());
-        assertEquals(200000L, properties.getModels().get("gpt-5_6-sol").getContextWindow());
+        assertEquals(128000, properties.getModels().get("claude-fable-5").getMaxTokens());
+        assertEquals(128000, properties.getModels().get("gpt-5_6-sol").getMaxTokens());
+        assertEquals(1050000L, properties.getModels().get("gpt-5_6-sol").getContextWindow());
         assertEquals("classpath:ai/system/system-prompt-connect-center-assistant.md",
                 properties.getAssistant().getSystemPromptResource());
         assertEquals(Duration.ofMinutes(2),
@@ -342,9 +357,9 @@ class ScoreAiConfigurationTest {
         assertNull(environment.getProperty("score.ai.mcp.connection-name"));
         assertNull(environment.getProperty("score.ai.gateway.model-name"));
         Map.of(
-                "claude-fable-5", "max",
-                "claude-opus-5", "max",
-                "claude-sonnet-5", "max",
+                "claude-fable-5", "xhigh",
+                "claude-opus-5", "xhigh",
+                "claude-sonnet-5", "xhigh",
                 "gpt-5_6-sol", "xhigh",
                 "gpt-5_6-terra", "xhigh",
                 "gpt-5_6-luna", "xhigh"
@@ -452,6 +467,31 @@ class ScoreAiConfigurationTest {
         assertEquals("disabled", registry.resolveReasoningEffort("claude-sonnet-5", "none"));
         assertEquals(1, registry.availableModels().getFirst().reasoningEfforts().stream()
                 .filter(effort -> "disabled".equals(effort.name())).count());
+    }
+
+    @Test
+    void preservesEmptyReasoningEffortsForModelsThatDoNotSupportTheSetting() {
+        ScoreAiProperties properties = properties("claude-haiku-4_5", "azure-foundry");
+        ScoreAiProperties.Provider provider = properties.getProviders().get("azure-foundry");
+        provider.setType("anthropic");
+        provider.setBaseUrl("https://example.services.ai.azure.com");
+        provider.setKey("test-key");
+        ScoreAiProperties.Model model = properties.getModels().get("claude-haiku-4_5");
+        model.setReasoningEffort(null);
+        model.setReasoningEfforts(List.of());
+        model.setThinkingBudgetTokens(4096);
+        model.getModelCapabilities().setThinkingModes(List.of("enabled", "disabled"));
+        model.getModelCapabilities().setDefaultThinking("disabled");
+
+        ScoreAiModelRegistry registry = new ScoreAiModelRegistry(
+                properties, Map.of("claude-haiku-4_5", mock(ChatModel.class)));
+
+        assertThat(registry.availableModels().getFirst().reasoningEfforts()).isEmpty();
+        assertThat(registry.availableModels().getFirst().defaultReasoningEffort()).isNull();
+        assertThat(registry.resolveReasoningEffort("claude-haiku-4_5", null)).isNull();
+        assertThatThrownBy(() -> registry.resolveReasoningEffort("claude-haiku-4_5", "default"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not support reasoning effort");
     }
 
     @Test

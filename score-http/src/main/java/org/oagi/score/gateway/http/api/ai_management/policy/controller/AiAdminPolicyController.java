@@ -60,9 +60,8 @@ public class AiAdminPolicyController {
     @DeleteMapping("/users/{userId}/policy")
     public void delete(@AuthenticationPrincipal AuthenticatedPrincipal principal,
                        @PathVariable UserId userId,
-                       @RequestParam long expectedVersion,
-                       @RequestParam String reason) {
-        policies.delete(sessions.asScoreUser(principal), userId, expectedVersion, reason);
+                       @RequestParam long expectedVersion) {
+        policies.delete(sessions.asScoreUser(principal), userId, expectedVersion);
     }
 
     @GetMapping("/users/{userId}/usage")

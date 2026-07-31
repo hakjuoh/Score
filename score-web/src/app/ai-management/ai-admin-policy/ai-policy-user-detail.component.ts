@@ -1,11 +1,15 @@
-import {Component, OnInit, inject} from '@angular/core';
+import {Component, OnInit, ViewChild, inject} from '@angular/core';
 import {ActivatedRoute} from '@angular/router';
 import {forkJoin} from 'rxjs';
 import {finalize} from 'rxjs/operators';
+import {MatSort} from '@angular/material/sort';
 import {MatSnackBar} from '@angular/material/snack-bar';
+import {MatTableDataSource} from '@angular/material/table';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiAdminModel, AiAdminUsage, AiPolicyUpdate, AiPolicyView} from './domain/ai-admin-policy';
 import {hashCode} from '../../common/utility';
+import {notifyAiAdminConflict, notifyAiAdminError,
+  notifyAiAdminSuccess} from './domain/ai-admin-notifications';
 
 @Component({
   standalone: false,
@@ -22,8 +26,6 @@ export class AiPolicyUserDetailComponent implements OnInit {
   models: AiAdminModel[] = [];
   policy?: AiPolicyView;
   saving = false;
-  policyReason = '';
-  operationReason = '';
   editingOverride = false;
   selectedModels = new Set<string>();
   quotaEnabled = false;
@@ -32,6 +34,24 @@ export class AiPolicyUserDetailComponent implements OnInit {
   loadFailed = false;
   private baselineHash = '';
   readonly usageColumns = ['time', 'model', 'kind', 'status', 'charged'];
+  readonly usageDataSource = new MatTableDataSource<AiAdminUsage['recentCalls'][number]>();
+
+  @ViewChild('usageSort') set usageSort(sort: MatSort | undefined) {
+    if (sort) this.usageDataSource.sort = sort;
+  }
+
+  constructor() {
+    this.usageDataSource.sortingDataAccessor = (call, column) => {
+      switch (column) {
+        case 'time': return Date.parse(call.reservedAt);
+        case 'model': return call.modelKey.toLowerCase();
+        case 'kind': return call.executionKind.toLowerCase();
+        case 'status': return call.status.toLowerCase();
+        case 'charged': return call.chargedTokens;
+        default: return '';
+      }
+    };
+  }
 
   ngOnInit(): void {
     this.userId = this.route.snapshot.paramMap.get('id') ?? '';
@@ -45,7 +65,7 @@ export class AiPolicyUserDetailComponent implements OnInit {
       .subscribe({
         next: ({models, policy, usage}) => {
           this.models = models.filter(model => model.enabled);
-          this.usage = usage;
+          this.applyUsage(usage);
           this.apply(policy);
         },
         error: () => this.loadFailed = true
@@ -110,6 +130,10 @@ export class AiPolicyUserDetailComponent implements OnInit {
     return !!this.policy && this.baselineHash !== hashCode(this.editableState());
   }
 
+  get updateDisabled(): boolean {
+    return this.saving || !this.isChanged;
+  }
+
   effortChecked(model: AiAdminModel, effort: string): boolean {
     const restricted = this.policy?.allowedReasoningEfforts[model.modelKey];
     return !restricted || restricted.includes(effort);
@@ -130,20 +154,23 @@ export class AiPolicyUserDetailComponent implements OnInit {
     this.service.cancelActiveRequests(this.userId).pipe(finalize(() => this.saving = false))
       .subscribe({next: result => {
         if (this.usage) this.usage.activeRequests = 0;
-        this.snackBar.open(`${result.cancelledRequests} active request(s) cancelled.`, '', {duration: 3000});
-      }, error: () => this.snackBar.open('Active requests could not be cancelled.', '', {duration: 5000})});
+        notifyAiAdminSuccess(this.snackBar, `${result.cancelledRequests} active request(s) cancelled.`);
+      }, error: () => notifyAiAdminError(this.snackBar, 'Active requests could not be cancelled.')});
   }
 
   adjustQuota(): void {
-    if (this.saving || !Number.isSafeInteger(this.adjustment) || this.adjustment === 0
-      || this.operationReason.trim().length < 10) return;
+    if (this.saving) return;
+    if (!Number.isSafeInteger(this.adjustment) || this.adjustment === 0) {
+      notifyAiAdminError(this.snackBar, 'Enter a non-zero whole-number quota adjustment.');
+      return;
+    }
     this.saving = true;
-    this.service.adjustQuota(this.userId, this.adjustment, this.operationReason.trim())
+    this.service.adjustQuota(this.userId, this.adjustment)
       .pipe(finalize(() => this.saving = false)).subscribe({next: usage => {
-        this.usage = usage;
-        this.adjustment = 0; this.operationReason = '';
-        this.snackBar.open('Quota adjusted.', '', {duration: 3000});
-      }, error: () => this.snackBar.open('Quota could not be adjusted.', '', {duration: 5000})});
+        this.applyUsage(usage);
+        this.adjustment = 0;
+        notifyAiAdminSuccess(this.snackBar, 'Quota adjusted.');
+      }, error: () => notifyAiAdminError(this.snackBar, 'Quota could not be adjusted.')});
   }
 
   get invalid(): boolean {
@@ -170,7 +197,11 @@ export class AiPolicyUserDetailComponent implements OnInit {
   }
 
   save(): void {
-    if (!this.policy || !this.editingOverride || this.invalid || !this.isChanged) return;
+    if (!this.policy || !this.editingOverride || !this.isChanged) return;
+    if (this.invalid) {
+      notifyAiAdminError(this.snackBar, 'Correct the invalid policy settings before updating.');
+      return;
+    }
     const selectedModels = this.policy.modelAccessMode === 'ALL'
       ? new Set(this.models.map(model => model.modelKey)) : this.selectedModels;
     const allowedReasoningEfforts = Object.fromEntries(
@@ -191,23 +222,21 @@ export class AiPolicyUserDetailComponent implements OnInit {
       maxOutputTokensPerCall: this.policy.maxOutputTokensPerCall,
       maxTotalTokensPerRequest: this.policy.maxTotalTokensPerRequest,
       quotaPeriod: this.quotaEnabled ? this.policy.quota.period : null,
-      quotaTokens: this.quotaEnabled ? this.policy.quota.limitTokens : null,
-      reason: this.policyReason.trim() || null
+      quotaTokens: this.quotaEnabled ? this.policy.quota.limitTokens : null
     };
     this.saving = true;
     this.service.save(this.userId, update).pipe(finalize(() => this.saving = false))
       .subscribe({
         next: policy => {
           this.apply(policy);
-          this.policyReason = '';
-          this.snackBar.open('AI policy saved.', '', {duration: 3000});
+          notifyAiAdminSuccess(this.snackBar, 'AI policy saved.');
         },
         error: error => {
           const conflict = error.status === 409;
-          const notice = this.snackBar.open(conflict
-            ? 'The policy changed elsewhere. Reload before saving again.'
-            : 'The AI policy could not be saved.', conflict ? 'Reload' : '', {duration: 5000});
-          if (conflict) notice.onAction().subscribe(() => this.reloadPolicy());
+          if (conflict) {
+            notifyAiAdminConflict(this.snackBar,
+              'The policy changed elsewhere. Reload before saving again.', () => this.reloadPolicy());
+          } else notifyAiAdminError(this.snackBar, 'The AI policy could not be saved.');
         }
       });
   }
@@ -217,16 +246,27 @@ export class AiPolicyUserDetailComponent implements OnInit {
   }
 
   reset(): void {
-    if (!this.policy || this.policy.inherited || this.policyReason.trim().length < 10) return;
+    if (!this.policy || this.policy.inherited) return;
     this.saving = true;
-    this.service.reset(this.userId, this.policy.policyVersion, this.policyReason.trim())
+    this.service.reset(this.userId, this.policy.policyVersion)
       .pipe(finalize(() => this.saving = false)).subscribe({
       next: () => {
-        this.policyReason = '';
-        this.snackBar.open('Default AI policy restored.', '', {duration: 3000});
+        notifyAiAdminSuccess(this.snackBar, 'Default AI policy restored.');
         this.reloadPolicy();
-      }, error: () => this.snackBar.open('The AI policy could not be reset.', '', {duration: 5000})
+      },
+      error: error => {
+        if (error.status === 409) {
+          notifyAiAdminConflict(this.snackBar,
+            'The policy changed elsewhere. Reload before restoring the default policy.',
+            () => this.reloadPolicy());
+        } else notifyAiAdminError(this.snackBar, 'The AI policy could not be reset.');
+      }
     });
+  }
+
+  private applyUsage(usage: AiAdminUsage): void {
+    this.usage = usage;
+    this.usageDataSource.data = usage.recentCalls;
   }
 
   private editableState(): object {

@@ -30,7 +30,7 @@ interface AiChatModelWire {
   description?: string;
   provider: string;
   defaultModel: boolean;
-  defaultReasoningEffort: string;
+  defaultReasoningEffort: string | null;
   reasoningEfforts?: Array<AiReasoningEffortInfo | string>;
   contextWindow?: number | null;
   outputReserveTokens?: number | null;
@@ -142,8 +142,8 @@ export class AiChatApiService {
 
   updateConversationModel(conversationId: string, modelName: string,
                           reasoningEffort: string): Observable<AiConversationModelResponse> {
-    if (!conversationId.trim() || !modelName.trim() || !reasoningEffort.trim()) {
-      throw new Error('A conversationId, modelName, and reasoningEffort are required.');
+    if (!conversationId.trim() || !modelName.trim()) {
+      throw new Error('A conversationId and modelName are required.');
     }
     return this.http.patch<AiConversationModelResponse>(
       '/api/ai/chat/conversations/' + encodeURIComponent(conversationId) + '/model',

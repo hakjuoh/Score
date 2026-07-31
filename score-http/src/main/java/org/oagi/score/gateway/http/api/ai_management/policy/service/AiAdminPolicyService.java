@@ -160,20 +160,16 @@ public class AiAdminPolicyService {
                         update.maxTotalTokensPerRequest(), update.quotaPeriod(),
                         update.quotaTokens(), update.expectedVersion() != null
                         ? update.expectedVersion() : 0L, allowedIds, efforts),
-                actor.userId(), update.expectedVersion(), update.reason());
+                actor.userId(), update.expectedVersion());
         if (!saved.aiEnabled()) {
             requests.cancelByUser(targetUserId, "AI_DISABLED_BY_POLICY");
         }
         return view(resolveFor(ULong.valueOf(targetUserId.value())));
     }
 
-    public void delete(ScoreUser actor, UserId targetUserId, long expectedVersion,
-                       String reason) {
+    public void delete(ScoreUser actor, UserId targetUserId, long expectedVersion) {
         requireAdministrator(actor);
-        if (reason == null || reason.strip().length() < 10) {
-            throw new IllegalArgumentException("A reset reason of at least 10 characters is required.");
-        }
-        commands.delete(targetUserId, actor.userId(), expectedVersion, reason.strip());
+        commands.delete(targetUserId, actor.userId(), expectedVersion);
     }
 
     public AiAdminUsageView usage(ScoreUser actor, UserId targetUserId) {
@@ -213,10 +209,6 @@ public class AiAdminPolicyService {
         if (input == null || input.deltaTokens() == 0) {
             throw new IllegalArgumentException("A non-zero quota adjustment is required.");
         }
-        if (input.reason() == null || input.reason().strip().length() < 10) {
-            throw new IllegalArgumentException(
-                    "A quota adjustment reason of at least 10 characters is required.");
-        }
         EffectiveAiPolicy policy = resolveFor(ULong.valueOf(targetUserId.value()));
         AiQuotaWindow window = policy.currentQuotaWindow(Instant.now()).orElseThrow(() ->
                 new IllegalArgumentException("The user does not have a period quota."));
@@ -251,7 +243,7 @@ public class AiAdminPolicyService {
                             ULong.valueOf(actor.userId().value()))
                     .set(AI_TOKEN_QUOTA_ADJUSTMENT.PERIOD_START, start)
                     .set(AI_TOKEN_QUOTA_ADJUSTMENT.DELTA_TOKENS, input.deltaTokens())
-                    .set(AI_TOKEN_QUOTA_ADJUSTMENT.REASON, input.reason().strip())
+                    .set(AI_TOKEN_QUOTA_ADJUSTMENT.REASON, "Manual quota adjustment")
                     .set(AI_TOKEN_QUOTA_ADJUSTMENT.CREATED_AT, now).execute();
         });
         return usage(actor, targetUserId);

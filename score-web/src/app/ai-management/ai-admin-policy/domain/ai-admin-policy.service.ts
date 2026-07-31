@@ -3,8 +3,10 @@ import {HttpClient} from '@angular/common/http';
 import {Observable} from 'rxjs';
 import {
   AiAdminModel,
-  AiModelUpdate,
+  AiModelCommand,
+  AiModelProfile,
   AiAdminUsage,
+  AiProviderConnectionTestResult,
   AiProviderUpdate,
   AiProviderView,
   AiPolicyUpdate,
@@ -28,11 +30,16 @@ export class AiAdminPolicyService {
     return this.http.get<AiAdminModel>(`/api/admin/ai/models/${modelId}`);
   }
 
-  createModel(update: AiModelUpdate): Observable<AiAdminModel> {
+  modelProfiles(providerId: number): Observable<AiModelProfile[]> {
+    return this.http.get<AiModelProfile[]>(
+      `/api/admin/ai/providers/${providerId}/model-profiles`);
+  }
+
+  createModel(update: AiModelCommand): Observable<AiAdminModel> {
     return this.http.post<AiAdminModel>('/api/admin/ai/models', update);
   }
 
-  updateModel(modelId: number, update: AiModelUpdate): Observable<AiAdminModel> {
+  updateModel(modelId: number, update: AiModelCommand): Observable<AiAdminModel> {
     return this.http.put<AiAdminModel>(`/api/admin/ai/models/${modelId}`, update);
   }
 
@@ -40,9 +47,9 @@ export class AiAdminPolicyService {
     return this.http.get<AiAdminUsage>(`/api/admin/ai/users/${userId}/usage`);
   }
 
-  adjustQuota(userId: string, deltaTokens: number, reason: string): Observable<AiAdminUsage> {
+  adjustQuota(userId: string, deltaTokens: number): Observable<AiAdminUsage> {
     return this.http.post<AiAdminUsage>(`/api/admin/ai/users/${userId}/quota-adjustments`,
-      {deltaTokens, reason});
+      {deltaTokens});
   }
 
   cancelActiveRequests(userId: string): Observable<{cancelledRequests: number}> {
@@ -58,9 +65,9 @@ export class AiAdminPolicyService {
     return this.http.put<AiPolicyView>(`/api/admin/ai/users/${userId}/policy`, update);
   }
 
-  reset(userId: string, expectedVersion: number, reason: string): Observable<void> {
+  reset(userId: string, expectedVersion: number): Observable<void> {
     return this.http.delete<void>(`/api/admin/ai/users/${userId}/policy`, {
-      params: {expectedVersion, reason}
+      params: {expectedVersion}
     });
   }
 
@@ -78,6 +85,12 @@ export class AiAdminPolicyService {
 
   updateProvider(providerId: number, update: AiProviderUpdate): Observable<AiProviderView> {
     return this.http.put<AiProviderView>(`/api/admin/ai/providers/${providerId}`, update);
+  }
+
+  testProviderConnection(providerId: number,
+                         update: AiProviderUpdate): Observable<AiProviderConnectionTestResult> {
+    return this.http.post<AiProviderConnectionTestResult>(
+      `/api/admin/ai/providers/${providerId}/connection-tests`, update);
   }
 
 }

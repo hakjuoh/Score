@@ -1,4 +1,6 @@
-import {Component, OnInit, inject} from '@angular/core';
+import {Component, OnInit, ViewChild, inject} from '@angular/core';
+import {MatSort} from '@angular/material/sort';
+import {MatTableDataSource} from '@angular/material/table';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiPolicyUserSummary} from './domain/ai-admin-policy';
 
@@ -19,6 +21,30 @@ export class AiPolicyUserListComponent implements OnInit {
   quotaFilter = 'ALL';
   multiAgentFilter = 'ALL';
   columns = this.defaultColumns();
+  readonly dataSource = new MatTableDataSource<AiPolicyUserSummary>();
+
+  @ViewChild(MatSort) set tableSort(sort: MatSort | undefined) {
+    if (sort) this.dataSource.sort = sort;
+  }
+
+  constructor() {
+    this.dataSource.sortingDataAccessor = (user, column) => {
+      switch (column) {
+        case 'loginId': return user.loginId.toLowerCase();
+        case 'name': return user.name.toLowerCase();
+        case 'organization': return user.organization.toLowerCase();
+        case 'access': return Number(user.enabled);
+        case 'models': return user.allowedModelCount;
+        case 'multiAgent': return Number(user.multiAgentEnabled);
+        case 'quota': return user.quotaLimitTokens == null
+          ? Number.MAX_SAFE_INTEGER : user.quotaConsumedTokens + user.quotaReservedTokens;
+        case 'active': return user.activeRequests;
+        case 'lastPolicyChange': return user.lastPolicyChange
+          ? Date.parse(user.lastPolicyChange) : 0;
+        default: return '';
+      }
+    };
+  }
 
   get displayedColumns(): string[] {
     const columnNames = new Map([
@@ -41,6 +67,7 @@ export class AiPolicyUserListComponent implements OnInit {
     this.policies.users().subscribe({
       next: users => {
         this.users = users;
+        this.refreshDataSource();
         this.loading = false;
       },
       error: () => {
@@ -52,6 +79,16 @@ export class AiPolicyUserListComponent implements OnInit {
 
   onSearch(): void {
     this.filter = this.filter.trim();
+    this.refreshDataSource();
+  }
+
+  onFilterChange(filter: string): void {
+    this.filter = filter;
+    this.refreshDataSource();
+  }
+
+  applyFilters(): void {
+    this.refreshDataSource();
   }
 
   onColumnsChange(columns: {name: string; selected: boolean}[]): void {
@@ -81,5 +118,9 @@ export class AiPolicyUserListComponent implements OnInit {
   private defaultColumns(): {name: string; selected: boolean}[] {
     return ['Login ID', 'Name', 'Organization', 'AI Access', 'Models', 'Multi-agent',
       'Quota', 'Active', 'Last Policy Change'].map(name => ({name, selected: true}));
+  }
+
+  private refreshDataSource(): void {
+    this.dataSource.data = this.filteredUsers;
   }
 }

@@ -676,14 +676,12 @@ describe('AiChatMessageListComponent', () => {
     fixture.componentInstance.availableModels = [{
       name: 'claude-haiku-4_5', displayName: 'Claude Haiku 4.5', description: 'Fast Claude model.',
       provider: 'azure-foundry', defaultModel: false,
-      defaultReasoningEffort: 'default', reasoningEfforts: [
-        {name: 'default', displayName: 'Default', description: 'Uses built-in behavior.'}
-      ]
+      defaultReasoningEffort: null, reasoningEfforts: []
     }];
     fixture.componentInstance.modelDraftName = 'claude-haiku-4_5';
-    fixture.componentInstance.modelDraftReasoningEffort = 'default';
+    fixture.componentInstance.modelDraftReasoningEffort = '';
     fixture.componentInstance.selectedModelName = 'claude-haiku-4_5';
-    fixture.componentInstance.selectedReasoningEffort = 'default';
+    fixture.componentInstance.selectedReasoningEffort = '';
     fixture.detectChanges();
     await fixture.whenStable();
 
