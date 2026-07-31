@@ -343,7 +343,7 @@ CREATE TABLE `ai_token_usage_period`
     `consumed_tokens` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens consumed during the period',
     `reserved_tokens` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens reserved by in-progress calls during the period',
     `updated_at`      datetime(6) NOT NULL COMMENT 'Date and time when the period counter was last updated',
-    PRIMARY KEY (`app_user_id`, `period_start`),
+    PRIMARY KEY (`app_user_id`, `period_start`, `period_end`),
     KEY `ai_token_usage_period_end_idx` (`period_end`),
     CONSTRAINT `ai_token_usage_period_user_fk`
         FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE
@@ -376,6 +376,8 @@ CREATE TABLE `ai_token_usage_ledger`
     `execution_kind`            varchar(64) NULL COMMENT 'Execution kind such as assistant, planner, or worker',
     `agent_id`                  varchar(64) NULL COMMENT 'Identifier of the agent that performed the call',
     `reserved_tokens`           bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens reserved before the provider call',
+    `quota_period_start`        datetime(6) NULL COMMENT 'Exact inclusive quota window start reserved by this call',
+    `quota_period_end`          datetime(6) NULL COMMENT 'Exact exclusive quota window end reserved by this call',
     `prompt_tokens`             bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Normalized input tokens reported by the provider',
     `completion_tokens`         bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Output tokens reported by the provider',
     `cached_tokens`             bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of input tokens served from cache',
@@ -389,6 +391,7 @@ CREATE TABLE `ai_token_usage_ledger`
     UNIQUE KEY `ai_token_usage_ledger_call_uk` (`call_id`),
     KEY `ai_token_usage_ledger_user_time_idx` (`app_user_id`, `reserved_at`),
     KEY `ai_token_usage_ledger_request_idx` (`request_id`, `reserved_at`),
+    KEY `ai_token_usage_ledger_stale_reservation_idx` (`status`, `reserved_at`),
     CONSTRAINT `ai_token_usage_ledger_user_fk`
         FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE,
     CONSTRAINT `ai_token_usage_ledger_model_fk`
