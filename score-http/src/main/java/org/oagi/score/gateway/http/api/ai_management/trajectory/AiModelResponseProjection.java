@@ -61,7 +61,11 @@ final class AiModelResponseProjection {
         }
         metrics.put("prompt_token_accounting", normalizer.wireValue());
         putIfPresent(metrics, "completion_tokens", usage.getCompletionTokens());
-        putIfPresent(metrics, "cached_tokens", usage.getCacheReadInputTokens());
+        if (usage.getCacheReadInputTokens() != null
+                || usage.getCacheWriteInputTokens() != null) {
+            metrics.put("cached_tokens",
+                    Objects.requireNonNullElse(usage.getCacheReadInputTokens(), 0L));
+        }
         if (usage.getCacheWriteInputTokens() != null) {
             metrics.put("extra", Map.of(
                     "cache_creation_input_tokens", usage.getCacheWriteInputTokens()));

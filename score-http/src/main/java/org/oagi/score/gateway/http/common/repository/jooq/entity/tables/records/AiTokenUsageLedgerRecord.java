@@ -167,11 +167,43 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
     }
 
     /**
+     * Setter for <code>oagi.ai_token_usage_ledger.quota_period_start</code>.
+     * Exact inclusive quota window start reserved by this call
+     */
+    public void setQuotaPeriodStart(LocalDateTime value) {
+        set(9, value);
+    }
+
+    /**
+     * Getter for <code>oagi.ai_token_usage_ledger.quota_period_start</code>.
+     * Exact inclusive quota window start reserved by this call
+     */
+    public LocalDateTime getQuotaPeriodStart() {
+        return (LocalDateTime) get(9);
+    }
+
+    /**
+     * Setter for <code>oagi.ai_token_usage_ledger.quota_period_end</code>.
+     * Exact exclusive quota window end reserved by this call
+     */
+    public void setQuotaPeriodEnd(LocalDateTime value) {
+        set(10, value);
+    }
+
+    /**
+     * Getter for <code>oagi.ai_token_usage_ledger.quota_period_end</code>.
+     * Exact exclusive quota window end reserved by this call
+     */
+    public LocalDateTime getQuotaPeriodEnd() {
+        return (LocalDateTime) get(10);
+    }
+
+    /**
      * Setter for <code>oagi.ai_token_usage_ledger.prompt_tokens</code>.
      * Normalized input tokens reported by the provider
      */
     public void setPromptTokens(ULong value) {
-        set(9, value);
+        set(11, value);
     }
 
     /**
@@ -179,7 +211,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * Normalized input tokens reported by the provider
      */
     public ULong getPromptTokens() {
-        return (ULong) get(9);
+        return (ULong) get(11);
     }
 
     /**
@@ -187,7 +219,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * Output tokens reported by the provider
      */
     public void setCompletionTokens(ULong value) {
-        set(10, value);
+        set(12, value);
     }
 
     /**
@@ -195,7 +227,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * Output tokens reported by the provider
      */
     public ULong getCompletionTokens() {
-        return (ULong) get(10);
+        return (ULong) get(12);
     }
 
     /**
@@ -203,7 +235,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * of input tokens served from cache
      */
     public void setCachedTokens(ULong value) {
-        set(11, value);
+        set(13, value);
     }
 
     /**
@@ -211,7 +243,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * of input tokens served from cache
      */
     public ULong getCachedTokens() {
-        return (ULong) get(11);
+        return (ULong) get(13);
     }
 
     /**
@@ -219,7 +251,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * of tokens charged against the quota
      */
     public void setChargedTokens(ULong value) {
-        set(12, value);
+        set(14, value);
     }
 
     /**
@@ -227,7 +259,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * of tokens charged against the quota
      */
     public ULong getChargedTokens() {
-        return (ULong) get(12);
+        return (ULong) get(14);
     }
 
     /**
@@ -235,7 +267,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * Indicates whether the provider usage data is complete
      */
     public void setUsageComplete(Byte value) {
-        set(13, value);
+        set(15, value);
     }
 
     /**
@@ -243,7 +275,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * Indicates whether the provider usage data is complete
      */
     public Byte getUsageComplete() {
-        return (Byte) get(13);
+        return (Byte) get(15);
     }
 
     /**
@@ -251,7 +283,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * and settlement status
      */
     public void setStatus(String value) {
-        set(14, value);
+        set(16, value);
     }
 
     /**
@@ -259,7 +291,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * and settlement status
      */
     public String getStatus() {
-        return (String) get(14);
+        return (String) get(16);
     }
 
     /**
@@ -267,7 +299,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * class or error code
      */
     public void setFailureType(String value) {
-        set(15, value);
+        set(17, value);
     }
 
     /**
@@ -275,7 +307,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * class or error code
      */
     public String getFailureType() {
-        return (String) get(15);
+        return (String) get(17);
     }
 
     /**
@@ -283,7 +315,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * time when the tokens were reserved
      */
     public void setReservedAt(LocalDateTime value) {
-        set(16, value);
+        set(18, value);
     }
 
     /**
@@ -291,7 +323,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * time when the tokens were reserved
      */
     public LocalDateTime getReservedAt() {
-        return (LocalDateTime) get(16);
+        return (LocalDateTime) get(18);
     }
 
     /**
@@ -299,7 +331,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * time when the usage was settled or released
      */
     public void setSettledAt(LocalDateTime value) {
-        set(17, value);
+        set(19, value);
     }
 
     /**
@@ -307,7 +339,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
      * time when the usage was settled or released
      */
     public LocalDateTime getSettledAt() {
-        return (LocalDateTime) get(17);
+        return (LocalDateTime) get(19);
     }
 
     // -------------------------------------------------------------------------
@@ -333,7 +365,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
     /**
      * Create a detached, initialised AiTokenUsageLedgerRecord
      */
-    public AiTokenUsageLedgerRecord(ULong aiTokenUsageLedgerId, String callId, String requestId, String conversationGuid, ULong appUserId, ULong aiModelId, String executionKind, String agentId, ULong reservedTokens, ULong promptTokens, ULong completionTokens, ULong cachedTokens, ULong chargedTokens, Byte usageComplete, String status, String failureType, LocalDateTime reservedAt, LocalDateTime settledAt) {
+    public AiTokenUsageLedgerRecord(ULong aiTokenUsageLedgerId, String callId, String requestId, String conversationGuid, ULong appUserId, ULong aiModelId, String executionKind, String agentId, ULong reservedTokens, LocalDateTime quotaPeriodStart, LocalDateTime quotaPeriodEnd, ULong promptTokens, ULong completionTokens, ULong cachedTokens, ULong chargedTokens, Byte usageComplete, String status, String failureType, LocalDateTime reservedAt, LocalDateTime settledAt) {
         super(AiTokenUsageLedger.AI_TOKEN_USAGE_LEDGER);
 
         setAiTokenUsageLedgerId(aiTokenUsageLedgerId);
@@ -345,6 +377,8 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
         setExecutionKind(executionKind);
         setAgentId(agentId);
         setReservedTokens(reservedTokens);
+        setQuotaPeriodStart(quotaPeriodStart);
+        setQuotaPeriodEnd(quotaPeriodEnd);
         setPromptTokens(promptTokens);
         setCompletionTokens(completionTokens);
         setCachedTokens(cachedTokens);

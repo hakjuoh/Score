@@ -119,6 +119,7 @@
             (elicitationResponded)="respondToElicitation($event)"
             (messageListClicked)="onMessageListClick($event)">
           </score-ai-chat-message-list>
+          @if (policyNotice) {<div class="ai-policy-notice" role="status">{{policyNotice}}</div>}
           <score-ai-chat-composer
             [prompt]="state.prompt"
             [trajectoryUrl]="trajectoryUrl"

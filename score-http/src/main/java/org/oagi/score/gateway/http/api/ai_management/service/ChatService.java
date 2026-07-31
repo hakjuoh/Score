@@ -17,6 +17,9 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardr
 import org.oagi.score.gateway.http.api.ai_management.memory.AiContextBudgetService;
 import org.oagi.score.gateway.http.api.ai_management.memory.ScoreChatMemoryFactory;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
+import org.oagi.score.gateway.http.api.ai_management.policy.model.EffectiveAiPolicy;
+import org.oagi.score.gateway.http.api.ai_management.policy.service.AiPolicyService;
+import org.oagi.score.gateway.http.api.ai_management.policy.service.AiUsageAccountingService;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
@@ -41,6 +44,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Transactional facade for assistant turns and conversation administration. */
 @Service
@@ -52,6 +56,9 @@ public class ChatService {
     private final ConversationSettingsManager settings;
     private final ChatTurnOrchestrator turns;
     private final ChatConversationJournal journal;
+    private final AiPolicyService policyService;
+    private final Map<String, AiExecutionEvent> policyNotices = new ConcurrentHashMap<>();
+    private volatile AiUsageAccountingService accounting;
 
     @Autowired
     public ChatService(ScoreAiModelRegistry models, AgentRunner agentRunner,
@@ -66,7 +73,8 @@ public class ChatService {
                        ConversationCompactor compactor,
                        ResponseOnlyAgent responseOnlyAgent, AiFileService files,
                        ScoreAiObservability observability,
-                       ObjectProvider<ExecutionObserver> executionObservers) {
+                       ObjectProvider<ExecutionObserver> executionObservers,
+                       AiPolicyService policyService) {
         this(models, new Dependencies(agentRunner, toolSearchAdvisor,
                 chatMemoryFactory::create,
                 requester -> repositoryFactory.aiChatConversationRepository(
@@ -76,13 +84,19 @@ public class ChatService {
                 compactor, responseOnlyAgent, files, observability,
                 executionObservers != null
                         ? executionObservers.getIfAvailable(ExecutionObserver::noop)
-                        : ExecutionObserver.noop()));
+                        : ExecutionObserver.noop()), policyService);
     }
 
     ChatService(ScoreAiModelRegistry models, Dependencies dependencies) {
+        this(models, dependencies, null);
+    }
+
+    ChatService(ScoreAiModelRegistry models, Dependencies dependencies,
+                AiPolicyService policyService) {
         Dependencies value = Objects.requireNonNull(dependencies);
         this.models = Objects.requireNonNull(models);
         this.rootAgentIdentity = value.rootAgentIdentity();
+        this.policyService = policyService;
         ScoreAiObservability observability = value.observability() != null
                 ? value.observability() : ScoreAiObservability.noop();
         ExecutionObserver observer = value.observer() != null
@@ -113,7 +127,7 @@ public class ChatService {
                 compactions, value.contextBudgets(), journal, results, responses);
         this.settings = new ConversationSettingsManager(models, prompts, conversations,
                 value.contextBudgets(), compactions, journal, value.objectMapper(),
-                observability, observer);
+                observability, observer, value.requests(), policyService);
         this.turns = new ChatTurnOrchestrator(value.rootAgentIdentity(), prompts,
                 conversations, value.objectMapper(), value.contextBudgets(),
                 value.inputGuardrails(), observability, observer, compactions,
@@ -149,6 +163,45 @@ public class ChatService {
                 : new AiAssistantInfoRecord(false, "AI_MODEL_NOT_CONFIGURED");
     }
 
+    public AiAssistantInfoRecord aiAssistantInfo(ScoreUser requester) {
+        if (requester == null || policyService == null) return aiAssistantInfo();
+        EffectiveAiPolicy policy = policyService.resolve(requester);
+        if (!models.isAvailable()) return new AiAssistantInfoRecord(false, "AI_MODEL_NOT_CONFIGURED");
+        if (!policy.aiEnabled()) return new AiAssistantInfoRecord(false, "AI_DISABLED_BY_POLICY");
+        if (policy.availableModels().isEmpty()) return new AiAssistantInfoRecord(false, "AI_NO_ALLOWED_MODELS");
+        if (accounting != null && accounting.isQuotaExhausted(policy)) {
+            return new AiAssistantInfoRecord(false, "AI_QUOTA_EXHAUSTED");
+        }
+        return new AiAssistantInfoRecord(true, null);
+    }
+
+    @Autowired(required = false)
+    void configureUsageAccounting(AiUsageAccountingService accounting) {
+        this.accounting = accounting;
+    }
+
+    public EffectiveAiPolicy resolvePolicy(ScoreUser requester) {
+        if (policyService == null) {
+            throw new IllegalStateException("AI policy service is not configured.");
+        }
+        return policyService.resolve(requester);
+    }
+
+    public void snapshotPolicy(String requestId, EffectiveAiPolicy policy) {
+        if (policyService != null) policyService.snapshot(requestId, policy);
+        models.snapshot(requestId);
+    }
+
+    public void snapshotPolicyNotice(String requestId, AiExecutionEvent notice) {
+        if (requestId != null && notice != null) policyNotices.put(requestId, notice);
+    }
+
+    public void clearPolicySnapshot(String requestId) {
+        if (policyService != null) policyService.clearSnapshot(requestId);
+        models.clearSnapshot(requestId);
+        if (requestId != null) policyNotices.remove(requestId);
+    }
+
     @Transactional
     public ChatRequest prepare(ChatRequest request, ScoreUser requester) {
         return prepare(request, requester, 0L);
@@ -160,6 +213,13 @@ public class ChatService {
         return settings.prepare(request, requester, requestGeneration);
     }
 
+    @Transactional
+    public ChatRequest prepare(ChatRequest request, ScoreUser requester,
+                               long requestGeneration, boolean persistentWorkflowsAllowed) {
+        return settings.prepare(request, requester, requestGeneration,
+                persistentWorkflowsAllowed);
+    }
+
     public ChatResponse chat(ChatRequest request, ScoreUser requester,
                              Consumer<AiExecutionEvent> progress) {
         return chat(request, requester, progress, 0L);
@@ -168,7 +228,8 @@ public class ChatService {
     public ChatResponse chat(ChatRequest request, ScoreUser requester,
                              Consumer<AiExecutionEvent> progress,
                              long requestGeneration) {
-        return turns.chat(request, requester, progress, requestGeneration);
+        return turns.chat(request, requester, progress, requestGeneration,
+                policyNotices.get(request.requestId()));
     }
 
     public String rootAgentId() {
@@ -190,6 +251,17 @@ public class ChatService {
         return conversations.availableModels();
     }
 
+    public List<AiChatModelInfo> availableModels(ScoreUser requester) {
+        if (policyService == null) return availableModels();
+        EffectiveAiPolicy policy = policyService.resolve(requester);
+        if (!policy.aiEnabled()) return List.of();
+        java.util.Set<String> allowed = policy.availableModels().stream()
+                .map(model -> model.descriptor().name())
+                .collect(java.util.stream.Collectors.toSet());
+        return conversations.availableModels().stream()
+                .filter(model -> allowed.contains(model.name())).toList();
+    }
+
     @Transactional
     public AiConversationModelResponse updateConversationModel(
             ScoreUser requester, String conversationId, String requestedModelName,
@@ -202,8 +274,14 @@ public class ChatService {
     public AiConversationModelResponse updateConversationModel(
             ScoreUser requester, String conversationId, String requestedModelName,
             String requestedReasoningEffort, String traceparent, String tracestate) {
+        EffectiveAiPolicy policy = null;
+        if (policyService != null) {
+            policy = policyService.resolve(requester);
+            policy.requireModelAllowed(requestedModelName);
+            policy.requireReasoningEffortAllowed(requestedModelName, requestedReasoningEffort);
+        }
         return settings.update(requester, conversationId, requestedModelName,
-                requestedReasoningEffort, traceparent, tracestate);
+                requestedReasoningEffort, traceparent, tracestate, policy);
     }
 
     @Transactional(readOnly = true)

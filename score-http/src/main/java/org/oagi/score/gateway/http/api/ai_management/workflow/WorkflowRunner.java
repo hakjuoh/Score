@@ -15,6 +15,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowPlan;
 import org.oagi.score.gateway.http.api.ai_management.model.AiWorkflowType;
 import org.oagi.score.gateway.http.api.ai_management.model.WorkflowPlanValidator;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
+import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -57,22 +58,41 @@ public final class WorkflowRunner {
     private final Duration inactivityTimeout;
     private final WorkflowPlanPolicy planPolicy;
     private final WorkflowGraphScheduler graphScheduler = new WorkflowGraphScheduler();
+    private final AiSpecialistAdmissionGate specialistAdmission;
 
     @Autowired
     public WorkflowRunner(AgentRunner agents, AiRequestRegistry requests,
-                    ScoreAiProperties properties) {
+                    ScoreAiProperties properties, ScoreAiObservability observability) {
         this(agents, requests,
                 properties != null
                         ? properties.getMultiAgent().getMaximumWorkflowIterations()
                         : DEFAULT_MAXIMUM_ITERATIONS,
                 properties != null
                         ? properties.getMultiAgent().getSpecialistInactivityTimeout()
-                        : DEFAULT_INACTIVITY_TIMEOUT);
+                        : DEFAULT_INACTIVITY_TIMEOUT,
+                properties != null
+                        ? properties.getMultiAgent().getMaxConcurrentSpecialists() : 16,
+                properties != null
+                        ? properties.getMultiAgent().getMaxConcurrentSpecialistsPerUser() : 8,
+                observability);
     }
 
     public WorkflowRunner(AgentRunner agents,
              AiRequestRegistry requests, int maximumIterations,
              Duration inactivityTimeout) {
+        this(agents, requests, maximumIterations, inactivityTimeout, 16, 8);
+    }
+
+    WorkflowRunner(AgentRunner agents, AiRequestRegistry requests, int maximumIterations,
+                   Duration inactivityTimeout, int globalSpecialists,
+                   int specialistsPerUser) {
+        this(agents, requests, maximumIterations, inactivityTimeout, globalSpecialists,
+                specialistsPerUser, ScoreAiObservability.noop());
+    }
+
+    WorkflowRunner(AgentRunner agents, AiRequestRegistry requests, int maximumIterations,
+                   Duration inactivityTimeout, int globalSpecialists,
+                   int specialistsPerUser, ScoreAiObservability observability) {
         this.requests = requests;
         if (maximumIterations < 1) {
             throw new IllegalArgumentException("Maximum Workflow iterations must be positive.");
@@ -83,6 +103,8 @@ public final class WorkflowRunner {
             throw new IllegalArgumentException("Agent inactivity timeout must be positive.");
         }
         this.inactivityTimeout = inactivityTimeout;
+        this.specialistAdmission = new AiSpecialistAdmissionGate(
+                globalSpecialists, specialistsPerUser, observability);
         this.agents = Objects.requireNonNull(agents, "agents");
         this.planPolicy = new WorkflowPlanPolicy(agents);
         this.gateway = agents.role("gateway-agent");
@@ -286,8 +308,14 @@ public final class WorkflowRunner {
             announcePlannedAssignments(local, plan, workflow);
             List<WorkflowResult> results = graphScheduler.execute(
                     workflow, local.inputs(), budget::checkpoint,
-                    (member, upstream) -> executeMember(local, plan, member, upstream,
-                            nodeId, depth, budget));
+                    (member, upstream) -> {
+                        try (AiSpecialistAdmissionGate.Lease ignored = specialistAdmission.acquire(
+                                local.request().requesterId(),
+                                local.request().maximumAgents(), budget::checkpoint)) {
+                            return executeMember(local, plan, member, upstream,
+                                    nodeId, depth, budget);
+                        }
+                    });
             List<WorkflowResult> completed = results.stream()
                     .filter(WorkflowResult::successful).toList();
             if (completed.isEmpty()) {

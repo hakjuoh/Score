@@ -96,6 +96,7 @@ class ScoreAiConfigurationTest {
                         "management.opentelemetry.resource-attributes"
                                 + ".deployment.environment.name",
                         "management.otlp.metrics.export.enabled",
+                        "score.ai.catalog.bootstrap-enabled",
                         "score.ai.observability.enabled");
 
         MockEnvironment environment = new MockEnvironment();
@@ -512,7 +513,7 @@ class ScoreAiConfigurationTest {
     }
 
     private Map<String, ChatModel> chatModels(ScoreAiProperties properties) {
-        return new ScoreAiConfiguration().scoreAiChatModels(
+        return new ScoreAiConfiguration().createChatModelsFromProperties(
                 properties, new AnthropicChatProperties(), new OpenAiChatProperties());
     }
 

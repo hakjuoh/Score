@@ -50,7 +50,8 @@ final class AiChatTransport {
                 return AiChatSocketEvent.elicitationRequired(request.requestId(),
                         request.conversationId(), sequence, event.content(), event.metadata());
             }
-            if ("guide".equals(event.subtype()) || "workflow_result".equals(event.subtype())
+            if ("guide".equals(event.subtype()) || "policy_notice".equals(event.subtype())
+                    || "workflow_result".equals(event.subtype())
                     || isWorkflowLifecycleEvent(event.subtype())) {
                 return system(request, sequence, event);
             }
@@ -73,12 +74,14 @@ final class AiChatTransport {
                 || "provider_retry".equals(event.subtype())
                 || "workflow_result".equals(event.subtype())
                 || "guide".equals(event.subtype())
+                || "policy_notice".equals(event.subtype())
                 || isWorkflowLifecycleEvent(event.subtype()));
     }
 
     static boolean isRestLiveEvent(AiExecutionEvent event) {
         return "tool_call".equals(event.type())
                 || "guide".equals(event.subtype())
+                || "policy_notice".equals(event.subtype())
                 || "change_approval_batch_required".equals(event.subtype())
                 || "change_approval_decision_accepted".equals(event.subtype())
                 || "elicitation_required".equals(event.subtype())

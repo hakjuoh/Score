@@ -27,8 +27,9 @@ public class AiModelQueryController {
     private SessionService sessionService;
 
     @GetMapping(value = "/models")
-    public List<String> getAvailableModels() {
-        return queryService.getAvailableModels();
+    public List<String> getAvailableModels(
+            @AuthenticationPrincipal AuthenticatedPrincipal user) {
+        return queryService.getAvailableModels(sessionService.asScoreUser(user));
     }
 
     @GetMapping("/generate/asccp/{asccpManifestId:[\\d]+}/definition")

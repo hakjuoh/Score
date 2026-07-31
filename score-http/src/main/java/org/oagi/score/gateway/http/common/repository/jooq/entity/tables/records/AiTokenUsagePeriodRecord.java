@@ -6,7 +6,7 @@ package org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records
 
 import java.time.LocalDateTime;
 
-import org.jooq.Record2;
+import org.jooq.Record3;
 import org.jooq.impl.UpdatableRecordImpl;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsagePeriod;
@@ -121,8 +121,8 @@ public class AiTokenUsagePeriodRecord extends UpdatableRecordImpl<AiTokenUsagePe
     // -------------------------------------------------------------------------
 
     @Override
-    public Record2<ULong, LocalDateTime> key() {
-        return (Record2) super.key();
+    public Record3<ULong, LocalDateTime, LocalDateTime> key() {
+        return (Record3) super.key();
     }
 
     // -------------------------------------------------------------------------

@@ -59,6 +59,8 @@ final class AiTrajectoryModelCalls {
     private final AtomicLong ownPromptTokens = new AtomicLong();
     private final AtomicLong ownCompletionTokens = new AtomicLong();
     private final AtomicLong ownModelCalls = new AtomicLong();
+    private final AtomicLong ownCachedTokens = new AtomicLong();
+    private final AtomicLong ownIncompleteModelCalls = new AtomicLong();
     private volatile ProviderPromptTokenNormalizer promptTokenNormalizer;
     private volatile String modelProvider = "unknown";
     private volatile String requestModelName;
@@ -122,7 +124,8 @@ final class AiTrajectoryModelCalls {
 
     AiUsageSnapshot usageSnapshot() {
         return new AiUsageSnapshot(stringTrace("node_id"), stringTrace("agent_name"),
-                ownPromptTokens.get(), ownCompletionTokens.get(), ownModelCalls.get());
+                ownPromptTokens.get(), ownCompletionTokens.get(), ownModelCalls.get(),
+                ownCachedTokens.get(), ownIncompleteModelCalls.get());
     }
 
     AiTrajectoryRecorder.ModelCallRecording begin(String phase) {
@@ -264,6 +267,11 @@ final class AiTrajectoryModelCalls {
         ownModelCalls.incrementAndGet();
         ownPromptTokens.addAndGet(longMetric(metrics.metrics().get("prompt_tokens")));
         ownCompletionTokens.addAndGet(longMetric(metrics.metrics().get("completion_tokens")));
+        ownCachedTokens.addAndGet(longMetric(metrics.metrics().get("cached_tokens")));
+        if (!Boolean.TRUE.equals(metrics.metrics().get("prompt_tokens_complete"))
+                || !(metrics.metrics().get("completion_tokens") instanceof Number)) {
+            ownIncompleteModelCalls.incrementAndGet();
+        }
     }
 
     private AiExecutionEvent modelEvent(String outcome, String phase) {

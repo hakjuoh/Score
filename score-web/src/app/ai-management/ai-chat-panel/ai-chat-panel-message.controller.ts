@@ -40,6 +40,12 @@ export abstract class AiChatPanelMessageController extends AiChatPanelViewContro
 
   protected handleSystemEvent(event: AiChatSocketEvent): void {
     const content = primaryContent(event);
+    if (event.subtype === 'policy_notice' && content) {
+      this.clearStatusMessage();
+      this.state.messages.push({role: 'guide', content});
+      this.scrollToBottom();
+      return;
+    }
     if (event.subtype === 'workflow_started') {
       this.applyWorkflowStarted(event, content);
       return;
