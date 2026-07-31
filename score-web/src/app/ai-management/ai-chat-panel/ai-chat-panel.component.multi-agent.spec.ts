@@ -92,6 +92,22 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
       .toBe(false);
   });
 
+  it('shows a policy notice when requested agents are constrained to direct execution', () => {
+    startPublishedRequest(false);
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'policy_notice',
+      content: 'Multi-agent execution is disabled by your AI policy.',
+      metadata: {code: 'AI_MULTI_AGENT_DISABLED'}
+    });
+
+    expect(component.state.messages.find(message =>
+      message.content === 'Multi-agent execution is disabled by your AI policy.')).toMatchObject({
+      role: 'guide', content: 'Multi-agent execution is disabled by your AI policy.'
+    });
+  });
+
   it('updates an unknown workflow type as one ordinary chat message', () => {
     startPublishedRequest(false);
     const started = {

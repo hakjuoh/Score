@@ -16,17 +16,17 @@ import {AiChatSocketEvent} from './ai-chat-panel.model';
 import {isWorkflowLifecycleEvent, workflowTerminalStatus} from './ai-execution-composite';
 
 const REPLAY_SYSTEM_SUBTYPES = new Set([
-  'context_usage', 'context_compacted', 'guide', 'workflow_result',
+  'context_usage', 'context_compacted', 'guide', 'policy_notice', 'workflow_result',
   'provider_error', 'provider_retry'
 ]);
 const LIVE_SYSTEM_SUBTYPES = new Set([
-  'guide', 'workflow_result', 'provider_error', 'provider_retry'
+  'guide', 'policy_notice', 'workflow_result', 'provider_error', 'provider_retry'
 ]);
 const RECOGNIZED_SYSTEM_SUBTYPES = new Set([
   'data_changed', 'data_change_rejected', 'audit_failed', 'cancelled',
   'authentication_failed', 'error', 'model_fallback', 'provider_error',
   'provider_retry', 'workflow_result', 'context_usage', 'context_compacted',
-  'guide', 'workflow_started'
+  'guide', 'policy_notice', 'workflow_started'
 ]);
 
 export type RequestEventAdmission =

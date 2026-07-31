@@ -38,5 +38,7 @@ management:
 
 score:
   ai:
+    catalog:
+      bootstrap-enabled: ${SCORE_AI_CATALOG_BOOTSTRAP_ENABLED:true}
     observability:
       enabled: ${SCORE_AI_OBSERVABILITY_ENABLED:true}

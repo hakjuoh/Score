@@ -3,6 +3,7 @@
  */
 
 import {Directive} from '@angular/core';
+import {takeUntil} from 'rxjs/operators';
 import {AiChatPanelRequestController} from './ai-chat-panel-request.controller';
 import {AiChatAttachmentQueueCallbacks} from './domain/ai-chat-attachment-queue.service';
 import {
@@ -26,6 +27,7 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     );
     this.initializeWorkspacePersistence(workspaceRestored);
     this.loadAvailableModels();
+    this.loadPolicy();
     this.state.dock = this.sessionPersistence.restorePanelDock() || this.state.dock;
     this.windowCoordinator.connect({
       popoutReady: () => this.markPopoutReady(),
@@ -58,6 +60,23 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
 
   protected loadAvailableModels(): void {
     this.modelSettings.load(this.state, this.destroyed$);
+  }
+
+  protected loadPolicy(): void {
+    if (typeof this.api.getPolicy !== 'function') return;
+    this.state.policyLoading = true;
+    this.state.policyLoadFailed = false;
+    this.api.getPolicy().pipe(takeUntil(this.destroyed$)).subscribe({
+      next: policy => {
+        this.state.policy = policy;
+        this.state.policyLoading = false;
+      },
+      error: () => {
+        this.state.policy = undefined;
+        this.state.policyLoading = false;
+        this.state.policyLoadFailed = true;
+      }
+    });
   }
 
   ngOnDestroy(): void {

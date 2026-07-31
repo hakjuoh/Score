@@ -13,11 +13,17 @@ import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentInputGuardra
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentInputGuardrailChain;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
+import org.oagi.score.gateway.http.api.ai_management.policy.model.AiCallReservation;
+import org.oagi.score.gateway.http.api.ai_management.policy.model.AiUsageSettlement;
+import org.oagi.score.gateway.http.api.ai_management.policy.service.AiUsageAccountingService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
+import org.oagi.score.gateway.http.api.ai_management.trajectory.ProviderPromptTokenNormalizer;
 import org.oagi.score.gateway.http.configuration.ai.ConnectCenterMcpClientFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiChatOptionsFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
+import org.oagi.score.gateway.http.configuration.ai.ProviderCallAccountingAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -33,6 +39,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.function.Supplier;
+import java.nio.charset.StandardCharsets;
 
 /** Owns Agent run lifecycle, observation, MCP admission, and direct Agent model calls. */
 final class AiChatAgentRuntime {
@@ -48,6 +55,7 @@ final class AiChatAgentRuntime {
     private final AiChatConversationRuntime conversations;
     private final org.oagi.score.gateway.http.api.ai_management.provider.AiProviderRetryExecutor
             providerRetry;
+    private volatile AiUsageAccountingService accounting;
 
     AiChatAgentRuntime(ScoreAiModelRegistry models,
                        ConnectCenterMcpClientFactory mcpClients,
@@ -69,6 +77,10 @@ final class AiChatAgentRuntime {
         this.observability = observability;
         this.conversations = conversations;
         this.providerRetry = providerRetry;
+    }
+
+    void accounting(AiUsageAccountingService accounting) {
+        this.accounting = accounting;
     }
 
     AgentChatResult executeAgentChat(AgentChatSession session) {
@@ -99,11 +111,16 @@ final class AiChatAgentRuntime {
                 : after.completionTokens();
         long calls = before != null ? after.modelCalls() - before.modelCalls()
                 : after.modelCalls();
-        if (prompt < 0 || completion < 0 || calls < 0) {
+        long cached = before != null ? after.cachedTokens() - before.cachedTokens()
+                : after.cachedTokens();
+        long incomplete = before != null
+                ? after.incompleteModelCalls() - before.incompleteModelCalls()
+                : after.incompleteModelCalls();
+        if (prompt < 0 || completion < 0 || calls < 0 || cached < 0 || incomplete < 0) {
             throw new IllegalStateException("Agent Chat usage counters moved backwards.");
         }
         return new org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot(
-                after.nodeId(), after.agentName(), prompt, completion, calls);
+                after.nodeId(), after.agentName(), prompt, completion, calls, cached, incomplete);
     }
 
     AiChatExecutor.Result execute(AiChatExecutor.Context context, Agent.Instruction instruction,
@@ -224,7 +241,23 @@ final class AiChatAgentRuntime {
         messages.add(new SystemMessage(invocation.session().instruction().value()));
         invocation.history().stream().map(SpringAiMessageAdapter::toProvider).forEach(messages::add);
         messages.add(SpringAiMessageAdapter.toProvider(checked.input()));
-        ChatClient.Builder builder = models.clientBuilder(modelId);
+        ScoreAiModelRegistry.ModelConfiguration model = models.modelConfiguration(
+                modelId, invocation.scope().requestId());
+        String configuredEffort = models.resolveReasoningEffort(
+                modelId, invocation.scope().requestId(), null);
+        String reasoningEffort = accounting != null
+                ? accounting.resolveReasoningEffort(invocation.scope(), modelId, configuredEffort)
+                : configuredEffort;
+        ChatRequest transport = new ChatRequest(invocation.request().content(),
+                invocation.scope().requestId(), invocation.session().agent().id().value(),
+                invocation.scope().conversationId(), null, List.of(), null, modelId,
+                reasoningEffort, null);
+        ChatClient.Builder builder = models.clientBuilder(modelId, invocation.scope().requestId());
+        if (accounting != null) {
+            builder.defaultAdvisors(new ProviderCallAccountingAdvisor(accounting, transport,
+                    invocation.scope(), invocation.session().agent().id().value(),
+                    model.providerType()));
+        }
         if (!invocation.session().tools().isEmpty()) {
             if (springAiToolAdapter == null) {
                 throw new IllegalStateException("The Spring AI Tool adapter is unavailable.");
@@ -232,8 +265,6 @@ final class AiChatAgentRuntime {
             builder.defaultTools(springAiToolAdapter.adapt(
                     invocation.session().tools(), invocation.tools(), invocation.scope()));
         }
-        String reasoningEffort = models.resolveReasoningEffort(modelId, null);
-        ScoreAiModelRegistry.ModelConfiguration model = models.modelConfiguration(modelId);
         AiTrajectoryRecorder recorder = AgentExecutionRecorderAdapter.providerRecorderOrNull(
                 invocation.recorder());
         Supplier<ChatResponse> providerCall = () -> modelCall(invocation, recorder, builder,
@@ -271,9 +302,12 @@ final class AiChatAgentRuntime {
                 "agent", recorder != null ? recorder.activeAgentRunId() : null,
                 invocation.scope().conversationId(), recording.started());
         try {
-            ChatResponse response = builder.build().prompt()
-                    .options(optionsFactory.create(modelId, reasoningEffort, null).mutate())
-                    .messages(messages).call().chatResponse();
+            var options = optionsFactory.create(modelId, reasoningEffort, null,
+                    invocation.scope().requestId());
+            ChatClient.ChatClientRequestSpec prompt = builder.build().prompt()
+                    .messages(messages);
+            if (options != null) prompt.options(options.mutate());
+            ChatResponse response = prompt.call().chatResponse();
             if (recorder != null) observation.eventIdentity(
                     recorder.recordModelResponse(recording, response, false));
             observation.complete(response);

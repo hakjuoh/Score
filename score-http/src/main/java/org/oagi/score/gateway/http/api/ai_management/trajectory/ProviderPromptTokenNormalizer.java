@@ -7,7 +7,7 @@ import java.util.Locale;
 import java.util.Objects;
 
 /** Normalizes provider-native prompt usage to ATIF's cache-inclusive token count. */
-final class ProviderPromptTokenNormalizer {
+public final class ProviderPromptTokenNormalizer {
 
     private final Accounting accounting;
 
@@ -15,7 +15,7 @@ final class ProviderPromptTokenNormalizer {
         this.accounting = accounting;
     }
 
-    static ProviderPromptTokenNormalizer forProvider(String providerType) {
+    public static ProviderPromptTokenNormalizer forProvider(String providerType) {
         if (!StringUtils.hasText(providerType)) {
             return new ProviderPromptTokenNormalizer(Accounting.UNKNOWN);
         }
@@ -31,7 +31,7 @@ final class ProviderPromptTokenNormalizer {
         return accounting.wireValue;
     }
 
-    Snapshot normalize(Usage usage, boolean streaming) {
+    public Snapshot normalize(Usage usage, boolean streaming) {
         Objects.requireNonNull(usage, "usage");
         Number reported = usage.getPromptTokens();
         long providerTokens = reported != null ? reported.longValue() : 0L;
@@ -51,7 +51,7 @@ final class ProviderPromptTokenNormalizer {
         return new Snapshot(providerTokens, inclusiveTokens, complete);
     }
 
-    record Snapshot(long providerReportedTokens, long inclusiveTokens, boolean complete) {
+    public record Snapshot(long providerReportedTokens, long inclusiveTokens, boolean complete) {
     }
 
     private enum Accounting {

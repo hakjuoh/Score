@@ -51,6 +51,7 @@ final class AiChatRequestFinalizer {
 
     void clear(String requestId) {
         if (changeApprovals != null) changeApprovals.cancelRequest(requestId);
+        chatService.clearPolicySnapshot(requestId);
     }
 
     String cancellationRequestId(AiRequestRegistry.Entry entry) {

@@ -64,8 +64,10 @@ public class InfoQueryController {
     }
 
     @GetMapping(value = "/ai-assistant")
-    public AiAssistantInfoRecord getAiAssistantInfo() {
-        return chatService.aiAssistantInfo();
+    public AiAssistantInfoRecord getAiAssistantInfo(
+            @AuthenticationPrincipal AuthenticatedPrincipal user) {
+        return user != null ? chatService.aiAssistantInfo(sessionService.asScoreUser(user))
+                : chatService.aiAssistantInfo();
     }
 
     @GetMapping(value = "/cc-summaries")

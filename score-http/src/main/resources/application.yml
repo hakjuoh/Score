@@ -135,6 +135,11 @@ springdoc:
     tags-sorter: alpha
 
 score:
+  security:
+    secret-encryption:
+      active-key-id: ${SCORE_APP_SECRET_ACTIVE_KEY_ID:primary}
+      keys:
+        primary: ${SCORE_APP_SECRET_KEY}
   redis:
     # Destructive maintenance switch. Keep false for every multi-instance deployment.
     flush-on-startup: ${SCORE_REDIS_FLUSH_ON_STARTUP:false}
@@ -179,6 +184,8 @@ score:
         Candidate: ${SCORE_GITHUB_PROJECT_FIELD_OPTION_CANDIDATE:Candidate}
         ReleaseDraft: ${SCORE_GITHUB_PROJECT_FIELD_OPTION_RELEASE_DRAFT:Ready for release}
   ai:
+    catalog:
+      bootstrap-enabled: ${SCORE_AI_CATALOG_BOOTSTRAP_ENABLED:false}
     observability:
       enabled: ${SCORE_AI_OBSERVABILITY_ENABLED:false}
       service-name: ${SCORE_AI_OBSERVABILITY_SERVICE_NAME:score-ai}
@@ -199,6 +206,15 @@ score:
       max-concurrent-specialists-per-user: ${SCORE_AI_MULTI_AGENT_MAX_CONCURRENT_SPECIALISTS_PER_USER:8}
       specialist-inactivity-timeout: ${SCORE_AI_MULTI_AGENT_SPECIALIST_INACTIVITY_TIMEOUT:${SCORE_AI_MULTI_AGENT_SPECIALIST_TIMEOUT:2m}}
       maximum-workflow-iterations: ${SCORE_AI_MULTI_AGENT_MAXIMUM_WORKFLOW_ITERATIONS:3}
+    quota:
+      input-safety-percent: ${SCORE_AI_QUOTA_INPUT_SAFETY_PERCENT:10}
+      reservation-timeout: ${SCORE_AI_QUOTA_RESERVATION_TIMEOUT:15m}
+      reconciliation-batch-size: ${SCORE_AI_QUOTA_RECONCILIATION_BATCH_SIZE:200}
+      reconciliation-interval: ${SCORE_AI_QUOTA_RECONCILIATION_INTERVAL:1m}
+    policy:
+      enabled: ${SCORE_AI_POLICY_ENABLED:true}
+      quota-enforcement-enabled: ${SCORE_AI_QUOTA_ENFORCEMENT_ENABLED:false}
+      usage-ledger-enabled: ${SCORE_AI_USAGE_LEDGER_ENABLED:true}
     providers:
       azure-foundry:
         type: anthropic
