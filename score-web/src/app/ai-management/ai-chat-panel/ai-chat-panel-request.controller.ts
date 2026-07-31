@@ -189,30 +189,24 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           this.state.currentStatus = 'Cancelling';
           return;
         }
-        this.clearCompletedPayloadRecovery();
-        this.cancellationService.reset();
-        this.completeProgressMessages();
-        this.clearTimers();
-        this.clearStatusMessage();
-        this.state.conversationId = response.conversationId || this.state.conversationId;
-        this.sessionPersistence.rememberLastConversation(this.state.conversationId);
-        replayRestEvents(response.events || []);
-        // Provider error/retry frames are transient recovery state. A successful
-        // canonical response settles them even when they were replayed from REST.
-        this.clearProviderRecoveryState();
-        this.settleAgentActivity('completed');
-        this.elicitationCoordinator.clear(this.state);
-        this.clearChangeApprovalBatch();
-        this.activeRequestId = undefined;
-        this.clearToolCallTracking();
+        this.transitionActiveRequest({
+          agentStatus: 'completed', reconciliationRequired: false,
+          cancellation: 'reset', completedPayload: 'clear', toolGroups: 'preserve',
+          confirmedChange: {kind: 'preserve'}, changeRepeat: {kind: 'preserve'}
+        }, () => {
+          this.state.conversationId = response.conversationId || this.state.conversationId;
+          this.sessionPersistence.rememberLastConversation(this.state.conversationId);
+          replayRestEvents(response.events || []);
+          // Provider error/retry frames are transient recovery state. A successful
+          // canonical response settles them even when replayed from REST.
+          this.clearProviderRecoveryState();
+        });
         if (response.progress?.length && this.state.debugEnabled) {
           response.progress.forEach(progress => this.state.messages.push({role: 'progress', content: progress}));
         }
         if (response.response) {
           this.commitAssistantMessage(requestId, response.response, response.files);
         }
-        this.state.pending = false;
-        this.state.reconciliationRequired = false;
         this.state.currentStatus = response.continuationRequired ? 'More processing is needed' : 'Ready';
         if (this.runDeferredNewChat()) {
           return;
@@ -242,23 +236,17 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         replayRestEvents(errorEvents(error));
         const confirmationConversationId =
           this.pendingChangeConfirmation?.conversationId;
-        this.completeProgressMessages();
-        this.settleAgentActivity('failed');
-        this.clearTimers();
-        this.clearStatusMessage();
-        if (!confirmationConversationId) {
-          this.clearChangeRepeatDraft(requestId);
-        }
-        this.elicitationCoordinator.clear(this.state);
-        this.clearChangeApprovalBatch();
-        this.activeRequestId = undefined;
-        this.clearToolCallTracking();
+        this.transitionActiveRequest({
+          agentStatus: 'failed', reconciliationRequired: false,
+          cancellation: 'preserve', completedPayload: 'preserve', toolGroups: 'preserve',
+          confirmedChange: {kind: 'preserve'},
+          changeRepeat: confirmationConversationId
+            ? {kind: 'preserve'} : {kind: 'clear-request', requestId}
+        });
         this.state.messages.push({
           role: 'error',
           content: this.attachmentFailureMessage(error)
         });
-        this.state.pending = false;
-        this.state.reconciliationRequired = false;
         this.state.currentStatus = 'Error';
         if (this.runDeferredNewChat()) {
           return;
@@ -312,22 +300,16 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     if (this.destroyed || this.activeRequestId !== requestId) {
       return;
     }
-    this.completeProgressMessages();
-    this.settleAgentActivity('failed');
-    this.clearTimers();
-    this.clearStatusMessage();
-    this.elicitationCoordinator.clear(this.state);
-    this.clearChangeApprovalBatch();
-    this.clearChangeRepeatDraft(requestId);
-    this.confirmedChangeRequests.cancel(requestId);
-    this.activeRequestId = undefined;
-    this.clearToolCallTracking();
+    this.transitionActiveRequest({
+      agentStatus: 'failed', reconciliationRequired: true,
+      cancellation: 'preserve', completedPayload: 'preserve', toolGroups: 'preserve',
+      confirmedChange: {kind: 'cancel', requestId},
+      changeRepeat: {kind: 'clear-request', requestId}
+    });
     this.state.messages.push({
       role: 'error',
       content: 'The approved change outcome is unknown and will not be retried automatically.'
     });
-    this.state.pending = false;
-    this.state.reconciliationRequired = true;
     this.state.currentStatus = 'Review needed';
     this.focusPrompt();
     this.scrollToBottom();
@@ -368,19 +350,19 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     if (!this.state.pending) {
       return;
     }
-    this.completeProgressMessages();
-    this.settleAgentActivity('failed');
-    this.clearStatusMessage();
+    const requestId = this.activeRequestId;
+    this.transitionActiveRequest({
+      agentStatus: 'failed', reconciliationRequired: false,
+      cancellation: 'preserve', completedPayload: 'preserve', toolGroups: 'preserve',
+      confirmedChange: {kind: 'preserve'},
+      changeRepeat: requestId
+        ? {kind: 'clear-request', requestId} : {kind: 'clear-all'}
+    });
     this.state.messages.push({
       role: 'error',
       content: 'Could not reconnect to WebSocket after 3 attempts. Check that score-http is running and the /ws proxy is active, then try again.'
     });
-    this.state.pending = false;
-    this.clearChangeRepeatDraft(this.activeRequestId);
-    this.activeRequestId = undefined;
-    this.clearToolCallTracking();
     this.state.currentStatus = 'Error';
-    this.requestSubscription?.unsubscribe();
     this.transportService.cancelReconnect();
     this.focusPrompt();
     this.scrollToBottom();
@@ -417,19 +399,19 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
     }, 5000);
     this.acknowledgementTimeout = window.setTimeout(() => {
       if (this.state.pending) {
-        this.completeProgressMessages();
-        this.settleAgentActivity('failed');
-        this.clearStatusMessage();
+        const activeRequestId = this.activeRequestId;
+        this.transitionActiveRequest({
+          agentStatus: 'failed', reconciliationRequired: false,
+          cancellation: 'preserve', completedPayload: 'preserve', toolGroups: 'preserve',
+          confirmedChange: {kind: 'preserve'},
+          changeRepeat: activeRequestId
+            ? {kind: 'clear-request', requestId: activeRequestId} : {kind: 'clear-all'}
+        });
         this.state.messages.push({
           role: 'error',
           content: 'The request was sent, but the backend did not acknowledge it. If this included an attachment, the WebSocket message may be too large or the backend may need to be restarted.'
         });
-        this.state.pending = false;
-        this.clearChangeRepeatDraft(this.activeRequestId);
-        this.activeRequestId = undefined;
-        this.clearToolCallTracking();
         this.state.currentStatus = 'Error';
-        this.requestSubscription?.unsubscribe();
         this.transportService.cancelReconnect();
         this.focusPrompt();
         this.scrollToBottom();
@@ -438,15 +420,15 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
   }
 
   protected failChatPublish(): void {
-    this.completeProgressMessages();
-    this.settleAgentActivity('failed');
-    this.clearStatusMessage();
+    const requestId = this.activeRequestId;
+    this.transitionActiveRequest({
+      agentStatus: 'failed', reconciliationRequired: false,
+      cancellation: 'preserve', completedPayload: 'preserve', toolGroups: 'preserve',
+      confirmedChange: {kind: 'preserve'},
+      changeRepeat: requestId
+        ? {kind: 'clear-request', requestId} : {kind: 'clear-all'}
+    });
     this.state.messages.push({role: 'error', content: 'Could not send the WebSocket chat request.'});
-    this.state.pending = false;
-    this.clearChangeRepeatDraft(this.activeRequestId);
-    this.activeRequestId = undefined;
-    this.clearToolCallTracking();
-    this.requestSubscription?.unsubscribe();
     this.focusPrompt();
     this.scrollToBottom();
   }

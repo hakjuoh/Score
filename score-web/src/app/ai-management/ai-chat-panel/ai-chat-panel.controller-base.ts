@@ -27,6 +27,10 @@ import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-
 import {AiChangeApprovalBatchCoordinator} from './domain/ai-change-approval-batch-coordinator';
 import {AiElicitationCoordinator} from './domain/ai-elicitation-coordinator';
 import {
+  AiRequestTerminalCoordinator,
+  AiRequestTerminalTransition
+} from './domain/ai-request-terminal-coordinator';
+import {
   AiConversationRestoreCallbacks,
   AiConversationRestoreService
 } from './domain/ai-conversation-restore.service';
@@ -94,6 +98,7 @@ export abstract class AiChatPanelControllerBase {
   protected confirmedChangeRequests = inject(AiConfirmedChangeRequestCoordinator);
   protected changeApprovalBatches = inject(AiChangeApprovalBatchCoordinator);
   protected elicitationCoordinator = inject(AiElicitationCoordinator);
+  protected requestTerminals = inject(AiRequestTerminalCoordinator);
   protected readonly destroyRef = inject(DestroyRef);
   protected contextService = inject(AiChatContextService);
   protected conversationRestoreService = inject(AiConversationRestoreService);
@@ -248,6 +253,24 @@ export abstract class AiChatPanelControllerBase {
 
   protected clearChangeApprovalBatch(): void {
     this.changeApprovalBatches.clear(this.state);
+  }
+
+  protected transitionActiveRequest(
+    transition: AiRequestTerminalTransition,
+    beforeSettlement?: () => void
+  ): void {
+    this.requestTerminals.transition(this.state, transition, {
+      beforeSettlement,
+      settleAgent: status => this.settleAgentActivity(status),
+      clearTimers: () => this.clearTimers(),
+      clearCompletedPayload: () => this.clearCompletedPayloadRecovery(),
+      clearChangeRepeat: requestId => this.clearChangeRepeatDraft(requestId),
+      releaseRequest: () => {
+        this.activeRequestId = undefined;
+        this.requestSubscription?.unsubscribe();
+        this.requestSubscription = undefined;
+      }
+    });
   }
 
   protected settleAgentActivity(status: Extract<AiAgentExecutionStatus,
