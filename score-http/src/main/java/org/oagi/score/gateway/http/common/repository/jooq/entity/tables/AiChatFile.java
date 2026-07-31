@@ -61,20 +61,19 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_chat_file.ai_chat_file_id</code>. The
-     * primary key of the generated AI file.
+     * The column <code>oagi.ai_chat_file.ai_chat_file_id</code>. The primary
+     * key of the generated AI file.
      */
     public final TableField<AiChatFileRecord, ULong> AI_CHAT_FILE_ID = createField(DSL.name("ai_chat_file_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the generated AI file.");
 
     /**
-     * The column <code>oagi.ai_chat_file.guid</code>. Public file
-     * identifier.
+     * The column <code>oagi.ai_chat_file.guid</code>. Public file identifier.
      */
     public final TableField<AiChatFileRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.CHAR(36).nullable(false), this, "Public file identifier.");
 
     /**
-     * The column <code>oagi.ai_chat_file.ai_chat_conversation_id</code>.
-     * Owning AI chat conversation.
+     * The column <code>oagi.ai_chat_file.ai_chat_conversation_id</code>. Owning
+     * AI chat conversation.
      */
     public final TableField<AiChatFileRecord, ULong> AI_CHAT_CONVERSATION_ID = createField(DSL.name("ai_chat_conversation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Owning AI chat conversation.");
 
@@ -97,14 +96,13 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
     public final TableField<AiChatFileRecord, String> FILENAME = createField(DSL.name("filename"), SQLDataType.VARCHAR(240).nullable(false), this, "Safe download filename.");
 
     /**
-     * The column <code>oagi.ai_chat_file.media_type</code>. File media
-     * type.
+     * The column <code>oagi.ai_chat_file.media_type</code>. File media type.
      */
     public final TableField<AiChatFileRecord, String> MEDIA_TYPE = createField(DSL.name("media_type"), SQLDataType.VARCHAR(160).nullable(false), this, "File media type.");
 
     /**
-     * The column <code>oagi.ai_chat_file.byte_size</code>. Stored content
-     * size in bytes.
+     * The column <code>oagi.ai_chat_file.byte_size</code>. Stored content size
+     * in bytes.
      */
     public final TableField<AiChatFileRecord, ULong> BYTE_SIZE = createField(DSL.name("byte_size"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Stored content size in bytes.");
 
@@ -115,8 +113,8 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
     public final TableField<AiChatFileRecord, String> SHA256 = createField(DSL.name("sha256"), SQLDataType.CHAR(64).nullable(false), this, "SHA-256 digest of stored content.");
 
     /**
-     * The column <code>oagi.ai_chat_file.storage_provider</code>.
-     * Configured file storage provider identifier.
+     * The column <code>oagi.ai_chat_file.storage_provider</code>. Configured
+     * file storage provider identifier.
      */
     public final TableField<AiChatFileRecord, String> STORAGE_PROVIDER = createField(DSL.name("storage_provider"), SQLDataType.VARCHAR(64).nullable(false), this, "Configured file storage provider identifier.");
 
@@ -127,14 +125,14 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
     public final TableField<AiChatFileRecord, String> STORAGE_LOCATION = createField(DSL.name("storage_location"), SQLDataType.VARCHAR(1024).nullable(false), this, "Provider-owned opaque object location.");
 
     /**
-     * The column <code>oagi.ai_chat_file.created_at</code>. File
-     * creation timestamp.
+     * The column <code>oagi.ai_chat_file.created_at</code>. File creation
+     * timestamp.
      */
     public final TableField<AiChatFileRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "File creation timestamp.");
 
     /**
-     * The column <code>oagi.ai_chat_file.expires_at</code>. File
-     * retention deadline.
+     * The column <code>oagi.ai_chat_file.expires_at</code>. File retention
+     * deadline.
      */
     public final TableField<AiChatFileRecord, LocalDateTime> EXPIRES_AT = createField(DSL.name("expires_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "File retention deadline.");
 

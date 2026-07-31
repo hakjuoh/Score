@@ -21,48 +21,46 @@ public class AiChatFileRecord extends UpdatableRecordImpl<AiChatFileRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_chat_file.ai_chat_file_id</code>. The
-     * primary key of the generated AI file.
+     * Setter for <code>oagi.ai_chat_file.ai_chat_file_id</code>. The primary
+     * key of the generated AI file.
      */
     public void setAiChatFileId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file.ai_chat_file_id</code>. The
-     * primary key of the generated AI file.
+     * Getter for <code>oagi.ai_chat_file.ai_chat_file_id</code>. The primary
+     * key of the generated AI file.
      */
     public ULong getAiChatFileId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file.guid</code>. Public file
-     * identifier.
+     * Setter for <code>oagi.ai_chat_file.guid</code>. Public file identifier.
      */
     public void setGuid(String value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file.guid</code>. Public file
-     * identifier.
+     * Getter for <code>oagi.ai_chat_file.guid</code>. Public file identifier.
      */
     public String getGuid() {
         return (String) get(1);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file.ai_chat_conversation_id</code>.
-     * Owning AI chat conversation.
+     * Setter for <code>oagi.ai_chat_file.ai_chat_conversation_id</code>. Owning
+     * AI chat conversation.
      */
     public void setAiChatConversationId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file.ai_chat_conversation_id</code>.
-     * Owning AI chat conversation.
+     * Getter for <code>oagi.ai_chat_file.ai_chat_conversation_id</code>. Owning
+     * AI chat conversation.
      */
     public ULong getAiChatConversationId() {
         return (ULong) get(2);
@@ -117,32 +115,30 @@ public class AiChatFileRecord extends UpdatableRecordImpl<AiChatFileRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file.media_type</code>. File media
-     * type.
+     * Setter for <code>oagi.ai_chat_file.media_type</code>. File media type.
      */
     public void setMediaType(String value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file.media_type</code>. File media
-     * type.
+     * Getter for <code>oagi.ai_chat_file.media_type</code>. File media type.
      */
     public String getMediaType() {
         return (String) get(6);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file.byte_size</code>. Stored content
-     * size in bytes.
+     * Setter for <code>oagi.ai_chat_file.byte_size</code>. Stored content size
+     * in bytes.
      */
     public void setByteSize(ULong value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file.byte_size</code>. Stored content
-     * size in bytes.
+     * Getter for <code>oagi.ai_chat_file.byte_size</code>. Stored content size
+     * in bytes.
      */
     public ULong getByteSize() {
         return (ULong) get(7);
@@ -165,16 +161,16 @@ public class AiChatFileRecord extends UpdatableRecordImpl<AiChatFileRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file.storage_provider</code>.
-     * Configured file storage provider identifier.
+     * Setter for <code>oagi.ai_chat_file.storage_provider</code>. Configured
+     * file storage provider identifier.
      */
     public void setStorageProvider(String value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file.storage_provider</code>.
-     * Configured file storage provider identifier.
+     * Getter for <code>oagi.ai_chat_file.storage_provider</code>. Configured
+     * file storage provider identifier.
      */
     public String getStorageProvider() {
         return (String) get(9);
@@ -197,32 +193,32 @@ public class AiChatFileRecord extends UpdatableRecordImpl<AiChatFileRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file.created_at</code>. File
-     * creation timestamp.
+     * Setter for <code>oagi.ai_chat_file.created_at</code>. File creation
+     * timestamp.
      */
     public void setCreatedAt(LocalDateTime value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file.created_at</code>. File
-     * creation timestamp.
+     * Getter for <code>oagi.ai_chat_file.created_at</code>. File creation
+     * timestamp.
      */
     public LocalDateTime getCreatedAt() {
         return (LocalDateTime) get(11);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file.expires_at</code>. File
-     * retention deadline.
+     * Setter for <code>oagi.ai_chat_file.expires_at</code>. File retention
+     * deadline.
      */
     public void setExpiresAt(LocalDateTime value) {
         set(12, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file.expires_at</code>. File
-     * retention deadline.
+     * Getter for <code>oagi.ai_chat_file.expires_at</code>. File retention
+     * deadline.
      */
     public LocalDateTime getExpiresAt() {
         return (LocalDateTime) get(12);

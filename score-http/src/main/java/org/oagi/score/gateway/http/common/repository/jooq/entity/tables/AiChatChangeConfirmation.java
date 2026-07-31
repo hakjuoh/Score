@@ -68,8 +68,8 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
     public final TableField<AiChatChangeConfirmationRecord, ULong> AI_CHAT_CHANGE_CONFIRMATION_ID = createField(DSL.name("ai_chat_change_confirmation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the AI change confirmation record.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.guid</code>. The
-     * public unique identifier of the change confirmation request.
+     * The column <code>oagi.ai_chat_change_confirmation.guid</code>. The public
+     * unique identifier of the change confirmation request.
      */
     public final TableField<AiChatChangeConfirmationRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.CHAR(36).nullable(false), this, "The public unique identifier of the change confirmation request.");
 
@@ -82,9 +82,9 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
     public final TableField<AiChatChangeConfirmationRecord, ULong> AI_CHAT_CONVERSATION_ID = createField(DSL.name("ai_chat_conversation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the AI_CHAT_CONVERSATION table identifying the owning conversation.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.request_id</code>.
-     * The chat request identifier that originally requested the data-changing
-     * tool call.
+     * The column <code>oagi.ai_chat_change_confirmation.request_id</code>. The
+     * chat request identifier that originally requested the data-changing tool
+     * call.
      */
     public final TableField<AiChatChangeConfirmationRecord, String> REQUEST_ID = createField(DSL.name("request_id"), SQLDataType.VARCHAR(128).nullable(false), this, "The chat request identifier that originally requested the data-changing tool call.");
 
@@ -102,9 +102,9 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
     public final TableField<AiChatChangeConfirmationRecord, String> ARGUMENTS_DIGEST = createField(DSL.name("arguments_digest"), SQLDataType.CHAR(64).nullable(false), this, "The SHA-256 digest binding the tool name to its canonicalized arguments.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.status</code>.
-     * Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED,
-     * and EXPIRED; other values are handled by the application.
+     * The column <code>oagi.ai_chat_change_confirmation.status</code>. Expected
+     * confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and
+     * EXPIRED; other values are handled by the application.
      */
     public final TableField<AiChatChangeConfirmationRecord, String> STATUS = createField(DSL.name("status"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("'REQUESTED'"), SQLDataType.VARCHAR)), this, "Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and EXPIRED; other values are handled by the application.");
 
@@ -116,15 +116,15 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
     public final TableField<AiChatChangeConfirmationRecord, String> GRANT_DIGEST = createField(DSL.name("grant_digest"), SQLDataType.CHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CHAR)), this, "The SHA-256 digest of the one-time approval grant; cleared after consumption, denial, or expiration.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.expires_at</code>.
-     * The timestamp after which the confirmation request or approval grant is
+     * The column <code>oagi.ai_chat_change_confirmation.expires_at</code>. The
+     * timestamp after which the confirmation request or approval grant is
      * invalid.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> EXPIRES_AT = createField(DSL.name("expires_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp after which the confirmation request or approval grant is invalid.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.approved_at</code>.
-     * The timestamp when the change request was approved.
+     * The column <code>oagi.ai_chat_change_confirmation.approved_at</code>. The
+     * timestamp when the change request was approved.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> APPROVED_AT = createField(DSL.name("approved_at"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "The timestamp when the change request was approved.");
 
@@ -135,20 +135,20 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> DENIED_AT = createField(DSL.name("denied_at"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "The timestamp when the change request was denied.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.consumed_at</code>.
-     * The timestamp when the one-time approval grant was consumed.
+     * The column <code>oagi.ai_chat_change_confirmation.consumed_at</code>. The
+     * timestamp when the one-time approval grant was consumed.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> CONSUMED_AT = createField(DSL.name("consumed_at"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "The timestamp when the one-time approval grant was consumed.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.expired_at</code>.
-     * The timestamp when the confirmation request or approval grant expired.
+     * The column <code>oagi.ai_chat_change_confirmation.expired_at</code>. The
+     * timestamp when the confirmation request or approval grant expired.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> EXPIRED_AT = createField(DSL.name("expired_at"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "The timestamp when the confirmation request or approval grant expired.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.created_at</code>.
-     * The timestamp when the change confirmation request was created.
+     * The column <code>oagi.ai_chat_change_confirmation.created_at</code>. The
+     * timestamp when the change confirmation request was created.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the change confirmation request was created.");
 

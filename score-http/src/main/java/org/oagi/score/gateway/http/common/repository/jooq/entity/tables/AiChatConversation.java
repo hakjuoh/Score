@@ -35,10 +35,10 @@ import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatFile.AiChatFilePath;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory.AiChatMemoryPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatChangeConfirmation.AiChatChangeConfirmationPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatFile.AiChatFilePath;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory.AiChatMemoryPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatStep.AiChatStepPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiChatConversationRecord;
@@ -252,11 +252,24 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
         return _aiChatConversation;
     }
 
-    private transient AiChatFilePath _aiChatFile;
+    private transient AiChatChangeConfirmationPath _aiChatChangeConfirmation;
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oagi.ai_chat_file</code> table
+     * <code>oagi.ai_chat_change_confirmation</code> table
+     */
+    public AiChatChangeConfirmationPath aiChatChangeConfirmation() {
+        if (_aiChatChangeConfirmation == null)
+            _aiChatChangeConfirmation = new AiChatChangeConfirmationPath(this, null, Keys.AI_CHAT_CHANGE_CONFIRMATION_CONVERSATION_FK.getInverseKey());
+
+        return _aiChatChangeConfirmation;
+    }
+
+    private transient AiChatFilePath _aiChatFile;
+
+    /**
+     * Get the implicit to-many join path to the <code>oagi.ai_chat_file</code>
+     * table
      */
     public AiChatFilePath aiChatFile() {
         if (_aiChatFile == null)
@@ -276,19 +289,6 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
             _aiChatMemory = new AiChatMemoryPath(this, null, Keys.AI_CHAT_MEMORY_CONVERSATION_FK.getInverseKey());
 
         return _aiChatMemory;
-    }
-
-    private transient AiChatChangeConfirmationPath _aiChatChangeConfirmation;
-
-    /**
-     * Get the implicit to-many join path to the
-     * <code>oagi.ai_chat_change_confirmation</code> table
-     */
-    public AiChatChangeConfirmationPath aiChatChangeConfirmation() {
-        if (_aiChatChangeConfirmation == null)
-            _aiChatChangeConfirmation = new AiChatChangeConfirmationPath(this, null, Keys.AI_CHAT_CHANGE_CONFIRMATION_CONVERSATION_FK.getInverseKey());
-
-        return _aiChatChangeConfirmation;
     }
 
     private transient AiChatStepPath _aiChatStep;

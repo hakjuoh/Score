@@ -12,8 +12,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatFi
 
 
 /**
- * Binary objects used only when score.ai.tools.files.storage.provider is
- * db.
+ * Binary objects used only when score.ai.tools.files.storage.provider is db.
  */
 @SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class AiChatFileObjectRecord extends UpdatableRecordImpl<AiChatFileObjectRecord> {
@@ -21,32 +20,32 @@ public class AiChatFileObjectRecord extends UpdatableRecordImpl<AiChatFileObject
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_chat_file_object.storage_location</code>.
-     * Opaque database-storage object key.
+     * Setter for <code>oagi.ai_chat_file_object.storage_location</code>. Opaque
+     * database-storage object key.
      */
     public void setStorageLocation(String value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file_object.storage_location</code>.
-     * Opaque database-storage object key.
+     * Getter for <code>oagi.ai_chat_file_object.storage_location</code>. Opaque
+     * database-storage object key.
      */
     public String getStorageLocation() {
         return (String) get(0);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file_object.content</code>. File
-     * bytes for the database storage provider.
+     * Setter for <code>oagi.ai_chat_file_object.content</code>. File bytes for
+     * the database storage provider.
      */
     public void setContent(byte[] value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file_object.content</code>. File
-     * bytes for the database storage provider.
+     * Getter for <code>oagi.ai_chat_file_object.content</code>. File bytes for
+     * the database storage provider.
      */
     public byte[] getContent() {
         return (byte[]) get(1);
