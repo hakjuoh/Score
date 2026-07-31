@@ -43,7 +43,6 @@ import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.metadata.ToolMetadata;
 import org.springframework.util.StringUtils;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -86,11 +85,11 @@ public final class AiTrajectoryRecorder {
     private final AiTrajectoryEventWriter eventWriter;
     private final AiTrajectoryAuditSanitizer auditSanitizer;
     private final AiTrajectoryModelCalls modelCalls;
+    private final AiToolOutputLimiter toolOutputLimiter;
     private final AtomicLong estimatedInputFloor;
     private final AtomicLong eventSequence;
     private final AtomicLong toolSequence;
     private final Map<String, Object> traceContext;
-    private final boolean subagentScope;
     private final AiChatConversationKind conversationKind;
     private final Map<String, ConcurrentLinkedQueue<AiPendingTool>> pendingTools = new ConcurrentHashMap<>();
     private final Set<String> completedToolCallIds = ConcurrentHashMap.newKeySet();
@@ -207,12 +206,13 @@ public final class AiTrajectoryRecorder {
         this.requestExecutedDomainToolCalls = requestExecutedDomainToolCalls;
         this.requestPendingApprovalIds = requestPendingApprovalIds;
         this.traceContext = traceContext != null ? Map.copyOf(traceContext) : Map.of();
-        this.subagentScope = subagentScope;
         this.conversationKind = conversationKind;
         this.eventWriter = new AiTrajectoryEventWriter(repository, conversationId,
                 requestId, this.realtimeEvents, executionScope, this.observer,
                 this.traceContext, this::activeAgentRunId, () -> sealed);
         this.auditSanitizer = new AiTrajectoryAuditSanitizer(objectMapper);
+        this.toolOutputLimiter = new AiToolOutputLimiter(
+                contextBudget, this.estimatedInputFloor, subagentScope);
         this.modelCalls = new AiTrajectoryModelCalls(
                 repository, objectMapper, conversationId, requestId, modelName, reasoningEffort,
                 contextBudget, this.estimatedInputFloor, promptTokenNormalizer, executionScope,
@@ -853,7 +853,7 @@ public final class AiTrajectoryRecorder {
     }
 
     public void resetEstimatedInputFloor(long inputTokens) {
-        estimatedInputFloor.set(Math.max(0L, inputTokens));
+        toolOutputLimiter.resetEstimatedInputFloor(inputTokens);
     }
 
     private Map<String, Object> arguments(String json) {
@@ -1149,47 +1149,9 @@ public final class AiTrajectoryRecorder {
         }
     }
 
-    private AiBoundedToolOutput boundedToolOutput(String output, long tokenLimit) {
-        String source = Objects.requireNonNullElse(output, "");
-        byte[] bytes = source.getBytes(StandardCharsets.UTF_8);
-        long byteLimit = tokenLimit == Long.MAX_VALUE || tokenLimit > Integer.MAX_VALUE / 3L
-                ? Integer.MAX_VALUE : Math.max(0L, tokenLimit) * 3L;
-        if (bytes.length <= byteLimit) {
-            return new AiBoundedToolOutput(source, false, bytes.length, bytes.length);
-        }
-        int maximumBytes = (int) byteLimit;
-        String suffix = "\n[TOOL OUTPUT TRUNCATED: rerun the tool with narrower filters or pagination.]";
-        int suffixBytes = suffix.getBytes(StandardCharsets.UTF_8).length;
-        if (maximumBytes <= suffixBytes) {
-            String marker = suffix.substring(0, Math.min(maximumBytes, suffix.length()));
-            return new AiBoundedToolOutput(marker, true, bytes.length,
-                    marker.getBytes(StandardCharsets.UTF_8).length);
-        }
-        int prefixBudget = Math.max(0, maximumBytes - suffixBytes);
-        int chars = 0;
-        int usedBytes = 0;
-        while (chars < source.length()) {
-            int codePoint = source.codePointAt(chars);
-            int width = Character.charCount(codePoint);
-            int encoded = new String(Character.toChars(codePoint)).getBytes(StandardCharsets.UTF_8).length;
-            if (usedBytes + encoded > prefixBudget) break;
-            chars += width;
-            usedBytes += encoded;
-        }
-        String bounded = source.substring(0, chars) + suffix;
-        int returnedBytes = bounded.getBytes(StandardCharsets.UTF_8).length;
-        return new AiBoundedToolOutput(bounded, true, bytes.length, returnedBytes);
-    }
-
-    private synchronized AiBoundedToolOutput reserveToolOutput(String output, long configuredLimit) {
-        long effectiveLimit = configuredLimit;
-        if (contextBudget != null) {
-            long remaining = Math.max(0L, contextBudget.safeInputLimit() - estimatedInputFloor.get());
-            effectiveLimit = Math.min(effectiveLimit, remaining);
-        }
-        AiBoundedToolOutput bounded = boundedToolOutput(output, effectiveLimit);
-        growEstimatedInputFloor(bounded.returnedBytes());
-        return bounded;
+    private synchronized AiBoundedToolOutput reserveToolOutput(String output,
+                                                               long configuredLimit) {
+        return toolOutputLimiter.reserve(output, configuredLimit);
     }
 
     private void emitToolOutputTruncated(AiBoundedToolOutput bounded, long configuredLimit,
@@ -1230,17 +1192,8 @@ public final class AiTrajectoryRecorder {
     }
 
     private void emitToolOutputUsage(AiBoundedToolOutput bounded) {
-        // Subagent tool outputs grow only the child's floor; the conversation's
-        // visible context usage is settled by the container on fan-out completion.
-        if (contextBudget == null || bounded.returnedBytes() <= 0 || subagentScope) return;
-        emitContextUsage(contextBudget.usage(estimatedInputFloor.get(), true,
-                "tool_output_estimate"));
-    }
-
-    private void growEstimatedInputFloor(int utf8Bytes) {
-        long additional = utf8Bytes <= 0 ? 0L : (utf8Bytes + 2L) / 3L;
-        estimatedInputFloor.updateAndGet(current -> current > Long.MAX_VALUE - additional
-                ? Long.MAX_VALUE : current + additional);
+        AiContextUsageInfo usage = toolOutputLimiter.usageAfter(bounded);
+        if (usage != null) emitContextUsage(usage);
     }
 
     private Map<String, Object> traceMetadata(Map<String, Object> metadata) {
