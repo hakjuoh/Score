@@ -8,17 +8,33 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Abie;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Acc;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifestTag;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.ActivityEvent;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.ActivityEventTarget;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdList;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValueManifest;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiCatalogAudit;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatChangeConfirmation;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatFile;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatFileObject;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatChangeConfirmation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatStep;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModel;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelCatalogConfig;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelReasoningEffort;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiProvider;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenQuotaAdjustment;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenRequestUsage;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsageLedger;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsagePeriod;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserModelAccess;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserModelReasoningAccess;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicy;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicyAudit;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppOauth2User;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppSecret;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbie;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsbieBizterm;
@@ -187,6 +203,16 @@ public class Tables {
     public static final AccManifestTag ACC_MANIFEST_TAG = AccManifestTag.ACC_MANIFEST_TAG;
 
     /**
+     * Append-only ledger of normalized user, service, and AI activity events.
+     */
+    public static final ActivityEvent ACTIVITY_EVENT = ActivityEvent.ACTIVITY_EVENT;
+
+    /**
+     * Append-only resource targets associated with normalized activity events.
+     */
+    public static final ActivityEventTarget ACTIVITY_EVENT_TARGET = ActivityEventTarget.ACTIVITY_EVENT_TARGET;
+
+    /**
      * The AGENCY_ID_LIST table stores information about agency identification
      * lists. The list's values are however kept in the AGENCY_ID_LIST_VALUE.
      */
@@ -215,25 +241,9 @@ public class Tables {
     public static final AgencyIdListValueManifest AGENCY_ID_LIST_VALUE_MANIFEST = AgencyIdListValueManifest.AGENCY_ID_LIST_VALUE_MANIFEST;
 
     /**
-     * Generated Assistant file metadata and provider location history.
+     * Audit history of AI provider and model catalog changes
      */
-    public static final AiChatFile AI_CHAT_FILE = AiChatFile.AI_CHAT_FILE;
-
-    /**
-     * Binary objects used only when score.ai.tools.files.storage.provider
-     * is db.
-     */
-    public static final AiChatFileObject AI_CHAT_FILE_OBJECT = AiChatFileObject.AI_CHAT_FILE_OBJECT;
-
-    /**
-     * User-owned AI chat conversation metadata.
-     */
-    public static final AiChatConversation AI_CHAT_CONVERSATION = AiChatConversation.AI_CHAT_CONVERSATION;
-
-    /**
-     * Bounded connectCenter assistant model context.
-     */
-    public static final AiChatMemory AI_CHAT_MEMORY = AiChatMemory.AI_CHAT_MEMORY;
+    public static final AiCatalogAudit AI_CATALOG_AUDIT = AiCatalogAudit.AI_CATALOG_AUDIT;
 
     /**
      * One-time server-authoritative grants for AI change tool calls.
@@ -241,10 +251,91 @@ public class Tables {
     public static final AiChatChangeConfirmation AI_CHAT_CHANGE_CONFIRMATION = AiChatChangeConfirmation.AI_CHAT_CHANGE_CONFIRMATION;
 
     /**
+     * User-owned AI chat conversation metadata.
+     */
+    public static final AiChatConversation AI_CHAT_CONVERSATION = AiChatConversation.AI_CHAT_CONVERSATION;
+
+    /**
+     * Generated Assistant file metadata and provider location history.
+     */
+    public static final AiChatFile AI_CHAT_FILE = AiChatFile.AI_CHAT_FILE;
+
+    /**
+     * Binary objects used only when score.ai.tools.files.storage.provider is
+     * db.
+     */
+    public static final AiChatFileObject AI_CHAT_FILE_OBJECT = AiChatFileObject.AI_CHAT_FILE_OBJECT;
+
+    /**
+     * Bounded connectCenter assistant model context.
+     */
+    public static final AiChatMemory AI_CHAT_MEMORY = AiChatMemory.AI_CHAT_MEMORY;
+
+    /**
      * Complete connectCenter assistant trajectory in ATIF-reconstructable
      * steps.
      */
     public static final AiChatStep AI_CHAT_STEP = AiChatStep.AI_CHAT_STEP;
+
+    /**
+     * Database-backed AI model catalog
+     */
+    public static final AiModel AI_MODEL = AiModel.AI_MODEL;
+
+    /**
+     * Singleton global AI model catalog configuration
+     */
+    public static final AiModelCatalogConfig AI_MODEL_CATALOG_CONFIG = AiModelCatalogConfig.AI_MODEL_CATALOG_CONFIG;
+
+    /**
+     * Reasoning efforts supported by each AI model
+     */
+    public static final AiModelReasoningEffort AI_MODEL_REASONING_EFFORT = AiModelReasoningEffort.AI_MODEL_REASONING_EFFORT;
+
+    /**
+     * AI provider catalog and encrypted API key reference
+     */
+    public static final AiProvider AI_PROVIDER = AiProvider.AI_PROVIDER;
+
+    /**
+     * History of manual user quota adjustments by administrators
+     */
+    public static final AiTokenQuotaAdjustment AI_TOKEN_QUOTA_ADJUSTMENT = AiTokenQuotaAdjustment.AI_TOKEN_QUOTA_ADJUSTMENT;
+
+    /**
+     * Token counter for each root AI request
+     */
+    public static final AiTokenRequestUsage AI_TOKEN_REQUEST_USAGE = AiTokenRequestUsage.AI_TOKEN_REQUEST_USAGE;
+
+    /**
+     * Token reservation and usage ledger for each provider call attempt
+     */
+    public static final AiTokenUsageLedger AI_TOKEN_USAGE_LEDGER = AiTokenUsageLedger.AI_TOKEN_USAGE_LEDGER;
+
+    /**
+     * Per-user token counter for a quota period
+     */
+    public static final AiTokenUsagePeriod AI_TOKEN_USAGE_PERIOD = AiTokenUsagePeriod.AI_TOKEN_USAGE_PERIOD;
+
+    /**
+     * Per-user AI model allowlist
+     */
+    public static final AiUserModelAccess AI_USER_MODEL_ACCESS = AiUserModelAccess.AI_USER_MODEL_ACCESS;
+
+    /**
+     * Per-user and per-model reasoning effort allowlist
+     */
+    public static final AiUserModelReasoningAccess AI_USER_MODEL_REASONING_ACCESS = AiUserModelReasoningAccess.AI_USER_MODEL_REASONING_ACCESS;
+
+    /**
+     * Per-user AI Assistant access and usage limit policy
+     */
+    public static final AiUserPolicy AI_USER_POLICY = AiUserPolicy.AI_USER_POLICY;
+
+    /**
+     * Audit history of AI user policy changes
+     */
+    public static final AiUserPolicyAudit AI_USER_POLICY_AUDIT = AiUserPolicyAudit.AI_USER_POLICY_AUDIT;
 
     /**
      * This table captures the OpenID Connect claims (such as the sub, name, and
@@ -254,6 +345,11 @@ public class Tables {
      * pending one that has not yet been associated with an application user.
      */
     public static final AppOauth2User APP_OAUTH2_USER = AppOauth2User.APP_OAUTH2_USER;
+
+    /**
+     * Encrypted application secrets; initially limited to AI provider API keys
+     */
+    public static final AppSecret APP_SECRET = AppSecret.APP_SECRET;
 
     /**
      * This table captures the user information for authentication and

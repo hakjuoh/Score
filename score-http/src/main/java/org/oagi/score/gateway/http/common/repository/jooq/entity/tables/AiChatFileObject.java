@@ -29,8 +29,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.
 
 
 /**
- * Binary objects used only when score.ai.tools.files.storage.provider is
- * db.
+ * Binary objects used only when score.ai.tools.files.storage.provider is db.
  */
 @SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
@@ -51,14 +50,14 @@ public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_chat_file_object.storage_location</code>.
-     * Opaque database-storage object key.
+     * The column <code>oagi.ai_chat_file_object.storage_location</code>. Opaque
+     * database-storage object key.
      */
     public final TableField<AiChatFileObjectRecord, String> STORAGE_LOCATION = createField(DSL.name("storage_location"), SQLDataType.VARCHAR(512).nullable(false), this, "Opaque database-storage object key.");
 
     /**
-     * The column <code>oagi.ai_chat_file_object.content</code>. File
-     * bytes for the database storage provider.
+     * The column <code>oagi.ai_chat_file_object.content</code>. File bytes for
+     * the database storage provider.
      */
     public final TableField<AiChatFileObjectRecord, byte[]> CONTENT = createField(DSL.name("content"), SQLDataType.BLOB.nullable(false), this, "File bytes for the database storage provider.");
 
@@ -77,16 +76,14 @@ public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_file_object</code> table
-     * reference
+     * Create an aliased <code>oagi.ai_chat_file_object</code> table reference
      */
     public AiChatFileObject(String alias) {
         this(DSL.name(alias), AI_CHAT_FILE_OBJECT);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_file_object</code> table
-     * reference
+     * Create an aliased <code>oagi.ai_chat_file_object</code> table reference
      */
     public AiChatFileObject(Name alias) {
         this(alias, AI_CHAT_FILE_OBJECT);
