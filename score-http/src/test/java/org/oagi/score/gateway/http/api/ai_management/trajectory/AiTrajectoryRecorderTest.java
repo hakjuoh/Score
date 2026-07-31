@@ -159,6 +159,105 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
+    void correlatesScopedModelCompletionWithCanonicalStartAndEndIdentities() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 2L, Instant.now()));
+        List<ExecutionObservation> exported = new ArrayList<>();
+        var publisher = org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher
+                .forListeners(List.of(exported::add));
+        ExecutionScope scope = new ExecutionScope("request-1", "conversation-1", "user-1", 1,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        publisher.observe(ExecutionObservation.of("workflow.root.started", scope, Map.of()));
+        exported.clear();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", "gpt-5", "medium",
+                ignored -> { }, null, 0L, Map.of(), scope, publisher,
+                ExecutionObservationContext.noop());
+
+        AiTrajectoryRecorder.ModelCallRecording call = recorder.beginModelCall("assistant");
+        AiTrajectoryRecorder.ExecutionEventIdentity completed = recorder.recordModelResponse(
+                call, new ChatResponse(List.of(new Generation(new AssistantMessage("done")))), false);
+
+        ArgumentCaptor<AiChatTrajectoryStep> updated =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).updateModelCall(eq("conversation-1"), eq(42L), updated.capture());
+        assertThat(exported).extracting(event -> AiExecutionLifecycle.from(event)
+                        .orElseThrow().subtype())
+                .containsExactly("model_call_started", "model_call_completed");
+        assertThat(updated.getValue().extra())
+                .containsEntry("score.event.id", call.started().eventId())
+                .containsEntry("score.event.sequence", call.started().sequence())
+                .containsEntry("score.event.occurred_at", call.started().occurredAt().toString())
+                .containsEntry("score.event.end.id", completed.eventId())
+                .containsEntry("score.event.end.sequence", completed.sequence())
+                .containsEntry("score.event.end.occurred_at", completed.occurredAt().toString());
+    }
+
+    @Test
+    void recordsScopedModelFailureWithoutDisclosingTheFailureMessage() {
+        String secret = "provider-secret-account@example.test";
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 2L, Instant.now()));
+        List<ExecutionObservation> exported = new ArrayList<>();
+        var publisher = org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher
+                .forListeners(List.of(exported::add));
+        ExecutionScope scope = new ExecutionScope("request-1", "conversation-1", "user-1", 1,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of());
+        publisher.observe(ExecutionObservation.of("workflow.root.started", scope, Map.of()));
+        exported.clear();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", "gpt-5", "medium",
+                ignored -> { }, null, 0L, Map.of(), scope, publisher,
+                ExecutionObservationContext.noop());
+
+        AiTrajectoryRecorder.ModelCallRecording call = recorder.beginModelCall("assistant");
+        AiTrajectoryRecorder.ExecutionEventIdentity failed = recorder.failModelCall(
+                call, new IllegalStateException(secret));
+
+        ArgumentCaptor<AiChatTrajectoryStep> updated =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).updateModelCall(eq("conversation-1"), eq(42L), updated.capture());
+        assertThat(exported).extracting(event -> AiExecutionLifecycle.from(event)
+                        .orElseThrow().subtype())
+                .containsExactly("model_call_started", "model_call_failed");
+        assertThat(updated.getValue().extra())
+                .containsEntry("status", "failed")
+                .containsEntry("failure_type", IllegalStateException.class.getName())
+                .containsEntry("score.event.id", call.started().eventId())
+                .containsEntry("score.event.end.id", failed.eventId());
+        assertThat(updated.getValue().toString()).doesNotContain(secret);
+        assertThat(exported).allSatisfy(event -> assertThat(event.toString()).doesNotContain(secret));
+    }
+
+    @Test
+    void forkPreservesTheProviderPromptTokenNormalizer() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 1L, Instant.now()));
+        AiTrajectoryRecorder root = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), mock(ScoreUser.class),
+                "conversation-1", "request-1", "claude", "high", ignored -> { });
+        root.useModelProvider("anthropic");
+        AiTrajectoryRecorder child = root.fork(Map.of("node_id", "worker-1"));
+
+        child.recordModelResponse(new ChatResponse(
+                List.of(new Generation(new AssistantMessage("done"))),
+                ChatResponseMetadata.builder()
+                        .usage(new DefaultUsage(2, 4, 6, null, 100L, 5L)).build()),
+                "assistant");
+
+        ArgumentCaptor<AiChatTrajectoryStep> persisted =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository).append(eq("conversation-1"), persisted.capture());
+        assertThat(persisted.getValue().metrics())
+                .containsEntry("prompt_tokens", 107L)
+                .containsEntry("cached_tokens", 100L)
+                .containsEntry("prompt_tokens_complete", true);
+    }
+
+    @Test
     void terminalSealAndSideEffectStartHaveOneAtomicOrdering() throws Exception {
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
                 mock(AiChatConversationRepository.class), new ObjectMapper(), null,
