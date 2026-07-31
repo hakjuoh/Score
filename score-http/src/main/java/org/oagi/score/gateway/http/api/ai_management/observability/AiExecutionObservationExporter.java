@@ -11,7 +11,6 @@ import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecy
 import org.springframework.stereotype.Component;
 import org.springframework.core.annotation.Order;
 
-import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -156,11 +155,6 @@ final class AiExecutionObservationExporter implements ExecutionEventListener {
                 .addEvent("score.ai.guardrail.decision", eventAttributes.build());
     }
 
-    private static double elapsedMillis(long startedNanos) {
-        return Duration.ofNanos(Math.max(0L, System.nanoTime() - startedNanos)).toNanos()
-                / 1_000_000.0;
-    }
-
     private static void eventIdentity(io.opentelemetry.api.trace.SpanBuilder builder,
                                       ExecutionObservation observation) {
         builder.setStartTimestamp(observation.occurredAt());
@@ -245,11 +239,12 @@ final class AiExecutionObservationExporter implements ExecutionEventListener {
                     .put("score.ai.outcome", outcome)
                     .build();
             observability.instruments().agentRuns.add(1, labels);
-            observability.instruments().agentDuration.record(elapsedMillis(startedNanos), labels);
+            observability.instruments().agentDuration.record(
+                    AiObservationTiming.elapsedMillis(startedNanos), labels);
             Attributes standard = GenAiSemanticConventions.agentDurationAttributes(
                     agent, model, errorType);
             observability.instruments().genAiInvokeAgentDuration.record(
-                    GenAiSemanticConventions.elapsedSeconds(startedNanos), standard);
+                    AiObservationTiming.elapsedSeconds(startedNanos), standard);
             Attributes calls = GenAiSemanticConventions.agentCallAttributes(agent);
             observability.instruments().genAiInvokeAgentInferenceCalls.record(
                     counts.inferenceCalls(), calls);

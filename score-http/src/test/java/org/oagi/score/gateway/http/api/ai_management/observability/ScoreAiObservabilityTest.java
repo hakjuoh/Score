@@ -46,6 +46,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import java.util.List;
 import java.util.Map;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
@@ -1328,8 +1329,273 @@ class ScoreAiObservabilityTest {
         assertThat(model.getParentSpanId()).isEqualTo(root.getSpanId());
     }
 
+    @Test
+    void fallsBackToTheAliasWhenModelResolutionThrowsOrReturnsNoText() {
+        ScoreAiObservability observed = new ScoreAiObservability(
+                openTelemetry, "3.6.0-test", alias -> switch (alias) {
+                    case "throwing-alias" -> throw new IllegalStateException("registry down");
+                    case "null-alias" -> null;
+                    case "blank-alias" -> "   ";
+                    default -> alias;
+                });
+        for (String alias : List.of("throwing-alias", "null-alias", "blank-alias")) {
+            ChatRequest request = request("request-" + alias, alias);
+            ScoreAiObservability.Turn turn = observed.startTurn(request, null, 1, null, null);
+            turn.prepared(request);
+            turn.complete("COMPLETED", null);
+
+            observed.recordAdmissionRejection(
+                    request("rejected-" + alias, alias), null, null,
+                    "registry_capacity", null, null);
+        }
+
+        for (String alias : List.of("throwing-alias", "null-alias", "blank-alias")) {
+            assertThat(spans.getFinishedSpanItems())
+                    .filteredOn(span -> GenAiSemanticConventions.INVOKE_WORKFLOW.equals(
+                            operation(span)))
+                    .filteredOn(span -> span.getAttributes().get(AttributeKey.stringKey(
+                            "score.ai.request.id")).endsWith(alias))
+                    .hasSize(2)
+                    .allSatisfy(span -> assertThat(span.getAttributes().get(
+                            AttributeKey.stringKey("gen_ai.request.model"))).isEqualTo(alias));
+        }
+    }
+
+    @Test
+    void preservesTheRegisteredTurnWhenADuplicateRequestIdStarts() {
+        ChatRequest request = request("request-duplicate", "gpt-5");
+        ScoreAiObservability.Turn original = observability.startTurn(
+                request, null, 1, null, null);
+        ScoreAiObservability.Turn duplicate = observability.startTurn(
+                request, null, 2, null, null);
+
+        duplicate.executionStarted();
+        duplicate.complete("FAILED", new IllegalStateException("ignored"));
+        assertThat(observability.correlation(request.requestId())).isNotEmpty();
+        observability.startModelCall(request.requestId(), "gpt-5", "openai", "assistant")
+                .complete(null);
+        original.complete("COMPLETED", null);
+
+        assertThat(spans.getFinishedSpanItems()).filteredOn(span -> Boolean.TRUE.equals(
+                span.getAttributes().get(AttributeKey.booleanKey(
+                        "score.ai.duplicate_request_id")))).hasSize(1);
+        assertThat(spans.getFinishedSpanItems()).filteredOn(span -> turnEntrypoint(span)
+                && span.getAttributes().get(AttributeKey.booleanKey(
+                        "score.ai.duplicate_request_id")) == null).hasSize(1);
+        assertThat(longMetric("score.ai.turn.requests")).isEqualTo(1L);
+        assertThat(longMetric("score.ai.model.calls")).isEqualTo(1L);
+        assertThat(activeRequests()).isZero();
+    }
+
+    @Test
+    void recordsModelAndTurnExactlyOnceWhenAllTerminalSignalsRace() throws Exception {
+        ChatRequest request = request("request-model-race", "gpt-5");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        ScoreAiObservability.ModelCall model = observability.startModelCall(
+                request.requestId(), "gpt-5", "openai", "assistant");
+        CountDownLatch ready = new CountDownLatch(4);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(4)) {
+            var futures = List.of(
+                    executor.submit(() -> race(ready, start, () -> model.complete(responseWithUsage()))),
+                    executor.submit(() -> race(ready, start,
+                            () -> model.fail(new IllegalStateException("provider failed")))),
+                    executor.submit(() -> race(ready, start, model::cancel)),
+                    executor.submit(() -> race(ready, start,
+                            () -> turn.complete("TIMED_OUT", null))));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            for (var future : futures) future.get(5, TimeUnit.SECONDS);
+        }
+        turn.complete("COMPLETED", null);
+
+        assertThat(spans.getFinishedSpanItems()).filteredOn(span ->
+                GenAiSemanticConventions.CHAT.equals(operation(span))).hasSize(1);
+        assertThat(spans.getFinishedSpanItems())
+                .filteredOn(ScoreAiObservabilityTest::turnEntrypoint).hasSize(1);
+        assertThat(longMetric("score.ai.model.calls")).isEqualTo(1L);
+        assertThat(longMetric("score.ai.turn.requests")).isEqualTo(1L);
+        assertThat(longMetric("score.ai.model.tokens")).isIn(0L, 19L);
+        assertThat(activeRequests()).isZero();
+    }
+
+    @Test
+    void recordsEveryModelTerminalPathDeterministically() {
+        ChatRequest completedRequest = request("request-model-completed", "completed-model");
+        ScoreAiObservability.Turn completedTurn = observability.startTurn(
+                completedRequest, null, 1, null, null);
+        observability.startModelCall(completedRequest.requestId(), "completed-model",
+                        "openai", "assistant")
+                .complete(responseWithUsage());
+        completedTurn.complete("COMPLETED", null);
+
+        ChatRequest failedRequest = request("request-model-failed", "failed-model");
+        ScoreAiObservability.Turn failedTurn = observability.startTurn(
+                failedRequest, null, 1, null, null);
+        observability.startModelCall(failedRequest.requestId(), "failed-model",
+                        "openai", "assistant")
+                .fail(new IllegalStateException("provider unavailable"));
+        failedTurn.complete("FAILED", null);
+
+        ChatRequest cancelledRequest = request("request-model-cancelled", "cancelled-model");
+        ScoreAiObservability.Turn cancelledTurn = observability.startTurn(
+                cancelledRequest, null, 1, null, null);
+        observability.startModelCall(cancelledRequest.requestId(), "cancelled-model",
+                        "openai", "assistant")
+                .cancel();
+        cancelledTurn.complete("CANCELLED", null);
+
+        ChatRequest timedOutRequest = request("request-model-timeout", "timeout-model");
+        ScoreAiObservability.Turn timedOutTurn = observability.startTurn(
+                timedOutRequest, null, 1, null, null);
+        observability.startModelCall(timedOutRequest.requestId(), "timeout-model",
+                "openai", "assistant");
+        timedOutTurn.complete("TIMED_OUT", null);
+
+        List<SpanData> modelSpans = spans.getFinishedSpanItems().stream()
+                .filter(span -> GenAiSemanticConventions.CHAT.equals(operation(span))).toList();
+        assertThat(modelSpans).hasSize(4);
+        assertModelOutcome(modelSpans, "completed-model", "success", false);
+        assertModelOutcome(modelSpans, "failed-model", "error", false);
+        assertModelOutcome(modelSpans, "cancelled-model", "cancelled", false);
+        assertModelOutcome(modelSpans, "timeout-model", "timeout", true);
+        assertThat(longMetric("score.ai.model.calls")).isEqualTo(4L);
+        assertThat(longMetric("score.ai.model.tokens")).isEqualTo(19L);
+        assertThat(longMetric("score.ai.turn.requests")).isEqualTo(4L);
+        assertThat(activeRequests()).isZero();
+    }
+
+    @Test
+    void distinguishesFailedCancelledAndTurnClosedPlans() {
+        ChatRequest request = request("request-plans", "gpt-5");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        var failed = observability.startPlan(request.requestId(), "failed-planner");
+        failed.fail(new IllegalArgumentException("private"));
+        failed.close();
+        var cancelled = observability.startPlan(request.requestId(), "cancelled-planner");
+        cancelled.cancel();
+        cancelled.close();
+        observability.startPlan(request.requestId(), "incomplete-planner");
+        turn.complete("TIMED_OUT", null);
+
+        List<SpanData> plans = spans.getFinishedSpanItems().stream()
+                .filter(span -> GenAiSemanticConventions.PLAN.equals(operation(span))).toList();
+        assertThat(plans).hasSize(3);
+        assertThat(plan(plans, "failed-planner").getStatus().getStatusCode())
+                .isEqualTo(StatusCode.ERROR);
+        assertThat(plan(plans, "failed-planner").getAttributes().get(
+                AttributeKey.stringKey("error.type")))
+                .isEqualTo(IllegalArgumentException.class.getName());
+        assertThat(plan(plans, "cancelled-planner").getAttributes().get(
+                AttributeKey.stringKey("score.ai.outcome"))).isEqualTo("cancelled");
+        SpanData incomplete = plan(plans, "incomplete-planner");
+        assertThat(incomplete.getAttributes().get(
+                AttributeKey.stringKey("score.ai.outcome"))).isEqualTo("timeout");
+        assertThat(incomplete.getAttributes().get(
+                AttributeKey.booleanKey("score.ai.observation.incomplete"))).isTrue();
+    }
+
+    @Test
+    void ignoresLateAdmissionAndInactiveModelOperations() {
+        ChatRequest request = request("request-late", "gpt-5");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        turn.admissionRejected("unbounded sensitive reason");
+        turn.complete("COMPLETED", null);
+        turn.admissionRejected("registry_capacity");
+        observability.startModelCall(request.requestId(), "gpt-5", "openai", "assistant")
+                .complete(responseWithUsage());
+
+        SpanData root = span(spans.getFinishedSpanItems(), "score.ai.turn");
+        assertThat(root.getAttributes().get(
+                AttributeKey.stringKey("score.ai.admission.reason"))).isEqualTo("other");
+        assertThat(longMetric("score.ai.admission.rejections")).isEqualTo(1L);
+        assertThat(longMetric("score.ai.model.calls")).isZero();
+        assertThat(spans.getFinishedSpanItems()).noneMatch(span ->
+                GenAiSemanticConventions.CHAT.equals(operation(span)));
+    }
+
+    @Test
+    void preservesExplicitModelEventIdentities() {
+        ChatRequest request = request("request-identities", "gpt-5");
+        ScoreAiObservability.Turn turn = observability.startTurn(request, null, 1, null, null);
+        Instant startedAt = Instant.now().minusSeconds(1);
+        Instant endedAt = startedAt.plusMillis(250);
+        ScoreAiObservability.ModelCall model = observability.startModelCall(
+                request.requestId(), "gpt-5", "gpt-5", "openai", "assistant",
+                null, request.conversationId(),
+                new AiTrajectoryRecorder.ExecutionEventIdentity("start-id", 41L, startedAt));
+        model.eventIdentity(new AiTrajectoryRecorder.ExecutionEventIdentity(
+                "end-id", 42L, endedAt));
+        model.complete(null);
+        turn.complete("COMPLETED", null);
+
+        SpanData modelSpan = span(spans.getFinishedSpanItems(), "score.ai.model");
+        assertThat(modelSpan.getStartEpochNanos()).isEqualTo(
+                startedAt.getEpochSecond() * 1_000_000_000L + startedAt.getNano());
+        assertThat(modelSpan.getAttributes().get(AttributeKey.stringKey(
+                ExecutionEventPublisher.EVENT_ID))).isEqualTo("start-id");
+        assertThat(modelSpan.getAttributes().get(AttributeKey.longKey(
+                ExecutionEventPublisher.EVENT_SEQUENCE))).isEqualTo(41L);
+        assertThat(modelSpan.getAttributes().get(AttributeKey.stringKey(
+                "score.event.end.id"))).isEqualTo("end-id");
+        assertThat(modelSpan.getAttributes().get(AttributeKey.longKey(
+                "score.event.end.sequence"))).isEqualTo(42L);
+    }
+
+    @Test
+    void convertsObservationTimingUnitsFromOneCentralPolicy() {
+        assertThat(AiObservationTiming.nanosToMillis(1_000_000L)).isEqualTo(1.0d);
+        assertThat(AiObservationTiming.nanosToSeconds(1_000_000_000L)).isEqualTo(1.0d);
+        assertThat(AiObservationTiming.nanosToMillis(-1L)).isZero();
+        assertThat(AiObservationTiming.nanosToSeconds(-1L)).isZero();
+        assertThat(AiObservationTiming.elapsedMillis(Long.MAX_VALUE)).isZero();
+        assertThat(AiObservationTiming.elapsedSeconds(Long.MAX_VALUE)).isZero();
+        assertThat(AiObservationTiming.elapsedNanos(
+                Long.MAX_VALUE - 5L, Long.MIN_VALUE + 5L)).isEqualTo(11L);
+        assertThat(AiObservationTiming.elapsedNanos(100L, 99L)).isZero();
+    }
+
     private ChatResponse responseWithUsage() {
         return responseWithUsage("stop");
+    }
+
+    private ChatRequest request(String requestId, String model) {
+        return new ChatRequest("prompt", requestId, null, "conversation-" + requestId,
+                null, List.of(), null, model, "medium", "ask");
+    }
+
+    private void race(CountDownLatch ready, CountDownLatch start, Runnable action) {
+        ready.countDown();
+        try {
+            assertThat(start.await(5, TimeUnit.SECONDS)).isTrue();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(interrupted);
+        }
+        action.run();
+    }
+
+    private long activeRequests() {
+        return metrics.collectAllMetrics().stream()
+                .filter(metric -> metric.getName().equals("score.ai.requests.active"))
+                .flatMap(metric -> metric.getLongSumData().getPoints().stream())
+                .mapToLong(LongPointData::getValue).sum();
+    }
+
+    private SpanData plan(List<SpanData> plans, String agentName) {
+        return plans.stream().filter(item -> agentName.equals(item.getAttributes().get(
+                AttributeKey.stringKey("gen_ai.agent.name")))).findFirst().orElseThrow();
+    }
+
+    private void assertModelOutcome(List<SpanData> modelSpans, String model,
+                                    String outcome, boolean incomplete) {
+        SpanData span = modelSpans.stream().filter(item -> model.equals(item.getAttributes().get(
+                AttributeKey.stringKey("gen_ai.request.model")))).findFirst().orElseThrow();
+        assertThat(span.getAttributes().get(AttributeKey.stringKey("score.ai.outcome")))
+                .isEqualTo(outcome);
+        assertThat(Boolean.TRUE.equals(span.getAttributes().get(
+                AttributeKey.booleanKey("score.ai.observation.incomplete"))))
+                .isEqualTo(incomplete);
     }
 
     private ChatResponse responseWithUsage(String finishReason) {

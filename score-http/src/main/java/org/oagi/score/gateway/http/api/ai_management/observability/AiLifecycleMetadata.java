@@ -4,7 +4,6 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher;
 
-import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 
@@ -129,8 +128,4 @@ final class AiLifecycleMetadata {
         return status >= 100 && status <= 599 ? (status / 100) + "xx" : "unknown";
     }
 
-    static double elapsedMillis(long startedNanos) {
-        return Duration.ofNanos(Math.max(0L, System.nanoTime() - startedNanos)).toNanos()
-                / 1_000_000.0;
-    }
 }
