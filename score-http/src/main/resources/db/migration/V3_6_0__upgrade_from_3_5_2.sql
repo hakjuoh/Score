@@ -148,3 +148,373 @@ CREATE TABLE `ai_chat_file_object`
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci
   ROW_FORMAT = DYNAMIC COMMENT ='Binary objects used only when score.ai.tools.files.storage.provider is db.';
+
+-- ----------------------------------------------------
+-- AI provider, model, policy, and token quota tables --
+-- ----------------------------------------------------
+
+CREATE TABLE `app_secret`
+(
+    `app_secret_id`      bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the encrypted application secret',
+    `secret_guid`        char(36) COLLATE ascii_bin NOT NULL COMMENT 'Stable UUID used as authenticated encryption context',
+    `secret_name`        varchar(255) NOT NULL COMMENT 'Unique logical name of the application secret',
+    `secret_type`        varchar(32) NOT NULL COMMENT 'Secret type such as AI_PROVIDER_API_KEY',
+    `encrypted_value`    mediumblob NOT NULL COMMENT 'AES-256-GCM ciphertext including the authentication tag',
+    `nonce`              binary(12) NOT NULL COMMENT 'Unique 96-bit AES-GCM nonce for this encrypted value',
+    `encryption_key_id`  varchar(64) NOT NULL COMMENT 'Identifier of the application encryption key used for this value',
+    `encryption_version` smallint unsigned NOT NULL DEFAULT 1 COMMENT 'Version of the encryption payload format',
+    `created_by`         bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the secret',
+    `last_updated_by`    bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the secret',
+    `created_at`         datetime(6) NOT NULL COMMENT 'Date and time when the secret was created',
+    `last_updated_at`    datetime(6) NOT NULL COMMENT 'Date and time when the secret was last updated',
+    PRIMARY KEY (`app_secret_id`),
+    UNIQUE KEY `app_secret_guid_uk` (`secret_guid`),
+    UNIQUE KEY `app_secret_name_uk` (`secret_name`),
+    CONSTRAINT `app_secret_created_by_fk`
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+    CONSTRAINT `app_secret_last_updated_by_fk`
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Encrypted application secrets; initially limited to AI provider API keys';
+
+CREATE TABLE `ai_provider`
+(
+    `ai_provider_id`     bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the AI provider',
+    `provider_name`      varchar(120) NOT NULL COMMENT 'Unique application-facing name of the AI provider',
+    `provider_type`      varchar(32) NOT NULL COMMENT 'Provider adapter type such as anthropic or azure-openai',
+    `base_url`           varchar(1000) NULL COMMENT 'Base endpoint URL of the AI provider',
+    `messages_url`       varchar(1000) NULL COMMENT 'Optional provider-specific messages endpoint URL',
+    `anthropic_version`  varchar(64) NULL COMMENT 'Anthropic API version sent to the provider',
+    `api_version`        varchar(64) NULL COMMENT 'Provider API version such as the Azure OpenAI API version',
+    `api_key_secret_id`  bigint unsigned NULL COMMENT 'Encrypted API key referenced from app_secret',
+    `enabled`            tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Indicates whether the provider can serve model requests',
+    `catalog_version`    bigint unsigned NOT NULL DEFAULT 1 COMMENT 'Optimistic locking and cache invalidation version',
+    `created_by`         bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the provider',
+    `last_updated_by`    bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the provider',
+    `created_at`         datetime(6) NOT NULL COMMENT 'Date and time when the provider was created',
+    `last_updated_at`    datetime(6) NOT NULL COMMENT 'Date and time when the provider was last updated',
+    PRIMARY KEY (`ai_provider_id`),
+    UNIQUE KEY `ai_provider_name_uk` (`provider_name`),
+    UNIQUE KEY `ai_provider_api_key_secret_uk` (`api_key_secret_id`),
+    CONSTRAINT `ai_provider_api_key_secret_fk`
+        FOREIGN KEY (`api_key_secret_id`) REFERENCES `app_secret` (`app_secret_id`) ON DELETE RESTRICT,
+    CONSTRAINT `ai_provider_created_by_fk`
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+    CONSTRAINT `ai_provider_last_updated_by_fk`
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='AI provider catalog and encrypted API key reference';
+
+CREATE TABLE `ai_model`
+(
+    `ai_model_id`                  bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the AI model catalog entry',
+    `provider_id`                  bigint unsigned NOT NULL COMMENT 'Identifier of the provider that serves the model',
+    `model_key`                    varchar(240) NOT NULL COMMENT 'Stable application-facing model key',
+    `provider_model_name`          varchar(240) NOT NULL COMMENT 'Model or deployment name sent to the provider',
+    `display_name`                 varchar(240) NOT NULL COMMENT 'Display name shown to administrators and users',
+    `description`                  varchar(1000) NOT NULL COMMENT 'Human-readable description of the model',
+    `enabled`                      tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Indicates whether the model is available for new requests',
+    `sort_order`                   int unsigned NOT NULL DEFAULT 0 COMMENT 'Stable display and fallback ordering of catalog models',
+    `max_tokens`                   int unsigned NULL COMMENT 'Maximum output-token budget for one provider call',
+    `context_window`               bigint unsigned NOT NULL COMMENT 'Maximum context window size in tokens',
+    `output_reserve_tokens`        bigint unsigned NULL COMMENT 'Output tokens reserved during context budget calculation',
+    `auto_compact_threshold_tokens` bigint unsigned NULL COMMENT 'Context token threshold that triggers automatic compaction',
+    `emergency_headroom_tokens`    bigint unsigned NOT NULL DEFAULT 4096 COMMENT 'Emergency context headroom in tokens',
+    `tool_output_token_limit`      bigint unsigned NOT NULL DEFAULT 32000 COMMENT 'Maximum tool output tokens retained in context',
+    `provider_compaction_enabled`  tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Indicates whether provider-native compaction is enabled',
+    `temperature`                  decimal(6,5) NULL COMMENT 'Optional default model sampling temperature',
+    `thinking_budget_tokens`       int unsigned NULL COMMENT 'Optional explicit thinking-token budget',
+    `adaptive_thinking`            tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Indicates whether adaptive thinking is enabled',
+    `output_effort`                varchar(32) NULL COMMENT 'Optional provider output effort value',
+    `cache_strategy`               varchar(64) NULL COMMENT 'Provider prompt cache strategy',
+    `reasoning_model_supported`    tinyint(1) NULL COMMENT 'Configured support for OpenAI-style reasoning options',
+    `output_effort_supported`      tinyint(1) NULL COMMENT 'Configured support for output effort options',
+    `verbosity_supported`          tinyint(1) NULL COMMENT 'Configured support for verbosity options',
+    `temperature_supported`        tinyint(1) NULL COMMENT 'Configured support for temperature options',
+    `thinking_modes_json`          JSON NULL COMMENT 'Configured provider thinking modes as a JSON array',
+    `default_thinking`             varchar(32) NULL COMMENT 'Default provider thinking mode',
+    `catalog_version`              bigint unsigned NOT NULL DEFAULT 1 COMMENT 'Optimistic locking and cache invalidation version',
+    `created_by`                   bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the model',
+    `last_updated_by`              bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the model',
+    `created_at`                   datetime(6) NOT NULL COMMENT 'Date and time when the model was created',
+    `last_updated_at`              datetime(6) NOT NULL COMMENT 'Date and time when the model was last updated',
+    PRIMARY KEY (`ai_model_id`),
+    UNIQUE KEY `ai_model_key_uk` (`model_key`),
+    KEY `ai_model_provider_idx` (`provider_id`),
+    CONSTRAINT `ai_model_provider_fk`
+        FOREIGN KEY (`provider_id`) REFERENCES `ai_provider` (`ai_provider_id`) ON DELETE RESTRICT,
+    CONSTRAINT `ai_model_created_by_fk`
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+    CONSTRAINT `ai_model_last_updated_by_fk`
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Database-backed AI model catalog';
+
+CREATE TABLE `ai_model_reasoning_effort`
+(
+    `ai_model_id`     bigint unsigned NOT NULL COMMENT 'Identifier of the AI model catalog entry',
+    `reasoning_effort` varchar(32) NOT NULL COMMENT 'Canonical reasoning effort name',
+    `display_name`    varchar(120) NOT NULL COMMENT 'Display name of the reasoning effort',
+    `description`     varchar(500) NOT NULL COMMENT 'Human-readable description of the reasoning effort',
+    `default_effort`  tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Indicates whether this is the model default reasoning effort',
+    `sort_order`      int unsigned NOT NULL DEFAULT 0 COMMENT 'Stable display ordering of reasoning efforts',
+    PRIMARY KEY (`ai_model_id`, `reasoning_effort`),
+    CONSTRAINT `ai_model_reasoning_effort_model_fk`
+        FOREIGN KEY (`ai_model_id`) REFERENCES `ai_model` (`ai_model_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Reasoning efforts supported by each AI model';
+
+CREATE TABLE `ai_model_catalog_config`
+(
+    `ai_model_catalog_config_id` tinyint unsigned NOT NULL COMMENT 'Singleton AI model catalog configuration identifier',
+    `default_ai_model_id`        bigint unsigned NOT NULL COMMENT 'Identifier of the global default AI model',
+    `catalog_version`            bigint unsigned NOT NULL DEFAULT 1 COMMENT 'Optimistic locking and cache invalidation version',
+    `last_updated_by`            bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the catalog configuration',
+    `last_updated_at`            datetime(6) NOT NULL COMMENT 'Date and time when the catalog configuration was last updated',
+    PRIMARY KEY (`ai_model_catalog_config_id`),
+    CONSTRAINT `ai_model_catalog_config_default_model_fk`
+        FOREIGN KEY (`default_ai_model_id`) REFERENCES `ai_model` (`ai_model_id`) ON DELETE RESTRICT,
+    CONSTRAINT `ai_model_catalog_config_last_updated_by_fk`
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Singleton global AI model catalog configuration';
+
+CREATE TABLE `ai_user_policy`
+(
+    `app_user_id`                  bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user to whom the policy applies',
+    `ai_enabled`                   tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Indicates whether the user can use AI Assistant',
+    `model_access_mode`            varchar(16) NOT NULL DEFAULT 'ALL' COMMENT 'Model access mode: ALL or ALLOW_LIST',
+    `default_ai_model_id`          bigint unsigned NULL COMMENT 'Identifier of the default AI model for the user',
+    `multi_agent_enabled`          tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Indicates whether the user can use multi-agent workflows',
+    `max_agents_per_request`       tinyint unsigned NOT NULL DEFAULT 4 COMMENT 'Maximum number of agents allowed per request',
+    `max_active_requests`          tinyint unsigned NOT NULL DEFAULT 8 COMMENT 'Maximum number of concurrent AI requests for the user',
+    `max_output_tokens_per_call`   bigint unsigned NULL COMMENT 'Maximum number of output tokens allowed per model call',
+    `max_total_tokens_per_request` bigint unsigned NULL COMMENT 'Maximum total tokens allowed for a root request',
+    `quota_period`                 varchar(16) NULL COMMENT 'Cumulative token quota period: DAILY or MONTHLY',
+    `quota_tokens`                 bigint unsigned NULL COMMENT 'Maximum cumulative tokens allowed during the quota period',
+    `policy_version`               bigint unsigned NOT NULL DEFAULT 1 COMMENT 'Policy version used for optimistic locking',
+    `created_by`                   bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the policy',
+    `last_updated_by`              bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the policy',
+    `created_at`                   datetime(6) NOT NULL COMMENT 'Date and time when the policy was created',
+    `last_updated_at`              datetime(6) NOT NULL COMMENT 'Date and time when the policy was last updated',
+    PRIMARY KEY (`app_user_id`),
+    CONSTRAINT `ai_user_policy_user_fk`
+        FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE,
+    CONSTRAINT `ai_user_policy_created_by_fk`
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+    CONSTRAINT `ai_user_policy_last_updated_by_fk`
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+    CONSTRAINT `ai_user_policy_default_model_fk`
+        FOREIGN KEY (`default_ai_model_id`) REFERENCES `ai_model` (`ai_model_id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Per-user AI Assistant access and usage limit policy';
+
+CREATE TABLE `ai_user_model_access`
+(
+    `app_user_id` bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user to whom the policy applies',
+    `ai_model_id` bigint unsigned NOT NULL COMMENT 'Identifier of an AI model allowed for the user',
+    PRIMARY KEY (`app_user_id`, `ai_model_id`),
+    CONSTRAINT `ai_user_model_access_policy_fk`
+        FOREIGN KEY (`app_user_id`) REFERENCES `ai_user_policy` (`app_user_id`) ON DELETE CASCADE,
+    CONSTRAINT `ai_user_model_access_model_fk`
+        FOREIGN KEY (`ai_model_id`) REFERENCES `ai_model` (`ai_model_id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Per-user AI model allowlist';
+
+CREATE TABLE `ai_user_model_reasoning_access`
+(
+    `app_user_id`      bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user to whom the policy applies',
+    `ai_model_id`      bigint unsigned NOT NULL COMMENT 'Identifier of the AI model subject to the reasoning effort restriction',
+    `reasoning_effort` varchar(32) NOT NULL COMMENT 'Name of a reasoning effort allowed for the user',
+    PRIMARY KEY (`app_user_id`, `ai_model_id`, `reasoning_effort`),
+    CONSTRAINT `ai_user_model_reasoning_access_policy_fk`
+        FOREIGN KEY (`app_user_id`) REFERENCES `ai_user_policy` (`app_user_id`) ON DELETE CASCADE,
+    CONSTRAINT `ai_user_model_reasoning_access_effort_fk`
+        FOREIGN KEY (`ai_model_id`, `reasoning_effort`)
+        REFERENCES `ai_model_reasoning_effort` (`ai_model_id`, `reasoning_effort`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Per-user and per-model reasoning effort allowlist';
+
+CREATE TABLE `ai_token_usage_period`
+(
+    `app_user_id`     bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user whose token usage is aggregated',
+    `period_start`    datetime(6) NOT NULL COMMENT 'Inclusive start of the quota period in UTC',
+    `period_end`      datetime(6) NOT NULL COMMENT 'Exclusive end of the quota period in UTC',
+    `consumed_tokens` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens consumed during the period',
+    `reserved_tokens` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens reserved by in-progress calls during the period',
+    `updated_at`      datetime(6) NOT NULL COMMENT 'Date and time when the period counter was last updated',
+    PRIMARY KEY (`app_user_id`, `period_start`),
+    KEY `ai_token_usage_period_end_idx` (`period_end`),
+    CONSTRAINT `ai_token_usage_period_user_fk`
+        FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Per-user token counter for a quota period';
+
+CREATE TABLE `ai_token_request_usage`
+(
+    `request_id`      varchar(128) COLLATE utf8mb4_bin NOT NULL COMMENT 'Identifier of the root AI request',
+    `app_user_id`     bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user who submitted the AI request',
+    `consumed_tokens` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens consumed by the request',
+    `reserved_tokens` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens reserved by in-progress calls for the request',
+    `created_at`      datetime(6) NOT NULL COMMENT 'Date and time when the request usage counter was created',
+    `updated_at`      datetime(6) NOT NULL COMMENT 'Date and time when the request usage counter was last updated',
+    PRIMARY KEY (`request_id`),
+    KEY `ai_token_request_usage_user_created_idx` (`app_user_id`, `created_at`),
+    CONSTRAINT `ai_token_request_usage_user_fk`
+        FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Token counter for each root AI request';
+
+CREATE TABLE `ai_token_usage_ledger`
+(
+    `ai_token_usage_ledger_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the token usage ledger entry',
+    `call_id`                   char(36) COLLATE ascii_bin NOT NULL COMMENT 'UUID of the provider call attempt',
+    `request_id`                varchar(128) COLLATE utf8mb4_bin NOT NULL COMMENT 'Identifier of the root AI request',
+    `conversation_guid`         char(36) COLLATE utf8mb4_bin NULL COMMENT 'GUID of the related AI conversation',
+    `app_user_id`               bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user who initiated the AI call',
+    `ai_model_id`               bigint unsigned NOT NULL COMMENT 'Identifier of the AI model that was called',
+    `execution_kind`            varchar(64) NULL COMMENT 'Execution kind such as assistant, planner, or worker',
+    `agent_id`                  varchar(64) NULL COMMENT 'Identifier of the agent that performed the call',
+    `reserved_tokens`           bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens reserved before the provider call',
+    `prompt_tokens`             bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Normalized input tokens reported by the provider',
+    `completion_tokens`         bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Output tokens reported by the provider',
+    `cached_tokens`             bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of input tokens served from cache',
+    `charged_tokens`            bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens charged against the quota',
+    `usage_complete`            tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Indicates whether the provider usage data is complete',
+    `status`                    varchar(16) NOT NULL COMMENT 'Reservation and settlement status',
+    `failure_type`              varchar(240) NULL COMMENT 'Failure class or error code',
+    `reserved_at`               datetime(6) NOT NULL COMMENT 'Date and time when the tokens were reserved',
+    `settled_at`                datetime(6) NULL COMMENT 'Date and time when the usage was settled or released',
+    PRIMARY KEY (`ai_token_usage_ledger_id`),
+    UNIQUE KEY `ai_token_usage_ledger_call_uk` (`call_id`),
+    KEY `ai_token_usage_ledger_user_time_idx` (`app_user_id`, `reserved_at`),
+    KEY `ai_token_usage_ledger_request_idx` (`request_id`, `reserved_at`),
+    CONSTRAINT `ai_token_usage_ledger_user_fk`
+        FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE,
+    CONSTRAINT `ai_token_usage_ledger_model_fk`
+        FOREIGN KEY (`ai_model_id`) REFERENCES `ai_model` (`ai_model_id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Token reservation and usage ledger for each provider call attempt';
+
+CREATE TABLE `ai_catalog_audit`
+(
+    `ai_catalog_audit_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the AI catalog audit entry',
+    `entity_type`         varchar(32) NOT NULL COMMENT 'Catalog entity type such as PROVIDER or MODEL',
+    `entity_id`           bigint unsigned NOT NULL COMMENT 'Identifier of the changed catalog entity',
+    `actor_app_user_id`   bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who changed the catalog',
+    `action`              varchar(16) NOT NULL COMMENT 'Catalog change action such as CREATE, UPDATE, DISABLE, or ROTATE_KEY',
+    `before_json`         JSON NULL COMMENT 'Non-secret catalog snapshot before the change',
+    `after_json`          JSON NULL COMMENT 'Non-secret catalog snapshot after the change',
+    `reason`              varchar(500) NULL COMMENT 'Reason or administrator comment for the catalog change',
+    `created_at`          datetime(6) NOT NULL COMMENT 'Date and time when the catalog was changed',
+    PRIMARY KEY (`ai_catalog_audit_id`),
+    KEY `ai_catalog_audit_entity_time_idx` (`entity_type`, `entity_id`, `created_at`),
+    CONSTRAINT `ai_catalog_audit_actor_fk`
+        FOREIGN KEY (`actor_app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Audit history of AI provider and model catalog changes';
+
+CREATE TABLE `ai_user_policy_audit`
+(
+    `ai_user_policy_audit_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the AI user policy audit entry',
+    `target_app_user_id`      bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user whose policy was changed',
+    `actor_app_user_id`       bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who changed the policy',
+    `action`                  varchar(16) NOT NULL COMMENT 'Policy change action: CREATE, UPDATE, or DELETE',
+    `before_json`             JSON NULL COMMENT 'Canonical policy snapshot before the change',
+    `after_json`              JSON NULL COMMENT 'Canonical policy snapshot after the change',
+    `reason`                  varchar(500) NULL COMMENT 'Reason or administrator comment for the policy change',
+    `created_at`              datetime(6) NOT NULL COMMENT 'Date and time when the policy was changed',
+    PRIMARY KEY (`ai_user_policy_audit_id`),
+    KEY `ai_user_policy_audit_target_time_idx` (`target_app_user_id`, `created_at`),
+    CONSTRAINT `ai_user_policy_audit_actor_fk`
+        FOREIGN KEY (`actor_app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Audit history of AI user policy changes';
+
+CREATE TABLE `ai_token_quota_adjustment`
+(
+    `ai_token_quota_adjustment_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the token quota adjustment',
+    `target_app_user_id`           bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user whose quota was adjusted',
+    `actor_app_user_id`            bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who adjusted the quota',
+    `period_start`                 datetime(6) NOT NULL COMMENT 'Start of the adjusted quota period in UTC',
+    `delta_tokens`                 bigint NOT NULL COMMENT 'Positive or negative token amount applied to consumed usage',
+    `reason`                       varchar(500) NOT NULL COMMENT 'Reason for the quota adjustment',
+    `created_at`                   datetime(6) NOT NULL COMMENT 'Date and time when the quota was adjusted',
+    PRIMARY KEY (`ai_token_quota_adjustment_id`),
+    KEY `ai_token_quota_adjustment_target_time_idx`
+        (`target_app_user_id`, `created_at`),
+    CONSTRAINT `ai_token_quota_adjustment_actor_fk`
+        FOREIGN KEY (`actor_app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='History of manual user quota adjustments by administrators';
+
+-- --------------------------------
+-- User activity tracking tables --
+-- --------------------------------
+
+CREATE TABLE `activity_event`
+(
+    `activity_event_id`   bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'The primary key of the append-only activity event record.',
+    `event_guid`          char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'The public UUID and idempotency key of the activity event.',
+    `actor_app_user_id`   bigint(20) unsigned NULL COMMENT 'The application user identifier of the actor at event time; no foreign key is used so historical events survive user deletion.',
+    `actor_login_id`      varchar(100) NULL COMMENT 'The login identifier snapshot of the actor at event time.',
+    `event_scope`         varchar(16) NOT NULL COMMENT 'The application-validated activity scope such as JOURNEY, AUDIT, ACCESS, AI, or TECHNICAL.',
+    `event_name`          varchar(100) NOT NULL COMMENT 'The stable dot-notation event name defined by the activity event catalog.',
+    `source`              varchar(32) NOT NULL COMMENT 'The application-validated producer of the event, such as UI, SCORE_HTTP_API, CONNECT_CENTER_MCP, or AI_ASSISTANT.',
+    `outcome`             varchar(16) NOT NULL COMMENT 'The application-validated event outcome such as OBSERVED, STARTED, SUCCEEDED, FAILED, or CANCELED.',
+    `occurred_at`         datetime(6) NOT NULL COMMENT 'The UTC timestamp when the represented activity occurred.',
+    `recorded_at`         datetime(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'The UTC timestamp when the server persisted the activity event.',
+    `client_sequence`     bigint unsigned NULL COMMENT 'The monotonically increasing sequence assigned within a browser client session.',
+    `client_session_guid` char(36) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT 'The browser tab session UUID used to reconstruct recent user journey order.',
+    `correlation_id`      varchar(128) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT 'The identifier correlating UI intent, service calls, and resulting audit events.',
+    `request_id`          varchar(128) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT 'The application or AI request identifier associated with the event.',
+    `trace_id`            varchar(64) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT 'The optional distributed trace identifier retained only for correlation.',
+    `conversation_guid`   char(36) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT 'The AI conversation UUID associated with the event when applicable.',
+    `route_key`           varchar(100) NULL COMMENT 'The stable application route key associated with the user activity.',
+    `canonical_path`      varchar(1000) NULL COMMENT 'The validated root-relative application path used for safe navigation.',
+    `summary`             varchar(500) NULL COMMENT 'The bounded human-readable summary of the activity event.',
+    `properties_json`     json NULL COMMENT 'The bounded allow-listed JSON properties specific to the event name.',
+    `legacy_log_id`       bigint(20) unsigned NULL COMMENT 'The optional legacy LOG identifier linked during live recording or backfill; no foreign key is used.',
+    `schema_version`      smallint unsigned NOT NULL DEFAULT 1 COMMENT 'The schema version of the event payload and properties contract.',
+    PRIMARY KEY (`activity_event_id`),
+    UNIQUE KEY `activity_event_guid_uk` (`event_guid`),
+    UNIQUE KEY `activity_event_legacy_log_uk` (`legacy_log_id`),
+    KEY `activity_event_actor_time_idx`
+        (`actor_app_user_id`, `occurred_at`, `activity_event_id`),
+    KEY `activity_event_actor_scope_time_idx`
+        (`actor_app_user_id`, `event_scope`, `occurred_at`, `activity_event_id`),
+    KEY `activity_event_session_time_idx`
+        (`client_session_guid`, `occurred_at`, `activity_event_id`),
+    KEY `activity_event_session_sequence_idx`
+        (`client_session_guid`, `client_sequence`, `activity_event_id`),
+    KEY `activity_event_request_idx` (`request_id`, `activity_event_id`),
+    KEY `activity_event_correlation_idx` (`correlation_id`, `activity_event_id`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_general_ci
+  ROW_FORMAT=DYNAMIC
+  COMMENT='Append-only ledger of normalized user, service, and AI activity events.';
+
+CREATE TABLE `activity_event_target`
+(
+    `activity_event_id` bigint(20) unsigned NOT NULL COMMENT 'The activity event that owns this target record.',
+    `target_ordinal`    smallint unsigned NOT NULL COMMENT 'The zero-based target order within the owning activity event.',
+    `target_type`       varchar(50) NOT NULL COMMENT 'The application-validated resource type, such as ACC, BIE, or CODE_LIST.',
+    `target_id`         bigint(20) unsigned NULL COMMENT 'The optional internal numeric identifier of the affected resource.',
+    `target_guid`       varchar(100) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT 'The optional stable public identifier of the affected resource.',
+    `target_name`       varchar(240) NULL COMMENT 'The display-name snapshot of the resource at event time.',
+    `target_role`       varchar(16) NOT NULL DEFAULT 'PRIMARY' COMMENT 'The application-validated relationship of the resource to the event: PRIMARY, AFFECTED, or CONTEXT.',
+    `occurred_at`       datetime(6) NOT NULL COMMENT 'The denormalized UTC event timestamp used by resource-history indexes.',
+    PRIMARY KEY (`activity_event_id`, `target_ordinal`),
+    KEY `activity_target_guid_time_idx`
+        (`target_type`, `target_guid`, `occurred_at`, `activity_event_id`),
+    KEY `activity_target_id_time_idx`
+        (`target_type`, `target_id`, `occurred_at`, `activity_event_id`),
+    CONSTRAINT `activity_target_event_fk`
+        FOREIGN KEY (`activity_event_id`) REFERENCES `activity_event` (`activity_event_id`)
+            ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_general_ci
+  ROW_FORMAT=DYNAMIC
+  COMMENT='Append-only resource targets associated with normalized activity events.';
