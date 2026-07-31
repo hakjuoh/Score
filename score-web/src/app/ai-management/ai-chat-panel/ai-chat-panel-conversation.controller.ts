@@ -106,7 +106,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
             || this.state.conversationId !== conversationId) {
             return;
           }
-          this.state.messages = this.conversationRestoreService.projectStoredMessages(
+          this.state.messages = this.conversationProjector.projectStoredMessages(
             [...(details.messages || [])].sort((left, right) => left.index - right.index));
           this.state.agentActivities = [];
           this.state.conversationId = details.conversationId;
@@ -211,7 +211,7 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
 
   protected applyRecoveredConversation(details: AiChatConversationDetails,
                                      status: AiPublicExecutionRequestStatus): void {
-    const messages = this.conversationRestoreService.projectStoredMessages(
+    const messages = this.conversationProjector.projectStoredMessages(
       [...(details.messages || [])].sort((left, right) => left.index - right.index));
     this.clearStatusMessage();
     this.state.messages = messages;
