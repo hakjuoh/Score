@@ -17,16 +17,26 @@ import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryData;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatHistoryMessage;
+import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.math.BigInteger;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -36,6 +46,51 @@ import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.A
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_STEP;
 
 class JooqAiChatConversationRepositoryTest {
+
+    @Test
+    void keepsEveryTransactionAtThePublicFacadeAfterRepositorySeparation() throws Exception {
+        Set<String> readOnly = Set.of("modelName", "settings", "activeWorkflow",
+                "latestUsage", "list", "get", "getTrajectoryData");
+        for (Method contract : AiChatConversationRepository.class.getDeclaredMethods()) {
+            Method facade = JooqAiChatConversationRepository.class.getMethod(
+                    contract.getName(), contract.getParameterTypes());
+            Transactional transaction = facade.getAnnotation(Transactional.class);
+            assertThat(transaction).as(contract.getName()).isNotNull();
+            assertThat(transaction.readOnly()).as(contract.getName())
+                    .isEqualTo(readOnly.contains(contract.getName()));
+        }
+        assertThat(Modifier.isPublic(JooqAiChatConversationCommands.class.getModifiers())).isFalse();
+        assertThat(Modifier.isPublic(JooqAiChatConversationQueries.class.getModifiers())).isFalse();
+        assertThat(Modifier.isPublic(JooqAiChatConversationAccess.class.getModifiers())).isFalse();
+    }
+
+    @Test
+    void ownershipAccessAlwaysScopesGuidByRequesterAndFailsClosed() {
+        OwnershipProvider owned = new OwnershipProvider(true);
+        JooqAiChatConversationAccess access = new JooqAiChatConversationAccess(
+                DSL.using(new MockConnection(owned), SQLDialect.MYSQL), ULong.valueOf(9));
+
+        assertThat(access.ownedId("conversation-1")).isEqualTo(ULong.valueOf(42));
+        assertThat(access.lockOwned("conversation-1")).isEqualTo(ULong.valueOf(42));
+        assertThat(owned.sql).hasSize(2).allSatisfy(sql ->
+                assertThat(sql).contains("where (`oagi`.`ai_chat_conversation`.`guid` = ?"
+                        + " and `oagi`.`ai_chat_conversation`.`app_user_id` = ?)"));
+        assertThat(owned.bindings).allSatisfy(bindings ->
+                assertThat(bindings).extracting(Object::toString)
+                        .contains("conversation-1", "9"));
+        assertThat(owned.sql.get(0)).doesNotContain("for update");
+        assertThat(owned.sql.get(1)).contains("for update");
+
+        OwnershipProvider missing = new OwnershipProvider(false);
+        JooqAiChatConversationAccess denied = new JooqAiChatConversationAccess(
+                DSL.using(new MockConnection(missing), SQLDialect.MYSQL), ULong.valueOf(9));
+        assertThatThrownBy(() -> denied.ownedId("missing"))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> denied.lockOwned("missing"))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> denied.requireOwned("missing"))
+                .isInstanceOf(AccessDeniedException.class);
+    }
 
     @Test
     void restoresOnlyTheCanonicalFinalAnswerAcrossWorkflowIterations() {
@@ -95,6 +150,32 @@ class JooqAiChatConversationRepositoryTest {
     }
 
     @Test
+    void appendsUnderTheOwnershipLockAndAdvancesConversationTimestamp() {
+        MutationProvider provider = new MutationProvider();
+        ScoreUser requester = new ScoreUser(new UserId(BigInteger.ONE), "tester", "Test User",
+                null, false, List.of());
+        JooqAiChatConversationRepository repository = new JooqAiChatConversationRepository(
+                DSL.using(new MockConnection(provider), SQLDialect.MYSQL), requester, null,
+                AiChatJsonSerializer.getInstance());
+        Instant createdAt = Instant.parse("2026-07-20T17:43:30Z");
+        AiChatTrajectoryStep step = new AiChatTrajectoryStep(
+                "request-1", "agent", "assistant", "visible", "done", null,
+                "model", "high", null, null, null, Map.of("safe", true),
+                1, false, createdAt);
+
+        AiChatStoredStep stored = repository.append("conversation-1", step);
+
+        assertThat(stored).isEqualTo(new AiChatStoredStep(77L, 5L, createdAt));
+        assertThat(provider.sql).anyMatch(sql -> sql.contains("for update"));
+        assertThat(provider.sql).anyMatch(sql -> sql.contains("max(")
+                && sql.contains("step_sequence"));
+        assertThat(provider.sql).anyMatch(sql -> sql.contains("insert into")
+                && sql.contains("ai_chat_step"));
+        assertThat(provider.sql).anyMatch(sql -> sql.contains("update")
+                && sql.contains("ai_chat_conversation") && sql.contains("updated_at"));
+    }
+
+    @Test
     void createsAParallelConversationWithoutClassifyingItAsASubagent() {
         RecordingProvider provider = new RecordingProvider();
         ScoreUser requester = new ScoreUser(new UserId(BigInteger.ONE), "tester", "Test User",
@@ -114,6 +195,24 @@ class JooqAiChatConversationRepositoryTest {
     }
 
     @Test
+    void rejectsIncompleteChildIdentityBeforeIssuingSql() {
+        RecordingProvider provider = new RecordingProvider();
+        ScoreUser requester = new ScoreUser(new UserId(BigInteger.ONE), "tester", "Test User",
+                null, false, List.of());
+        JooqAiChatConversationRepository repository = new JooqAiChatConversationRepository(
+                DSL.using(new MockConnection(provider), SQLDialect.MYSQL), requester, null,
+                AiChatJsonSerializer.getInstance());
+
+        assertThatThrownBy(() -> repository.openChild("conversation-1", "request-1",
+                AiChatConversationKind.ROOT, "worker", "title"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> repository.openChild("conversation-1", "request-1",
+                AiChatConversationKind.SUBAGENT, "  ", "title"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(provider.sql).isEmpty();
+    }
+
+    @Test
     void locksTheConversationThenReadsTheLatestCompleteStepSettingsSnapshot() {
         RecordingProvider provider = new RecordingProvider();
         DSLContext dslContext = DSL.using(new MockConnection(provider), SQLDialect.MYSQL);
@@ -127,9 +226,44 @@ class JooqAiChatConversationRepositoryTest {
                 repository.settingsForUpdate("conversation-1");
 
         assertEquals(new AiChatConversationSettings("model", "high"), result);
-        assertTrue(provider.sql.stream().anyMatch(sql -> sql.contains("for update")));
-        assertTrue(provider.sql.stream().anyMatch(sql -> sql.contains("ai_chat_step")
-                && sql.contains("order by") && sql.contains("limit")), provider.sql.toString());
+        int lockIndex = indexOf(provider.sql, sql -> sql.contains("ai_chat_conversation")
+                && sql.contains("for update"));
+        int settingsIndex = indexOf(provider.sql, sql -> sql.contains("ai_chat_step"));
+        assertThat(lockIndex).isGreaterThanOrEqualTo(0).isLessThan(settingsIndex);
+        assertThat(provider.sql.get(settingsIndex))
+                .contains("message_kind` = ?",
+                        "order by `oagi`.`ai_chat_step`.`step_sequence` desc", "limit ?");
+        assertThat(provider.bindings.get(settingsIndex)).contains("settings_change", 1L);
+    }
+
+    @Test
+    void zeroRowTrajectoryUpdatesFailAndModelCompletionKeepsItsKindPredicate() {
+        ZeroUpdateProvider provider = new ZeroUpdateProvider();
+        ScoreUser requester = new ScoreUser(new UserId(BigInteger.ONE), "tester", "Test User",
+                null, false, List.of());
+        JooqAiChatConversationRepository repository = new JooqAiChatConversationRepository(
+                DSL.using(new MockConnection(provider), SQLDialect.MYSQL), requester, null,
+                AiChatJsonSerializer.getInstance());
+        AiChatTrajectoryStep modelCall = new AiChatTrajectoryStep(
+                "request-1", "agent", "model_call", "debug", "", null,
+                "model", "high", List.of(), Map.of(), Map.of(), Map.of(), 1, null,
+                Instant.parse("2026-07-20T17:43:30Z"));
+
+        assertThatThrownBy(() -> repository.updateObservation(
+                "conversation-1", 77L, Map.of("status", "done")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("trajectory step");
+        assertThatThrownBy(() -> repository.updateModelCall(
+                "conversation-1", 77L, modelCall))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("model-call trajectory step");
+        assertThat(provider.sql.stream()
+                .filter(sql -> sql.startsWith("update") && sql.contains("model_name"))
+                .toList()).singleElement().satisfies(sql ->
+                assertThat(sql).contains("message_kind` = ?", "ai_chat_conversation_id` = ?"));
+        assertThat(provider.bindings).anySatisfy(bindings ->
+                assertThat(bindings).extracting(value -> Objects.toString(value, "null"))
+                        .contains("model_call", "42", "77"));
     }
 
     @Test
@@ -172,16 +306,32 @@ class JooqAiChatConversationRepositoryTest {
         assertThat(data.truncated()).isFalse();
         assertThat(data.steps()).extracting(AiChatTrajectoryData.Step::messageKind)
                 .containsExactly("model_call", "assistant");
+        assertThat(data.steps()).extracting(AiChatTrajectoryData.Step::sequence)
+                .containsExactly(1L, 2L);
         assertThat(data.childTrajectories()).singleElement().satisfies(child -> {
             assertThat(child.trajectoryId()).isEqualTo("child-1");
             assertThat(child.conversationKind()).isEqualTo("SUBAGENT");
             assertThat(child.agentId()).isEqualTo("researcher");
             assertThat(child.parentRequestId()).isEqualTo("request-1");
-            assertThat(child.steps()).hasSize(4);
+            assertThat(child.steps()).extracting(AiChatTrajectoryData.Step::sequence)
+                    .containsExactly(1L, 2L, 3L, 4L);
         });
         assertThat(provider.sql.stream()
                 .filter(sql -> sql.contains("from `oagi`.`ai_chat_step`")))
                 .noneMatch(sql -> sql.contains(" limit "));
+        assertThat(provider.sql.stream()
+                .filter(sql -> sql.contains("from `oagi`.`ai_chat_step`"))
+                .toList()).singleElement().satisfies(sql ->
+                assertThat(sql).contains("order by `oagi`.`ai_chat_step`.`created_at` desc",
+                        "`oagi`.`ai_chat_step`.`ai_chat_step_id` desc"));
+    }
+
+    private static int indexOf(List<String> values,
+                               java.util.function.Predicate<String> predicate) {
+        for (int index = 0; index < values.size(); index++) {
+            if (predicate.test(values.get(index))) return index;
+        }
+        return -1;
     }
 
     private static final class RecordingProvider implements MockDataProvider {
@@ -192,7 +342,7 @@ class JooqAiChatConversationRepositoryTest {
         public MockResult[] execute(MockExecuteContext context) {
             String query = context.sql().toLowerCase(Locale.ROOT);
             sql.add(query);
-            bindings.add(List.of(context.bindings()));
+            bindings.add(java.util.Arrays.asList(context.bindings()));
             DSLContext create = DSL.using(SQLDialect.MYSQL);
             if (query.contains("from `oagi`.`ai_chat_conversation`")
                     && query.contains("for update")) {
@@ -227,6 +377,66 @@ class JooqAiChatConversationRepositoryTest {
                 Record2<String, String> record = create.newRecord(
                         AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.REASONING_EFFORT);
                 record.values("model", "high");
+                result.add(record);
+                return new MockResult[]{new MockResult(1, result)};
+            }
+            return new MockResult[]{new MockResult(0, create.newResult())};
+        }
+    }
+
+    private static final class OwnershipProvider implements MockDataProvider {
+
+        private final boolean found;
+        private final java.util.ArrayList<String> sql = new java.util.ArrayList<>();
+        private final java.util.ArrayList<List<Object>> bindings = new java.util.ArrayList<>();
+
+        private OwnershipProvider(boolean found) {
+            this.found = found;
+        }
+
+        @Override
+        public MockResult[] execute(MockExecuteContext context) {
+            String query = context.sql().toLowerCase(Locale.ROOT);
+            sql.add(query);
+            bindings.add(List.of(context.bindings()));
+            DSLContext create = DSL.using(SQLDialect.MYSQL);
+            if (query.contains("select exists")) {
+                Field<Boolean> exists = DSL.field("exists", Boolean.class);
+                Result<Record1<Boolean>> result = create.newResult(exists);
+                Record1<Boolean> record = create.newRecord(exists);
+                record.value1(found);
+                result.add(record);
+                return new MockResult[]{new MockResult(1, result)};
+            }
+            if (!found) return new MockResult[]{new MockResult(0, create.newResult())};
+            Result<Record1<ULong>> result = create.newResult(
+                    AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+            Record1<ULong> record = create.newRecord(
+                    AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+            record.value1(ULong.valueOf(42));
+            result.add(record);
+            return new MockResult[]{new MockResult(1, result)};
+        }
+    }
+
+    private static final class ZeroUpdateProvider implements MockDataProvider {
+
+        private final java.util.ArrayList<String> sql = new java.util.ArrayList<>();
+        private final java.util.ArrayList<List<Object>> bindings = new java.util.ArrayList<>();
+
+        @Override
+        public MockResult[] execute(MockExecuteContext context) {
+            String query = context.sql().toLowerCase(Locale.ROOT);
+            sql.add(query);
+            bindings.add(java.util.Arrays.asList(context.bindings()));
+            DSLContext create = DSL.using(SQLDialect.MYSQL);
+            if (query.contains("from `oagi`.`ai_chat_conversation`")
+                    && query.contains("for update")) {
+                Result<Record1<ULong>> result = create.newResult(
+                        AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+                Record1<ULong> record = create.newRecord(
+                        AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+                record.value1(ULong.valueOf(42));
                 result.add(record);
                 return new MockResult[]{new MockResult(1, result)};
             }
@@ -339,6 +549,44 @@ class JooqAiChatConversationRepositoryTest {
             record.set(AI_CHAT_STEP.IS_COPIED_CONTEXT, copied);
             record.set(AI_CHAT_STEP.CREATED_AT, createdAt);
             result.add(record);
+        }
+    }
+
+    private static final class MutationProvider implements MockDataProvider {
+
+        private final java.util.ArrayList<String> sql = new java.util.ArrayList<>();
+
+        @Override
+        public MockResult[] execute(MockExecuteContext context) {
+            String query = context.sql().toLowerCase(Locale.ROOT);
+            sql.add(query);
+            DSLContext create = DSL.using(SQLDialect.MYSQL);
+            if (query.contains("from `oagi`.`ai_chat_conversation`")
+                    && query.contains("for update")) {
+                Result<Record1<ULong>> result = create.newResult(
+                        AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+                Record1<ULong> record = create.newRecord(
+                        AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+                record.value1(ULong.valueOf(42));
+                result.add(record);
+                return new MockResult[]{new MockResult(1, result)};
+            }
+            if (query.contains("max(") && query.contains("step_sequence")) {
+                Field<Long> nextSequence = DSL.field("next_sequence", Long.class);
+                Result<Record1<Long>> result = create.newResult(nextSequence);
+                Record1<Long> record = create.newRecord(nextSequence);
+                record.value1(5L);
+                result.add(record);
+                return new MockResult[]{new MockResult(1, result)};
+            }
+            if (query.contains("insert into") && query.contains("ai_chat_step")) {
+                Result<Record1<ULong>> result = create.newResult(AI_CHAT_STEP.AI_CHAT_STEP_ID);
+                Record1<ULong> record = create.newRecord(AI_CHAT_STEP.AI_CHAT_STEP_ID);
+                record.value1(ULong.valueOf(77));
+                result.add(record);
+                return new MockResult[]{new MockResult(1, result)};
+            }
+            return new MockResult[]{new MockResult(1, create.newResult())};
         }
     }
 
