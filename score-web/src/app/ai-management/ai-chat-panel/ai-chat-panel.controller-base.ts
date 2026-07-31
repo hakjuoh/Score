@@ -20,6 +20,12 @@ import {
 import {AiChatCommandService, AiLocalCommand} from './domain/ai-chat-command.service';
 import {AiChatContextService} from './domain/ai-chat-context.service';
 import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
+import {
+  AiChangeRepeatCoordinator,
+  BoundChangeConfirmationNotice,
+  ChangeRepeatDraft
+} from './domain/ai-change-repeat-coordinator';
+import {AiRequestDispatchCoordinator} from './domain/ai-request-dispatch-coordinator';
 import {AiChangeApprovalBatchCoordinator} from './domain/ai-change-approval-batch-coordinator';
 import {AiElicitationCoordinator} from './domain/ai-elicitation-coordinator';
 import {
@@ -43,10 +49,7 @@ import {
   isTerminalAgentStatus,
   settleAgentConversation
 } from './domain/ai-agent-activity';
-import {
-  AiChangeInteractionService,
-  ChangeRepeatDraft
-} from './domain/ai-change-interaction.service';
+import {AiChangeInteractionService} from './domain/ai-change-interaction.service';
 import {
   AiActiveRequestIdentity,
   AiAgentExecutionStatus,
@@ -59,18 +62,12 @@ import {
   AiChatPanelTab,
   AiChatSocketEvent,
   AiExecutionStatus,
-  AiChangeConfirmationNotice,
   AiChangeInteraction,
   ResizeState,
   checkingAiMcpStatus,
   failedAiMcpStatusCheck,
   readyAiMcpStatus
 } from './domain/ai-chat-panel.model';
-
-export interface BoundChangeConfirmationNotice {
-  conversationId: string;
-  notice: AiChangeConfirmationNotice;
-}
 
 @Directive()
 export abstract class AiChatPanelControllerBase {
@@ -82,6 +79,8 @@ export abstract class AiChatPanelControllerBase {
   protected cancellationService = inject(AiChatCancellationService);
   protected commandService = inject(AiChatCommandService);
   protected confirmedChangeRequests = inject(AiConfirmedChangeRequestCoordinator);
+  protected changeRepeats = inject(AiChangeRepeatCoordinator);
+  protected requestDispatch = inject(AiRequestDispatchCoordinator);
   protected changeApprovalBatches = inject(AiChangeApprovalBatchCoordinator);
   protected elicitationCoordinator = inject(AiElicitationCoordinator);
   protected requestTerminals = inject(AiRequestTerminalCoordinator);
@@ -123,13 +122,18 @@ export abstract class AiChatPanelControllerBase {
   protected activeRestoreRequestId?: string;
   protected restoreAttemptSequence = 0;
   protected assistantMessageIndexesByRequestId = new Map<string, number>();
-  protected changeRepeatDraft?: ChangeRepeatDraft;
-  protected pendingChangeConfirmation?: BoundChangeConfirmationNotice;
-  protected rejectedChangeConfirmationRequestId?: string;
   protected destroyed = false;
   protected readonly destroyed$ = new Subject<void>();
   private mcpStatusCheck?: Observable<AiMcpStatus>;
   protected restoreChatScrollPending = false;
+
+  protected get changeRepeatDraft(): ChangeRepeatDraft | undefined {
+    return this.changeRepeats.draft;
+  }
+
+  protected get pendingChangeConfirmation(): BoundChangeConfirmationNotice | undefined {
+    return this.changeRepeats.pendingConfirmation;
+  }
 
   abstract composer?: AiChatComposerComponent;
   abstract chatTerminalPane?: ElementRef<HTMLDivElement>;

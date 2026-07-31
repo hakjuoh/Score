@@ -1,13 +1,9 @@
 import {Message} from '@stomp/stompjs';
 import {AiChatPanelUiController} from './ai-chat-panel-ui.controller';
 import {
-  isUnexpiredChangeConfirmation,
-  changeConfirmationNotice
-} from './domain/ai-change-confirmation';
-import {
-  AiChangeInteractionCallbacks,
-  ChangeRepeatOpportunity
+  AiChangeInteractionCallbacks
 } from './domain/ai-change-interaction.service';
+import {ChangeRepeatOpportunity} from './domain/ai-change-repeat-coordinator';
 import {
   AiChatAttachment,
   AiChatSocketEvent,
@@ -309,60 +305,26 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     prompt: string,
     attachments: AiChatAttachment[]
   ): void {
-    this.clearChangeRepeatDraft();
-    this.changeRepeatDraft = {
-      requestId,
-      prompt,
-      attachments: attachments.map(attachment => ({...attachment}))
-    };
+    this.changeRepeats.begin(requestId, prompt, attachments);
   }
 
   protected handleChangeConfirmationNotice(event: AiChatSocketEvent): void {
-    const requestId = this.activeRequestId;
-    if (!requestId
-      || this.rejectedChangeConfirmationRequestId === requestId) {
-      return;
-    }
-    if (this.pendingChangeConfirmation) {
-      // First notice wins. Each confirmation is bound server-side to one
-      // exact tool-and-arguments digest, so a later notice on the same
-      // request (the model attempting a second change in one step) cannot
-      // change what this approval grants. Nothing is lost by ignoring it:
-      // after the approved repeat executes, the guard freshly re-blocks any
-      // remaining change and emits a new notice on that later turn.
-      return;
-    }
-    const draft = this.changeRepeatDraft;
-    const eventConversationId = typeof event.conversationId === 'string'
-      && event.conversationId.trim() === event.conversationId
-      && event.conversationId.length > 0
-      ? event.conversationId : undefined;
-    // The broker does not guarantee that the accepted frame reaches the
-    // browser before later lifecycle frames. For a brand-new conversation,
-    // bind a strictly parsed notice to its own safe conversation field, then
-    // cross-check that binding when the accepted identity arrives.
-    const expectedConversationId = this.state.activeRequest?.conversationId
-      || this.state.conversationId || eventConversationId;
-    const notice = changeConfirmationNotice(
-      event, requestId, expectedConversationId
+    const result = this.changeRepeats.acceptNotice(
+      event,
+      this.activeRequestId,
+      this.state.activeRequest?.conversationId,
+      this.state.conversationId
     );
-    if (!draft || draft.requestId !== requestId
-      || !notice) {
-      this.rejectedChangeConfirmationRequestId = requestId;
-      return;
+    if (result === 'accepted') {
+      this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
     }
-    this.acknowledgeRecoveredRequestLiveEvent(event.requestId);
-    this.pendingChangeConfirmation = {
-      conversationId: expectedConversationId!,
-      notice
-    };
   }
 
   protected completeConflictingChangeConfirmationFinal(
     requestId: string,
     confirmationConversationId: string
   ): void {
-    this.pendingChangeConfirmation = undefined;
+    this.changeRepeats.discardConfirmation();
     this.state.conversationId = this.state.activeRequest?.conversationId
       || this.state.conversationId || confirmationConversationId;
     this.state.messages.push({
@@ -378,26 +340,12 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
     requestId: string,
     terminalConversationId: string | undefined
   ): void {
-    const draft = this.changeRepeatDraft;
-    const boundNotice = this.pendingChangeConfirmation;
-    const rejected = this.rejectedChangeConfirmationRequestId === requestId;
-    this.clearChangeRepeatDraft(requestId);
-    if (rejected || !draft || draft.requestId !== requestId
-      || !boundNotice
-      || terminalConversationId !== boundNotice.conversationId
-      || !isUnexpiredChangeConfirmation(boundNotice.notice)) {
-      return;
+    const completion = this.changeRepeats.finish(requestId, terminalConversationId);
+    if (completion.kind === 'lost-grant') {
+      this.showLostGrantInteraction(completion.opportunity);
+    } else if (completion.kind === 'confirmation') {
+      this.showChangeRepeatInteraction(completion.opportunity);
     }
-    const opportunity = {
-      conversationId: boundNotice.conversationId,
-      draft,
-      notice: boundNotice.notice
-    };
-    if (boundNotice.notice.status === 'APPROVED') {
-      this.showLostGrantInteraction(opportunity);
-      return;
-    }
-    this.showChangeRepeatInteraction(opportunity);
   }
 
   protected showChangeRepeatInteraction(opportunity: ChangeRepeatOpportunity): void {
@@ -472,26 +420,8 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       .map(attachment => ({...attachment}));
     this.requestSubscription?.unsubscribe();
     this.transportService.cancelReconnect();
-    this.activeRequestId = requestId;
-    this.activeRequestPublished = false;
-    this.clearToolCallTracking();
-    this.state.resetAgentActivity();
-    this.state.activePanelTab = 'chat';
-    this.state.pending = true;
-    this.state.currentStatus = 'Sending approved change';
-    this.beginChangeRepeatDraft(requestId, prompt, attachments);
-    if (revision) {
-      // Match the normal send path: once the revised approval is accepted and
-      // promoted to a request, the composer no longer owns that draft.
-      this.state.prompt = '';
-      this.state.attachments = [];
-      this.resizePromptInput();
-    }
-    this.state.messages.push({
-      role: 'user',
-      content: this.attachmentService.userMessageContent(
-        prompt, attachments
-      )
+    this.prepareRequestDispatch(requestId, prompt, attachments, {
+      kind: revision ? 'revised-repeat' : 'approved-repeat'
     });
     this.scrollToBottom(true);
     const changeConfirmation: AiChangeConfirmationAuthorization = revision ? {
@@ -520,13 +450,7 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
   }
 
   protected clearChangeRepeatDraft(requestId?: string): void {
-    if (requestId && this.changeRepeatDraft
-      && this.changeRepeatDraft.requestId !== requestId) {
-      return;
-    }
-    this.changeRepeatDraft = undefined;
-    this.pendingChangeConfirmation = undefined;
-    this.rejectedChangeConfirmationRequestId = undefined;
+    this.changeRepeats.clear(requestId);
   }
 
 }
