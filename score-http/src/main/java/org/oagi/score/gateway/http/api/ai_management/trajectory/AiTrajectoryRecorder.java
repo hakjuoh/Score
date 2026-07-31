@@ -1,6 +1,5 @@
 package org.oagi.score.gateway.http.api.ai_management.trajectory;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiContextUsageInfo;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
@@ -9,7 +8,6 @@ import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecy
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
-import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
 import org.oagi.score.gateway.http.api.ai_management.model.AiBoundedToolOutput;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
@@ -72,7 +70,6 @@ public final class AiTrajectoryRecorder {
     public static final String PHASE_CONTEXT_KEY = "score.ai.trajectory.phase";
     /** Stable trajectory wire value recognized by external verifiers. */
     public static final String FANOUT_USAGE_STEP_KIND = "fanout_usage";
-    private static final int MAX_AUDIT_TEXT_CHARS = 32_768;
 
     private final AiChatConversationRepository repository;
     private final ObjectMapper objectMapper;
@@ -86,6 +83,8 @@ public final class AiTrajectoryRecorder {
     private final ExecutionScope executionScope;
     private final ExecutionObserver observer;
     private final ExecutionObservationContext observationContext;
+    private final AiTrajectoryEventWriter eventWriter;
+    private final AiTrajectoryAuditSanitizer auditSanitizer;
     private volatile ProviderPromptTokenNormalizer promptTokenNormalizer;
     private final AtomicLong estimatedInputFloor;
     private final AtomicLong eventSequence;
@@ -218,6 +217,10 @@ public final class AiTrajectoryRecorder {
         this.traceContext = traceContext != null ? Map.copyOf(traceContext) : Map.of();
         this.subagentScope = subagentScope;
         this.conversationKind = conversationKind;
+        this.eventWriter = new AiTrajectoryEventWriter(repository, conversationId,
+                requestId, this.realtimeEvents, executionScope, this.observer,
+                this.traceContext, this::activeAgentRunId, () -> sealed);
+        this.auditSanitizer = new AiTrajectoryAuditSanitizer(objectMapper);
     }
 
     /**
@@ -1227,68 +1230,15 @@ public final class AiTrajectoryRecorder {
     }
 
     private String auditText(String value) {
-        String source = Objects.requireNonNullElse(value, "");
-        int omitted = Math.max(0, source.length() - MAX_AUDIT_TEXT_CHARS);
-        String candidate = omitted > 0 ? source.substring(0, MAX_AUDIT_TEXT_CHARS) : source;
-        String sanitized = sanitizeText(candidate);
-        try {
-            Object parsed = objectMapper.readValue(candidate, Object.class);
-            if (parsed instanceof Map<?, ?> || parsed instanceof List<?>) {
-                sanitized = objectMapper.writeValueAsString(redact(parsed));
-            }
-        } catch (JsonProcessingException ignored) {
-            // Non-JSON tool output is redacted with the conservative text pattern.
-        }
-        if (sanitized.length() > MAX_AUDIT_TEXT_CHARS) {
-            omitted += sanitized.length() - MAX_AUDIT_TEXT_CHARS;
-            sanitized = sanitized.substring(0, MAX_AUDIT_TEXT_CHARS);
-        }
-        return omitted > 0 ? sanitized + "\n[TRUNCATED " + omitted + " CHARACTERS]" : sanitized;
-    }
-
-    private Object redact(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            map.forEach((key, item) -> {
-                String name = Objects.toString(key);
-                result.put(name, AiSensitiveDataRedactor.isSensitiveKey(name)
-                        ? "[REDACTED]" : redact(item));
-            });
-            return result;
-        }
-        if (value instanceof List<?> list) {
-            return list.stream().map(this::redact).toList();
-        }
-        return value instanceof String text ? auditText(text) : value;
+        return auditSanitizer.auditText(value);
     }
 
     private Object boundedRedactedValue(Object value) {
-        Object redacted = redact(value);
-        String serialized = toJson(redacted);
-        if (serialized.length() <= MAX_AUDIT_TEXT_CHARS) {
-            return redacted;
-        }
-        return Map.of("truncated", true, "summary", boundedText(serialized));
-    }
-
-    private String sanitizeText(String value) {
-        return AiSensitiveDataRedactor.redactText(value);
-    }
-
-    private String boundedText(String value) {
-        if (value.length() <= MAX_AUDIT_TEXT_CHARS) {
-            return value;
-        }
-        return value.substring(0, MAX_AUDIT_TEXT_CHARS)
-                + "\n[TRUNCATED " + (value.length() - MAX_AUDIT_TEXT_CHARS) + " CHARACTERS]";
+        return auditSanitizer.boundedValue(value);
     }
 
     private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
-            return Objects.toString(value);
-        }
+        return auditSanitizer.json(value);
     }
 
     private final class RecordingToolCallback implements ToolCallback {
@@ -1444,17 +1394,7 @@ public final class AiTrajectoryRecorder {
     }
 
     private Map<String, Object> traceMetadata(Map<String, Object> metadata) {
-        if (traceContext.isEmpty() && (metadata == null || metadata.isEmpty())) {
-            return Map.of();
-        }
-        Map<String, Object> merged = new LinkedHashMap<>();
-        if (metadata != null) merged.putAll(metadata);
-        // The server-owned namespace wins over provider/tool metadata.
-        merged.putAll(traceContext);
-        if (StringUtils.hasText(activeAgentRunId())) {
-            merged.put("agent_run_id", activeAgentRunId());
-        }
-        return Map.copyOf(merged);
+        return eventWriter.traceMetadata(metadata);
     }
 
     private AiChatStoredStep persistAndEmit(AiChatTrajectoryStep step, AiExecutionEvent event) {
@@ -1468,25 +1408,9 @@ public final class AiTrajectoryRecorder {
 
     private AiChatStoredStep persist(AiChatTrajectoryStep step, AiExecutionEvent event,
                                      boolean deliverRealtime) {
-        Objects.requireNonNull(step, "step");
-        Objects.requireNonNull(event, "event");
-        if (executionScope == null) {
-            AiChatStoredStep stored = repository.append(conversationId,
-                    canonicalStep(step, Instant.now(), Map.of()));
-            if (deliverRealtime) emit(event);
-            lastEventIdentity = null;
-            return stored;
-        }
-        java.util.concurrent.atomic.AtomicReference<AiChatStoredStep> stored =
-                new java.util.concurrent.atomic.AtomicReference<>();
-        ExecutionObservation observation = AiExecutionLifecycle.from(event)
-                .observation(executionScope, Instant.now());
-        observer.publish(observation, published -> {
-            lastEventIdentity = ExecutionEventIdentity.from(published);
-            stored.set(repository.append(conversationId,
-                    canonicalStep(step, published.occurredAt(), published.attributes())));
-        }, deliverRealtime ? published -> deliverRealtime(event, published) : ignored -> { });
-        return stored.get();
+        AiChatStoredStep stored = eventWriter.persist(step, event, deliverRealtime);
+        lastEventIdentity = ExecutionEventIdentity.from(eventWriter.lastIdentity());
+        return stored;
     }
 
     /**
@@ -1501,6 +1425,12 @@ public final class AiTrajectoryRecorder {
                     .map(identity -> new ExecutionEventIdentity(identity.eventId(),
                             identity.sequence(), identity.occurredAt()))
                     .orElse(null);
+        }
+
+        private static ExecutionEventIdentity from(
+                org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventIdentity identity) {
+            return identity != null ? new ExecutionEventIdentity(
+                    identity.eventId(), identity.sequence(), identity.occurredAt()) : null;
         }
 
         public org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventIdentity canonical() {
@@ -1525,72 +1455,8 @@ public final class AiTrajectoryRecorder {
         }
     }
 
-    private AiChatTrajectoryStep canonicalStep(AiChatTrajectoryStep step, Instant occurredAt,
-                                                Map<String, Object> eventAttributes) {
-        Map<String, Object> extra = new LinkedHashMap<>(
-                step.extra() != null ? step.extra() : Map.of());
-        ExecutionEventIdentity.copyAttributes(eventAttributes, extra);
-        return new AiChatTrajectoryStep(step.requestId(), step.source(), step.messageKind(),
-                step.visibility(), step.message(), step.reasoningContent(), step.modelName(),
-                step.reasoningEffort(), step.toolCalls(), step.observation(), step.metrics(),
-                extra.isEmpty() ? Map.of() : Map.copyOf(extra), step.llmCallCount(),
-                step.isCopiedContext(), occurredAt);
-    }
-
     private synchronized void emit(AiExecutionEvent event) {
-        if (sealed) return;
-        if (executionScope != null) {
-            try {
-                observer.publish(AiExecutionLifecycle.from(event).observation(
-                        executionScope, Instant.now()), ignored -> { },
-                        published -> deliverRealtime(event, published));
-            } catch (RuntimeException failure) {
-                LOGGER.warn("Could not observe AI trajectory event {} for request {}",
-                        event.subtype(), requestId, failure);
-            }
-            return;
-        }
-        deliverRealtime(event, null);
-    }
-
-    private void deliverRealtime(AiExecutionEvent event, ExecutionObservation canonical) {
-        Map<String, Object> metadata = new LinkedHashMap<>(realtimeMetadata(event.metadata()));
-        if (canonical != null) {
-            ExecutionEventIdentity.copyAttributes(canonical, metadata);
-        }
-        AiExecutionEvent realtimeEvent = new AiExecutionEvent(
-                event.type(), event.subtype(), event.content(),
-                event.toolCallId(), event.toolName(), event.toolCallSequence(),
-                metadata.isEmpty() ? Map.of() : Map.copyOf(metadata));
-        try {
-            realtimeEvents.accept(realtimeEvent);
-        } catch (RuntimeException failure) {
-            LOGGER.warn("Could not deliver AI trajectory event {} for request {}",
-                    event.subtype(), requestId, failure);
-        }
-    }
-
-    /** Keeps persisted ATIF metadata stable while exposing frontend-friendly trace aliases. */
-    private Map<String, Object> realtimeMetadata(Map<String, Object> metadata) {
-        Map<String, Object> merged = new LinkedHashMap<>(traceMetadata(metadata));
-        alias(merged, "fanout_id", "fanoutId");
-        alias(merged, "node_id", "nodeId");
-        alias(merged, "node_id", "agentId");
-        alias(merged, "parent_node_id", "parentNodeId");
-        alias(merged, "agent_name", "agentName");
-        alias(merged, "agent_role", "agentRole");
-        alias(merged, "task_label", "taskLabel");
-        alias(merged, "active_verb", "activeVerb");
-        alias(merged, "completed_verb", "completedVerb");
-        alias(merged, "execution_scope", "executionScope");
-        alias(merged, "child_conversation_id", "childConversationId");
-        return merged.isEmpty() ? Map.of() : Map.copyOf(merged);
-    }
-
-    private void alias(Map<String, Object> metadata, String source, String target) {
-        if (metadata.containsKey(source) && !metadata.containsKey(target)) {
-            metadata.put(target, metadata.get(source));
-        }
+        eventWriter.emit(event);
     }
 
 }
