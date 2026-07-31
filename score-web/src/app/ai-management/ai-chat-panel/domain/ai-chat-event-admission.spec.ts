@@ -1,3 +1,7 @@
+/**
+ * Verifies live, replay, interaction, and specialist event-admission decisions.
+ */
+
 import {describe, expect, it} from 'vitest';
 import {
   admitsRestLiveSideChannel,

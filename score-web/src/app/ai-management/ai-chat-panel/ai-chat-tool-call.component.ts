@@ -1,3 +1,7 @@
+/**
+ * Renders one tool call's lifecycle status, details, and expandable result content.
+ */
+
 import {Component, Input} from '@angular/core';
 import {AiChatToolStatus} from './domain/ai-chat-panel.model';
 import {displayToolText} from './domain/ai-tool-presentation';

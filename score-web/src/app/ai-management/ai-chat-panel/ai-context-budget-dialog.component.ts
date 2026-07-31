@@ -1,3 +1,7 @@
+/**
+ * Builds and presents the detailed context-window token allocation breakdown.
+ */
+
 import {Component, inject} from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
 import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';

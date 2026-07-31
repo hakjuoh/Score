@@ -1,3 +1,7 @@
+/**
+ * Draws the token-budget chart and exposes accessible slice labels and hover details.
+ */
+
 import {CommonModule} from '@angular/common';
 import {Component, Input} from '@angular/core';
 import {

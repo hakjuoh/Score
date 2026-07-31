@@ -1,3 +1,7 @@
+/**
+ * Displays elapsed working time and animated status text for an active request.
+ */
+
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,

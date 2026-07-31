@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's conversation restore and attachment behavior.
+ */
+
 import {
   AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY,
   AiContextBudgetDialogComponent,

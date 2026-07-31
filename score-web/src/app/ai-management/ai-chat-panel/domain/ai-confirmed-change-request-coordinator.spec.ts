@@ -1,3 +1,7 @@
+/**
+ * Verifies AI Confirmed Change Request Coordinator coordination, state transitions, and edge cases.
+ */
+
 import {AiConfirmedChangeRequestCoordinator} from './ai-confirmed-change-request-coordinator';
 
 describe('AiConfirmedChangeRequestCoordinator', () => {

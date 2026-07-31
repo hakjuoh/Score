@@ -1,3 +1,7 @@
+/**
+ * Wraps STOMP subscriptions, publishing, connection recovery, and bounded reconnect attempts.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {Message} from '@stomp/stompjs';
 import {RxStompState} from '@stomp/rx-stomp';

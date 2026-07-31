@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Chat Composer component's rendering and interaction contract.
+ */
+
 import {FormsModule} from '@angular/forms';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {NoopAnimationsModule} from '@angular/platform-browser/animations';

@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's multi-agent lifecycle behavior.
+ */
+
 import {
   AiChatRestResponse,
   Subject,

@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Working Status component's rendering and interaction contract.
+ */
+
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {AiWorkingStatusComponent} from './ai-working-status.component';
 

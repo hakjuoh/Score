@@ -1,3 +1,7 @@
+/**
+ * Verifies AI Request Dispatch Coordinator coordination, state transitions, and edge cases.
+ */
+
 import {describe, expect, it, vi} from 'vitest';
 import {AiRequestDispatchCoordinator} from './ai-request-dispatch-coordinator';
 import {AiChatPanelState} from './ai-chat-panel-state';

@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's provider failure and retry behavior.
+ */
+
 import {
   AiCancellationResponse,
   AiChatRestResponse,

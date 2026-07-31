@@ -1,3 +1,7 @@
+/**
+ * Validates restore frames and coordinates ordered replay into the current conversation.
+ */
+
 import {Injectable} from '@angular/core';
 import {
   AiChatMessage,

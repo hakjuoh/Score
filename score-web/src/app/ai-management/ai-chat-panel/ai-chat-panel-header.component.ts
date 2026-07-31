@@ -1,3 +1,7 @@
+/**
+ * Renders panel docking, pop-out, reattach, and close controls.
+ */
+
 import {Component, EventEmitter, Input, Output} from '@angular/core';
 import {SafeHtml} from '@angular/platform-browser';
 import {AiChatDock} from './domain/ai-chat-panel.model';

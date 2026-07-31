@@ -1,3 +1,7 @@
+/**
+ * Provides shared fixtures and setup for the AI chat cancellation service specifications.
+ */
+
 import {TestBed} from '@angular/core/testing';
 import {Subject} from 'rxjs';
 import {AiChatApiService} from './ai-chat-api.service';

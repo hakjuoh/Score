@@ -1,3 +1,7 @@
+/**
+ * Registers and cancels cleanup callbacks for in-flight confirmed change requests.
+ */
+
 import {Injectable} from '@angular/core';
 
 /**

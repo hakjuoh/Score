@@ -1,3 +1,7 @@
+/**
+ * Composes the AI chat panel and connects its controller hierarchy to the Angular view.
+ */
+
 import {
   Component,
   DoCheck,

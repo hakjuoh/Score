@@ -1,3 +1,7 @@
+/**
+ * Aggregates resource routes available to authenticated AI assistant users.
+ */
+
 import {AiResourceRoute} from '../ai-chat-panel.model';
 import {AI_BIE_RESOURCE_ROUTES} from './ai-bie-resource-routes';
 import {AI_COMPONENT_RESOURCE_ROUTES} from './ai-component-resource-routes';

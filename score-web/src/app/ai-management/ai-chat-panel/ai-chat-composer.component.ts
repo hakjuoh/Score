@@ -1,3 +1,7 @@
+/**
+ * Collects prompts and attachments and emits submit, stop, recovery, and command-selection actions.
+ */
+
 import {Component, ElementRef, EventEmitter, Input, Output, ViewChild} from '@angular/core';
 import {AI_CHAT_ATTACHMENT_ACCEPT} from './domain/ai-chat-panel.constants';
 import {AiChatCommand} from './domain/ai-chat-panel.model';

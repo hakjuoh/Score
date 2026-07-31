@@ -1,3 +1,7 @@
+/**
+ * Verifies normalized tool names and default user-facing terminal status content.
+ */
+
 import {describe, expect, it} from 'vitest';
 import {defaultToolStatusContent} from './ai-tool-presentation';
 

@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's request cancellation behavior.
+ */
+
 import {
   AiCancellationResponse,
   AiConversationRestoreService,

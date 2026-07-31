@@ -1,3 +1,7 @@
+/**
+ * Synchronizes the main panel and pop-out window through messaging, heartbeat, and geometry state.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {AuthService} from '../../../authentication/auth.service';
 

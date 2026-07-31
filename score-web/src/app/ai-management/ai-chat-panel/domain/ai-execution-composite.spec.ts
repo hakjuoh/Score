@@ -1,3 +1,7 @@
+/**
+ * Verifies workflow placement when node identifiers repeat or nested workflow types are unknown.
+ */
+
 import {AiExecutionComposite} from './ai-execution-composite';
 import {AiChatMessage, AiChatSocketEvent} from './ai-chat-panel.model';
 

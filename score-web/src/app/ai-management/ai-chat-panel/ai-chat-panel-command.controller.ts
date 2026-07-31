@@ -1,3 +1,7 @@
+/**
+ * Handles local commands and command-related socket events for the AI chat panel.
+ */
+
 import {Message} from '@stomp/stompjs';
 import {AiChatPanelMessageController} from './ai-chat-panel-message.controller';
 import {

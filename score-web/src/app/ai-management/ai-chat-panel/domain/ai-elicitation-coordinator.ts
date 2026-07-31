@@ -1,3 +1,7 @@
+/**
+ * Coordinates one active elicitation response, transport acknowledgement, and cleanup.
+ */
+
 import {Injectable} from '@angular/core';
 import {AiChatPanelState} from './ai-chat-panel-state';
 import {AiChatTransportService} from './ai-chat-transport.service';

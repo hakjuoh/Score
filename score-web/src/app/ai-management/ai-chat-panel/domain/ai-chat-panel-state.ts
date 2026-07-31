@@ -1,3 +1,7 @@
+/**
+ * Owns the mutable UI and request state used throughout the AI chat panel.
+ */
+
 import {SafeHtml} from '@angular/platform-browser';
 import {AiAgentActivity} from './ai-agent-activity';
 import {

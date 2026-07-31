@@ -1,3 +1,7 @@
+/**
+ * Verifies canonical ordering and fallback projection of stored messages and replayed events.
+ */
+
 import {AiConversationProjector} from './ai-conversation-projector';
 
 describe('AiConversationProjector', () => {

@@ -1,3 +1,7 @@
+/**
+ * Renders change approvals and schema-driven elicitation forms and emits validated decisions.
+ */
+
 import {Component, EventEmitter, Input, OnChanges, Output, SimpleChanges} from '@angular/core';
 import {
   AiElicitationNotice,

@@ -1,3 +1,7 @@
+/**
+ * Loads model choices and coordinates draft model and reasoning-effort selection.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {Observable} from 'rxjs';
 import {take, takeUntil} from 'rxjs/operators';

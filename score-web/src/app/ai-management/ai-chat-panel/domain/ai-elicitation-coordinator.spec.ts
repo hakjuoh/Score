@@ -1,3 +1,7 @@
+/**
+ * Verifies AI Elicitation Coordinator coordination, state transitions, and edge cases.
+ */
+
 import {AiElicitationCoordinator} from './ai-elicitation-coordinator';
 import {AiChatPanelState} from './ai-chat-panel-state';
 import {AiChatSocketEvent} from './ai-chat-panel.model';

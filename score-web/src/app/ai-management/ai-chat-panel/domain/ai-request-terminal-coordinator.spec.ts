@@ -1,3 +1,7 @@
+/**
+ * Verifies AI Request Terminal Coordinator coordination, state transitions, and edge cases.
+ */
+
 import {AiRequestTerminalCoordinator} from './ai-request-terminal-coordinator';
 import {AiChatPanelState} from './ai-chat-panel-state';
 

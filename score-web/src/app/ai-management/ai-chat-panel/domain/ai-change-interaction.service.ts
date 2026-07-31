@@ -1,3 +1,7 @@
+/**
+ * Executes approve, deny, revoke, dismiss, and cleanup transitions for one proposed change.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Subject} from 'rxjs';

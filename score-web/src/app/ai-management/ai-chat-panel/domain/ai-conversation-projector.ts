@@ -1,3 +1,7 @@
+/**
+ * Projects stored messages and replayed socket events into canonical chat conversations.
+ */
+
 import {Injectable} from '@angular/core';
 import {
   AiChatHistoryMessage,

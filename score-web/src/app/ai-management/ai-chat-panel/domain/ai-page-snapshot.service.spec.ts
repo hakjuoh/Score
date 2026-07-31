@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Page Snapshot service contract, failure handling, and edge cases.
+ */
+
 import {TestBed} from '@angular/core/testing';
 import {Router} from '@angular/router';
 import {AiPageSnapshotService} from './ai-page-snapshot.service';

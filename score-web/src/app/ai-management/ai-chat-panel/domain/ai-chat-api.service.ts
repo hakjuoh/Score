@@ -1,3 +1,7 @@
+/**
+ * Wraps AI chat HTTP endpoints and normalizes model, status, and conversation responses.
+ */
+
 import {HttpClient, HttpContext, HttpParams} from '@angular/common/http';
 import {Injectable, inject} from '@angular/core';
 import {map, Observable, timeout} from 'rxjs';

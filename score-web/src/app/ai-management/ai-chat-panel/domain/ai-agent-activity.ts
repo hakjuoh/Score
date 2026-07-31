@@ -1,3 +1,7 @@
+/**
+ * Classifies agent events and maintains user-visible specialist activity timelines.
+ */
+
 import {
   AiAgentExecutionStatus,
   AiChatMessage,

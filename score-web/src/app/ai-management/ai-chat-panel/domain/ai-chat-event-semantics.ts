@@ -1,3 +1,7 @@
+/**
+ * Normalizes chat event content, terminal status, correlation, retry, and usage semantics.
+ */
+
 import {AiChatSocketEvent, AiChatToolStatus, AiContextUsage, AiExecutionStatus} from './ai-chat-panel.model';
 import {
   defaultToolStatusContent,

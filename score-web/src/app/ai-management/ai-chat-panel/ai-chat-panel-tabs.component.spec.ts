@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Chat Panel Tabs component's rendering and interaction contract.
+ */
+
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {NoopAnimationsModule} from '@angular/platform-browser/animations';
 import {MaterialModule} from '../../material.module';

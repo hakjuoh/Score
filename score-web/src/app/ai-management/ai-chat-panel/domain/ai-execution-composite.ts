@@ -1,3 +1,7 @@
+/**
+ * Combines workflow and specialist events into a consistent execution conversation model.
+ */
+
 import {
   AiAgentActivity,
   AiAgentActivityUpdate,

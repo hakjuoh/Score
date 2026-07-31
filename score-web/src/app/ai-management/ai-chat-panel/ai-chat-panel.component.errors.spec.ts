@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's terminal error and data-change behavior.
+ */
+
 import {
   AiCancellationResponse,
   Subject,

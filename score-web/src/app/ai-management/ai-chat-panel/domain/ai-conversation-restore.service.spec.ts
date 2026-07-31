@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Conversation Restore service contract, failure handling, and edge cases.
+ */
+
 import {AiConversationRestoreCallbacks, AiConversationRestoreService} from './ai-conversation-restore.service';
 import {AiConversationProjector} from './ai-conversation-projector';
 import {AiChatMessage, AiChatSocketEvent} from './ai-chat-panel.model';

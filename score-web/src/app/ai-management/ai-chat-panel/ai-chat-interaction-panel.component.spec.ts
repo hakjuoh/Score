@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Chat Interaction Panel component's rendering and interaction contract.
+ */
+
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {describe, expect, it, vi} from 'vitest';
 import {AiChatInteractionPanelComponent} from './ai-chat-interaction-panel.component';

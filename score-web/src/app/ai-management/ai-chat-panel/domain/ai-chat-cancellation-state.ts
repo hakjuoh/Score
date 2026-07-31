@@ -1,3 +1,7 @@
+/**
+ * Defines the state and callback contracts shared by cancellation workflows.
+ */
+
 import {
   CANCELLATION_ACK_TIMEOUT_MS,
   CANCELLATION_ADMISSION_RETRY_MS,

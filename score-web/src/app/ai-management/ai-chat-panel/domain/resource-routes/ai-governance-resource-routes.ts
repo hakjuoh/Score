@@ -1,3 +1,7 @@
+/**
+ * Registers governance resources and their query and detail-route metadata.
+ */
+
 import {AiResourceRoute} from '../ai-chat-panel.model';
 import {
   AUTHENTICATED_ROLES,

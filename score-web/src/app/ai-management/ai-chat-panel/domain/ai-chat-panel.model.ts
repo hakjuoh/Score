@@ -1,3 +1,7 @@
+/**
+ * Defines the data contracts shared by AI chat transport, domain logic, and presentation.
+ */
+
 import type {AiAgentActivity} from './ai-agent-activity';
 
 export type AiChatDock = 'right' | 'bottom' | 'left' | 'top';

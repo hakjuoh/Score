@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI chat panel's change execution lifecycle behavior.
+ */
+
 import {
   AiCancellationResponse,
   AiChatRestResponse,

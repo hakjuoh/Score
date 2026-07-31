@@ -1,3 +1,7 @@
+/**
+ * Queues restored assistant content for cancellable block-by-block rendering.
+ */
+
 import {Injectable} from '@angular/core';
 import {AiChatMessage} from './ai-chat-panel.model';
 

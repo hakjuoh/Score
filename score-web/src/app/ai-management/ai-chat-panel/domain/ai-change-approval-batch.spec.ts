@@ -1,3 +1,7 @@
+/**
+ * Verifies approval-batch parsing, durable recovery, expiry filtering, and status labels.
+ */
+
 import {describe, expect, it} from 'vitest';
 import {AiChatSocketEvent} from './ai-chat-panel.model';
 import {

@@ -1,3 +1,7 @@
+/**
+ * Verifies AI Change Repeat Coordinator coordination, state transitions, and edge cases.
+ */
+
 import {describe, expect, it} from 'vitest';
 import {AiChangeRepeatCoordinator} from './ai-change-repeat-coordinator';
 import {AiChatSocketEvent} from './ai-chat-panel.model';

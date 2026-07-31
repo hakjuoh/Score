@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Chat Context service contract, failure handling, and edge cases.
+ */
+
 import {TestBed} from '@angular/core/testing';
 import {Router} from '@angular/router';
 import {AiChatContextService} from './ai-chat-context.service';

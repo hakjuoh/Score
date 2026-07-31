@@ -1,3 +1,7 @@
+/**
+ * Reconciles a server-side active request with the panel and retries recoverable probes.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {Observable, of, Subscription, map, switchMap, take} from 'rxjs';
 import {AiChatApiService} from './ai-chat-api.service';

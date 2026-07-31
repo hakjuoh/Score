@@ -1,3 +1,7 @@
+/**
+ * Parses, reconstructs, and summarizes batched change-approval barriers.
+ */
+
 import {
   AiChatHistoryMessage,
   AiChatSocketEvent,

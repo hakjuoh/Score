@@ -1,3 +1,7 @@
+/**
+ * Applies the invariant state cleanup shared by all active-request terminal paths.
+ */
+
 import {Injectable} from '@angular/core';
 import {AiChatCancellationService} from './ai-chat-cancellation.service';
 import {AiChangeApprovalBatchCoordinator} from './ai-change-approval-batch-coordinator';

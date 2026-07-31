@@ -1,3 +1,7 @@
+/**
+ * Handles template-driven user actions, settings, attachments, and interaction responses.
+ */
+
 import {Directive} from '@angular/core';
 import {AiChatPanelRequestController} from './ai-chat-panel-request.controller';
 import {AiChatAttachmentQueueCallbacks} from './domain/ai-chat-attachment-queue.service';

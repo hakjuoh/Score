@@ -1,3 +1,7 @@
+/**
+ * Verifies that context-budget slices partition the model window without overlap.
+ */
+
 import {contextBudgetSlices} from './ai-context-budget-chart.model';
 
 describe('contextBudgetSlices', () => {

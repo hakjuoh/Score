@@ -1,3 +1,7 @@
+/**
+ * Owns request lifecycle completion, cancellation, timeout, and terminal cleanup behavior.
+ */
+
 import {take, timeout} from 'rxjs/operators';
 import {AiChatPanelConversationController} from './ai-chat-panel-conversation.controller';
 import {AiChatCancellationCallbacks} from './domain/ai-chat-cancellation.service';

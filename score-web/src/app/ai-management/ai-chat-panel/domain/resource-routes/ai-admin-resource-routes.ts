@@ -1,3 +1,7 @@
+/**
+ * Registers administrator-only resources and their list and detail route metadata.
+ */
+
 import {AiResourceRoute} from '../ai-chat-panel.model';
 import {
   ADMIN_ROLES,

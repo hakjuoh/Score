@@ -1,3 +1,7 @@
+/**
+ * Verifies AI Provider Recovery Coordinator coordination, state transitions, and edge cases.
+ */
+
 import {AiChatSocketEvent} from './ai-chat-panel.model';
 import {AiProviderRecoveryCoordinator} from './ai-provider-recovery-coordinator';
 

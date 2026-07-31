@@ -1,3 +1,7 @@
+/**
+ * Tracks revised change requests and binds their repeat execution to the matching confirmation.
+ */
+
 import {Injectable} from '@angular/core';
 import {changeConfirmationNotice, isUnexpiredChangeConfirmation} from './ai-change-confirmation';
 import {AiChatAttachment, AiChatSocketEvent, AiChangeConfirmationNotice} from './ai-chat-panel.model';

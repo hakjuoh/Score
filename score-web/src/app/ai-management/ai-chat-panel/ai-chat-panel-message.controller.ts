@@ -1,3 +1,7 @@
+/**
+ * Projects live and restored execution events into user-visible chat messages and agent activity.
+ */
+
 import {AiChatPanelViewController} from './ai-chat-panel-view.controller';
 import {AiConversationRestoreCallbacks} from './domain/ai-conversation-restore.service';
 import {

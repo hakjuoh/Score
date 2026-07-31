@@ -1,3 +1,7 @@
+/**
+ * Coordinates editing and applying the chat panel's change-permission mode.
+ */
+
 import {Injectable, inject} from '@angular/core';
 import {AiChatPanelState} from './ai-chat-panel-state';
 import {AiChatSessionPersistenceService} from './ai-chat-session-persistence.service';

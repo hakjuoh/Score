@@ -1,3 +1,7 @@
+/**
+ * Applies dock-aware main-panel insets and clamps the resizable chat dimensions.
+ */
+
 import {Injectable} from '@angular/core';
 import {AiChatDock} from './ai-chat-panel.model';
 

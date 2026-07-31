@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Resource Refresh service contract, failure handling, and edge cases.
+ */
+
 import {TestBed} from '@angular/core/testing';
 import {AiDataChangeService} from './ai-data-change.service';
 import {AiResourceRefreshService, AiResourceRefreshStrategy} from './ai-resource-refresh.service';
