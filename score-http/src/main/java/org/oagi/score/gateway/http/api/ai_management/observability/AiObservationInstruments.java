@@ -34,6 +34,17 @@ final class AiObservationInstruments {
     final DoubleHistogram contextWindowUsage;
     final LongCounter compactions;
     final DoubleHistogram cost;
+    final LongCounter quotaReservedTokens;
+    final LongCounter quotaConsumedTokens;
+    final LongCounter quotaReleasedTokens;
+    final LongCounter quotaOverageTokens;
+    final LongCounter quotaReconciliationCount;
+    final LongCounter policyDenied;
+    final LongCounter multiAgentPolicyDowngrade;
+    final DoubleHistogram specialistAdmissionWait;
+    final LongCounter specialistAdmissionRejected;
+    final LongCounter catalogCacheRefresh;
+    final LongCounter providerSecretDecryptionFailed;
 
     // OpenTelemetry GenAI semantic-convention instruments. Custom SCORE metrics above remain
     // available for operational continuity while dashboards migrate to these standard names.
@@ -78,6 +89,29 @@ final class AiObservationInstruments {
         cost = meter.histogramBuilder("score.ai.cost")
                 .setDescription("Provider-reported or pricing-engine AI cost")
                 .setUnit("USD").build();
+        quotaReservedTokens = tokenCounter(meter, "ai.quota.reserved_tokens",
+                "AI quota tokens reserved before provider calls");
+        quotaConsumedTokens = tokenCounter(meter, "ai.quota.consumed_tokens",
+                "AI quota tokens charged after provider calls");
+        quotaReleasedTokens = tokenCounter(meter, "ai.quota.released_tokens",
+                "AI quota reservations released without provider usage");
+        quotaOverageTokens = tokenCounter(meter, "ai.quota.overage_tokens",
+                "Provider usage exceeding its reservation");
+        quotaReconciliationCount = counter(meter, "ai.quota.reconciliation_count",
+                "Abandoned AI quota reservations reconciled");
+        policyDenied = counter(meter, "ai.policy.denied",
+                "AI requests denied by a user policy");
+        multiAgentPolicyDowngrade = counter(meter, "ai.multi_agent.policy_downgrade",
+                "Multi-agent requests downgraded by policy");
+        specialistAdmissionWait = duration(meter, "ai.specialist.admission_wait",
+                "Time waiting for a specialist execution permit");
+        specialistAdmissionRejected = counter(meter, "ai.specialist.admission_rejected",
+                "Specialist permit waits terminated before admission");
+        catalogCacheRefresh = counter(meter, "ai.catalog.cache_refresh",
+                "Runtime AI catalog cache refreshes");
+        providerSecretDecryptionFailed = counter(meter,
+                "ai.provider.secret_decryption_failed",
+                "AI provider secret decryption failures");
 
         genAiClientTokenUsage = meter.histogramBuilder("gen_ai.client.token.usage")
                 .setDescription("Number of input and output tokens used")
@@ -109,6 +143,10 @@ final class AiObservationInstruments {
 
     private static LongCounter counter(Meter meter, String name, String description) {
         return meter.counterBuilder(name).setDescription(description).setUnit("{event}").build();
+    }
+
+    private static LongCounter tokenCounter(Meter meter, String name, String description) {
+        return meter.counterBuilder(name).setDescription(description).setUnit("{token}").build();
     }
 
     private static DoubleHistogram duration(Meter meter, String name, String description) {

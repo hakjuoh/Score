@@ -613,6 +613,32 @@ class ChatServiceTest {
     }
 
     @Test
+    void policyDisabledPersistentWorkflowsCannotReadOrWriteAWorkflowPreference() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        when(models.resolveModelName("model")).thenReturn("model");
+        when(models.resolveReasoningEffort("model", "high")).thenReturn("high");
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.settingsForUpdate("conversation-1"))
+                .thenReturn(new AiChatConversationSettings("model", "high"));
+        when(repository.activeWorkflow("conversation-1"))
+                .thenReturn(Optional.of("agents"));
+        when(repository.open("conversation-1", "Use sub-agents for future prompts"))
+                .thenReturn("conversation-1");
+        ChatService service = service(models, identity(), null, null, repository, null);
+
+        ChatRequest prepared = service.prepare(new ChatRequest(
+                "Use sub-agents for future prompts", "request-policy", null,
+                "conversation-1", null, List.of(), null),
+                mock(ScoreUser.class), 7L, false);
+
+        assertThat(prepared.activeWorkflow()).isEqualTo("assistant");
+        assertThat(prepared.multiAgent().active()).isFalse();
+        verify(repository, never()).activeWorkflow("conversation-1");
+        verify(repository, never()).append(eq("conversation-1"), any());
+    }
+
+    @Test
     void clearsTheWorkflowPreferenceWithADurableVisibleNotice() {
         ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
         when(models.isAvailable()).thenReturn(true);

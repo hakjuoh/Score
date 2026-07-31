@@ -19,6 +19,7 @@ import {
   AiChangeApprovalBatchNotice,
   AiChangePermissionMode,
   AiChatPanelTab,
+  AiSelfPolicy,
   checkingAiMcpStatus,
   normalizeAiReasoningEffort
 } from './ai-chat-panel.model';
@@ -40,6 +41,9 @@ export class AiChatPanelState {
   dragActive = false;
   conversationId?: string;
   availableModels: AiChatModelInfo[] = [];
+  policy?: AiSelfPolicy;
+  policyLoading = false;
+  policyLoadFailed = false;
   mcpStatus: AiMcpStatus = checkingAiMcpStatus();
   selectedModelName = '';
   defaultModelName = '';

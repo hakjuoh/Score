@@ -5,6 +5,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AiSensitiveDataRedactor;
 import org.oagi.score.gateway.http.api.ai_management.provider.AiProviderRetryExecutor;
+import org.oagi.score.gateway.http.api.ai_management.policy.service.AiUsageAccountingService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.springframework.ai.chat.client.ChatClient;
@@ -26,6 +27,7 @@ final class AiChatModelInvoker {
     private final AiRequestRegistry requests;
     private final AiExecutionInstructions instructions;
     private final AiModelInputGuard modelInputGuard;
+    private volatile AiUsageAccountingService accounting;
 
     AiChatModelInvoker(AiProviderRetryExecutor providerRetry, AiRequestRegistry requests,
                        AiExecutionInstructions instructions, AiModelInputGuard modelInputGuard) {
@@ -33,6 +35,14 @@ final class AiChatModelInvoker {
         this.requests = requests;
         this.instructions = instructions;
         this.modelInputGuard = modelInputGuard;
+    }
+
+    void accounting(AiUsageAccountingService accounting) {
+        this.accounting = accounting;
+    }
+
+    AiUsageAccountingService accounting() {
+        return accounting;
     }
 
     String invoke(ChatClient assistant, ChatOptions options, ChatRequest request,
@@ -75,29 +85,33 @@ final class AiChatModelInvoker {
                     requestScopedInput(request, instructions))));
         }
         requestMessages = modelInputGuard.apply(request, requestMessages, guardedUserIndex, scope);
-        assistant.prompt().options(options.mutate())
-                .system(system -> system.text(instruction.value()))
-                .messages(requestMessages)
-                .advisors(advisor -> advisor
-                        .param(ChatMemory.CONVERSATION_ID, request.conversationId())
-                        .param(AiTrajectoryRecorder.PHASE_CONTEXT_KEY, "assistant"))
-                .stream().chatResponse()
-                .doOnNext(ignored -> progress.run())
-                .map(SpringAiResponseContent::visibleStreaming)
-                .filter(content -> !content.isEmpty())
-                .doOnNext(content -> {
-                    long boundary = recorder.completedToolCallCount();
-                    // Text before a Tool call is interim narration. The first substantive
-                    // post-Tool chunk starts the answer segment that may reach the user.
-                    if (boundary != toolBoundary[0] && StringUtils.hasText(content)) {
-                        toolBoundary[0] = boundary;
-                        answer.setLength(0);
-                    }
-                    answer.append(content);
-                    // Candidate text remains private until the application output guardrail
-                    // accepts or rewrites the complete response.
-                })
-                .then().block();
+        try {
+            assistant.prompt().options(options.mutate())
+                    .system(system -> system.text(instruction.value()))
+                    .messages(requestMessages)
+                    .advisors(advisor -> advisor
+                            .param(ChatMemory.CONVERSATION_ID, request.conversationId())
+                            .param(AiTrajectoryRecorder.PHASE_CONTEXT_KEY, "assistant"))
+                    .stream().chatResponse()
+                    .doOnNext(ignored -> progress.run())
+                    .map(SpringAiResponseContent::visibleStreaming)
+                    .filter(content -> !content.isEmpty())
+                    .doOnNext(content -> {
+                        long boundary = recorder.completedToolCallCount();
+                        // Text before a Tool call is interim narration. The first substantive
+                        // post-Tool chunk starts the answer segment that may reach the user.
+                        if (boundary != toolBoundary[0] && StringUtils.hasText(content)) {
+                            toolBoundary[0] = boundary;
+                            answer.setLength(0);
+                        }
+                        answer.append(content);
+                        // Candidate text remains private until the application output guardrail
+                        // accepts or rewrites the complete response.
+                    })
+                    .then().block();
+        } catch (RuntimeException | Error failure) {
+            throw failure;
+        }
         if (!StringUtils.hasText(answer)) {
             throw new IllegalStateException("The assistant returned an empty response.");
         }

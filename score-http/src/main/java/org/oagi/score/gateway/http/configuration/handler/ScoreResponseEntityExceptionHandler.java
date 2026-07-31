@@ -2,6 +2,9 @@ package org.oagi.score.gateway.http.configuration.handler;
 
 import org.oagi.score.gateway.http.api.DataAccessForbiddenException;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiSharedStateUnavailableException;
+import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
+import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
+import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiQuotaExceededException;
 import org.oagi.score.gateway.http.common.model.AccessControlException;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
 import org.oagi.score.gateway.http.common.model.base.ScoreDataAccessException;
@@ -58,6 +61,34 @@ public class ScoreResponseEntityExceptionHandler extends ResponseEntityException
             headers.set("X-Error-Message-Id", errorMessageId);
         }
         return new ResponseEntity<>(message, headers, status);
+    }
+
+    private ResponseEntity<String> policyErrorResponse(HttpStatus status,
+                                                       AiPolicyViolationException exception) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Error-Message", toHeaderValue(exception.getMessage()));
+        headers.set("X-Error-Code", exception.code().name());
+        if (exception instanceof AiQuotaExceededException quota
+                && quota.retryAfter() != null && !quota.retryAfter().isNegative()) {
+            headers.set("Retry-After", Long.toString(Math.max(1L,
+                    quota.retryAfter().toSeconds())));
+        }
+        return new ResponseEntity<>(exception.getMessage(), headers, status);
+    }
+
+    @ExceptionHandler(AiPolicyViolationException.class)
+    public ResponseEntity<String> handleAiPolicyViolationException(
+            AiPolicyViolationException ex, WebRequest webRequest) {
+        logger.debug(ex.getMessage(), ex);
+        HttpStatus status = switch (ex.code()) {
+            case AI_QUOTA_EXHAUSTED, AI_REQUEST_TOKEN_LIMIT_EXHAUSTED,
+                    AI_ACTIVE_REQUEST_LIMIT -> HttpStatus.TOO_MANY_REQUESTS;
+            case AI_POLICY_VERSION_CONFLICT, AI_CATALOG_VERSION_CONFLICT -> HttpStatus.CONFLICT;
+            case AI_PROVIDER_NOT_CONFIGURED -> HttpStatus.SERVICE_UNAVAILABLE;
+            case AI_DISABLED_BY_POLICY, AI_MODEL_NOT_ALLOWED,
+                    AI_REASONING_EFFORT_NOT_ALLOWED, AI_NO_ALLOWED_MODELS -> HttpStatus.FORBIDDEN;
+        };
+        return policyErrorResponse(status, ex);
     }
 
     @ExceptionHandler(AuthenticationException.class)

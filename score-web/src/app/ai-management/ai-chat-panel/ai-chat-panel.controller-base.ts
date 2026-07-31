@@ -218,7 +218,10 @@ export abstract class AiChatPanelControllerBase {
   }
 
   get commandInputBlocked(): boolean {
-    return this.state.reconciliationRequired
+    return this.state.policyLoading || this.state.policyLoadFailed
+      || this.state.policy?.enabled === false
+      || this.state.policy?.quota.remainingTokens === 0
+      || this.state.reconciliationRequired
       || this.state.modelChangePending || this.state.modelSettingsOpen
       || this.state.permissionSettingsOpen
       || !!this.state.elicitation
@@ -228,8 +231,29 @@ export abstract class AiChatPanelControllerBase {
   }
 
   get composerPlaceholder(): string {
+    if (this.state.policyLoading) return 'Loading AI policy';
+    if (this.state.policyLoadFailed) return 'AI policy unavailable';
+    if (this.state.policy?.enabled === false) return 'AI Assistant is disabled by policy';
+    if (this.state.policy?.quota.remainingTokens === 0) return 'Token quota exhausted';
     return this.changeDecisionOpen && this.changeInteractionMode === 'confirm'
       ? 'Describe how to revise this change' : 'Ask a question';
+  }
+
+  get policyNotice(): string | undefined {
+    if (this.state.policyLoading) return 'Loading your AI access policy…';
+    if (this.state.policyLoadFailed) {
+      return 'Your AI access policy could not be loaded. Refresh the page to try again.';
+    }
+    const policy = this.state.policy;
+    if (!policy) return undefined;
+    if (!policy.enabled) return 'AI Assistant access is disabled by your administrator.';
+    if (policy.quota.remainingTokens === 0) {
+      return `AI token quota exhausted. Resets ${policy.quota.periodEnd || 'at the next period'}.`;
+    }
+    const quota = policy.quota.remainingTokens !== null
+      ? `${policy.quota.remainingTokens.toLocaleString()} tokens remain until ${policy.quota.periodEnd}.` : '';
+    const agents = !policy.multiAgentEnabled ? 'Multi-agent workflows are disabled.' : '';
+    return [quota, agents].filter(Boolean).join(' ') || undefined;
   }
 
   get changeInteraction(): AiChangeInteraction | undefined {

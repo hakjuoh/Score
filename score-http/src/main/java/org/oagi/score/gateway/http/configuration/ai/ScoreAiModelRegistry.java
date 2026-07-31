@@ -4,6 +4,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
@@ -11,13 +12,16 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Resolves the models used by the connectCenter assistant. */
 @Component
 public class ScoreAiModelRegistry {
 
     private final ScoreAiProperties properties;
-    private final Map<String, ChatModel> models;
+    private volatile Map<String, ChatModel> models;
+    private volatile AiDynamicModelCatalog dynamicCatalog;
+    private final Map<String, CatalogSnapshot> requestSnapshots = new ConcurrentHashMap<>();
 
     public ScoreAiModelRegistry(ScoreAiProperties properties,
                                 @Qualifier("scoreAiChatModels") Map<String, ChatModel> scoreAiChatModels) {
@@ -25,11 +29,51 @@ public class ScoreAiModelRegistry {
         this.models = scoreAiChatModels;
     }
 
+    @Autowired(required = false)
+    void configureDynamicCatalog(AiDynamicModelCatalog dynamicCatalog) {
+        this.dynamicCatalog = dynamicCatalog;
+    }
+
+    void install(Map<String, ChatModel> refreshedModels) {
+        this.models = Map.copyOf(refreshedModels);
+    }
+
+    void install(Map<String, ChatModel> refreshedModels,
+                 Map<String, ScoreAiProperties.Provider> providers,
+                 Map<String, ScoreAiProperties.Model> configurations,
+                 String defaultModel) {
+        properties.setProviders(new LinkedHashMap<>(providers));
+        properties.setModels(new LinkedHashMap<>(configurations));
+        properties.setModelName(defaultModel);
+        this.models = Map.copyOf(refreshedModels);
+    }
+
+    private void refresh() {
+        AiDynamicModelCatalog catalog = dynamicCatalog;
+        if (catalog != null) catalog.refreshIfChanged(this);
+    }
+
+    public void snapshot(String requestId) {
+        if (!StringUtils.hasText(requestId)) return;
+        refresh();
+        Map<String, ModelConfiguration> configurations = new LinkedHashMap<>();
+        properties.getModels().keySet().forEach(name ->
+                configurations.put(name, configuredModel(name)));
+        requestSnapshots.putIfAbsent(requestId,
+                new CatalogSnapshot(Map.copyOf(models), Map.copyOf(configurations)));
+    }
+
+    public void clearSnapshot(String requestId) {
+        if (requestId != null) requestSnapshots.remove(requestId);
+    }
+
     public boolean isAvailable() {
+        refresh();
         return properties.getModels().keySet().stream().anyMatch(this::isAvailable);
     }
 
     public String modelName() {
+        refresh();
         String name = properties.getModelName();
         if (StringUtils.hasText(name) && isAvailable(name)) {
             return name;
@@ -42,6 +86,7 @@ public class ScoreAiModelRegistry {
     }
 
     public String resolveModelName(String requestedModelName) {
+        refresh();
         String name = StringUtils.hasText(requestedModelName) ? requestedModelName.strip() : modelName();
         if (!isAvailable(name)) {
             throw new IllegalArgumentException("The requested assistant model is not available: " + name);
@@ -50,6 +95,7 @@ public class ScoreAiModelRegistry {
     }
 
     public String resolveReasoningEffort(String modelName, String requestedReasoningEffort) {
+        refresh();
         String resolvedModelName = resolveModelName(modelName);
         ScoreAiProperties.Model model = properties.getModels().get(resolvedModelName);
         List<ReasoningEffortDescriptor> efforts = reasoningEfforts(model);
@@ -67,7 +113,26 @@ public class ScoreAiModelRegistry {
                                 + resolvedModelName + "': " + requested));
     }
 
+    public String resolveReasoningEffort(String modelName, String requestId,
+                                         String requestedReasoningEffort) {
+        ModelConfiguration configuration = modelConfiguration(modelName, requestId);
+        String normalized = StringUtils.hasText(requestedReasoningEffort)
+                ? requestedReasoningEffort.strip().toLowerCase()
+                : configuration.defaultReasoningEffort();
+        boolean legacyDisabled = "none".equals(normalized)
+                && configuration.reasoningEfforts().stream()
+                .anyMatch(effort -> "disabled".equals(effort.name()));
+        String requested = legacyDisabled ? "disabled" : normalized;
+        return configuration.reasoningEfforts().stream()
+                .map(ReasoningEffortDescriptor::name)
+                .filter(effort -> effort.equalsIgnoreCase(requested))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException(
+                        "The requested reasoning effort is not available for model '"
+                                + modelName + "': " + requested));
+    }
+
     public List<ModelDescriptor> availableModels() {
+        refresh();
         String defaultModel = isAvailable() ? modelName() : null;
         return properties.getModels().entrySet().stream()
                 .filter(entry -> isAvailable(entry.getKey()))
@@ -79,6 +144,7 @@ public class ScoreAiModelRegistry {
     }
 
     public ChatClient.Builder clientBuilder(String modelName) {
+        refresh();
         ChatModel model = models.get(resolveModelName(modelName));
         if (model == null) {
             throw new IllegalStateException("The assistant model is not configured.");
@@ -86,17 +152,40 @@ public class ScoreAiModelRegistry {
         return ChatClient.builder(model).defaultAdvisors(new VisibleTextResultAdvisor());
     }
 
+    public ChatClient.Builder clientBuilder(String modelName, String requestId) {
+        CatalogSnapshot snapshot = requestSnapshots.get(requestId);
+        if (snapshot == null) return clientBuilder(modelName);
+        ChatModel model = snapshot.clients().get(modelName);
+        if (model == null) throw new IllegalStateException(
+                "The snapshotted assistant model is not configured.");
+        return ChatClient.builder(model).defaultAdvisors(new VisibleTextResultAdvisor());
+    }
+
     public ModelConfiguration modelConfiguration(String modelName) {
-        String resolvedModelName = resolveModelName(modelName);
+        refresh();
+        return configuredModel(resolveModelName(modelName));
+    }
+
+    public ModelConfiguration modelConfiguration(String modelName, String requestId) {
+        CatalogSnapshot snapshot = requestSnapshots.get(requestId);
+        if (snapshot == null) return modelConfiguration(modelName);
+        ModelConfiguration configuration = snapshot.configurations().get(modelName);
+        if (configuration == null) throw new IllegalStateException(
+                "The snapshotted assistant model configuration is unavailable.");
+        return configuration;
+    }
+
+    private ModelConfiguration configuredModel(String resolvedModelName) {
         ScoreAiProperties.Model model = properties.getModels().get(resolvedModelName);
         ScoreAiProperties.Provider provider = properties.getProviders().get(model.getProvider());
         ScoreAiProperties.ModelCapabilities capabilities = model.getModelCapabilities();
         String configuredModel = StringUtils.hasText(model.getModel())
                 ? model.getModel().strip() : resolvedModelName;
-        return new ModelConfiguration(resolvedModelName, configuredModel, providerType(provider),
+        return new ModelConfiguration(model.getCatalogId(), resolvedModelName, configuredModel, providerType(provider),
                 model.getMaxTokens(), model.getTemperature(), model.getThinkingBudgetTokens(),
                 model.isAdaptiveThinking(), model.getOutputEffort(), model.getCacheStrategy(),
-                reasoningEfforts(model), capabilities.getReasoningModel(),
+                reasoningEfforts(model), defaultReasoningEffort(model),
+                capabilities.getReasoningModel(),
                 capabilities.getOutputEffort(), capabilities.getVerbosity(),
                 capabilities.getTemperature(), capabilities.getThinkingModes().stream()
                         .filter(StringUtils::hasText).map(value -> value.strip().toLowerCase()).distinct().toList(),
@@ -104,6 +193,9 @@ public class ScoreAiModelRegistry {
                         ? capabilities.getDefaultThinking().strip().toLowerCase() : null,
                 contextBudget(model));
     }
+
+    private record CatalogSnapshot(Map<String, ChatModel> clients,
+                                   Map<String, ModelConfiguration> configurations) {}
 
     private ContextBudgetDescriptor contextBudget(ScoreAiProperties.Model model) {
         ScoreAiProperties.ContextBudget configured = model.getContextBudget();
@@ -136,7 +228,7 @@ public class ScoreAiModelRegistry {
             return false;
         }
         ScoreAiProperties.Provider provider = properties.getProviders().get(model.getProvider());
-        return provider != null && StringUtils.hasText(provider.getKey())
+        return provider != null
                 && (StringUtils.hasText(provider.getBaseUrl()) || StringUtils.hasText(provider.getMessagesUrl()));
     }
 
@@ -210,11 +302,12 @@ public class ScoreAiModelRegistry {
 
     public record ReasoningEffortDescriptor(String name, String displayName, String description) {}
 
-    public record ModelConfiguration(String name, String model, String providerType,
+    public record ModelConfiguration(Long catalogId, String name, String model, String providerType,
                                Integer maxTokens, Double temperature,
                                Integer thinkingBudgetTokens, boolean adaptiveThinking,
                                String outputEffort, String cacheStrategy,
                                List<ReasoningEffortDescriptor> reasoningEfforts,
+                               String defaultReasoningEffort,
                                Boolean configuredReasoningModel,
                                Boolean configuredOutputEffort,
                                Boolean configuredVerbosity,
@@ -234,8 +327,10 @@ public class ScoreAiModelRegistry {
                             Boolean configuredTemperature,
                             List<String> thinkingModes,
                             String defaultThinking) {
-            this(name, model, providerType, maxTokens, temperature, thinkingBudgetTokens,
+            this(null, name, model, providerType, maxTokens, temperature, thinkingBudgetTokens,
                     adaptiveThinking, outputEffort, cacheStrategy, reasoningEfforts,
+                    reasoningEfforts != null && !reasoningEfforts.isEmpty()
+                            ? reasoningEfforts.getFirst().name() : null,
                     configuredReasoningModel, configuredOutputEffort, configuredVerbosity,
                     configuredTemperature, thinkingModes, defaultThinking,
                     new ContextBudgetDescriptor(null, null, null, null, null, false));

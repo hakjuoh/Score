@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -112,8 +113,18 @@ public class AiRequestRegistry implements ConversationCommitFence {
     }
 
     public Entry register(String requestId, String conversationId, ScoreUser requester, Instant deadline) {
+        try {
+            return register(requestId, conversationId, requester, deadline, 8);
+        } catch (org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException failure) {
+            // Compatibility overload retained for non-policy callers and legacy tests.
+            throw new IllegalStateException(failure.getMessage(), failure);
+        }
+    }
+
+    public Entry register(String requestId, String conversationId, ScoreUser requester,
+                          Instant deadline, int maxActiveRequests) {
         AiSharedRequestState state = admission.reserve(
-                requestId, conversationId, requester, deadline);
+                requestId, conversationId, requester, deadline, maxActiveRequests);
         Entry entry = new Entry(requestId, state.generation(),
                 new AiRequestInactivityLease(Duration.between(state.createdAt(), deadline),
                         System.nanoTime()));
@@ -129,6 +140,51 @@ public class AiRequestRegistry implements ConversationCommitFence {
             throw exception;
         }
         return entry;
+    }
+
+    /** Cancels every active root request for a user across all application instances. */
+    public int cancelByUser(org.oagi.score.gateway.http.api.account_management.model.UserId userId,
+                            String reason) {
+        String appUserId = userId.value().toString();
+        Instant now = Instant.now();
+        List<AiRequestStopSignal> signals = stateStore.withGlobalLock(storage -> {
+            List<AiRequestStopSignal> pending = new ArrayList<>();
+            storage.values().stream()
+                    .filter(state -> appUserId.equals(state.appUserId()))
+                    .filter(state -> sharedStatePolicy.isLogicallyActive(state, now))
+                    .forEach(state -> {
+                        AiSharedRequestState stopping = state.cancelling(
+                                "policy:" + UUID.randomUUID(),
+                                reason != null ? reason : "AI_DISABLED_BY_POLICY", now);
+                        if ("REGISTERED".equals(state.status())) {
+                            stopping = stopping.terminal("CANCELLED",
+                                    "AI_DISABLED_BY_POLICY", now);
+                        }
+                        storage.put(stopping);
+                        pending.add(new AiRequestStopSignal(state.requestId(), state.generation()));
+                    });
+            return pending;
+        });
+        signals.forEach(signal -> stateStore.publishStop(
+                signal.requestId(), signal.generation()));
+        return signals.size();
+    }
+
+    public int activeCountByUser(
+            org.oagi.score.gateway.http.api.account_management.model.UserId userId) {
+        String appUserId = userId.value().toString();
+        Instant now = Instant.now();
+        return stateStore.withGlobalLock(storage -> (int) storage.values().stream()
+                .filter(state -> appUserId.equals(state.appUserId()))
+                .filter(state -> sharedStatePolicy.isLogicallyActive(state, now)).count());
+    }
+
+    public boolean isLogicallyActive(String requestId) {
+        if (requestId == null) return false;
+        return stateStore.withRequestLock(requestId, storage -> {
+            AiSharedRequestState state = storage.get(requestId);
+            return state != null && sharedStatePolicy.isLogicallyActive(state, Instant.now());
+        });
     }
 
     public void bindConversation(Entry entry, String conversationId) {

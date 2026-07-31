@@ -32,9 +32,16 @@ public class ScoreAiProperties {
     private Tools tools = new Tools();
     private ProviderRetry providerRetry = new ProviderRetry();
     private Middleware middleware = new Middleware();
+    private Quota quota = new Quota();
+    private Policy policy = new Policy();
 
     public Map<String, Provider> getProviders() {
         return providers;
+    }
+
+    public Policy getPolicy() { return policy; }
+    public void setPolicy(Policy policy) {
+        this.policy = policy != null ? policy : new Policy();
     }
 
     public void setProviders(Map<String, Provider> providers) {
@@ -115,6 +122,9 @@ public class ScoreAiProperties {
     public void setMultiAgent(MultiAgent multiAgent) {
         this.multiAgent = multiAgent != null ? multiAgent : new MultiAgent();
     }
+
+    public Quota getQuota() { return quota; }
+    public void setQuota(Quota quota) { this.quota = quota != null ? quota : new Quota(); }
 
     public ProviderRetry getProviderRetry() {
         return providerRetry;
@@ -260,6 +270,7 @@ public class ScoreAiProperties {
     }
 
     public static class Model {
+        private Long catalogId;
         private String displayName;
         private String description;
         private String provider;
@@ -276,6 +287,8 @@ public class ScoreAiProperties {
         private String cacheStrategy;
         private ModelCapabilities modelCapabilities = new ModelCapabilities();
 
+        public Long getCatalogId() { return catalogId; }
+        public void setCatalogId(Long catalogId) { this.catalogId = catalogId; }
         public String getDisplayName() { return displayName; }
         public void setDisplayName(String displayName) { this.displayName = displayName; }
         public String getDescription() { return description; }
@@ -454,6 +467,50 @@ public class ScoreAiProperties {
         public void setMaximumWorkflowIterations(int maximumWorkflowIterations) {
             this.maximumWorkflowIterations = maximumWorkflowIterations;
         }
+    }
+
+    public static class Quota {
+        private int inputSafetyPercent = 10;
+        private Duration reservationTimeout = Duration.ofMinutes(15);
+        private int reconciliationBatchSize = 200;
+
+        public int getInputSafetyPercent() { return inputSafetyPercent; }
+        public void setInputSafetyPercent(int inputSafetyPercent) {
+            if (inputSafetyPercent < 0 || inputSafetyPercent > 100) {
+                throw new IllegalArgumentException(
+                        "AI quota input safety percent must be between 0 and 100.");
+            }
+            this.inputSafetyPercent = inputSafetyPercent;
+        }
+        public Duration getReservationTimeout() { return reservationTimeout; }
+        public void setReservationTimeout(Duration reservationTimeout) {
+            if (reservationTimeout == null || reservationTimeout.isNegative()
+                    || reservationTimeout.isZero()) {
+                throw new IllegalArgumentException("AI quota reservation timeout must be positive.");
+            }
+            this.reservationTimeout = reservationTimeout;
+        }
+        public int getReconciliationBatchSize() { return reconciliationBatchSize; }
+        public void setReconciliationBatchSize(int reconciliationBatchSize) {
+            if (reconciliationBatchSize < 1 || reconciliationBatchSize > 10_000) {
+                throw new IllegalArgumentException(
+                        "AI quota reconciliation batch size must be between 1 and 10000.");
+            }
+            this.reconciliationBatchSize = reconciliationBatchSize;
+        }
+    }
+
+    public static class Policy {
+        private boolean enabled = true;
+        private boolean quotaEnforcementEnabled;
+        private boolean usageLedgerEnabled = true;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public boolean isQuotaEnforcementEnabled() { return quotaEnforcementEnabled; }
+        public void setQuotaEnforcementEnabled(boolean value) { quotaEnforcementEnabled = value; }
+        public boolean isUsageLedgerEnabled() { return usageLedgerEnabled; }
+        public void setUsageLedgerEnabled(boolean value) { usageLedgerEnabled = value; }
     }
 
     public static class Memory {

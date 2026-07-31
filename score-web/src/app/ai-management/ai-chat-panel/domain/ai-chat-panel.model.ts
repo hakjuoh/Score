@@ -112,6 +112,17 @@ export interface AiChatModelInfo {
   emergencyHeadroomTokens?: number | null;
 }
 
+export interface AiSelfPolicy {
+  enabled: boolean;
+  multiAgentEnabled: boolean;
+  maxAgentsPerRequest: number;
+  maxOutputTokensPerCall: number | null;
+  maxTotalTokensPerRequest: number | null;
+  quota: {period: 'DAILY' | 'MONTHLY' | null; limitTokens: number | null;
+    consumedTokens: number; reservedTokens: number; remainingTokens: number | null;
+    periodStart: string | null; periodEnd: string | null};
+}
+
 export type AiMcpServerStatusCode = 'CONNECTED' | 'NOT_CONFIGURED' | 'UNAVAILABLE';
 
 export interface AiMcpServerStatus {

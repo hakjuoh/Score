@@ -20,6 +20,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailDecision;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.GuardrailRefusal;
+import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiObservabilityConfiguration.ScoreAiObservabilitySdk;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
@@ -104,6 +105,45 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
         return new ScoreAiObservability(OpenTelemetry.noop(), "unknown");
     }
 
+    public void quotaReserved(long tokens) {
+        if (tokens > 0) instruments.quotaReservedTokens.add(tokens);
+    }
+
+    public void quotaConsumed(long tokens, long reserved) {
+        if (tokens > 0) instruments.quotaConsumedTokens.add(tokens);
+        if (tokens > reserved) instruments.quotaOverageTokens.add(tokens - reserved);
+    }
+
+    public void quotaReleased(long tokens) {
+        if (tokens > 0) instruments.quotaReleasedTokens.add(tokens);
+    }
+
+    public void quotaReconciled(long count) {
+        if (count > 0) instruments.quotaReconciliationCount.add(count);
+    }
+
+    public void multiAgentPolicyDowngrade() {
+        instruments.multiAgentPolicyDowngrade.add(1);
+    }
+
+    public void specialistAdmissionWait(long elapsedNanos) {
+        if (elapsedNanos > 0) {
+            instruments.specialistAdmissionWait.record(elapsedNanos / 1_000_000.0);
+        }
+    }
+
+    public void specialistAdmissionRejected() {
+        instruments.specialistAdmissionRejected.add(1);
+    }
+
+    public void catalogCacheRefresh() {
+        instruments.catalogCacheRefresh.add(1);
+    }
+
+    public void providerSecretDecryptionFailed() {
+        instruments.providerSecretDecryptionFailed.add(1);
+    }
+
     /**
      * Starts the turn's entrypoint span. A valid inbound W3C trace context is continued when
      * supplied.
@@ -162,6 +202,12 @@ public final class ScoreAiObservability implements ExecutionObservationContext {
                                          String traceparent, String tracestate,
                                          long generation) {
         if (request == null) return;
+        if (failure instanceof AiPolicyViolationException violation) {
+            instruments.policyDenied.add(1, Attributes.builder()
+                    .put("code", AiObservationInstruments.normalized(violation.code().name()))
+                    .put("model", AiObservationInstruments.normalized(request.modelName()))
+                    .build());
+        }
         long startedNanos = System.nanoTime();
         String requestModel = requestModels.resolve(request.modelName());
         admissionObservation.record(request, requester, failure, reason, generation,

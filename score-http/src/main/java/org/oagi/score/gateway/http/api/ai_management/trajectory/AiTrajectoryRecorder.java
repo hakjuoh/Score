@@ -244,6 +244,10 @@ public final class AiTrajectoryRecorder {
         interactions.assistantMessage(content, metadata);
     }
 
+    public synchronized void recordPolicyNotice(AiExecutionEvent notice) {
+        interactions.policyNotice(notice);
+    }
+
     public Map<String, Object> observationContext() {
         Map<String, Object> context = new LinkedHashMap<>();
         for (String key : List.of("fanout_id", "node_id", "parent_node_id",

@@ -19,6 +19,8 @@ import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryReco
 import org.oagi.score.gateway.http.api.ai_management.workflow.AiWorkflowIntent;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiModelRegistry;
+import org.oagi.score.gateway.http.api.ai_management.policy.model.EffectiveAiPolicy;
+import org.oagi.score.gateway.http.api.ai_management.policy.service.AiPolicyService;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.util.StringUtils;
 
@@ -39,6 +41,8 @@ final class ConversationSettingsManager {
     private final ObjectMapper objectMapper;
     private final ScoreAiObservability observability;
     private final ExecutionObserver observer;
+    private final AiRequestRegistry requests;
+    private final AiPolicyService policies;
 
     ConversationSettingsManager(ScoreAiModelRegistry models, ChatPromptAssembler prompts,
                                 AiConversationUseCases conversations,
@@ -47,7 +51,8 @@ final class ConversationSettingsManager {
                                 ChatConversationJournal journal,
                                 ObjectMapper objectMapper,
                                 ScoreAiObservability observability,
-                                ExecutionObserver observer) {
+                                ExecutionObserver observer, AiRequestRegistry requests,
+                                AiPolicyService policies) {
         this.models = models;
         this.prompts = prompts;
         this.conversations = conversations;
@@ -57,20 +62,29 @@ final class ConversationSettingsManager {
         this.objectMapper = objectMapper;
         this.observability = observability;
         this.observer = observer;
+        this.requests = requests;
+        this.policies = policies;
     }
 
     ChatRequest prepare(ChatRequest request, ScoreUser requester, long generation) {
+        return prepare(request, requester, generation, true);
+    }
+
+    ChatRequest prepare(ChatRequest request, ScoreUser requester, long generation,
+                        boolean persistentWorkflowsAllowed) {
         prompts.validate(request);
         AiChatConversationRepository repository = conversations.repository(requester);
         Optional<AiPersistentWorkflowCommand> workflowCommand =
                 AiWorkflowIntent.persistentWorkflowCommand(request.prompt());
+        if (!persistentWorkflowsAllowed) workflowCommand = Optional.empty();
         String requestedModelName = request.modelName();
         String requestedReasoningEffort = request.reasoningEffort();
         AiChatConversationSettings previous = null;
         String storedActiveWorkflow = null;
         if (StringUtils.hasText(request.conversationId())) {
             previous = repository.settingsForUpdate(request.conversationId());
-            Optional<String> stored = repository.activeWorkflow(request.conversationId());
+            Optional<String> stored = persistentWorkflowsAllowed
+                    ? repository.activeWorkflow(request.conversationId()) : Optional.empty();
             storedActiveWorkflow = AiConversationUseCases.normalizeWorkflowPreference(
                     stored != null ? stored.orElse(null) : null);
             if (!StringUtils.hasText(requestedModelName)) {
@@ -80,10 +94,12 @@ final class ConversationSettingsManager {
                 requestedReasoningEffort = previous.reasoningEffort();
             }
         }
-        String activeWorkflow = workflowCommand.isPresent()
+        String activeWorkflow = !persistentWorkflowsAllowed ? "assistant" : workflowCommand.isPresent()
                 ? workflowCommand.orElseThrow().activeWorkflow() : storedActiveWorkflow;
-        request = AiWorkflowIntent.applyExplicitDelegation(
-                request.withActiveWorkflow(activeWorkflow));
+        request = request.withActiveWorkflow(activeWorkflow);
+        request = persistentWorkflowsAllowed
+                ? AiWorkflowIntent.applyExplicitDelegation(request)
+                : request.withMultiAgent(AiMultiAgentOptions.single());
         if (request.changeConfirmation() != null) {
             request = request.withActiveWorkflow("assistant")
                     .withMultiAgent(AiMultiAgentOptions.single());
@@ -109,7 +125,8 @@ final class ConversationSettingsManager {
     AiConversationModelResponse update(ScoreUser requester, String conversationId,
                                        String requestedModelName,
                                        String requestedReasoningEffort,
-                                       String traceparent, String tracestate) {
+                                       String traceparent, String tracestate,
+                                       EffectiveAiPolicy policy) {
         AiChatConversationRepository repository = conversations.repository(requester);
         AiChatConversationSettings previous = repository.settingsForUpdate(conversationId);
         String modelName = models.resolveModelName(requestedModelName);
@@ -137,7 +154,19 @@ final class ConversationSettingsManager {
                             "context_compaction", "none"),
                     requester, 0L, traceparent, tracestate);
             turn.executionStarted();
+            AiRequestRegistry.Entry admission = null;
             try {
+                if (requests != null) {
+                    int maximum = policy != null ? policy.maxActiveRequests() : 8;
+                    admission = requests.register(compactionRequestId, conversationId, requester,
+                            java.time.Instant.now().plus(java.time.Duration.ofMinutes(10)), maximum);
+                    if (policies != null && policy != null) policies.snapshot(compactionRequestId, policy);
+                    models.snapshot(compactionRequestId);
+                    if (!requests.start(admission)) {
+                        throw new CancellationException(
+                                "Model-switch compaction stopped during admission.");
+                    }
+                }
                 Optional<AiContextBudget> sourceBudget =
                         contextBudgets.budget(previous.modelName());
                 long sourceEstimate = contextBudgets.estimateInputTokens(
@@ -147,7 +176,8 @@ final class ConversationSettingsManager {
                         compactionRequestId, previous.modelName(), previous.reasoningEffort(),
                         ignored -> { }, sourceBudget.orElse(null), sourceEstimate,
                         observability.correlation(compactionRequestId),
-                        ChatExecutionScopes.turn(compactionRequest, requester, 0L)
+                        ChatExecutionScopes.turn(compactionRequest, requester,
+                                        admission != null ? admission.generation() : 0L)
                                 .withPurpose(ExecutionScope.Purpose.COMPACTION),
                         observer, observability);
                 String summary = compactions.executeSummary(compactionRequest, history,
@@ -161,10 +191,15 @@ final class ConversationSettingsManager {
                 contextCompacted = true;
                 journal.completeAfterTransaction(turn, "COMPLETED", null);
             } catch (RuntimeException failure) {
+                if (admission != null) requests.fail(admission, failure);
                 journal.completeAfterTransaction(turn,
                         failure instanceof CancellationException ? "CANCELLED" : "FAILED",
                         failure);
                 throw failure;
+            } finally {
+                if (admission != null) requests.complete(admission);
+                if (policies != null) policies.clearSnapshot(compactionRequestId);
+                models.clearSnapshot(compactionRequestId);
             }
         }
         if (targetBudget.isPresent()

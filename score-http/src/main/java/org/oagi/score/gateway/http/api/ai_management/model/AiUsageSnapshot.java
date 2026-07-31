@@ -6,5 +6,11 @@ public record AiUsageSnapshot(
         String agentName,
         long promptTokens,
         long completionTokens,
-        long modelCalls) {
+        long modelCalls,
+        long cachedTokens,
+        long incompleteModelCalls) {
+    public AiUsageSnapshot(String nodeId, String agentName, long promptTokens,
+                           long completionTokens, long modelCalls) {
+        this(nodeId, agentName, promptTokens, completionTokens, modelCalls, 0L, 0L);
+    }
 }
