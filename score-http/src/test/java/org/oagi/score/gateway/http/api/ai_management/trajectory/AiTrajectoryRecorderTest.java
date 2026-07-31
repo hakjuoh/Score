@@ -40,6 +40,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -50,6 +51,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -934,6 +936,152 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
+    void correlatesSameNamedToolCallsByArgumentsWhenTheyExecuteInReverseOrder() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.append(eq("conversation-1"), any()))
+                .thenReturn(new AiChatStoredStep(42L, 1L, Instant.now()));
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), mock(ScoreUser.class),
+                "conversation-1", "request-1", ignored -> { });
+        AssistantMessage.ToolCall first = new AssistantMessage.ToolCall(
+                "call-1", "function", "lookup", "{\"id\":1}");
+        AssistantMessage.ToolCall second = new AssistantMessage.ToolCall(
+                "call-2", "function", "lookup", "{\"id\":2}");
+        recorder.recordModelResponse(new ChatResponse(List.of(new Generation(
+                AssistantMessage.builder().toolCalls(List.of(first, second)).build()))),
+                "assistant");
+        ToolCallback callback = mock(ToolCallback.class);
+        when(callback.getToolDefinition()).thenReturn(ToolDefinition.builder()
+                .name("lookup").description("lookup").inputSchema("{\"type\":\"object\"}").build());
+        when(callback.call(anyString(), any(ToolContext.class))).thenAnswer(invocation ->
+                invocation.getArgument(0, String.class).contains("2")
+                        ? "{\"value\":\"two\"}" : "{\"value\":\"one\"}");
+        ToolCallback wrapped = recorder.recordingTools(() -> new ToolCallback[]{callback})
+                .getToolCallbacks()[0];
+
+        wrapped.call("{\"id\":2}", new ToolContext(Map.of()));
+        wrapped.call("{\"id\":1}", new ToolContext(Map.of()));
+
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, times(5)).append(eq("conversation-1"), steps.capture());
+        List<AiChatTrajectoryStep> toolSteps = steps.getAllValues().stream()
+                .filter(step -> step.messageKind().startsWith("tool_call")).toList();
+        assertThat(toolSteps).extracting(step -> step.extra().get("tool_call_id"))
+                .containsExactly("call-2", "call-2", "call-1", "call-1");
+        assertThat(toolSteps).extracting(step -> step.extra().get("tool_call_sequence"))
+                .containsExactly(1L, 1L, 0L, 0L);
+        @SuppressWarnings("rawtypes")
+        ArgumentCaptor<Map> observations = ArgumentCaptor.forClass(Map.class);
+        verify(repository, times(2)).updateObservation(
+                eq("conversation-1"), eq(42L), observations.capture());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> results = (List<Map<String, Object>>)
+                observations.getAllValues().getLast().get("results");
+        assertThat(results).extracting(
+                        result -> result.get("source_call_id"), result -> result.get("content"))
+                .containsExactly(
+                        tuple("call-1", "{\"value\":\"one\"}"),
+                        tuple("call-2", "{\"value\":\"two\"}"));
+    }
+
+    @Test
+    void incrementsTheProviderReplayFenceOnlyForPossiblyExecutedChanges() {
+        record Scenario(String name, boolean readOnly, String output,
+                        boolean fails, long expectedFence) { }
+        List<Scenario> scenarios = List.of(
+                new Scenario("create_context", false, "{}", false, 1L),
+                new Scenario("update_context", false, null, true, 1L),
+                new Scenario("get_context", true, "{}", false, 0L),
+                new Scenario("get_context_failed", true, null, true, 0L),
+                new Scenario("create_blocked", false,
+                        "{\"error\":\"CHANGE_CONFIRMATION_REQUIRED\","
+                                + "\"confirmationRequestId\":\"c-1\"}", false, 0L),
+                new Scenario("create_denied", false,
+                        "{\"error\":\"CHANGE_CONFIRMATION_DENIED\"}", false, 0L),
+                new Scenario("create_cancelled", false,
+                        "{\"error\":\"REQUEST_STOPPING\"}", false, 0L),
+                new Scenario("toolSearchTool", false, "[]", false, 0L));
+
+        for (Scenario scenario : scenarios) {
+            AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                    mock(AiChatConversationRepository.class), new ObjectMapper(),
+                    mock(ScoreUser.class), "conversation-1", "request-1", ignored -> { });
+            if (scenario.readOnly()) recorder.readOnlyToolNames(Set.of(scenario.name()));
+            ToolCallback callback = mock(ToolCallback.class);
+            when(callback.getToolDefinition()).thenReturn(ToolDefinition.builder()
+                    .name(scenario.name()).description("test")
+                    .inputSchema("{\"type\":\"object\"}").build());
+            if (scenario.fails()) {
+                when(callback.call(anyString(), any(ToolContext.class)))
+                        .thenThrow(new IllegalStateException("failed"));
+            } else {
+                when(callback.call(anyString(), any(ToolContext.class)))
+                        .thenReturn(scenario.output());
+            }
+            ToolCallback wrapped = recorder.recordingTools(() -> new ToolCallback[]{callback})
+                    .getToolCallbacks()[0];
+
+            if (scenario.fails()) {
+                assertThatThrownBy(() -> wrapped.call("{}", new ToolContext(Map.of())))
+                        .isInstanceOf(IllegalStateException.class);
+            } else {
+                wrapped.call("{}", new ToolContext(Map.of()));
+            }
+            assertThat(recorder.executedChangeToolCallCount())
+                    .as(scenario.name()).isEqualTo(scenario.expectedFence());
+        }
+    }
+
+    @Test
+    void propagatesNormalizedMcpAndAgentRunMetadataWithPortBoundaries() {
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                mock(AiChatConversationRepository.class), new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", events::add);
+        recorder.mcpToolNames(Set.of("mcp_valid", "mcp_invalid"));
+        ToolCallback valid = namedTool("mcp_valid", "{}");
+        ToolCallback invalid = namedTool("mcp_invalid", "{}");
+        ToolCallback local = namedTool("local_tool", "{}");
+        ToolCallback[] callbacks = recorder.recordingTools(
+                () -> new ToolCallback[]{valid, invalid, local}).getToolCallbacks();
+
+        try (var ignored = recorder.activateAgentRun(" run-7 ")) {
+            recorder.mcpTelemetry(" server ", " 2026-01 ", " host.example ",
+                    65_535L, " tcp ", " stdio ");
+            callbacks[0].call("{}", new ToolContext(Map.of()));
+            recorder.mcpTelemetry(" server ", " 2026-01 ", " host.example ",
+                    65_536L, " tcp ", " stdio ");
+            callbacks[1].call("{}", new ToolContext(Map.of()));
+            callbacks[2].call("{}", new ToolContext(Map.of()));
+        }
+
+        List<AiExecutionEvent> validEvents = events.stream()
+                .filter(event -> "mcp_valid".equals(event.toolName())).toList();
+        assertThat(validEvents).hasSize(2).allSatisfy(event -> assertThat(event.metadata())
+                .containsEntry("mcp", true)
+                .containsEntry("mcp_server_name", "server")
+                .containsEntry("mcp_protocol_version", "2026-01")
+                .containsEntry("server_address", "host.example")
+                .containsEntry("server_port", 65_535L)
+                .containsEntry("network_protocol_name", "tcp")
+                .containsEntry("network_transport", "stdio")
+                .containsEntry("agent_run_id", "run-7"));
+        assertThat(events.stream().filter(event -> "mcp_invalid".equals(event.toolName())))
+                .hasSize(2).allSatisfy(event -> assertThat(event.metadata())
+                        .containsEntry("mcp", true)
+                        .containsEntry("agent_run_id", "run-7")
+                        .doesNotContainKey("server_port"));
+        assertThat(events.stream().filter(event -> "local_tool".equals(event.toolName())))
+                .hasSize(2).allSatisfy(event -> assertThat(event.metadata())
+                        .containsEntry("mcp", false)
+                        .containsEntry("agent_run_id", "run-7")
+                        .doesNotContainKeys("mcp_server_name", "mcp_protocol_version",
+                                "server_address", "server_port", "network_protocol_name",
+                                "network_transport"));
+    }
+
+    @Test
     void addsAnthropicCacheTokensToTheProviderReportedInputCount() {
         Map<String, Object> metrics = recordedMetrics(
                 "anthropic", new DefaultUsage(2, 4, 6, null, 100L, 5L));
@@ -1770,6 +1918,26 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
+    void preservesTheCallerLimitInTruncationMetadataWhenOnlyContextBudgetTruncates() {
+        AiContextBudget budget = new AiContextBudget(
+                "model", 120L, 10L, 90L, 10L, 100L, false);
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                mock(AiChatConversationRepository.class), new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", "model", "high",
+                events::add, budget, 90L);
+
+        String output = recorder.limitToolOutput(
+                "x".repeat(1000), 0L, "update_business_context");
+
+        assertThat(output.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(30);
+        assertThat(events.getFirst().metadata())
+                .containsEntry("toolOutputTokenLimit", 0L)
+                .containsEntry("returnedUtf8Bytes",
+                        output.getBytes(StandardCharsets.UTF_8).length);
+    }
+
+    @Test
     void returnsNoToolBytesWhenTheSafeInputBudgetIsAlreadyExhausted() {
         AiContextBudget budget = new AiContextBudget(
                 "model", 120L, 10L, 90L, 10L, 100L, false);
@@ -1833,6 +2001,14 @@ class AiTrajectoryRecorderTest {
                 id, "function", "create_top_level_asbiep", arguments);
         recorder.recordModelResponse(new ChatResponse(List.of(new Generation(
                 AssistantMessage.builder().toolCalls(List.of(retry)).build()))), "assistant");
+    }
+
+    private static ToolCallback namedTool(String name, String output) {
+        ToolCallback callback = mock(ToolCallback.class);
+        when(callback.getToolDefinition()).thenReturn(ToolDefinition.builder()
+                .name(name).description("test").inputSchema("{\"type\":\"object\"}").build());
+        when(callback.call(anyString(), any(ToolContext.class))).thenReturn(output);
+        return callback;
     }
 
     private static final class CountTool implements ToolCallback {
