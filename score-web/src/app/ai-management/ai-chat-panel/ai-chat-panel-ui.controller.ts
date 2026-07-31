@@ -203,20 +203,21 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     const attachments = [...this.state.attachments];
 
     if (prompt) {
-      const commandDecision = this.commandService.decide(prompt);
-      if (commandDecision.kind === 'local' && commandDecision.command === 'cancel') {
-        this.handleLocalCommand(commandDecision.command, prompt);
+      const command = this.commandService.resolveCommand(prompt);
+      if (command === '/cancel') {
+        this.tryHandleCommand(command, prompt);
         return;
       }
-      if (commandDecision.kind !== 'local' && this.canRequestChangeRevision()) {
+      if (command) {
+        if (this.interactionBlocked) {
+          return;
+        }
+        if (this.tryHandleCommand(command, prompt)) {
+          return;
+        }
+      }
+      if (this.canRequestChangeRevision()) {
         this.sendChangeRevisionRequest(prompt, attachments);
-        return;
-      }
-      if (this.interactionBlocked) {
-        return;
-      }
-      if (commandDecision.kind === 'local') {
-        this.handleLocalCommand(commandDecision.command!, prompt);
         return;
       }
     }

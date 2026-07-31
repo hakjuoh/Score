@@ -127,7 +127,8 @@ final class ConversationSettingsManager {
         if (modelChanged && !history.isEmpty() && targetBudget.isPresent()
                 && targetBudget.get().shouldCompact(targetInputTokens)) {
             String compactionRequestId = "model-switch-" + UUID.randomUUID();
-            ChatRequest compactionRequest = new ChatRequest("/compact", compactionRequestId,
+            ChatRequest compactionRequest = new ChatRequest(ChatCommands.compactPrompt(),
+                    compactionRequestId,
                     null, conversationId, null, List.of(), null, previous.modelName(),
                     previous.reasoningEffort(), "ask");
             ScoreAiObservability.Turn turn = observability.startExecution(
@@ -140,7 +141,7 @@ final class ConversationSettingsManager {
                 Optional<AiContextBudget> sourceBudget =
                         contextBudgets.budget(previous.modelName());
                 long sourceEstimate = contextBudgets.estimateInputTokens(
-                        history, prompts.compactMessage(null), null);
+                        history, compactions.compactMessage(null), null);
                 AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
                         repository, objectMapper, requester, conversationId,
                         compactionRequestId, previous.modelName(), previous.reasoningEffort(),
@@ -150,7 +151,7 @@ final class ConversationSettingsManager {
                                 .withPurpose(ExecutionScope.Purpose.COMPACTION),
                         observer, observability);
                 String summary = compactions.executeSummary(compactionRequest, history,
-                        prompts.compactMessage(null), requester, recorder, false).content();
+                        compactions.compactMessage(null), requester, recorder, false).content();
                 compactions.replaceMemoryWithSummary(requester, conversationId, summary);
                 long beforeTokens = targetInputTokens;
                 history = List.of(compactions.summaryMessage(summary));

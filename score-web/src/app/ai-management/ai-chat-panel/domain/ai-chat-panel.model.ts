@@ -519,7 +519,6 @@ export interface AiResourceListQuery {
 export interface AiChatCommand {
   name: string;
   description: string;
-  kind: 'local' | 'backend';
 }
 
 export interface AiChatContextUpdate {

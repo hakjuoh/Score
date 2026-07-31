@@ -191,7 +191,7 @@ describe('AiChatComposerComponent cancellation actions', () => {
     const selected = vi.fn();
     component.showCommandSuggestions = true;
     component.commandSuggestions = [{
-      name: '/model', description: 'Change the model.', kind: 'local'
+      name: '/model', description: 'Change the model.'
     }];
     component.commandSuggestionSelected.subscribe(selected);
     fixture.detectChanges();
