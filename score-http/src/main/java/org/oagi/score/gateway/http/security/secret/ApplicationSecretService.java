@@ -27,6 +27,11 @@ public class ApplicationSecretService {
         this.observability = observability;
     }
 
+    /** Whether encrypted provider credentials can be created or opened in this process. */
+    public boolean isEncryptionConfigured() {
+        return crypto.isConfigured();
+    }
+
     public ULong create(DSLContext tx, String name, char[] plaintext, ULong actorId) {
         String guid = UUID.randomUUID().toString();
         var context = new ApplicationSecretCrypto.SecretContext(

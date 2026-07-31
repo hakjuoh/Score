@@ -55,6 +55,10 @@ public class AiCatalogBootstrap implements ApplicationRunner {
             return;
         }
         if (properties.getProviders().isEmpty() || properties.getModels().isEmpty()) return;
+        if (!secrets.isEncryptionConfigured() && properties.getProviders().values().stream()
+                .anyMatch(provider -> StringUtils.hasText(provider.getKey()))) {
+            return;
+        }
 
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         Map<String, ULong> providerIds = new LinkedHashMap<>();

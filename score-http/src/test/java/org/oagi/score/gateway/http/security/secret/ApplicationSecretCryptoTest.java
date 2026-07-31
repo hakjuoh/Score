@@ -76,14 +76,43 @@ class ApplicationSecretCryptoTest {
     }
 
     @Test
-    void rejectsMissingOrInvalidKeyMaterialDuringStartupValidation() {
-        assertThatThrownBy(() -> new ApplicationSecretCrypto(
-                properties("primary", Map.of("primary", ""))).validateConfiguration())
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("not configured");
+    void permitsMissingKeyMaterialAtStartupAndRejectsItWhenEncryptionIsUsed() {
+        ApplicationSecretCrypto missing = new ApplicationSecretCrypto(
+                properties("primary", Map.of("primary", "")));
+        missing.validateConfiguration();
+        assertThat(missing.isConfigured()).isFalse();
+        assertThatThrownBy(() -> missing.encrypt("secret".toCharArray(),
+                new ApplicationSecretCrypto.SecretContext(
+                        "guid", "name", "AI_PROVIDER_API_KEY")))
+                .isInstanceOf(ApplicationSecretUnavailableException.class)
+                .hasMessageContaining("not configured")
+                .hasMessageContaining("before using encrypted provider credentials");
+
+    }
+
+    @Test
+    void rejectsMalformedActiveAndInactiveKeysDuringStartupValidation() {
         assertThatThrownBy(() -> new ApplicationSecretCrypto(
                 properties("primary", Map.of("primary", "not-base64"))).validateConfiguration())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Base64");
+        assertThatThrownBy(() -> new ApplicationSecretCrypto(
+                properties("primary", Map.of("primary", "   "))).validateConfiguration())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Base64");
+        assertThatThrownBy(() -> new ApplicationSecretCrypto(properties("active",
+                Map.of("active", key('a'), "retired", "not-base64")))
+                .validateConfiguration())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Base64");
+    }
+
+    @Test
+    void rejectsAConfiguredKeyWithTheWrongDecodedLengthDuringStartupValidation() {
+        assertThatThrownBy(() -> new ApplicationSecretCrypto(properties("primary",
+                Map.of("primary", Base64.getEncoder().encodeToString(new byte[16]))))
+                .validateConfiguration())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("32 bytes");
     }
 }

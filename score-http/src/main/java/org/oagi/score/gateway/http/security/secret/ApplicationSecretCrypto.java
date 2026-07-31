@@ -38,11 +38,17 @@ public class ApplicationSecretCrypto {
         this.random = random;
     }
 
-    /** Validates the complete key ring during startup, before any provider can be used. */
+    /** Validates a configured key ring; an absent ring leaves encrypted-secret features disabled. */
     @PostConstruct
     void validateConfiguration() {
+        if (!isConfigured()) return;
         key(properties.getActiveKeyId());
         properties.getKeys().keySet().forEach(this::key);
+    }
+
+    boolean isConfigured() {
+        return properties.getKeys().values().stream()
+                .anyMatch(value -> value != null && !value.isEmpty());
     }
 
     public EncryptedSecret encrypt(char[] plaintext, SecretContext context) {
@@ -98,9 +104,11 @@ public class ApplicationSecretCrypto {
             throw new IllegalStateException("An active application secret encryption key ID is required.");
         }
         String encoded = properties.getKeys().get(keyId);
-        if (!StringUtils.hasText(encoded)) {
-            throw new IllegalStateException("Application secret encryption key '" + keyId
-                    + "' is not configured.");
+        if (encoded == null || encoded.isEmpty()) {
+            throw new ApplicationSecretUnavailableException(
+                    "Application secret encryption key '" + keyId
+                    + "' is not configured. Configure the application secret key before "
+                    + "using encrypted provider credentials.");
         }
         byte[] decoded;
         try {

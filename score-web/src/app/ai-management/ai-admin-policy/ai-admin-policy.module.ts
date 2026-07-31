@@ -11,6 +11,8 @@ import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiProviderListComponent} from './ai-provider-list.component';
 import {AiProviderDetailComponent} from './ai-provider-detail.component';
 import {AiModelDetailComponent} from './ai-model-detail.component';
+import {SearchBarModule} from '../../common/search-bar/search-bar.module';
+import {ColumnSelectorModule} from '../../common/column-selector/column-selector.module';
 
 export const AI_ADMIN_ROUTES: Routes = [
   {path: 'ai-admin/users', component: AiPolicyUserListComponent,
@@ -28,7 +30,8 @@ export const AI_ADMIN_ROUTES: Routes = [
 ];
 
 @NgModule({
-  imports: [CommonModule, FormsModule, MaterialModule, RouterModule.forChild(AI_ADMIN_ROUTES)],
+  imports: [CommonModule, FormsModule, MaterialModule, SearchBarModule, ColumnSelectorModule,
+    RouterModule.forChild(AI_ADMIN_ROUTES)],
   declarations: [AiPolicyUserListComponent, AiPolicyUserDetailComponent, AiModelListComponent,
     AiProviderListComponent, AiProviderDetailComponent, AiModelDetailComponent],
   providers: [AiAdminPolicyService]
