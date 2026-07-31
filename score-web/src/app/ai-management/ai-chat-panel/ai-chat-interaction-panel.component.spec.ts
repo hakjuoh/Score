@@ -117,7 +117,7 @@ describe('AiChatInteractionPanelComponent', () => {
     const response = vi.fn();
     component.elicitationResponded.subscribe(response);
     component.elicitation = {
-      elicitationId: 'elicitation-1', requestId: 'request-1',
+      elicitationId: 'elicitation-1', requestId: 'request-1', generation: 7,
       conversationId: 'conversation-1', expiresAt: '2099-01-01T00:00:00Z',
       message: 'Choose import behavior.',
       requestedSchema: {
