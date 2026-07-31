@@ -7,27 +7,15 @@ import {CHANGE_CONFIRMATION_DECISION_TIMEOUT_MS} from './ai-chat-panel.constants
 import {AiChatPanelState} from './ai-chat-panel-state';
 import {
   AiChatAttachment,
-  AiChangeInteraction,
-  AiChangeConfirmationNotice
+  AiChangeInteraction
 } from './ai-chat-panel.model';
+import {ChangeRepeatOpportunity} from './ai-change-repeat-coordinator';
 import {
   isUnexpiredChangeConfirmation,
   changeApprovalOutcome,
   changeConflictOutcome,
   changeDenialOutcome
 } from './ai-change-confirmation';
-
-export interface ChangeRepeatDraft {
-  requestId: string;
-  prompt: string;
-  attachments: AiChatAttachment[];
-}
-
-export interface ChangeRepeatOpportunity {
-  conversationId: string;
-  draft: ChangeRepeatDraft;
-  notice: AiChangeConfirmationNotice;
-}
 
 export interface AiChangeInteractionCallbacks {
   sendConfirmedChangeRepeat(
