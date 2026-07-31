@@ -80,17 +80,4 @@ export class AiAdminPolicyService {
     return this.http.put<AiProviderView>(`/api/admin/ai/providers/${providerId}`, update);
   }
 
-  rotateProviderKey(providerId: number, expectedVersion: number,
-                    apiKey: string, reason: string): Observable<AiProviderView> {
-    return this.http.put<AiProviderView>(`/api/admin/ai/providers/${providerId}/api-key`, {
-      expectedVersion, apiKey, reason
-    });
-  }
-
-  removeProviderKey(providerId: number, expectedVersion: number,
-                    reason: string): Observable<AiProviderView> {
-    return this.http.delete<AiProviderView>(`/api/admin/ai/providers/${providerId}/api-key`, {
-      params: {expectedVersion, reason}
-    });
-  }
 }

@@ -33,21 +33,14 @@ describe('AiAdminPolicyService REST contract', () => {
     request.flush(null);
   });
 
-  it('rotates a provider key only through the write endpoint', () => {
-    service.rotateProviderKey(2, 4, 'new-secret', 'Rotate key for test').subscribe();
-    const request = http.expectOne('/api/admin/ai/providers/2/api-key');
+  it('updates provider settings and API key through one write endpoint', () => {
+    const update = {expectedVersion: 4, providerName: 'OpenAI', providerType: 'openai',
+      baseUrl: 'https://api.openai.com', messagesUrl: null, anthropicVersion: null,
+      apiVersion: null, enabled: true, apiKey: '', reason: 'Remove key for test'};
+    service.updateProvider(2, update).subscribe();
+    const request = http.expectOne('/api/admin/ai/providers/2');
     expect(request.request.method).toBe('PUT');
-    expect(request.request.body).toEqual({
-      expectedVersion: 4, apiKey: 'new-secret', reason: 'Rotate key for test'
-    });
-    request.flush({});
-  });
-
-  it('removes a provider key without putting secret material in the URL', () => {
-    service.removeProviderKey(2, 5, 'Remove key for test').subscribe();
-    const request = http.expectOne(req => req.url === '/api/admin/ai/providers/2/api-key');
-    expect(request.request.method).toBe('DELETE');
-    expect(request.request.params.keys().sort()).toEqual(['expectedVersion', 'reason']);
+    expect(request.request.body).toEqual(update);
     request.flush({});
   });
 

@@ -27,8 +27,7 @@ import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.A
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_TOKEN_USAGE_PERIOD;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.APP_USER;
 
-@SpringBootTest(properties =
-        "score.security.secret-encryption.keys.primary=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+@SpringBootTest
 class JooqAiQuotaRepositoryIntegrationTest {
 
     @Autowired
