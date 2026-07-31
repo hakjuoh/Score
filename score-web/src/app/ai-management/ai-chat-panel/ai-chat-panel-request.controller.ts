@@ -11,24 +11,11 @@ import {
   AiChatSocketEvent,
   AiChangeConfirmationAuthorization
 } from './domain/ai-chat-panel.model';
-import {
-  isExecutionActivityEvent,
-  isSpecialistActivityEvent,
-  isSpecialistToolEvent
-} from './domain/ai-agent-activity';
-import {isWorkflowLifecycleEvent} from './domain/ai-execution-composite';
 import {AiRequestDispatchIntent} from './domain/ai-request-dispatch-coordinator';
-
-const CHANGE_APPROVAL_EVENT_SUBTYPES = new Set([
-  'change_approval_batch_required',
-  'change_approval_decision_accepted',
-  'change_approval_decision_rejected'
-]);
-
-function isChangeApprovalInteractionEvent(event: AiChatSocketEvent): boolean {
-  return event.type === 'system' && !!event.subtype
-    && CHANGE_APPROVAL_EVENT_SUBTYPES.has(event.subtype);
-}
+import {
+  admitsRestLiveSideChannel,
+  restReplayDisposition
+} from './domain/ai-chat-event-admission';
 
 export abstract class AiChatPanelRequestController extends AiChatPanelControllerBase {
   protected startChatRequest(prompt: string, attachments: AiChatAttachment[]): void {
@@ -98,25 +85,14 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         if (key && liveRestEventKeys.has(key)) {
           return;
         }
-        if (isChangeApprovalInteractionEvent(event)) {
+        const disposition = restReplayDisposition(event);
+        if (disposition === 'socket') {
           this.handleSocketEvent(event);
-        } else if (event.type === 'system'
-          && event.subtype === 'change_confirmation_required') {
+        } else if (disposition === 'confirmation') {
           this.handleChangeConfirmationNotice(event);
-        } else if (event.type === 'system'
-          && (event.subtype === 'context_usage' || event.subtype === 'context_compacted')) {
+        } else if (disposition === 'system') {
           this.handleSystemEvent(event);
-        } else if (isWorkflowLifecycleEvent(event) || isExecutionActivityEvent(event)) {
-          this.handleSystemEvent(event);
-        } else if (event.type === 'system' && event.subtype === 'guide') {
-          this.handleSystemEvent(event);
-        } else if (event.type === 'system' && event.subtype === 'workflow_result') {
-          this.handleSystemEvent(event);
-        } else if (event.type === 'system' && event.subtype === 'provider_error') {
-          this.handleSystemEvent(event);
-        } else if (event.type === 'system' && event.subtype === 'provider_retry') {
-          this.handleSystemEvent(event);
-        } else if (event.type === 'tool_call' || event.type === 'tool_group') {
+        } else if (disposition === 'tool') {
           // Replayed specialist activity belongs in its agent timeline;
           // lead activity uses the same structured row path as WebSocket chat.
           if (!this.divertSpecialistToolEvent(event)) {
@@ -140,17 +116,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
       '/user/queue/ai/chat/' + requestId
     ).subscribe((message: Message) => {
       const event = JSON.parse(message.body) as AiChatSocketEvent;
-      if (isWorkflowLifecycleEvent(event) || isExecutionActivityEvent(event)
-        || isSpecialistToolEvent(event)
-        || event.type === 'tool_call' || event.type === 'tool_group'
-        || event.type === 'system' && event.subtype === 'guide'
-        || event.type === 'system' && event.subtype === 'workflow_result'
-        || event.type === 'system' && (event.subtype === 'provider_error'
-          || event.subtype === 'provider_retry')
-        || isChangeApprovalInteractionEvent(event)
-        || event.type === 'system' && (event.subtype === 'elicitation_required'
-        || event.subtype === 'elicitation_decision_accepted'
-        || event.subtype === 'elicitation_decision_rejected')) {
+      if (admitsRestLiveSideChannel(event)) {
         const key = restEventKey(event);
         if (key) liveRestEventKeys.add(key);
         this.handleSocketEvent(event);

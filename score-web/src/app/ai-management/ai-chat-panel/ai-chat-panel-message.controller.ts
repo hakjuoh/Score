@@ -9,9 +9,9 @@ import {
   isReconciliationRequired,
   primaryContent,
   providerRetrySemantics,
-  terminalRequestErrorStatus,
-  toolCallEventSemantics
+  terminalRequestErrorStatus
 } from './domain/ai-chat-event-semantics';
+import {requestEventAdmission} from './domain/ai-chat-event-admission';
 import {
   FORMATTER_META_RESPONSE_PATTERN,
   WORKING_STATUS_LABEL
@@ -358,51 +358,16 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   }
 
   protected isRecognizedRequestEvent(event: AiChatSocketEvent): boolean {
-    if (event.type === 'assistant_update') {
-      return !!primaryContent(event);
+    const admission = requestEventAdmission(event);
+    if (admission === 'admit') return true;
+    if (admission === 'requires-terminal-identity') {
+      return this.matchesTerminalIdentity(event);
     }
-    if (event.type === 'assistant_final') {
-      return typeof event.conversationId === 'string' && !!event.conversationId.trim()
-        && !!primaryContent(event).trim();
+    if (admission === 'requires-active-identity') {
+      const identity = this.acceptedIdentity(event);
+      return !!identity && this.matchesActiveIdentity(identity);
     }
-    if (event.type === 'tool_call') {
-      return !!toolCallEventSemantics(event);
-    }
-    if (event.type === 'tool_group') {
-      return !!event.groupId && (event.subtype === 'started' || event.subtype === 'progress'
-        || event.subtype === 'completed' || event.subtype === 'failed');
-    }
-    if (event.type === 'system') {
-      if (event.subtype === 'request_error') {
-        return !!terminalRequestErrorStatus(event) && this.matchesTerminalIdentity(event);
-      }
-      if (event.subtype === 'reconciliation_required') {
-        return isReconciliationRequired(event) && this.matchesTerminalIdentity(event);
-      }
-      if (event.subtype === 'accepted') {
-        const identity = this.acceptedIdentity(event);
-        return !!identity && this.matchesActiveIdentity(identity);
-      }
-      return event.subtype === 'data_changed'
-        || event.subtype === 'data_change_rejected'
-        || event.subtype === 'audit_failed'
-        || event.subtype === 'cancelled'
-        || event.subtype === 'authentication_failed'
-        || event.subtype === 'error'
-        || event.subtype === 'model_fallback'
-        || event.subtype === 'provider_error'
-        || event.subtype === 'provider_retry'
-        || event.subtype === 'workflow_result'
-        || event.subtype === 'context_usage'
-        || event.subtype === 'context_compacted'
-        || event.subtype === 'guide'
-        || event.subtype === 'workflow_started'
-        || !!workflowTerminalStatus(event.subtype)
-        || isExecutionActivityEvent(event)
-        || event.visibility === 'debug'
-        || event.metadata?.['inProgress'] === true;
-    }
-    return event.type === 'UI_FORMATTED' && !!event.response;
+    return false;
   }
 
   protected hasActiveStructuredToolRows(): boolean {

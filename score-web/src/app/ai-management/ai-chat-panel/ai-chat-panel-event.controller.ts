@@ -19,6 +19,7 @@ import {
   AiChangeApprovalBatchCallbacks
 } from './domain/ai-change-approval-batch-coordinator';
 import {AiElicitationCallbacks} from './domain/ai-elicitation-coordinator';
+import {interactionEventDisposition} from './domain/ai-chat-event-admission';
 
 export abstract class AiChatPanelEventController extends AiChatPanelUiController {
   protected handleSocketEvent(event: AiChatSocketEvent): void {
@@ -66,33 +67,28 @@ export abstract class AiChatPanelEventController extends AiChatPanelUiController
       return;
     }
     this.scheduleRequestStatusWatchdog();
-    if (event.type === 'system'
-      && event.subtype === 'change_approval_batch_required') {
+    const interaction = interactionEventDisposition(event);
+    if (interaction === 'change-approval-required') {
       this.handleChangeApprovalBatchRequired(event);
       this.scrollToBottom(true);
       return;
     }
-    if (event.type === 'system'
-      && (event.subtype === 'change_approval_decision_accepted'
-        || event.subtype === 'change_approval_decision_rejected')) {
+    if (interaction === 'change-approval-decision') {
       this.handleChangeApprovalDecisionEvent(event);
       this.scrollToBottom(true);
       return;
     }
-    if (event.type === 'system'
-      && event.subtype === 'change_confirmation_required') {
+    if (interaction === 'change-confirmation-required') {
       this.handleChangeConfirmationNotice(event);
       this.scrollToBottom();
       return;
     }
-    if (event.type === 'system' && event.subtype === 'elicitation_required') {
+    if (interaction === 'elicitation-required') {
       this.handleElicitationRequired(event);
       this.scrollToBottom(true);
       return;
     }
-    if (event.type === 'system'
-      && (event.subtype === 'elicitation_decision_accepted'
-        || event.subtype === 'elicitation_decision_rejected')) {
+    if (interaction === 'elicitation-decision') {
       this.handleElicitationDecisionEvent(event);
       this.scrollToBottom();
       return;
