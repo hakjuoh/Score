@@ -9,7 +9,6 @@ import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservat
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrail;
-import org.oagi.score.gateway.http.api.ai_management.model.AiBoundedToolOutput;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
@@ -19,31 +18,17 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.model.AiMetricsSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalBatchNotice;
-import org.oagi.score.gateway.http.api.ai_management.model.AiObservationAccumulator;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApproval;
-import org.oagi.score.gateway.http.api.ai_management.model.AiPendingTool;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeToolGuard;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiToolFailureMessage;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiToolRetryMessage;
-import org.oagi.score.gateway.http.api.ai_management.tool.AiToolRetryTracker;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.ToolContext;
-import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.ai.tool.definition.ToolDefinition;
-import org.springframework.ai.tool.metadata.ToolMetadata;
 import org.springframework.util.StringUtils;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -51,9 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -65,7 +48,6 @@ import java.util.function.Supplier;
  */
 public final class AiTrajectoryRecorder {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(AiTrajectoryRecorder.class);
     public static final String PHASE_CONTEXT_KEY = "score.ai.trajectory.phase";
     /** Stable trajectory wire value recognized by external verifiers. */
     public static final String FANOUT_USAGE_STEP_KIND = "fanout_usage";
@@ -86,29 +68,14 @@ public final class AiTrajectoryRecorder {
     private final AiTrajectoryAuditSanitizer auditSanitizer;
     private final AiTrajectoryModelCalls modelCalls;
     private final AiToolOutputLimiter toolOutputLimiter;
+    private final AiTrajectoryToolCalls toolCalls;
     private final AtomicLong estimatedInputFloor;
     private final AtomicLong eventSequence;
     private final AtomicLong toolSequence;
     private final Map<String, Object> traceContext;
     private final AiChatConversationKind conversationKind;
-    private final Map<String, ConcurrentLinkedQueue<AiPendingTool>> pendingTools = new ConcurrentHashMap<>();
-    private final Set<String> completedToolCallIds = ConcurrentHashMap.newKeySet();
-    private final Set<String> narratedToolCallIds = ConcurrentHashMap.newKeySet();
-    private final AiToolRetryTracker toolRetryTracker = new AiToolRetryTracker();
-    private final AtomicLong completedToolCalls = new AtomicLong();
-    private final AtomicLong completedDomainToolCalls = new AtomicLong();
-    private final AtomicLong successfulDomainToolCalls = new AtomicLong();
     private final AtomicLong requestExecutedDomainToolCalls;
     private final Set<String> requestPendingApprovalIds;
-    private final Set<String> mcpToolNames = ConcurrentHashMap.newKeySet();
-    private volatile String mcpServerName = "unknown";
-    private volatile String mcpProtocolVersion;
-    private volatile String mcpServerAddress;
-    private volatile long mcpServerPort = -1;
-    private volatile String mcpNetworkProtocolName;
-    private volatile String mcpNetworkTransport;
-    private final AtomicLong executedChangeToolCalls = new AtomicLong();
-    private volatile Set<String> readOnlyToolNames = Set.of();
     private volatile boolean sealed;
     private volatile boolean usageAccountingSealed;
     private volatile String lastGuideContent;
@@ -213,14 +180,19 @@ public final class AiTrajectoryRecorder {
         this.auditSanitizer = new AiTrajectoryAuditSanitizer(objectMapper);
         this.toolOutputLimiter = new AiToolOutputLimiter(
                 contextBudget, this.estimatedInputFloor, subagentScope);
+        this.toolCalls = new AiTrajectoryToolCalls(
+                this, repository, objectMapper, conversationId, requestId, modelName,
+                reasoningEffort, executionScope, this.observer, this.observationContext,
+                eventWriter, auditSanitizer, toolOutputLimiter, toolSequence,
+                requestExecutedDomainToolCalls, requestPendingApprovalIds,
+                () -> sealed, this::verifyActive, this::appendGuide,
+                this::activeAgentRunId, conversationKind != AiChatConversationKind.ROOT
+                        || this.traceContext.containsKey("agent_id")
+                        || Boolean.TRUE.equals(this.traceContext.get("concurrent_branch")));
         this.modelCalls = new AiTrajectoryModelCalls(
                 repository, objectMapper, conversationId, requestId, modelName, reasoningEffort,
                 contextBudget, this.estimatedInputFloor, promptTokenNormalizer, executionScope,
-                this.observer, eventWriter, auditSanitizer::boundedValue,
-                (name, callId, arguments, observations) -> pendingTools
-                        .computeIfAbsent(name, ignored -> new ConcurrentLinkedQueue<>())
-                        .add(new AiPendingTool(callId, name, arguments, observations,
-                                toolSequence.getAndIncrement())),
+                this.observer, eventWriter, auditSanitizer::boundedValue, toolCalls::enqueue,
                 this::emitContextUsage, () -> sealed, () -> usageAccountingSealed,
                 subagentScope, this.traceContext);
     }
@@ -360,30 +332,18 @@ public final class AiTrajectoryRecorder {
     }
 
     public void mcpToolNames(java.util.Collection<String> toolNames) {
-        mcpToolNames.clear();
-        if (toolNames != null) {
-            toolNames.stream().filter(StringUtils::hasText).map(String::strip)
-                    .forEach(mcpToolNames::add);
-        }
+        toolCalls.mcpToolNames(toolNames);
     }
 
     public void mcpServerName(String serverName) {
-        this.mcpServerName = StringUtils.hasText(serverName) ? serverName.strip() : "unknown";
+        toolCalls.mcpServerName(serverName);
     }
 
     public void mcpTelemetry(String serverName, String protocolVersion, String serverAddress,
                              long serverPort, String networkProtocolName,
                              String networkTransport) {
-        mcpServerName(serverName);
-        this.mcpProtocolVersion = normalizedMetadata(protocolVersion);
-        this.mcpServerAddress = normalizedMetadata(serverAddress);
-        this.mcpServerPort = serverPort > 0 && serverPort <= 65_535 ? serverPort : -1;
-        this.mcpNetworkProtocolName = normalizedMetadata(networkProtocolName);
-        this.mcpNetworkTransport = normalizedMetadata(networkTransport);
-    }
-
-    private static String normalizedMetadata(String value) {
-        return StringUtils.hasText(value) ? value.strip() : null;
+        toolCalls.mcpTelemetry(serverName, protocolVersion, serverAddress, serverPort,
+                networkProtocolName, networkTransport);
     }
 
     /** Selects the provider-specific mapping from Spring AI usage to ATIF prompt totals. */
@@ -487,14 +447,14 @@ public final class AiTrajectoryRecorder {
             appendLifecycle(subtype, content, metadata);
         } finally {
             sealed = true;
-            pendingTools.clear();
+            toolCalls.clearPending();
         }
     }
 
     /** Silently rejects callbacks that arrive after an enclosing execution has terminated. */
     public synchronized void sealAgainstLateCallbacks() {
         sealed = true;
-        pendingTools.clear();
+        toolCalls.clearPending();
     }
 
     /** Stops accounting-only updates after the bounded provider settlement window. */
@@ -713,39 +673,8 @@ public final class AiTrajectoryRecorder {
         }
     }
 
-    private boolean delegatedWorkerScope() {
-        return conversationKind != AiChatConversationKind.ROOT
-                || traceContext.containsKey("agent_id")
-                || Boolean.TRUE.equals(traceContext.get("concurrent_branch"));
-    }
-
     public synchronized void recordToolResponses(List<Message> messages) {
-        if (sealed || messages == null) {
-            return;
-        }
-        for (Message message : messages) {
-            if (!(message instanceof ToolResponseMessage toolResponseMessage)) {
-                continue;
-            }
-            for (ToolResponseMessage.ToolResponse response : toolResponseMessage.getResponses()) {
-                if (response.id().startsWith("approved-")) {
-                    // The exact approved invocation was already recorded by RecordingToolCallback.
-                    // This synthetic response only restores model context after the approval turn.
-                    continue;
-                }
-                if (completedToolCallIds.contains(response.id())) {
-                    continue;
-                }
-                AiPendingTool pending = pendingTools.computeIfAbsent(response.name(), ignored -> new ConcurrentLinkedQueue<>())
-                        .poll();
-                if (pending == null) {
-                    pending = new AiPendingTool(response.id(), response.name(), Map.of(),
-                            new AiObservationAccumulator(0L, List.of()), toolSequence.getAndIncrement());
-                }
-                toolStarted(pending);
-                toolCompleted(pending, response.responseData(), null, Duration.ZERO);
-            }
-        }
+        toolCalls.recordResponses(messages);
     }
 
     /**
@@ -754,17 +683,17 @@ public final class AiTrajectoryRecorder {
      * narration emitted before a tool call is interim commentary, not the answer.
      */
     public long completedToolCallCount() {
-        return completedToolCalls.get();
+        return toolCalls.completedCount();
     }
 
     /** Number of completed connectCenter calls, excluding the tool-discovery helper. */
     public long completedDomainToolCallCount() {
-        return completedDomainToolCalls.get();
+        return toolCalls.completedDomainCount();
     }
 
     /** Number of successful connectCenter calls local to this recorder, excluding tool discovery. */
     public long successfulDomainToolCallCount() {
-        return successfulDomainToolCalls.get();
+        return toolCalls.successfulDomainCount();
     }
 
     /**
@@ -773,24 +702,17 @@ public final class AiTrajectoryRecorder {
      * calls are excluded: this is the evaluator's grounding evidence, not a boundary marker.
      */
     public long executedDomainToolCallCount() {
-        return requestExecutedDomainToolCalls.get();
+        return toolCalls.executedDomainCount();
     }
 
     /** Request-wide count of data-changing calls intercepted and awaiting user approval. */
     public long pendingApprovalCount() {
-        return requestPendingApprovalIds.size();
+        return toolCalls.pendingApprovalCount();
     }
 
     /** Removes the exact intercepted approvals from request-wide evaluator evidence. */
     public void changeApprovalsResolved(List<AiPendingChangeApproval> approvals) {
-        if (approvals == null || approvals.isEmpty()) {
-            return;
-        }
-        approvals.forEach(approval -> {
-            requestPendingApprovalIds.remove(approval.notice().confirmationRequestId());
-            requestPendingApprovalIds.remove(pendingApprovalToolIdentity(
-                    approval.toolName(), arguments(approval.arguments())));
-        });
+        toolCalls.approvalsResolved(approvals);
     }
 
     /**
@@ -799,7 +721,7 @@ public final class AiTrajectoryRecorder {
      * retry loop: re-running it could repeat the data change.
      */
     public long executedChangeToolCallCount() {
-        return executedChangeToolCalls.get();
+        return toolCalls.executedChangeCount();
     }
 
     /**
@@ -807,7 +729,7 @@ public final class AiTrajectoryRecorder {
      * tool step carries the guard classification external verifiers evaluate against.
      */
     public void readOnlyToolNames(Set<String> names) {
-        this.readOnlyToolNames = names != null ? Set.copyOf(names) : Set.of();
+        toolCalls.readOnlyToolNames(names);
     }
 
     public ToolCallbackProvider recordingTools(ToolCallbackProvider delegate) {
@@ -815,12 +737,7 @@ public final class AiTrajectoryRecorder {
     }
 
     public ToolCallbackProvider recordingTools(ToolCallbackProvider delegate, long toolOutputTokenLimit) {
-        ToolCallback[] callbacks = delegate != null ? delegate.getToolCallbacks() : new ToolCallback[0];
-        ToolCallback[] wrapped = new ToolCallback[callbacks.length];
-        for (int index = 0; index < callbacks.length; index++) {
-            wrapped[index] = new RecordingToolCallback(callbacks[index], toolOutputTokenLimit);
-        }
-        return () -> wrapped;
+        return toolCalls.recording(delegate, toolOutputTokenLimit);
     }
 
     public String limitToolOutput(String output, long toolOutputTokenLimit) {
@@ -828,11 +745,7 @@ public final class AiTrajectoryRecorder {
     }
 
     public String limitToolOutput(String output, long toolOutputTokenLimit, String toolName) {
-        AiBoundedToolOutput bounded = reserveToolOutput(output,
-                toolOutputTokenLimit > 0 ? toolOutputTokenLimit : Long.MAX_VALUE);
-        emitToolOutputTruncated(bounded, toolOutputTokenLimit, toolName);
-        emitToolOutputUsage(bounded);
-        return bounded.value();
+        return toolCalls.limitOutput(output, toolOutputTokenLimit, toolName);
     }
 
     public synchronized void contextCompacted(String reason, long beforeTokens,
@@ -856,344 +769,9 @@ public final class AiTrajectoryRecorder {
         toolOutputLimiter.resetEstimatedInputFloor(inputTokens);
     }
 
-    private Map<String, Object> arguments(String json) {
-        return AiModelResponseProjection.arguments(json, objectMapper);
-    }
-
     private void emitContextUsage(AiContextUsageInfo usage) {
         emit(AiExecutionEvent.detail("context_usage", "Context usage updated.",
                 Map.of("contextUsage", usage)));
-    }
-
-    private AiPendingTool pending(String toolName, String input) {
-        ConcurrentLinkedQueue<AiPendingTool> queue = pendingTools.get(toolName);
-        Object parsedArguments = arguments(input);
-        AiPendingTool pending = null;
-        if (queue != null) {
-            pending = queue.stream()
-                    .filter(candidate -> Objects.equals(candidate.arguments(), parsedArguments))
-                    .findFirst()
-                    .orElse(null);
-            if (pending != null) {
-                queue.remove(pending);
-            } else {
-                pending = queue.poll();
-            }
-        }
-        if (pending != null) {
-            return pending;
-        }
-        return new AiPendingTool(UUID.randomUUID().toString(), toolName, parsedArguments,
-                new AiObservationAccumulator(0L, List.of()), toolSequence.getAndIncrement());
-    }
-
-    private synchronized void toolStarted(AiPendingTool pending) {
-        if (sealed) return;
-        boolean retryAlreadyNarrated = narratedToolCallIds.remove(pending.id())
-                || delegatedWorkerScope();
-        toolRetryTracker.retry(pending, retryAlreadyNarrated)
-                .ifPresent(notice -> appendGuide(
-                        AiToolRetryMessage.format(notice),
-                        Map.of("phase", "assistant", "tool_retry", true,
-                                "tool_name", pending.name()),
-                        false));
-        Map<String, Object> extra = new LinkedHashMap<>();
-        extra.put("tool_call_id", pending.id());
-        extra.put("tool_name", pending.name());
-        extra.put("tool_status", "started");
-        extra.put("read_only", readOnlyToolNames.contains(pending.name()));
-        extra.put("tool_call_sequence", pending.sequence());
-        extra.put("arguments", boundedRedactedValue(pending.arguments()));
-        persistAndEmit(new AiChatTrajectoryStep(
-                requestId, "agent", "tool_call_update", "debug",
-                "Calling " + pending.name() + ".", null, modelName,
-                reasoningEffort,
-                null, null, null, traceMetadata(extra), 0, null, null),
-                AiExecutionEvent.tool("started", "Calling " + pending.name() + ".",
-                pending.id(), pending.name(), pending.sequence(),
-                toolObservationMetadata(pending.name())));
-    }
-
-    private synchronized void toolCompleted(AiPendingTool pending, String output,
-                                            Throwable failure, Duration duration) {
-        toolCompleted(pending, output, failure, duration, false);
-    }
-
-    private synchronized void toolCompleted(AiPendingTool pending, String output,
-                                            Throwable failure, Duration duration,
-                                            boolean resultTruncated) {
-        if (sealed) return;
-        if (!completedToolCallIds.add(pending.id())) {
-            return;
-        }
-        String approvalIdentity = failure == null
-                ? pendingApprovalIdentity(output, pending) : null;
-        String status = failure != null ? "failed"
-                : approvalIdentity != null ? "blocked"
-                : deniedBeforeExecution(output) ? "denied"
-                : stoppedBeforeExecution(output) ? "cancelled" : "completed";
-        boolean successful = "completed".equals(status);
-        if (failure != null) {
-            toolRetryTracker.failed(pending);
-        }
-        completedToolCalls.incrementAndGet();
-        if (!"toolSearchTool".equals(pending.name())) {
-            completedDomainToolCalls.incrementAndGet();
-            if ("completed".equals(status)) {
-                successfulDomainToolCalls.incrementAndGet();
-                requestExecutedDomainToolCalls.incrementAndGet();
-            }
-        }
-        if ("blocked".equals(status)) {
-            requestPendingApprovalIds.add(approvalIdentity);
-        }
-        // Guard-intercepted calls never executed; completed or failed calls on a
-        // tool without the read-only annotation may have changed data.
-        if (("completed".equals(status) || "failed".equals(status))
-                && !"toolSearchTool".equals(pending.name())
-                && !readOnlyToolNames.contains(pending.name())) {
-            executedChangeToolCalls.incrementAndGet();
-        }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("source_call_id", pending.id());
-        result.put("content", auditText(output));
-        result.put("extra", Map.of(
-                "duration_ms", duration.toMillis(),
-                "success", successful));
-        pending.observations().results().put(pending.id(), result);
-        updateModelObservation(pending);
-        String detail = toolDetail(pending, output, failure);
-        Map<String, Object> extra = new LinkedHashMap<>();
-        extra.put("tool_call_id", pending.id());
-        extra.put("tool_name", pending.name());
-        extra.put("tool_status", status);
-        extra.put("read_only", readOnlyToolNames.contains(pending.name()));
-        extra.put("tool_call_sequence", pending.sequence());
-        extra.put("arguments", boundedRedactedValue(pending.arguments()));
-        extra.put("duration_ms", duration.toMillis());
-        extra.put("success", successful);
-        extra.put("result_truncated", resultTruncated);
-        if (failure != null) extra.put("failure_type", failure.getClass().getName());
-        extra = new LinkedHashMap<>(traceMetadata(extra));
-        AiChatTrajectoryStep completedStep = new AiChatTrajectoryStep(
-                requestId, "agent", "tool_call", "debug", detail, null, modelName,
-                reasoningEffort,
-                null, null, null, extra, 0, null, null);
-        Map<String, Object> eventMetadata = new LinkedHashMap<>();
-        eventMetadata.put("toolDetail", detail);
-        eventMetadata.put("duration_ms", duration.toMillis());
-        eventMetadata.put("success", successful);
-        eventMetadata.put("result_truncated", resultTruncated);
-        eventMetadata.put("read_only", readOnlyToolNames.contains(pending.name()));
-        eventMetadata.put("mcp", mcpToolNames.contains(pending.name()));
-        if (StringUtils.hasText(activeAgentRunId())) {
-            eventMetadata.put("agent_run_id", activeAgentRunId());
-        }
-        if (mcpToolNames.contains(pending.name())) {
-            eventMetadata.putAll(mcpObservationMetadata());
-        }
-        if (failure != null) eventMetadata.put("failure_type", failure.getClass().getName());
-        persistAndEmit(completedStep, AiExecutionEvent.tool(status,
-                switch (status) {
-                    case "failed" -> pending.name() + " failed.";
-                    case "blocked" -> pending.name() + " is awaiting approval.";
-                    case "denied" -> pending.name() + " was denied before execution.";
-                    case "cancelled" -> pending.name() + " was stopped before execution.";
-                    default -> pending.name() + " completed.";
-                },
-                pending.id(), pending.name(), pending.sequence(), Map.copyOf(eventMetadata)));
-    }
-
-    private void updateModelObservation(AiPendingTool pending) {
-        if (pending.observations().stepId() <= 0) return;
-        Map<String, Object> observation = Map.of(
-                "results", pending.observations().orderedResults());
-        if (executionScope == null) {
-            repository.updateObservation(conversationId, pending.observations().stepId(), observation);
-            return;
-        }
-        observer.publish(ExecutionObservation.of("model.observation.updated", executionScope,
-                        Map.of("tool_id", pending.id(), "tool_name", pending.name())),
-                ignored -> repository.updateObservation(conversationId,
-                        pending.observations().stepId(), observation));
-    }
-
-    /** Returns the stable confirmation identity embedded by the change guard. */
-    private String pendingApprovalIdentity(String output, AiPendingTool pending) {
-        if (!StringUtils.hasText(output)) {
-            return null;
-        }
-        try {
-            var root = objectMapper.readTree(output);
-            var error = root != null && root.isObject() ? root.get("error") : null;
-            if (error == null || !error.isTextual()
-                    || !AiChangeToolGuard.CHANGE_CONFIRMATION_REQUIRED.equals(
-                    error.textValue())) {
-                return null;
-            }
-            var confirmationId = root.get("confirmationRequestId");
-            return confirmationId != null && confirmationId.isTextual()
-                    && StringUtils.hasText(confirmationId.textValue())
-                    ? confirmationId.textValue()
-                    : pendingApprovalToolIdentity(pending.name(), pending.arguments());
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private String pendingApprovalToolIdentity(String toolName, Object arguments) {
-        return "tool:" + Objects.toString(toolName, "") + "\u0000" + toJson(arguments);
-    }
-
-    /** The guard declines new data changes while the user is stopping the request. */
-    private boolean stoppedBeforeExecution(String output) {
-        return hasTopLevelError(output, AiChangeToolGuard.REQUEST_STOPPING);
-    }
-
-    /** The guard returns a stable cached result when an exact change was denied. */
-    private boolean deniedBeforeExecution(String output) {
-        return hasTopLevelError(output, AiChangeToolGuard.CHANGE_CONFIRMATION_DENIED);
-    }
-
-    private boolean hasTopLevelError(String output, String expected) {
-        if (!StringUtils.hasText(output)) {
-            return false;
-        }
-        try {
-            var root = objectMapper.readTree(output);
-            var error = root != null && root.isObject() ? root.get("error") : null;
-            return error != null && error.isTextual() && expected.equals(error.textValue());
-        } catch (Exception ignored) {
-            return false;
-        }
-    }
-
-    private String toolDetail(AiPendingTool pending, String output, Throwable failure) {
-        StringBuilder detail = new StringBuilder(pending.name())
-                .append("\nArguments: ").append(toJson(boundedRedactedValue(pending.arguments())));
-        if (failure == null) {
-            detail.append("\nResult: ").append(auditText(output));
-        } else {
-            detail.append("\nError: ").append(AiToolFailureMessage.userMessage(failure));
-        }
-        return detail.toString();
-    }
-
-    private String auditText(String value) {
-        return auditSanitizer.auditText(value);
-    }
-
-    private Object boundedRedactedValue(Object value) {
-        return auditSanitizer.boundedValue(value);
-    }
-
-    private String toJson(Object value) {
-        return auditSanitizer.json(value);
-    }
-
-    private final class RecordingToolCallback implements ToolCallback {
-
-        private final ToolCallback delegate;
-        private final long toolOutputTokenLimit;
-
-        private RecordingToolCallback(ToolCallback delegate, long toolOutputTokenLimit) {
-            this.delegate = delegate;
-            this.toolOutputTokenLimit = toolOutputTokenLimit > 0 ? toolOutputTokenLimit : Long.MAX_VALUE;
-        }
-
-        @Override
-        public ToolDefinition getToolDefinition() {
-            return delegate.getToolDefinition();
-        }
-
-        @Override
-        public ToolMetadata getToolMetadata() {
-            return delegate.getToolMetadata();
-        }
-
-        @Override
-        public String call(String input) {
-            return call(input, new ToolContext(Map.of()));
-        }
-
-        @Override
-        public String call(String input, ToolContext context) {
-            AiPendingTool pending;
-            // Bookkeeping runs under the terminal-sealing lock; the Tool call itself must not.
-            // A server-to-client callback (an MCP elicitation, for one) arrives on another
-            // thread while the call is in flight and has to reach this recorder to publish
-            // itself, so holding the monitor across the call would deadlock both threads.
-            synchronized (AiTrajectoryRecorder.this) {
-                verifyActive();
-                pending = pending(getToolDefinition().name(), input);
-                toolStarted(pending);
-            }
-            Instant started = Instant.now();
-            try (var ignored = observationContext.makeToolCurrent(requestId, pending.id())) {
-                String output = delegate.call(input, context);
-                synchronized (AiTrajectoryRecorder.this) {
-                    AiBoundedToolOutput bounded = reserveToolOutput(output, toolOutputTokenLimit);
-                    emitToolOutputTruncated(bounded, toolOutputTokenLimit, pending.name());
-                    emitToolOutputUsage(bounded);
-                    toolCompleted(pending, output, null, Duration.between(started, Instant.now()),
-                            bounded.truncated());
-                    return bounded.value();
-                }
-            } catch (RuntimeException exception) {
-                LOGGER.warn("AI tool {} failed for request {}", pending.name(), requestId, exception);
-                synchronized (AiTrajectoryRecorder.this) {
-                    toolCompleted(pending, null, exception, Duration.between(started, Instant.now()));
-                }
-                throw exception;
-            }
-        }
-    }
-
-    private synchronized AiBoundedToolOutput reserveToolOutput(String output,
-                                                               long configuredLimit) {
-        return toolOutputLimiter.reserve(output, configuredLimit);
-    }
-
-    private void emitToolOutputTruncated(AiBoundedToolOutput bounded, long configuredLimit,
-                                         String toolName) {
-        if (!bounded.truncated()) return;
-        String safeToolName = StringUtils.hasText(toolName) ? toolName : "tool";
-        emit(AiExecutionEvent.detail("tool_output_truncated",
-                safeToolName + " returned more data than the active context budget allows.", Map.of(
-                        "toolName", safeToolName,
-                        "mcp", mcpToolNames.contains(safeToolName),
-                        "originalUtf8Bytes", bounded.originalBytes(),
-                        "returnedUtf8Bytes", bounded.returnedBytes(),
-                        "toolOutputTokenLimit", configuredLimit)));
-    }
-
-    private Map<String, Object> toolObservationMetadata(String toolName) {
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("mcp", mcpToolNames.contains(toolName));
-        if (mcpToolNames.contains(toolName)) metadata.putAll(mcpObservationMetadata());
-        if (StringUtils.hasText(activeAgentRunId())) {
-            metadata.put("agent_run_id", activeAgentRunId());
-        }
-        return Map.copyOf(metadata);
-    }
-
-    private Map<String, Object> mcpObservationMetadata() {
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("mcp", true);
-        metadata.put("mcp_server_name", mcpServerName);
-        if (mcpProtocolVersion != null) metadata.put("mcp_protocol_version", mcpProtocolVersion);
-        if (mcpServerAddress != null) metadata.put("server_address", mcpServerAddress);
-        if (mcpServerPort > 0) metadata.put("server_port", mcpServerPort);
-        if (mcpNetworkProtocolName != null) {
-            metadata.put("network_protocol_name", mcpNetworkProtocolName);
-        }
-        if (mcpNetworkTransport != null) metadata.put("network_transport", mcpNetworkTransport);
-        return metadata;
-    }
-
-    private void emitToolOutputUsage(AiBoundedToolOutput bounded) {
-        AiContextUsageInfo usage = toolOutputLimiter.usageAfter(bounded);
-        if (usage != null) emitContextUsage(usage);
     }
 
     private Map<String, Object> traceMetadata(Map<String, Object> metadata) {
