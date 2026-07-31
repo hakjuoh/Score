@@ -104,7 +104,7 @@ export interface AiChatModelInfo {
   description: string;
   provider: string;
   defaultModel: boolean;
-  defaultReasoningEffort: string;
+  defaultReasoningEffort: string | null;
   reasoningEfforts: AiReasoningEffortInfo[];
   contextWindow?: number | null;
   outputReserveTokens?: number | null;
@@ -211,13 +211,14 @@ export interface AiReasoningEffortInfo {
   description: string;
 }
 
-export function normalizeAiReasoningEffort(reasoningEffort: string): string {
-  const normalized = reasoningEffort.trim().toLowerCase();
+export function normalizeAiReasoningEffort(reasoningEffort: string | null | undefined): string {
+  const normalized = reasoningEffort?.trim().toLowerCase() || '';
   return normalized === 'none' ? 'disabled' : normalized;
 }
 
 export function aiModelSessionLabel(displayName: string, reasoningEffort: string): string {
   const normalizedEffort = normalizeAiReasoningEffort(reasoningEffort);
+  if (!normalizedEffort) return displayName;
   return normalizedEffort === 'disabled'
     ? `${displayName} without reasoning`
     : `${displayName} with ${normalizedEffort} reasoning effort`;
@@ -226,7 +227,7 @@ export function aiModelSessionLabel(displayName: string, reasoningEffort: string
 export interface AiConversationModelResponse {
   conversationId: string;
   modelName: string;
-  reasoningEffort: string;
+  reasoningEffort: string | null;
   contextCompacted?: boolean;
   contextUsage?: AiContextUsage;
 }

@@ -9,11 +9,14 @@ import org.jooq.types.UInteger;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogView;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ReasoningEffort;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
 import org.oagi.score.gateway.http.api.ai_management.policy.service.AiAdminPolicyService;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiModelRecord;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -56,49 +59,26 @@ public class AiModelCatalogAdminService {
         try {
             return dsl.transactionResult(configuration -> {
             DSLContext tx = org.jooq.impl.DSL.using(configuration);
-            requireEnabledProvider(tx, input.providerId());
+            AiModelProfile profile = requireModelProfile(tx, input);
+            List<ReasoningEffort> efforts =
+                    AiModelProfileSettingsValidator.validate(profile, input);
             ULong actorId = ULong.valueOf(actor.userId().value());
             LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
             ULong id = tx.insertInto(AI_MODEL)
+                    .set(configurationRecord(tx, profile, input))
                     .set(AI_MODEL.PROVIDER_ID, ULong.valueOf(input.providerId()))
                     .set(AI_MODEL.MODEL_KEY, input.modelKey().strip())
-                    .set(AI_MODEL.PROVIDER_MODEL_NAME, input.providerModelName().strip())
-                    .set(AI_MODEL.DISPLAY_NAME, input.displayName().strip())
-                    .set(AI_MODEL.DESCRIPTION, input.description().strip())
                     .set(AI_MODEL.ENABLED, flag(input.enabled()))
                     .set(AI_MODEL.SORT_ORDER, UInteger.valueOf(input.sortOrder()))
-                    .set(AI_MODEL.MAX_TOKENS, unsigned(input.maxTokens()))
-                    .set(AI_MODEL.CONTEXT_WINDOW, ULong.valueOf(input.contextWindow()))
-                    .set(AI_MODEL.OUTPUT_RESERVE_TOKENS, unsigned(input.outputReserveTokens()))
-                    .set(AI_MODEL.AUTO_COMPACT_THRESHOLD_TOKENS,
-                            unsigned(input.autoCompactThresholdTokens()))
-                    .set(AI_MODEL.EMERGENCY_HEADROOM_TOKENS,
-                            ULong.valueOf(input.emergencyHeadroomTokens()))
-                    .set(AI_MODEL.TOOL_OUTPUT_TOKEN_LIMIT,
-                            ULong.valueOf(input.toolOutputTokenLimit()))
-                    .set(AI_MODEL.PROVIDER_COMPACTION_ENABLED,
-                            flag(input.providerCompactionEnabled()))
-                    .set(AI_MODEL.TEMPERATURE, input.temperature() != null
-                            ? java.math.BigDecimal.valueOf(input.temperature()) : null)
-                    .set(AI_MODEL.THINKING_BUDGET_TOKENS, unsigned(input.thinkingBudgetTokens()))
-                    .set(AI_MODEL.ADAPTIVE_THINKING, flag(input.adaptiveThinking()))
-                    .set(AI_MODEL.OUTPUT_EFFORT, normalized(input.outputEffort()))
-                    .set(AI_MODEL.CACHE_STRATEGY, normalized(input.cacheStrategy()))
-                    .set(AI_MODEL.REASONING_MODEL_SUPPORTED, nullableFlag(input.reasoningModelSupported()))
-                    .set(AI_MODEL.OUTPUT_EFFORT_SUPPORTED, nullableFlag(input.outputEffortSupported()))
-                    .set(AI_MODEL.VERBOSITY_SUPPORTED, nullableFlag(input.verbositySupported()))
-                    .set(AI_MODEL.TEMPERATURE_SUPPORTED, nullableFlag(input.temperatureSupported()))
-                    .set(AI_MODEL.THINKING_MODES_JSON, json(input.thinkingModes()))
-                    .set(AI_MODEL.DEFAULT_THINKING, normalized(input.defaultThinking()))
                     .set(AI_MODEL.CREATED_BY, actorId).set(AI_MODEL.LAST_UPDATED_BY, actorId)
                     .set(AI_MODEL.CREATED_AT, now).set(AI_MODEL.LAST_UPDATED_AT, now)
                     .returning(AI_MODEL.AI_MODEL_ID).fetchOne(AI_MODEL.AI_MODEL_ID);
-            replaceEfforts(tx, id, input.reasoningEfforts());
+            replaceEfforts(tx, id, efforts);
             updateDefault(tx, id, input.defaultModel()
                     || !tx.fetchExists(tx.selectOne().from(AI_MODEL_CATALOG_CONFIG)), actorId, now);
             AiModelCatalogView after = view(tx, tx.selectFrom(AI_MODEL)
                     .where(AI_MODEL.AI_MODEL_ID.eq(id)).fetchOne());
-            audit(tx, id, actorId, "CREATE", null, after, input.reason());
+            audit(tx, id, actorId, "CREATE", null, after);
             return after;
             });
         } catch (org.jooq.exception.IntegrityConstraintViolationException exception) {
@@ -116,7 +96,9 @@ public class AiModelCatalogAdminService {
                     .where(AI_MODEL.AI_MODEL_ID.eq(id)).forUpdate().fetchOne();
             if (existing == null) throw new NotFoundException();
             validate(input, true, existing.getModelKey());
-            requireEnabledProvider(tx, input.providerId());
+            AiModelProfile profile = requireModelProfile(tx, input);
+            List<ReasoningEffort> efforts =
+                    AiModelProfileSettingsValidator.validate(profile, input);
             AiModelCatalogView before = view(tx, existing);
             boolean currentDefault = isDefault(tx, id);
             if (currentDefault && !input.defaultModel()) {
@@ -130,56 +112,59 @@ public class AiModelCatalogAdminService {
             ULong actorId = ULong.valueOf(actor.userId().value());
             LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
             int changed = tx.update(AI_MODEL)
+                    .set(configurationRecord(tx, profile, input))
                     .set(AI_MODEL.PROVIDER_ID, ULong.valueOf(input.providerId()))
-                    .set(AI_MODEL.PROVIDER_MODEL_NAME, input.providerModelName().strip())
-                    .set(AI_MODEL.DISPLAY_NAME, input.displayName().strip())
-                    .set(AI_MODEL.DESCRIPTION, input.description().strip())
                     .set(AI_MODEL.ENABLED, flag(input.enabled()))
                     .set(AI_MODEL.SORT_ORDER, UInteger.valueOf(input.sortOrder()))
-                    .set(AI_MODEL.MAX_TOKENS, unsigned(input.maxTokens()))
-                    .set(AI_MODEL.CONTEXT_WINDOW, ULong.valueOf(input.contextWindow()))
-                    .set(AI_MODEL.OUTPUT_RESERVE_TOKENS, unsigned(input.outputReserveTokens()))
-                    .set(AI_MODEL.AUTO_COMPACT_THRESHOLD_TOKENS,
-                            unsigned(input.autoCompactThresholdTokens()))
-                    .set(AI_MODEL.EMERGENCY_HEADROOM_TOKENS,
-                            ULong.valueOf(input.emergencyHeadroomTokens()))
-                    .set(AI_MODEL.TOOL_OUTPUT_TOKEN_LIMIT,
-                            ULong.valueOf(input.toolOutputTokenLimit()))
-                    .set(AI_MODEL.PROVIDER_COMPACTION_ENABLED,
-                            flag(input.providerCompactionEnabled()))
-                    .set(AI_MODEL.TEMPERATURE, input.temperature() != null
-                            ? java.math.BigDecimal.valueOf(input.temperature()) : null)
-                    .set(AI_MODEL.THINKING_BUDGET_TOKENS, unsigned(input.thinkingBudgetTokens()))
-                    .set(AI_MODEL.ADAPTIVE_THINKING, flag(input.adaptiveThinking()))
-                    .set(AI_MODEL.OUTPUT_EFFORT, normalized(input.outputEffort()))
-                    .set(AI_MODEL.CACHE_STRATEGY, normalized(input.cacheStrategy()))
-                    .set(AI_MODEL.REASONING_MODEL_SUPPORTED, nullableFlag(input.reasoningModelSupported()))
-                    .set(AI_MODEL.OUTPUT_EFFORT_SUPPORTED, nullableFlag(input.outputEffortSupported()))
-                    .set(AI_MODEL.VERBOSITY_SUPPORTED, nullableFlag(input.verbositySupported()))
-                    .set(AI_MODEL.TEMPERATURE_SUPPORTED, nullableFlag(input.temperatureSupported()))
-                    .set(AI_MODEL.THINKING_MODES_JSON, json(input.thinkingModes()))
-                    .set(AI_MODEL.DEFAULT_THINKING, normalized(input.defaultThinking()))
                     .set(AI_MODEL.CATALOG_VERSION, AI_MODEL.CATALOG_VERSION.plus(1))
                     .set(AI_MODEL.LAST_UPDATED_BY, actorId).set(AI_MODEL.LAST_UPDATED_AT, now)
                     .where(AI_MODEL.AI_MODEL_ID.eq(id))
                     .and(AI_MODEL.CATALOG_VERSION.eq(ULong.valueOf(input.expectedVersion())))
                     .execute();
             if (changed != 1) throw conflict();
-            replaceEfforts(tx, id, input.reasoningEfforts());
+            replaceEfforts(tx, id, efforts);
             updateDefault(tx, id, input.defaultModel(), actorId, now);
             AiModelCatalogView after = view(tx, tx.selectFrom(AI_MODEL)
                     .where(AI_MODEL.AI_MODEL_ID.eq(id)).fetchOne());
             audit(tx, id, actorId, after.enabled() ? "UPDATE" : "DISABLE",
-                    before, after, input.reason());
+                    before, after);
             return after;
         });
     }
 
+    AiModelRecord configurationRecord(DSLContext tx, AiModelProfile profile,
+                                      AiModelCatalogUpdate input) {
+        AiModelProfileSettingsResolver.ResolvedSettings settings =
+                AiModelProfileSettingsResolver.resolve(profile, input);
+        AiModelRecord record = tx.newRecord(AI_MODEL);
+        record.setProviderModelName(profile.getProviderModelName());
+        record.setDisplayName(profile.getDisplayName());
+        record.setDescription(profile.getDescription());
+        record.setMaxTokens(unsigned(settings.maxTokens()));
+        record.setContextWindow(ULong.valueOf(input.contextWindow()));
+        record.setOutputReserveTokens(unsigned(settings.outputReserveTokens()));
+        record.setAutoCompactThresholdTokens(unsigned(settings.autoCompactThresholdTokens()));
+        record.setEmergencyHeadroomTokens(ULong.valueOf(input.emergencyHeadroomTokens()));
+        record.setToolOutputTokenLimit(ULong.valueOf(input.toolOutputTokenLimit()));
+        record.setProviderCompactionEnabled(flag(input.providerCompactionEnabled()));
+        record.setTemperature(settings.temperature() != null
+                ? java.math.BigDecimal.valueOf(settings.temperature()) : null);
+        record.setThinkingBudgetTokens(unsigned(settings.thinkingBudgetTokens()));
+        record.setAdaptiveThinking(flag(input.adaptiveThinking()));
+        record.setOutputEffort(normalized(input.outputEffort()));
+        record.setCacheStrategy(normalized(input.cacheStrategy()));
+        record.setReasoningModelSupported(flag(settings.reasoningOptionsEnabled()));
+        record.setOutputEffortSupported(flag(settings.outputEffortEnabled()));
+        record.setVerbositySupported(flag(settings.verbosityEnabled()));
+        record.setTemperatureSupported(flag(settings.temperatureEnabled()));
+        record.setThinkingModesJson(json(input.thinkingModes()));
+        record.setDefaultThinking(normalized(input.defaultThinking()));
+        return record;
+    }
+
     private void validate(AiModelCatalogUpdate input, boolean update, String immutableKey) {
-        if (input == null || !StringUtils.hasText(input.modelKey())
-                || !StringUtils.hasText(input.providerModelName())
-                || !StringUtils.hasText(input.displayName()) || input.description() == null) {
-            throw new IllegalArgumentException("Model key, provider model, name, and description are required.");
+        if (input == null || !StringUtils.hasText(input.modelKey())) {
+            throw new IllegalArgumentException("A model is required.");
         }
         if (update && input.expectedVersion() == null) {
             throw new IllegalArgumentException("Expected catalog version is required.");
@@ -187,80 +172,30 @@ public class AiModelCatalogAdminService {
         if (immutableKey != null && !immutableKey.equals(input.modelKey().strip())) {
             throw new IllegalArgumentException("The model key is immutable.");
         }
-        if (input.providerId() <= 0 || input.sortOrder() < 0 || input.contextWindow() <= 0
-                || input.emergencyHeadroomTokens() < 0 || input.toolOutputTokenLimit() <= 0
-                || input.maxTokens() != null && input.maxTokens() <= 0
-                || input.thinkingBudgetTokens() != null && input.thinkingBudgetTokens() <= 0
-                || input.temperature() != null
-                    && (!Double.isFinite(input.temperature()) || input.temperature() < 0
-                    || input.temperature() > 2)) {
-            throw new IllegalArgumentException("Model catalog numeric values are invalid.");
-        }
-        long reserve = input.outputReserveTokens() != null ? input.outputReserveTokens()
-                : input.maxTokens() != null ? input.maxTokens()
-                : Math.min(32768L, input.contextWindow() / 6L);
-        long safeInput = input.contextWindow() - reserve - input.emergencyHeadroomTokens();
-        long threshold = input.autoCompactThresholdTokens() != null
-                ? input.autoCompactThresholdTokens()
-                : Math.max(1L, safeInput - safeInput / 5L);
-        if (reserve < 0 || reserve >= input.contextWindow()
-                || input.emergencyHeadroomTokens() >= input.contextWindow() - reserve
-                || safeInput <= 0 || threshold <= 0 || threshold > safeInput
-                || input.toolOutputTokenLimit() > safeInput) {
-            throw new IllegalArgumentException(
-                    "Context reserve, headroom, compaction threshold, and tool limit must fit the context window.");
-        }
-        List<String> thinkingModes = input.thinkingModes() != null
-                ? input.thinkingModes().stream().map(String::strip).filter(StringUtils::hasText).toList()
-                : List.of();
-        if (thinkingModes.size() != (input.thinkingModes() != null ? input.thinkingModes().size() : 0)
-                || thinkingModes.stream().distinct().count() != thinkingModes.size()) {
-            throw new IllegalArgumentException("Thinking modes must be non-blank and unique.");
-        }
-        if (StringUtils.hasText(input.defaultThinking())
-                && !thinkingModes.contains(input.defaultThinking().strip())) {
-            throw new IllegalArgumentException("Default thinking must be one of the thinking modes.");
+        if (input.providerId() <= 0 || input.sortOrder() < 0) {
+            throw new IllegalArgumentException("Provider and sort order are invalid.");
         }
         if (input.defaultModel() && !input.enabled()) {
             throw new IllegalArgumentException("The global default model must be enabled.");
         }
-        List<AiModelCatalogUpdate.ReasoningEffortUpdate> efforts = input.reasoningEfforts() != null
-                ? input.reasoningEfforts() : List.of();
-        long defaults = efforts.stream().filter(AiModelCatalogUpdate.ReasoningEffortUpdate::defaultEffort).count();
-        if (input.enabled() && efforts.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "An enabled model requires at least one reasoning effort.");
-        }
-        if (!efforts.isEmpty() && defaults != 1) {
-            throw new IllegalArgumentException("Exactly one reasoning effort must be the default.");
-        }
-        if (efforts.stream().anyMatch(e -> !StringUtils.hasText(e.name())
-                || !StringUtils.hasText(e.displayName()) || e.description() == null
-                || e.sortOrder() < 0)) {
-            throw new IllegalArgumentException("Reasoning effort values are incomplete.");
-        }
-        long distinctEffortNames = efforts.stream()
-                .map(e -> e.name().strip().toLowerCase(java.util.Locale.ROOT))
-                .distinct().count();
-        if (distinctEffortNames != efforts.size()) {
-            throw new IllegalArgumentException("Reasoning effort names must be unique.");
-        }
-        if (input.reason() == null || input.reason().strip().length() < 10) {
-            throw new IllegalArgumentException("A change reason of at least 10 characters is required.");
-        }
     }
 
-    private void requireEnabledProvider(DSLContext tx, long id) {
-        if (!tx.fetchExists(tx.selectOne().from(AI_PROVIDER)
-                .where(AI_PROVIDER.AI_PROVIDER_ID.eq(ULong.valueOf(id)))
-                .and(AI_PROVIDER.ENABLED.eq((byte) 1)))) {
+    private AiModelProfile requireModelProfile(DSLContext tx, AiModelCatalogUpdate input) {
+        var provider = tx.select(AI_PROVIDER.PROVIDER_TYPE, AI_PROVIDER.ENABLED).from(AI_PROVIDER)
+                .where(AI_PROVIDER.AI_PROVIDER_ID.eq(ULong.valueOf(input.providerId())))
+                .forUpdate().fetchOne();
+        if (provider == null || provider.value2() != 1) {
             throw new IllegalArgumentException("An enabled provider is required.");
         }
+        String providerType = provider.value1();
+        return AiModelProfileCatalog.find(providerType, input.modelKey())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "The selected model is not supported by this provider."));
     }
 
     private void replaceEfforts(DSLContext tx, ULong id,
-                                List<AiModelCatalogUpdate.ReasoningEffortUpdate> efforts) {
-        List<AiModelCatalogUpdate.ReasoningEffortUpdate> requested = efforts != null
+                                List<ReasoningEffort> efforts) {
+        List<ReasoningEffort> requested = efforts != null
                 ? efforts : List.of();
         java.util.Set<String> requestedNames = requested.stream()
                 .map(e -> e.name().strip().toLowerCase())
@@ -355,7 +290,7 @@ public class AiModelCatalogAdminService {
     }
 
     private void audit(DSLContext tx, ULong id, ULong actor, String action, Object before,
-                       Object after, String reason) {
+                       Object after) {
         try {
             tx.insertInto(AI_CATALOG_AUDIT).set(AI_CATALOG_AUDIT.ENTITY_TYPE, "MODEL")
                     .set(AI_CATALOG_AUDIT.ENTITY_ID, id)
@@ -365,7 +300,6 @@ public class AiModelCatalogAdminService {
                             before != null ? mapper.writeValueAsString(before) : null)
                     .set(AI_CATALOG_AUDIT.AFTER_JSON,
                             after != null ? mapper.writeValueAsString(after) : null)
-                    .set(AI_CATALOG_AUDIT.REASON, reason.strip())
                     .set(AI_CATALOG_AUDIT.CREATED_AT, LocalDateTime.now(ZoneOffset.UTC)).execute();
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Could not serialize model catalog audit.", exception);
@@ -373,7 +307,6 @@ public class AiModelCatalogAdminService {
     }
 
     private static byte flag(boolean value) { return (byte) (value ? 1 : 0); }
-    private static Byte nullableFlag(Boolean value) { return value != null ? flag(value) : null; }
     private static Boolean nullableBoolean(Byte value) { return value != null ? value == 1 : null; }
     private static String normalized(String value) {
         return StringUtils.hasText(value) ? value.strip() : null;

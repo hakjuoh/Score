@@ -33,6 +33,7 @@ public class AiCatalogBootstrap implements ApplicationRunner {
     }
 
     public void bootstrapNow() {
+        AiModelProfileCatalog.install(properties);
         if (properties.getProviders().isEmpty() || properties.getModels().isEmpty()) return;
         if (!secrets.isEncryptionConfigured() && properties.getProviders().values().stream()
                 .anyMatch(provider -> StringUtils.hasText(provider.getKey()))) {

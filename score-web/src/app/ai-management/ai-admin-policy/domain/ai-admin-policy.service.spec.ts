@@ -24,19 +24,19 @@ describe('AiAdminPolicyService REST contract', () => {
     request.flush([]);
   });
 
-  it('resets a policy with its optimistic version and reason', () => {
-    service.reset('17', 3, 'Policy reset for test').subscribe();
+  it('resets a policy with its optimistic version', () => {
+    service.reset('17', 3).subscribe();
     const request = http.expectOne(req => req.url === '/api/admin/ai/users/17/policy');
     expect(request.request.method).toBe('DELETE');
     expect(request.request.params.get('expectedVersion')).toBe('3');
-    expect(request.request.params.get('reason')).toBe('Policy reset for test');
+    expect(request.request.params.has('reason')).toBe(false);
     request.flush(null);
   });
 
   it('updates provider settings and API key through one write endpoint', () => {
     const update = {expectedVersion: 4, providerName: 'OpenAI', providerType: 'openai',
       baseUrl: 'https://api.openai.com', messagesUrl: null, anthropicVersion: null,
-      apiVersion: null, enabled: true, apiKey: '', reason: 'Remove key for test'};
+      apiVersion: null, enabled: true, apiKey: ''};
     service.updateProvider(2, update).subscribe();
     const request = http.expectOne('/api/admin/ai/providers/2');
     expect(request.request.method).toBe('PUT');
@@ -44,17 +44,29 @@ describe('AiAdminPolicyService REST contract', () => {
     request.flush({});
   });
 
+  it('tests draft provider settings without using the write endpoint', () => {
+    const update = {expectedVersion: 4, providerName: 'Anthropic', providerType: 'anthropic',
+      baseUrl: 'https://api.anthropic.com', messagesUrl: null,
+      anthropicVersion: '2023-06-01', apiVersion: null, enabled: true};
+    service.testProviderConnection(2, update).subscribe();
+
+    const request = http.expectOne('/api/admin/ai/providers/2/connection-tests');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual(update);
+    request.flush({successful: true, message: 'Connection successful.', statusCode: 200});
+  });
+
   it('updates a model through the catalog endpoint', () => {
     const update = {expectedVersion: 2, providerId: 1, modelKey: 'model-key',
-      providerModelName: 'deployment', displayName: 'Model', description: '', enabled: true,
-      defaultModel: false, sortOrder: 1, maxTokens: 4096, contextWindow: 128000,
-      outputReserveTokens: null, autoCompactThresholdTokens: null,
-      emergencyHeadroomTokens: 4096, toolOutputTokenLimit: 32000,
-      providerCompactionEnabled: true, temperature: null, thinkingBudgetTokens: null,
-      adaptiveThinking: false, outputEffort: null, cacheStrategy: null,
-      reasoningModelSupported: null, outputEffortSupported: null,
-      verbositySupported: null, temperatureSupported: null, thinkingModes: [],
-      defaultThinking: null, reasoningEfforts: [], reason: 'Update model for test'};
+      enabled: true, defaultModel: false, sortOrder: 1, maxTokens: 4096,
+      contextWindow: 128000, outputReserveTokens: 4096,
+      autoCompactThresholdTokens: 100000, emergencyHeadroomTokens: 4096,
+      toolOutputTokenLimit: 16000, providerCompactionEnabled: false,
+      temperature: null, thinkingBudgetTokens: null, adaptiveThinking: false,
+      outputEffort: null, cacheStrategy: null, reasoningModelSupported: true,
+      outputEffortSupported: false, verbositySupported: true,
+      temperatureSupported: false, thinkingModes: [], defaultThinking: null,
+      reasoningEfforts: [{name: 'medium', defaultEffort: true, sortOrder: 0}]};
     service.updateModel(8, update).subscribe();
     const request = http.expectOne('/api/admin/ai/models/8');
     expect(request.request.method).toBe('PUT');
@@ -62,13 +74,21 @@ describe('AiAdminPolicyService REST contract', () => {
     request.flush({});
   });
 
-  it('loads usage and posts an audited quota adjustment', () => {
+  it('loads backend model profiles for the selected provider', () => {
+    service.modelProfiles(2).subscribe();
+
+    const request = http.expectOne('/api/admin/ai/providers/2/model-profiles');
+    expect(request.request.method).toBe('GET');
+    request.flush([]);
+  });
+
+  it('loads usage and posts a quota adjustment without a reason', () => {
     service.usage('17').subscribe();
     http.expectOne('/api/admin/ai/users/17/usage').flush({});
-    service.adjustQuota('17', -1000, 'Credit quota for test').subscribe();
+    service.adjustQuota('17', -1000).subscribe();
     const request = http.expectOne('/api/admin/ai/users/17/quota-adjustments');
     expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({deltaTokens: -1000, reason: 'Credit quota for test'});
+    expect(request.request.body).toEqual({deltaTokens: -1000});
     request.flush({});
   });
 

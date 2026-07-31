@@ -3,6 +3,7 @@ import {of, throwError} from 'rxjs';
 import {AiPolicyUserListComponent} from './ai-policy-user-list.component';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiPolicyUserSummary} from './domain/ai-admin-policy';
+import {MatSort} from '@angular/material/sort';
 
 describe('AiPolicyUserListComponent', () => {
   const user = (id: string, used: number, limit: number, overrides: Partial<AiPolicyUserSummary> = {}): AiPolicyUserSummary => ({
@@ -41,9 +42,14 @@ describe('AiPolicyUserListComponent', () => {
     const users = [user('alice', 0, 100), user('bob', 0, 100, {enabled: false, inherited: false, multiAgentEnabled: false})];
     TestBed.configureTestingModule({providers: [{provide: AiAdminPolicyService, useValue: {users: () => of(users)}}]});
     const component = TestBed.runInInjectionContext(() => new AiPolicyUserListComponent());
-    component.ngOnInit(); component.filter = 'bob'; component.accessFilter = 'DISABLED';
+    component.ngOnInit(); component.onFilterChange('bob'); component.accessFilter = 'DISABLED';
     component.multiAgentFilter = 'DISABLED';
+    component.applyFilters();
     expect(component.filteredUsers.map(item => item.userId)).toEqual(['bob']);
+    expect(component.dataSource.data.map(item => item.userId)).toEqual(['bob']);
+    const sorted = component.dataSource.sortData(users,
+      {active: 'access', direction: 'asc'} as MatSort);
+    expect(sorted.map(item => item.userId)).toEqual(['bob', 'alice']);
   });
 
   it('updates and resets visible table columns', () => {

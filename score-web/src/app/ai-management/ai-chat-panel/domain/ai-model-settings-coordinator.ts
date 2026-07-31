@@ -50,7 +50,7 @@ export class AiModelSettingsCoordinator {
     state.modelDraftName = model.name;
     state.modelDraftReasoningEffort = model.reasoningEfforts
       .some(effort => effort.name === state.selectedReasoningEffort)
-      ? state.selectedReasoningEffort : model.defaultReasoningEffort;
+      ? state.selectedReasoningEffort : model.defaultReasoningEffort || '';
     state.modelSettingsOpen = true;
   }
 
@@ -59,7 +59,7 @@ export class AiModelSettingsCoordinator {
     if (!model || state.modelChangePending) return;
     state.modelDraftName = modelName;
     if (!model.reasoningEfforts.some(effort => effort.name === state.modelDraftReasoningEffort)) {
-      state.modelDraftReasoningEffort = model.defaultReasoningEffort;
+      state.modelDraftReasoningEffort = model.defaultReasoningEffort || '';
     }
   }
 
@@ -68,7 +68,8 @@ export class AiModelSettingsCoordinator {
     const model = state.availableModels.find(candidate => candidate.name === state.modelDraftName);
     const effort = state.modelDraftReasoningEffort;
     if (!state.modelSettingsOpen || !model
-      || !model.reasoningEfforts.some(candidate => candidate.name === effort)
+      || model.reasoningEfforts.length > 0
+      && !model.reasoningEfforts.some(candidate => candidate.name === effort)
       || state.modelChangePending) return;
     const previous = {
       modelName: state.selectedModelName,
@@ -88,11 +89,11 @@ export class AiModelSettingsCoordinator {
     ).subscribe({
       next: response => {
         state.selectedModelName = response.modelName;
-        state.selectedReasoningEffort = response.reasoningEffort;
+        state.selectedReasoningEffort = response.reasoningEffort || '';
         state.resetContextUsageForSelectedModel();
         state.setContextUsage(contextUsageValue(response.contextUsage, response.modelName));
         state.modelChangePending = false;
-        this.finish(state, model.displayName, response.reasoningEffort);
+        this.finish(state, model.displayName, response.reasoningEffort || '');
         callbacks.completed();
         if (response.contextCompacted) callbacks.compacted();
       },

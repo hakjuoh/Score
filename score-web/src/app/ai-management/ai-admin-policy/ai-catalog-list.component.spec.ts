@@ -4,6 +4,7 @@ import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiProviderListComponent} from './ai-provider-list.component';
 import {AiModelListComponent} from './ai-model-list.component';
 import {AiAdminModel, AiProviderView} from './domain/ai-admin-policy';
+import {MatSort} from '@angular/material/sort';
 
 describe('AI catalog list retries', () => {
   it('retries a failed provider catalog load', () => {
@@ -33,8 +34,13 @@ describe('AI catalog list retries', () => {
       useValue: {providers: () => of(providers)}}]});
     const component = TestBed.runInInjectionContext(() => new AiProviderListComponent());
     component.ngOnInit();
-    component.filter = 'anthropic';
+    component.onFilterChange('anthropic');
     expect(component.filteredProviders.map(provider => provider.providerName)).toEqual(['Anthropic']);
+    expect(component.dataSource.data.map(provider => provider.providerName)).toEqual(['Anthropic']);
+    const sorted = component.dataSource.sortData(providers,
+      {active: 'name', direction: 'asc'} as MatSort);
+    expect(sorted.map(provider => provider.providerName)).toEqual(['Anthropic', 'OpenAI']);
+    expect(component.providerTypeLabel('azure-openai')).toBe('OpenAI');
     component.onColumnsChange(component.columns.map(column => ({...column, selected: column.name !== 'Version'})));
     expect(component.displayedColumns).not.toContain('version');
   });
@@ -44,12 +50,18 @@ describe('AI catalog list retries', () => {
       displayName: 'GPT Test', modelKey: 'gpt-test', provider: 'OpenAI', providerModelName: 'gpt-test',
       reasoningEfforts: []
     } as AiAdminModel;
+    const otherModel = {...model, displayName: 'Claude Test', modelKey: 'claude-test',
+      provider: 'Anthropic'};
     TestBed.configureTestingModule({providers: [{provide: AiAdminPolicyService,
-      useValue: {models: () => of([model])}}]});
+      useValue: {models: () => of([model, otherModel])}}]});
     const component = TestBed.runInInjectionContext(() => new AiModelListComponent());
     component.ngOnInit();
-    component.filter = 'openai';
+    component.onFilterChange('openai');
     expect(component.filteredModels).toEqual([model]);
+    expect(component.dataSource.data).toEqual([model]);
+    const sorted = component.dataSource.sortData([model, otherModel],
+      {active: 'model', direction: 'asc'} as MatSort);
+    expect(sorted.map(item => item.displayName)).toEqual(['Claude Test', 'GPT Test']);
     component.onColumnsChange(component.columns.map(column => ({...column, selected: false})));
     expect(component.displayedColumns).toEqual([]);
     component.onColumnsReset();
