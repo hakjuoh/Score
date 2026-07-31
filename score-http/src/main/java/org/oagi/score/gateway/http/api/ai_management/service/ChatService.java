@@ -101,17 +101,24 @@ public class ChatService {
         ChatOutputDiscloser outputDiscloser = new ChatOutputDiscloser(
                 value.outputGuardrails(), value.responseOnlyAgent(), observability,
                 standaloneAgents);
-        ChatTurnExecutor turnExecutor = new ChatTurnExecutor(prompts, value.workflow(),
+        ChatTurnExecutor turnExecutor = new ChatTurnExecutor(value.workflow(),
                 value.contextBudgets(), compactions, outputDiscloser);
-        ChatTurnCommitter turnCommitter = new ChatTurnCommitter(conversations, compactions,
-                journal, value.contextBudgets(), value.resultCommitter(), value.requests());
+        ChatResultCommitter results = new ChatResultCommitter(
+                value.resultCommitter(), value.requests());
+        ChatResponseFinalizer responses = new ChatResponseFinalizer(
+                value.rootAgentIdentity(), outputDiscloser, results, value.files());
+        ChatTurnCommitter turnCommitter = new ChatTurnCommitter(
+                conversations, compactions, journal, results);
+        ManualCompactionHandler manualCompactions = new ManualCompactionHandler(
+                compactions, value.contextBudgets(), journal, results, responses);
         this.settings = new ConversationSettingsManager(models, prompts, conversations,
                 value.contextBudgets(), compactions, journal, value.objectMapper(),
                 observability, observer);
         this.turns = new ChatTurnOrchestrator(value.rootAgentIdentity(), prompts,
-                conversations, value.objectMapper(), value.requests(), value.contextBudgets(),
-                value.inputGuardrails(), observability, observer, value.files(), compactions,
-                journal, outputDiscloser, turnExecutor, turnCommitter);
+                conversations, value.objectMapper(), value.contextBudgets(),
+                value.inputGuardrails(), observability, observer, compactions,
+                journal, outputDiscloser, turnExecutor, turnCommitter, results, responses,
+                manualCompactions);
     }
 
     /** Cohesive runtime collaborators; tests customize this value instead of constructors. */

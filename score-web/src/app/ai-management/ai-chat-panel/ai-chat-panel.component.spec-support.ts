@@ -209,7 +209,10 @@ export function setupAiChatPanelSpec(): void {
       AiActiveRequestRecoveryService,
       AiChatAttachmentQueueService,
       {provide: AiChatAttachmentService, useValue: attachmentService},
-      {provide: AiChatCommandService, useValue: {decide: () => ({kind: 'none'}), suggestions: () => []}},
+      {provide: AiChatCommandService, useValue: {
+        resolveCommand: () => undefined,
+        suggestions: () => []
+      }},
       AiConfirmedChangeRequestCoordinator,
       AiChangeRepeatCoordinator,
       AiRequestDispatchCoordinator,
