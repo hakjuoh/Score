@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.execution;
 import com.anthropic.core.JsonValue;
 import com.anthropic.core.http.Headers;
 import com.anthropic.errors.InternalServerException;
+import io.opentelemetry.context.Scope;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentSession;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiModel;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
+import org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalResolution;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApproval;
@@ -26,6 +28,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
 import org.oagi.score.gateway.http.api.ai_management.service.AiChangeConfirmationService;
+import org.oagi.score.gateway.http.api.ai_management.service.AiElicitationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiRequestRegistry;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
 import org.oagi.score.gateway.http.api.ai_management.tool.file.AiPlatformToolProvider;
@@ -70,6 +73,7 @@ import reactor.core.publisher.Flux;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -78,11 +82,16 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -184,6 +193,93 @@ class AiChatExecutorTest {
     }
 
     @Test
+    void agentRuntimePairsLifecycleEventsAndClosesPlanningAndMcpResources() {
+        Fixture fixture = new Fixture();
+        AiChatConversationRuntime conversations = mock(AiChatConversationRuntime.class);
+        AiRequestRegistry requests = mock(AiRequestRegistry.class);
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        List<ExecutionObservation> observations = new ArrayList<>();
+        ExecutionObservationContext.Operation successfulPlan =
+                mock(ExecutionObservationContext.Operation.class);
+        ExecutionObservationContext.Operation failedPlan =
+                mock(ExecutionObservationContext.Operation.class);
+        ExecutionObservationContext.Operation cancelledPlan =
+                mock(ExecutionObservationContext.Operation.class);
+        ExecutionObservationContext.Operation timedOutPlan =
+                mock(ExecutionObservationContext.Operation.class);
+        when(observability.makeAgentCurrent(anyString(), anyString()))
+                .thenReturn(Scope.noop());
+        when(observability.startPlan("success", "workflow-planner"))
+                .thenReturn(successfulPlan);
+        when(observability.startPlan("failed", "workflow-planner"))
+                .thenReturn(failedPlan);
+        when(observability.startPlan("cancelled", "workflow-planner"))
+                .thenReturn(cancelledPlan);
+        when(observability.startPlan("timed-out", "workflow-planner"))
+                .thenReturn(timedOutPlan);
+        when(requests.isTimingOut("timed-out")).thenReturn(true);
+
+        AiChatExecutor.Context success = planningContext(fixture, "success",
+                AiChatExecutor.ToolPolicy.NONE);
+        AiChatExecutor.Context failed = planningContext(fixture, "failed",
+                AiChatExecutor.ToolPolicy.FULL);
+        AiChatExecutor.Context cancelled = planningContext(fixture, "cancelled",
+                AiChatExecutor.ToolPolicy.NONE);
+        AiChatExecutor.Context timedOut = planningContext(fixture, "timed-out",
+                AiChatExecutor.ToolPolicy.NONE);
+        IllegalStateException providerFailure = new IllegalStateException("provider failed");
+        CancellationException cancellation = new CancellationException("stopped");
+        IllegalStateException timeoutFailure = new IllegalStateException("deadline reached");
+        McpSyncClient mcpClient = mock(McpSyncClient.class);
+        ConnectCenterMcpClientFactory.McpSession mcp =
+                new ConnectCenterMcpClientFactory.McpSession(mcpClient, null, Set.of());
+        when(conversations.supportsElicitation()).thenReturn(false);
+        when(fixture.mcpClients.open(eq(fixture.requester), isNull(), any(Runnable.class)))
+                .thenReturn(mcp);
+        when(conversations.execute(eq(success), isNull(), any(ExecutionState.class),
+                eq(TEST_INSTRUCTION), any(Runnable.class), eq(WorkflowRunControl.NOOP)))
+                .thenReturn(new AiChatExecutor.Result("ok"));
+        when(conversations.execute(eq(failed), eq(mcp), any(ExecutionState.class),
+                eq(TEST_INSTRUCTION), any(Runnable.class), eq(WorkflowRunControl.NOOP)))
+                .thenThrow(providerFailure);
+        when(conversations.execute(eq(cancelled), isNull(), any(ExecutionState.class),
+                eq(TEST_INSTRUCTION), any(Runnable.class), eq(WorkflowRunControl.NOOP)))
+                .thenThrow(cancellation);
+        when(conversations.execute(eq(timedOut), isNull(), any(ExecutionState.class),
+                eq(TEST_INSTRUCTION), any(Runnable.class), eq(WorkflowRunControl.NOOP)))
+                .thenThrow(timeoutFailure);
+
+        AiChatAgentRuntime runtime = new AiChatAgentRuntime(
+                fixture.models, fixture.mcpClients, fixture.optionsFactory,
+                new SpringAiToolAdapter(), allowModelInput(), requests,
+                observations::add, observability, conversations, null);
+
+        assertThat(runtime.execute(success, TEST_INSTRUCTION, () -> { },
+                WorkflowRunControl.NOOP).answer()).isEqualTo("ok");
+        assertThatThrownBy(() -> runtime.execute(failed, TEST_INSTRUCTION, () -> { },
+                WorkflowRunControl.NOOP)).isSameAs(providerFailure);
+        assertThatThrownBy(() -> runtime.execute(cancelled, TEST_INSTRUCTION, () -> { },
+                WorkflowRunControl.NOOP)).isSameAs(cancellation);
+        assertThatThrownBy(() -> runtime.execute(timedOut, TEST_INSTRUCTION, () -> { },
+                WorkflowRunControl.NOOP)).isSameAs(timeoutFailure);
+
+        assertLifecycle(observations, "success", "agent.run.completed");
+        assertLifecycle(observations, "failed", "agent.run.failed");
+        assertLifecycle(observations, "cancelled", "agent.run.cancelled");
+        assertLifecycle(observations, "timed-out", "agent.run.timed_out");
+        verify(successfulPlan).close();
+        verify(successfulPlan, never()).fail(any());
+        verify(successfulPlan, never()).cancel();
+        verify(failedPlan).fail(providerFailure);
+        verify(failedPlan).close();
+        verify(cancelledPlan).cancel();
+        verify(cancelledPlan).close();
+        verify(timedOutPlan).fail(timeoutFailure);
+        verify(timedOutPlan).close();
+        verify(mcpClient).closeGracefully();
+    }
+
+    @Test
     void suppliesStableProtocolParametersAndSeparatesRequestContext() {
         AiUiRouteManifest routeManifest = new AiUiRouteManifest(1, List.of(
                 new AiUiRouteManifest.Route(
@@ -222,6 +318,208 @@ class AiChatExecutorTest {
                 AiChatExecutor.ToolPolicy.FULL, 0);
 
         assertThat(context.toolPolicy()).isEqualTo(AiChatExecutor.ToolPolicy.NONE);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void installsAndExecutesTheElicitationCallbackOnlyWhenTheServiceIsAvailable() {
+        Fixture fixture = new Fixture();
+        fixture.responses(Flux.just(response("answer")), Flux.just(response("answer")));
+        var emptySession = new ConnectCenterMcpClientFactory.McpSession(
+                mock(McpSyncClient.class), () -> new ToolCallback[0], Set.of(), List.of(),
+                ConnectCenterMcpClientFactory.McpTelemetry.EMPTY);
+        AtomicReference<Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult>> handler =
+                new AtomicReference<>();
+        when(fixture.mcpClients.open(any(ScoreUser.class), any(Function.class), any(Runnable.class)))
+                .thenAnswer(invocation -> {
+                    handler.set(invocation.getArgument(1));
+                    return emptySession;
+                });
+        AiElicitationService elicitations = mock(AiElicitationService.class);
+        McpSchema.ElicitResult accepted = new McpSchema.ElicitResult(
+                McpSchema.ElicitResult.Action.ACCEPT, Map.of("definition", "value"));
+        when(elicitations.await(any(), anyString(), anyString(), anyLong(),
+                any(McpSchema.ElicitFormRequest.class), any())).thenReturn(accepted);
+        AiChatExecutor withElicitation = new AiChatExecutor(
+                fixture.models, fixture.mcpClients, fixture.toolSearchAdvisor,
+                null, elicitations, null, fixture.optionsFactory);
+        AiTrajectoryRecorder recorder = fixture.recorder("request-1");
+
+        withElicitation.execute(new AiChatExecutor.Context(request("Ask"), List.of(),
+                new UserMessage("Ask"), fixture.requester, recorder,
+                true, false, AiChatExecutor.ToolPolicy.FULL, 0), TEST_INSTRUCTION);
+        McpSchema.ElicitFormRequest elicitation = new McpSchema.ElicitFormRequest(
+                "Enter a definition", Map.of("type", "object", "properties", Map.of(
+                "definition", Map.of("type", "string"))), Map.of());
+        assertThat(handler.get().apply(elicitation)).isSameAs(accepted);
+        verify(elicitations).await(eq(fixture.requester), eq("conversation-1"),
+                eq("request-1"), eq(0L), eq(elicitation), any());
+
+        fixture.mcp(new ToolCallback[0], Set.of());
+        fixture.executor(null).execute(new AiChatExecutor.Context(request("Ask again"), List.of(),
+                new UserMessage("Ask again"), fixture.requester,
+                fixture.recorder("request-1"), true, false,
+                AiChatExecutor.ToolPolicy.FULL, 0), TEST_INSTRUCTION);
+        verify(fixture.mcpClients).open(eq(fixture.requester), isNull(), any(Runnable.class));
+    }
+
+    @Test
+    void completesReadBackAndFailsAfterTwoUnverifiedContinuations() {
+        AiChatModelInvoker invoker = mock(AiChatModelInvoker.class);
+        AiChatContinuationRunner runner = new AiChatContinuationRunner(
+                null, AiExecutionInstructions.bundled(), invoker);
+        AiChangeToolGuard.GuardedToolSession successful =
+                mock(AiChangeToolGuard.GuardedToolSession.class);
+        when(successful.changeCompleted()).thenReturn(true);
+        when(successful.confirmationRequired()).thenReturn(false);
+        when(successful.readAfterLastChange()).thenReturn(false, true);
+        when(successful.completedChanges()).thenReturn(List.of());
+        when(invoker.invoke(any(), any(), any(), anyList(), any(), anyBoolean(),
+                any(), any(), any(), any())).thenReturn("verified answer");
+        AiChatExecutor.Context context = new AiChatExecutor.Context(request("Update"), List.of(),
+                new UserMessage("Update"), null, mock(AiTrajectoryRecorder.class),
+                false, false, AiChatExecutor.ToolPolicy.NONE, 0);
+        AiChatContinuationRunner.Outcome outcome = runner.run(
+                "changed", mock(ChatClient.class), mock(ChatOptions.class), context,
+                List.of(context.userMessage()), context.recorder(),
+                new AiChatToolSetup(successful, null, ""), Long.MAX_VALUE, false,
+                new ExecutionScope("request-1", "conversation-1", "user", 0,
+                        ExecutionScope.Purpose.USER_RESPONSE, List.of()),
+                new ExecutionState(), TEST_INSTRUCTION, () -> { },
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP, 0L);
+        assertThat(outcome.answer()).isEqualTo("verified answer");
+
+        AiChangeToolGuard.GuardedToolSession stalled =
+                mock(AiChangeToolGuard.GuardedToolSession.class);
+        when(stalled.changeCompleted()).thenReturn(true);
+        when(stalled.confirmationRequired()).thenReturn(false);
+        when(stalled.readAfterLastChange()).thenReturn(false);
+        when(stalled.completedChanges()).thenReturn(List.of());
+        assertThatThrownBy(() -> runner.run(
+                "changed", mock(ChatClient.class), mock(ChatOptions.class), context,
+                List.of(context.userMessage()), context.recorder(),
+                new AiChatToolSetup(stalled, null, ""), Long.MAX_VALUE, false,
+                new ExecutionScope("request-1", "conversation-1", "user", 0,
+                        ExecutionScope.Purpose.USER_RESPONSE, List.of()),
+                new ExecutionState(), TEST_INSTRUCTION, () -> { },
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP, 0L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("without completing read-back");
+        verify(invoker, times(3)).invoke(any(), any(), any(), anyList(), any(),
+                anyBoolean(), any(), any(), any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void suppliesTheChangeReplayFenceToProviderRetry() {
+        AiProviderRetryExecutor retry = mock(AiProviderRetryExecutor.class);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.executedChangeToolCallCount()).thenReturn(7L);
+        ExecutionState state = new ExecutionState();
+        state.toolCompleted(true);
+        AiChatModelInvoker invoker = new AiChatModelInvoker(
+                retry, null, AiExecutionInstructions.bundled(), null);
+        when(retry.execute(any(ChatRequest.class), eq(recorder), any(LongSupplier.class),
+                eq(state), any(Supplier.class))).thenAnswer(invocation -> {
+                    LongSupplier fence = invocation.getArgument(2);
+                    assertThat(fence.getAsLong()).isEqualTo(7L);
+                    return "fenced answer";
+                });
+
+        assertThat(invoker.invoke(mock(ChatClient.class), mock(ChatOptions.class),
+                request("Update"), List.of(), recorder, false,
+                new ExecutionScope("request-1", "conversation-1", "user", 0,
+                        ExecutionScope.Purpose.USER_RESPONSE, List.of()),
+                state, TEST_INSTRUCTION, () -> { })).isEqualTo("fenced answer");
+    }
+
+    @Test
+    void stopsAfterTwoTextualToolCallRecoveries() {
+        AiChatModelInvoker invoker = mock(AiChatModelInvoker.class);
+        when(invoker.invoke(any(), any(), any(), anyList(), any(), anyBoolean(),
+                any(), any(), any(), any())).thenReturn("[Tool call: search]");
+        AiChatContinuationRunner runner = new AiChatContinuationRunner(
+                null, AiExecutionInstructions.bundled(), invoker);
+        AiChatExecutor.Context context = new AiChatExecutor.Context(request("Search"), List.of(),
+                new UserMessage("Search"), null, mock(AiTrajectoryRecorder.class),
+                false, false, AiChatExecutor.ToolPolicy.NONE, 0);
+
+        assertThatThrownBy(() -> runner.run(
+                "[Tool call: search]", mock(ChatClient.class), mock(ChatOptions.class), context,
+                List.of(context.userMessage()), context.recorder(), AiChatToolSetup.empty(),
+                Long.MAX_VALUE, false,
+                new ExecutionScope("request-1", "conversation-1", "user", 0,
+                        ExecutionScope.Purpose.USER_RESPONSE, List.of()),
+                new ExecutionState(), TEST_INSTRUCTION, () -> { },
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP, 0L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("textual tool-call placeholder");
+        verify(invoker, times(2)).invoke(any(), any(), any(), anyList(), any(),
+                anyBoolean(), any(), any(), any(), any());
+    }
+
+    @Test
+    void balancesElicitationActivityAndAutoAcceptsFullAccessConfirmation() {
+        AiElicitationService elicitations = mock(AiElicitationService.class);
+        AiChatConversationRuntime runtime = new AiChatConversationRuntime(
+                null, elicitations, null, AiExecutionInstructions.bundled(),
+                ScoreAiObservability.noop(), null, null, null);
+        var runControl = mock(
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.class);
+        ChatRequest fullAccess = new ChatRequest("Confirm", "request-1", null,
+                "conversation-1", null, List.of(), null,
+                "configured-model", "high", "full_access");
+        AiChatExecutor.Context fullContext = new AiChatExecutor.Context(
+                fullAccess, List.of(), new UserMessage("Confirm"), null,
+                mock(AiTrajectoryRecorder.class), false, false,
+                AiChatExecutor.ToolPolicy.NONE, 0);
+        McpSchema.ElicitFormRequest confirmation = new McpSchema.ElicitFormRequest(
+                "Confirm", Map.of("properties", Map.of(), "required", List.of()), Map.of());
+
+        assertThat(runtime.handleElicitation(fullContext, confirmation, runControl).action())
+                .isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+        verify(elicitations, never()).await(any(), anyString(), anyString(), anyLong(), any(), any());
+        verify(runControl, never()).definiteActivityStarted();
+
+        AiChatExecutor.Context askContext = new AiChatExecutor.Context(
+                request("Enter value"), List.of(), new UserMessage("Enter value"), null,
+                mock(AiTrajectoryRecorder.class), false, false,
+                AiChatExecutor.ToolPolicy.NONE, 0);
+        McpSchema.ElicitFormRequest form = new McpSchema.ElicitFormRequest(
+                "Enter", Map.of("properties", Map.of("value", Map.of("type", "string"))),
+                Map.of());
+        when(elicitations.await(any(), anyString(), anyString(), anyLong(), eq(form), any()))
+                .thenThrow(new IllegalStateException("interaction failed"));
+        assertThatThrownBy(() -> runtime.handleElicitation(askContext, form, runControl))
+                .isInstanceOf(IllegalStateException.class);
+        verify(runControl).definiteActivityStarted();
+        verify(runControl).definiteActivityFinished();
+    }
+
+    @Test
+    void rejectsToolExecutionAfterTheRequestFenceCloses() {
+        Fixture fixture = new Fixture();
+        AtomicReference<ToolCallbackProvider> installed = fixture.captureInstalledTools();
+        fixture.responses(Flux.just(response("safe answer")));
+        fixture.mcp(tool("search", "result"), Set.of("search"));
+        AiRequestRegistry requests = mock(AiRequestRegistry.class);
+        when(requests.shouldDiscardResult("request-1")).thenReturn(false, true);
+        ToolGuardrailRegistry guardrails = mock(ToolGuardrailRegistry.class);
+        AiChangeToolGuard changeGuard = mock(AiChangeToolGuard.class);
+        when(changeGuard.readOnly(any(), any())).thenAnswer(invocation ->
+                invocation.getArgument(0));
+
+        fixture.executorWithRequestFence(changeGuard, requests, guardrails).execute(
+                new AiChatExecutor.Context(request("Search"), List.of(),
+                        new UserMessage("Search"), fixture.requester,
+                        fixture.recorder("request-1"), true, false,
+                        AiChatExecutor.ToolPolicy.READ_ONLY, 0), TEST_INSTRUCTION);
+
+        assertThat(installed.get()).isNotNull();
+        assertThatThrownBy(() -> installed.get().getToolCallbacks()[0].call(
+                "{}", new org.springframework.ai.chat.model.ToolContext(Map.of())))
+                .isInstanceOf(CancellationException.class)
+                .hasMessageContaining("stopped before Tool execution");
     }
 
     @Test
@@ -742,6 +1040,29 @@ class AiChatExecutorTest {
                 List.of(), null, "configured-model", "high", "ask");
     }
 
+    private static AiChatExecutor.Context planningContext(
+            Fixture fixture, String requestId, AiChatExecutor.ToolPolicy toolPolicy) {
+        ChatRequest request = new ChatRequest(
+                "Plan it", requestId, null, "conversation-1", "test page",
+                List.of(), null, "configured-model", "high", "ask");
+        return new AiChatExecutor.Context(request, List.of(), new UserMessage("Plan it"),
+                fixture.requester, fixture.recorder(requestId),
+                toolPolicy != AiChatExecutor.ToolPolicy.NONE, false, toolPolicy, 0)
+                .withAgentIdentity("workflow-planner",
+                        ExecutionScope.Purpose.WORKFLOW_PLANNING);
+    }
+
+    private static void assertLifecycle(List<ExecutionObservation> observations,
+                                        String requestId, String terminalType) {
+        List<ExecutionObservation> lifecycle = observations.stream()
+                .filter(observation -> observation.scope().requestId().equals(requestId))
+                .toList();
+        assertThat(lifecycle).extracting(ExecutionObservation::type)
+                .containsExactly("agent.run.started", terminalType);
+        assertThat(lifecycle.getFirst().attributes().get("agent_run_id"))
+                .isEqualTo(lifecycle.getLast().attributes().get("agent_run_id"));
+    }
+
     private static AiChatExecutor.Result execute(AiChatExecutor executor,
                                                  AiChatExecutor.Context context) {
         return executor.execute(context, TEST_INSTRUCTION);
@@ -857,6 +1178,17 @@ class AiChatExecutorTest {
                 AgentInputGuardrailChain modelInputGuardrails) {
             return executorWithPolicies(changeGuard, toolGuardrails, modelInputGuardrails,
                     new ScoreAiProperties());
+        }
+
+        private AiChatExecutor executorWithRequestFence(
+                AiChangeToolGuard changeGuard, AiRequestRegistry requests,
+                ToolGuardrailRegistry toolGuardrails) {
+            return new AiChatExecutor(models, mcpClients, toolSearchAdvisor,
+                    changeGuard, null, null, optionsFactory, null, toolGuardrails,
+                    new SpringAiCallbackToolSetAdapter(), new SpringAiToolAdapter(),
+                    allowModelInput(), requests, AiExecutionInstructions.bundled(),
+                    ScoreAiObservability.noop(), AiMiddlewareChain.none(), null,
+                    new ScoreAiProperties(), null);
         }
 
         private AiChatExecutor executorWithPolicies(
