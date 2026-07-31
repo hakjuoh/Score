@@ -139,7 +139,7 @@ score:
     secret-encryption:
       active-key-id: ${SCORE_APP_SECRET_ACTIVE_KEY_ID:primary}
       keys:
-        primary: ${SCORE_APP_SECRET_KEY}
+        primary: ${SCORE_APP_SECRET_KEY:}
   redis:
     # Destructive maintenance switch. Keep false for every multi-instance deployment.
     flush-on-startup: ${SCORE_REDIS_FLUSH_ON_STARTUP:false}
