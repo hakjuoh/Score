@@ -206,23 +206,17 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
     if (!this.state.pending && !this.activeRequestId) {
       return;
     }
-    this.cancellationService.reset();
-    this.completeProgressMessages();
-    this.settleAgentActivity('cancelled');
-    this.clearTimers();
-    this.clearStatusMessage();
-    this.elicitationCoordinator.clear(this.state);
-    this.clearChangeApprovalBatch();
-    this.confirmedChangeRequests.cancel(this.activeRequestId);
-    this.clearChangeRepeatDraft(this.activeRequestId);
-    this.activeRequestId = undefined;
-    this.clearToolCallTracking();
+    const requestId = this.activeRequestId;
+    this.transitionActiveRequest({
+      agentStatus: 'cancelled', reconciliationRequired: false,
+      cancellation: 'reset', completedPayload: 'clear', toolGroups: 'preserve',
+      confirmedChange: requestId
+        ? {kind: 'cancel', requestId} : {kind: 'preserve'},
+      changeRepeat: requestId
+        ? {kind: 'clear-request', requestId} : {kind: 'clear-all'}
+    });
     this.state.messages.push({role: 'debug', content: content || 'Request cancelled.'});
-    this.state.pending = false;
-    this.state.reconciliationRequired = false;
     this.state.currentStatus = 'Ready';
-    this.requestSubscription?.unsubscribe();
-    this.clearCompletedPayloadRecovery();
     if (this.runDeferredNewChat()) {
       return;
     }
@@ -230,25 +224,20 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
   }
 
   protected completeAuthenticationFailure(content?: string): void {
-    this.cancellationService.reset();
-    this.completeProgressMessages();
-    this.settleAgentActivity('failed');
-    this.clearTimers();
-    this.clearStatusMessage();
-    this.elicitationCoordinator.clear(this.state);
-    this.clearChangeApprovalBatch();
-    this.confirmedChangeRequests.cancel(this.activeRequestId);
-    this.clearChangeRepeatDraft(this.activeRequestId);
-    this.activeRequestId = undefined;
-    this.clearToolCallTracking();
+    const requestId = this.activeRequestId;
+    this.transitionActiveRequest({
+      agentStatus: 'failed', reconciliationRequired: false,
+      cancellation: 'reset', completedPayload: 'preserve', toolGroups: 'preserve',
+      confirmedChange: requestId
+        ? {kind: 'cancel', requestId} : {kind: 'preserve'},
+      changeRepeat: requestId
+        ? {kind: 'clear-request', requestId} : {kind: 'clear-all'}
+    });
     if (this.activeRestoreRequestId) {
       this.cancelConversationRestore();
     }
     this.state.messages.push({role: 'error', content: content || 'Your session is no longer valid.'});
-    this.state.pending = false;
-    this.state.reconciliationRequired = false;
     this.state.currentStatus = 'Authentication required';
-    this.requestSubscription?.unsubscribe();
     this.transportService.cancelReconnect();
     this.transportService.deactivate({force: true}).finally(() => {
       this.snackBar.open('Authentication required', '', {duration: 3000});
@@ -258,18 +247,15 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
 
   protected completeFailedRequest(content?: string,
                                 status: AiTerminalRequestErrorStatus = 'FAILED'): void {
-    this.clearCompletedPayloadRecovery();
-    this.cancellationService.reset();
-    this.completeProgressMessages();
-    this.settleAgentActivity('failed');
-    this.clearTimers();
-    this.clearStatusMessage();
-    this.elicitationCoordinator.clear(this.state);
-    this.clearChangeApprovalBatch();
-    this.confirmedChangeRequests.cancel(this.activeRequestId);
-    this.clearChangeRepeatDraft(this.activeRequestId);
-    this.activeRequestId = undefined;
-    this.clearToolCallTracking();
+    const requestId = this.activeRequestId;
+    this.transitionActiveRequest({
+      agentStatus: 'failed', reconciliationRequired: false,
+      cancellation: 'reset', completedPayload: 'clear', toolGroups: 'preserve',
+      confirmedChange: requestId
+        ? {kind: 'cancel', requestId} : {kind: 'preserve'},
+      changeRepeat: requestId
+        ? {kind: 'clear-request', requestId} : {kind: 'clear-all'}
+    });
     if (this.activeRestoreRequestId) {
       this.cancelConversationRestore();
     }
@@ -278,11 +264,8 @@ export abstract class AiChatPanelMessageController extends AiChatPanelEventContr
       : status === 'STEP_LIMIT_REACHED'
         ? 'The request reached its step limit.' : 'The AI chat request failed.';
     this.state.messages.push({role: 'error', content: content || fallback});
-    this.state.pending = false;
-    this.state.reconciliationRequired = false;
     this.state.currentStatus = status === 'TIMED_OUT'
       ? 'Timed out' : status === 'STEP_LIMIT_REACHED' ? 'Step limit reached' : 'Error';
-    this.requestSubscription?.unsubscribe();
     if (this.runDeferredNewChat()) {
       return;
     }

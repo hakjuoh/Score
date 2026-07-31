@@ -28,6 +28,7 @@ import {AiChatContextService} from './domain/ai-chat-context.service';
 import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
 import {AiChangeApprovalBatchCoordinator} from './domain/ai-change-approval-batch-coordinator';
 import {AiElicitationCoordinator} from './domain/ai-elicitation-coordinator';
+import {AiRequestTerminalCoordinator} from './domain/ai-request-terminal-coordinator';
 import {AiConversationRestoreService} from './domain/ai-conversation-restore.service';
 import {AiConversationProjector} from './domain/ai-conversation-projector';
 import {AiChatNavigationService} from './domain/ai-chat-navigation.service';
@@ -204,6 +205,7 @@ export function setupAiChatPanelSpec(): void {
       AiConfirmedChangeRequestCoordinator,
       AiChangeApprovalBatchCoordinator,
       AiElicitationCoordinator,
+      AiRequestTerminalCoordinator,
       AiConversationProjector,
       {provide: AiChatContextService, useValue: {
         nextContextUpdate: () => ({routeManifest: {schemaVersion: 1, routes: []}})

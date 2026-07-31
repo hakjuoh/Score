@@ -222,7 +222,6 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
 
   protected completeCancellationTerminal(status: AiExecutionStatus,
                                        response?: AiCancellationResponse): void {
-    this.confirmedChangeRequests.cancel(this.activeRequestId);
     if (status === 'CANCELLED') {
       this.completeCancelledRequest('Request cancelled.');
       return;
@@ -231,22 +230,19 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
       this.awaitCompletedPayload(response);
       return;
     }
-    this.clearCompletedPayloadRecovery();
-    this.completeProgressMessages();
-    this.settleAgentActivity('failed');
-    this.clearTimers();
-    this.clearStatusMessage();
-    this.elicitationCoordinator.clear(this.state);
-    this.clearChangeApprovalBatch();
-    this.clearChangeRepeatDraft(this.activeRequestId);
-    this.activeRequestId = undefined;
-    this.clearToolCallTracking();
-    this.state.pending = false;
-    this.state.reconciliationRequired = status === 'UNKNOWN_RECONCILIATION_REQUIRED';
+    const requestId = this.activeRequestId;
+    this.transitionActiveRequest({
+      agentStatus: 'failed',
+      reconciliationRequired: status === 'UNKNOWN_RECONCILIATION_REQUIRED',
+      cancellation: 'preserve', completedPayload: 'clear', toolGroups: 'preserve',
+      confirmedChange: requestId
+        ? {kind: 'cancel', requestId} : {kind: 'preserve'},
+      changeRepeat: requestId
+        ? {kind: 'clear-request', requestId} : {kind: 'clear-all'}
+    });
     if (this.state.reconciliationRequired) {
       this.deferredNewChatTab = undefined;
     }
-    this.requestSubscription?.unsubscribe();
     if (status === 'TIMED_OUT') {
       this.state.messages.push({role: 'error', content: 'The request deadline was exceeded.'});
       this.state.currentStatus = 'Timed out';
@@ -320,24 +316,14 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
     if (this.completedPayloadRequestId !== requestId) {
       return;
     }
-    this.clearCompletedPayloadRecovery();
-    this.completeProgressMessages();
-    this.completeToolGroupMessages();
-    this.settleAgentActivity('completed');
-    this.clearTimers();
-    this.clearStatusMessage();
-    this.elicitationCoordinator.clear(this.state);
-    this.clearChangeApprovalBatch();
-    this.confirmedChangeRequests.cancel(requestId);
-    this.clearChangeRepeatDraft(requestId);
+    this.transitionActiveRequest({
+      agentStatus: 'completed', reconciliationRequired: false,
+      cancellation: 'preserve', completedPayload: 'clear', toolGroups: 'complete',
+      confirmedChange: {kind: 'cancel', requestId},
+      changeRepeat: {kind: 'clear-request', requestId}
+    });
     this.state.conversationId = conversationId || this.state.conversationId;
     this.sessionPersistence.rememberLastConversation(this.state.conversationId);
-    this.activeRequestId = undefined;
-    this.clearToolCallTracking();
-    this.state.pending = false;
-    this.state.reconciliationRequired = false;
-    this.requestSubscription?.unsubscribe();
-    this.requestSubscription = undefined;
     if (content) {
       this.state.messages.push({role: 'assistant', content});
       this.assistantMessageIndexesByRequestId.set(requestId, this.state.messages.length - 1);

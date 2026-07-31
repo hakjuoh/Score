@@ -14,6 +14,7 @@ import {AiActiveRequestRecoveryService} from './domain/ai-active-request-recover
 import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
 import {AiChangeApprovalBatchCoordinator} from './domain/ai-change-approval-batch-coordinator';
 import {AiElicitationCoordinator} from './domain/ai-elicitation-coordinator';
+import {AiRequestTerminalCoordinator} from './domain/ai-request-terminal-coordinator';
 import {AiConversationRestoreService} from './domain/ai-conversation-restore.service';
 import {AiConversationProjector} from './domain/ai-conversation-projector';
 import {AiConversationRestoreRenderer} from './domain/ai-conversation-restore-renderer';
@@ -52,6 +53,7 @@ export {
     AiConfirmedChangeRequestCoordinator,
     AiChangeApprovalBatchCoordinator,
     AiElicitationCoordinator,
+    AiRequestTerminalCoordinator,
     AiChatMessageTrackerService,
     AiChangeInteractionService,
     AiChatPanelViewportService,

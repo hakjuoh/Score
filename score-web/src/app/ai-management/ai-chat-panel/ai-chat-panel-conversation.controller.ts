@@ -262,17 +262,15 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
   protected finishRecoveredRequest(status: AiPublicExecutionRequestStatus): void {
     this.recoveredRequestSnapshotId = undefined;
     this.clearActiveRecovery();
-    this.requestSubscription?.unsubscribe();
-    this.requestSubscription = undefined;
-    this.clearTimers();
-    this.clearChangeApprovalBatch();
-    this.completeProgressMessages();
-    this.settleAgentActivity(status.status === 'COMPLETED' ? 'completed'
-      : status.status === 'CANCELLED' ? 'cancelled' : 'failed');
-    this.state.pending = false;
+    this.transitionActiveRequest({
+      agentStatus: status.status === 'COMPLETED' ? 'completed'
+        : status.status === 'CANCELLED' ? 'cancelled' : 'failed',
+      reconciliationRequired: status.status === 'UNKNOWN_RECONCILIATION_REQUIRED',
+      cancellation: 'preserve', completedPayload: 'preserve', toolGroups: 'preserve',
+      confirmedChange: {kind: 'preserve'},
+      changeRepeat: {kind: 'clear-request', requestId: status.requestId}
+    });
     this.activeRequestPublished = false;
-    this.state.activeRequest = undefined;
-    this.state.reconciliationRequired = status.status === 'UNKNOWN_RECONCILIATION_REQUIRED';
     this.appendBackendRestartMessage(status);
     this.state.currentStatus = status.status === 'COMPLETED'
       ? 'Ready' : this.state.reconciliationRequired ? 'Review needed' : status.status;
@@ -422,21 +420,14 @@ export abstract class AiChatPanelConversationController extends AiChatPanelComma
   protected abandonActiveRequest(requestId: string, content: string, currentStatus: string): void {
     this.recoveredRequestSnapshotId = undefined;
     this.activeRequestRecovery.cancel();
-    this.completeProgressMessages();
-    this.settleAgentActivity('failed');
-    this.clearTimers();
-    this.clearStatusMessage();
-    this.elicitationCoordinator.clear(this.state);
-    this.clearChangeApprovalBatch();
-    this.clearChangeRepeatDraft(requestId);
-    this.requestSubscription?.unsubscribe();
-    this.requestSubscription = undefined;
+    this.transitionActiveRequest({
+      agentStatus: 'failed', reconciliationRequired: true,
+      cancellation: 'preserve', completedPayload: 'preserve', toolGroups: 'preserve',
+      confirmedChange: {kind: 'preserve'},
+      changeRepeat: {kind: 'clear-request', requestId}
+    });
     this.activeRequestPublished = false;
-    this.activeRequestId = undefined;
-    this.clearToolCallTracking();
     this.state.messages.push({role: 'error', content});
-    this.state.pending = false;
-    this.state.reconciliationRequired = true;
     this.state.currentStatus = currentStatus;
     this.scrollToBottom();
   }
