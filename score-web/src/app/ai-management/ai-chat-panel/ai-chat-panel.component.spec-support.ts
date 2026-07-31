@@ -37,7 +37,8 @@ import {AiChatNavigationService} from './domain/ai-chat-navigation.service';
 import {AiChatPanelLayoutService} from './domain/ai-chat-panel-layout.service';
 import {AiChatMessageTrackerService} from './domain/ai-chat-message-tracker.service';
 import {AiChatPanelViewportService} from './domain/ai-chat-panel-viewport.service';
-import {AiChatSettingsService} from './domain/ai-chat-settings.service';
+import {AiPermissionSettingsService} from './domain/ai-permission-settings.service';
+import {AiModelSettingsCoordinator} from './domain/ai-model-settings-coordinator';
 import {AiChatTransportService} from './domain/ai-chat-transport.service';
 import {AiChatWindowCoordinatorService} from './domain/ai-chat-window-coordinator.service';
 import {AiChatWorkspacePersistenceCoordinator} from './domain/ai-chat-workspace-persistence-coordinator';
@@ -228,7 +229,8 @@ export function setupAiChatPanelSpec(): void {
       AiChatMessageTrackerService,
       AiChangeInteractionService,
       AiChatPanelViewportService,
-      AiChatSettingsService,
+      AiPermissionSettingsService,
+      AiModelSettingsCoordinator,
       {provide: AiChatTransportService, useValue: transport},
       {provide: AiChatWindowCoordinatorService, useValue: windowCoordinator},
       AiChatWorkspacePersistenceCoordinator,
