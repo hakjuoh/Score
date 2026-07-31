@@ -23,6 +23,71 @@ export interface AiReasoningEffort {
   sortOrder: number;
 }
 
+export interface AiNumericConstraint {
+  defaultValue: number | null;
+  minimum: number | null;
+  maximum: number | null;
+  optional: boolean;
+}
+
+export interface AiModelConfigurationConstraints {
+  contextWindow: AiNumericConstraint;
+  maxOutputTokens: AiNumericConstraint;
+  outputReserveTokens: AiNumericConstraint;
+  autoCompactThresholdTokens: AiNumericConstraint;
+  emergencyHeadroomTokens: AiNumericConstraint;
+  toolOutputTokenLimit: AiNumericConstraint;
+  thinkingBudgetTokens: AiNumericConstraint;
+  temperature: AiNumericConstraint;
+}
+
+export interface AiCapabilityConstraint {
+  supported: boolean;
+  defaultEnabled: boolean;
+}
+
+export interface AiModelCapabilityConstraints {
+  reasoningOptions: AiCapabilityConstraint;
+  outputEffort: AiCapabilityConstraint;
+  verbosity: AiCapabilityConstraint;
+  temperature: AiCapabilityConstraint;
+  adaptiveThinking: AiCapabilityConstraint;
+  providerCompaction: AiCapabilityConstraint;
+}
+
+export interface AiModelProfile {
+  providerType: string;
+  modelKey: string;
+  providerModelName: string;
+  displayName: string;
+  description: string;
+  maxTokens: number | null;
+  contextWindow: number;
+  maxOutputTokens: number | null;
+  maxContextWindow: number;
+  outputReserveTokens: number | null;
+  autoCompactThresholdTokens: number | null;
+  emergencyHeadroomTokens: number;
+  toolOutputTokenLimit: number;
+  providerCompactionEnabled: boolean;
+  temperature: number | null;
+  thinkingBudgetTokens: number | null;
+  minThinkingBudgetTokens: number | null;
+  maxThinkingBudgetTokens: number | null;
+  adaptiveThinking: boolean;
+  outputEffort: string | null;
+  cacheStrategy: string | null;
+  reasoningModelSupported: boolean | null;
+  outputEffortSupported: boolean | null;
+  verbositySupported: boolean | null;
+  temperatureSupported: boolean | null;
+  thinkingModes: string[];
+  defaultThinking: string | null;
+  reasoningEfforts: AiReasoningEffort[];
+  configurationConstraints: AiModelConfigurationConstraints;
+  capabilityConstraints: AiModelCapabilityConstraints;
+}
+
 export interface AiAdminModel {
   aiModelId: number;
   modelKey: string;
@@ -85,7 +150,34 @@ export interface AiModelUpdate {
   thinkingModes: string[];
   defaultThinking: string | null;
   reasoningEfforts: AiReasoningEffort[];
-  reason: string;
+}
+
+export interface AiModelCommand {
+  expectedVersion: number | null;
+  providerId: number;
+  modelKey: string;
+  enabled: boolean;
+  defaultModel: boolean;
+  sortOrder: number;
+  maxTokens: number | null;
+  contextWindow: number;
+  outputReserveTokens: number | null;
+  autoCompactThresholdTokens: number | null;
+  emergencyHeadroomTokens: number;
+  toolOutputTokenLimit: number;
+  providerCompactionEnabled: boolean;
+  temperature: number | null;
+  thinkingBudgetTokens: number | null;
+  adaptiveThinking: boolean;
+  outputEffort: string | null;
+  cacheStrategy: string | null;
+  reasoningModelSupported: boolean | null;
+  outputEffortSupported: boolean | null;
+  verbositySupported: boolean | null;
+  temperatureSupported: boolean | null;
+  thinkingModes: string[];
+  defaultThinking: string | null;
+  reasoningEfforts: Array<{name: string; defaultEffort: boolean; sortOrder: number}>;
 }
 
 export interface AiAdminUsage {
@@ -138,7 +230,6 @@ export interface AiPolicyUpdate {
   maxTotalTokensPerRequest: number | null;
   quotaPeriod: 'DAILY' | 'MONTHLY' | null;
   quotaTokens: number | null;
-  reason: string | null;
 }
 
 export interface AiProviderView {
@@ -164,5 +255,10 @@ export interface AiProviderUpdate {
   apiVersion: string | null;
   enabled: boolean;
   apiKey?: string;
-  reason: string;
+}
+
+export interface AiProviderConnectionTestResult {
+  successful: boolean;
+  message: string;
+  statusCode: number | null;
 }

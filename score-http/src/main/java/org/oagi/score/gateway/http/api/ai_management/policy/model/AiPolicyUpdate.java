@@ -16,8 +16,7 @@ public record AiPolicyUpdate(
         Long maxOutputTokensPerCall,
         Long maxTotalTokensPerRequest,
         AiQuotaPeriod quotaPeriod,
-        Long quotaTokens,
-        String reason) {
+        Long quotaTokens) {
 
     public AiPolicyUpdate {
         modelAccessMode = modelAccessMode != null ? modelAccessMode : AiModelAccessMode.ALL;

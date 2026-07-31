@@ -99,6 +99,11 @@ public class ScoreAiModelRegistry {
         String resolvedModelName = resolveModelName(modelName);
         ScoreAiProperties.Model model = properties.getModels().get(resolvedModelName);
         List<ReasoningEffortDescriptor> efforts = reasoningEfforts(model);
+        if (efforts.isEmpty()) {
+            if (!StringUtils.hasText(requestedReasoningEffort)) return null;
+            throw new IllegalArgumentException(
+                    "The model does not support reasoning effort: " + resolvedModelName);
+        }
         String normalizedRequested = StringUtils.hasText(requestedReasoningEffort)
                 ? requestedReasoningEffort.strip().toLowerCase() : defaultReasoningEffort(model);
         boolean legacyDisabled = "none".equals(normalizedRequested)
@@ -116,6 +121,11 @@ public class ScoreAiModelRegistry {
     public String resolveReasoningEffort(String modelName, String requestId,
                                          String requestedReasoningEffort) {
         ModelConfiguration configuration = modelConfiguration(modelName, requestId);
+        if (configuration.reasoningEfforts().isEmpty()) {
+            if (!StringUtils.hasText(requestedReasoningEffort)) return null;
+            throw new IllegalArgumentException(
+                    "The model does not support reasoning effort: " + modelName);
+        }
         String normalized = StringUtils.hasText(requestedReasoningEffort)
                 ? requestedReasoningEffort.strip().toLowerCase()
                 : configuration.defaultReasoningEffort();
@@ -263,7 +273,8 @@ public class ScoreAiModelRegistry {
                                 (first, ignored) -> first, LinkedHashMap::new),
                         values -> List.copyOf(values.values())));
         List<ReasoningEffortDescriptor> efforts = new ArrayList<>(configuredEfforts);
-        if ((Boolean.TRUE.equals(model.getModelCapabilities().getReasoningModel())
+        if (!configuredEfforts.isEmpty()
+                && (Boolean.TRUE.equals(model.getModelCapabilities().getReasoningModel())
                 || model.getModelCapabilities().getThinkingModes().stream()
                 .filter(StringUtils::hasText)
                 .map(value -> value.strip().toLowerCase())
@@ -272,10 +283,7 @@ public class ScoreAiModelRegistry {
             efforts.addFirst(new ReasoningEffortDescriptor(
                     "disabled", "Disabled", "Disable additional reasoning."));
         }
-        return efforts.isEmpty() ? List.of(
-                new ReasoningEffortDescriptor("low", "Low", "Fast responses with lighter reasoning."),
-                new ReasoningEffortDescriptor("medium", "Medium", "Balanced reasoning depth."),
-                new ReasoningEffortDescriptor("high", "High", "Greater reasoning depth.")) : efforts;
+        return List.copyOf(efforts);
     }
 
     private String canonicalReasoningEffortName(String name) {
@@ -292,7 +300,8 @@ public class ScoreAiModelRegistry {
                 return normalized;
             }
         }
-        return reasoningEfforts(model).getFirst().name();
+        List<ReasoningEffortDescriptor> efforts = reasoningEfforts(model);
+        return efforts.isEmpty() ? null : efforts.getFirst().name();
     }
 
     public record ModelDescriptor(String name, String displayName, String description, String provider,

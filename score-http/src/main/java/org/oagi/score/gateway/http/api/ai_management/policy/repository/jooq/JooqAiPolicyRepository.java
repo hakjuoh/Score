@@ -83,7 +83,7 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
 
     @Override
     public AiUserPolicy save(AiUserPolicy policy, UserId actorUserId,
-                             Long expectedVersion, String reason) {
+                             Long expectedVersion) {
         return dsl.transactionResult(configuration -> {
             DSLContext tx = org.jooq.impl.DSL.using(configuration);
             ULong target = unsigned(policy.userId());
@@ -126,7 +126,7 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
             replaceChildren(tx, policy);
             AiUserPolicy saved = find(tx, policy.userId()).orElseThrow();
             audit(tx, policy.userId(), actorUserId, before == null ? "CREATE" : "UPDATE",
-                    before, saved, reason);
+                    before, saved);
             return saved;
         });
     }
@@ -182,8 +182,7 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
     }
 
     @Override
-    public void delete(UserId targetUserId, UserId actorUserId, long expectedVersion,
-                       String reason) {
+    public void delete(UserId targetUserId, UserId actorUserId, long expectedVersion) {
         dsl.transaction(configuration -> {
             DSLContext tx = org.jooq.impl.DSL.using(configuration);
             AiUserPolicy before = find(tx, targetUserId)
@@ -193,20 +192,18 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
                     .and(AI_USER_POLICY.POLICY_VERSION.eq(ULong.valueOf(expectedVersion)))
                     .execute();
             if (deleted != 1) throw new AiPolicyVersionConflictException();
-            audit(tx, targetUserId, actorUserId, "DELETE", before, null, reason);
+            audit(tx, targetUserId, actorUserId, "DELETE", before, null);
         });
     }
 
     private void audit(DSLContext tx, UserId target, UserId actor, String action,
-                       AiUserPolicy before, AiUserPolicy after, String reason) {
+                       AiUserPolicy before, AiUserPolicy after) {
         tx.insertInto(AI_USER_POLICY_AUDIT)
                 .set(AI_USER_POLICY_AUDIT.TARGET_APP_USER_ID, unsigned(target))
                 .set(AI_USER_POLICY_AUDIT.ACTOR_APP_USER_ID, unsigned(actor))
                 .set(AI_USER_POLICY_AUDIT.ACTION, action)
                 .set(AI_USER_POLICY_AUDIT.BEFORE_JSON, json(before))
                 .set(AI_USER_POLICY_AUDIT.AFTER_JSON, json(after))
-                .set(AI_USER_POLICY_AUDIT.REASON,
-                        reason != null && !reason.isBlank() ? reason.strip() : null)
                 .set(AI_USER_POLICY_AUDIT.CREATED_AT, now())
                 .execute();
     }
