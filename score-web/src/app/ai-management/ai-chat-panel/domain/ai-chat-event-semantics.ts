@@ -172,6 +172,10 @@ export function primaryContent(event: AiChatSocketEvent): string {
   return event.content || event.response || event.message || '';
 }
 
+export function normalizedDisplayText(value?: string): string {
+  return (value || '').trim().replace(/\s+/g, ' ');
+}
+
 /** Preserves a correlation value only when transport whitespace is exact. */
 export function exactOptionalText(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() === value ? value : undefined;
