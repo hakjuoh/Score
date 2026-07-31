@@ -1,9 +1,10 @@
 package org.oagi.score.gateway.http.api.ai_management.repository.jooq;
 
 import org.jooq.DSLContext;
-import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiChatConversationRecord;
@@ -39,10 +40,11 @@ final class JooqAiChatConversationCommands {
 
     String open(String requestedConversationId, String firstPrompt) {
         if (StringUtils.hasText(requestedConversationId)) {
-            ULong internalConversationId = access.lockOwned(requestedConversationId);
+            AiChatConversationId internalConversationId = access.lockOwned(requestedConversationId);
             dslContext.update(AI_CHAT_CONVERSATION)
                     .set(AI_CHAT_CONVERSATION.UPDATED_AT, LocalDateTime.now())
-                    .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
+                    .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
+                            .eq(access.valueOf(internalConversationId)))
                     .execute();
             return requestedConversationId;
         }
@@ -50,7 +52,7 @@ final class JooqAiChatConversationCommands {
         LocalDateTime now = LocalDateTime.now();
         AiChatConversationRecord record = new AiChatConversationRecord();
         record.setGuid(conversationId);
-        record.setAppUserId(access.userId());
+        record.setAppUserId(access.valueOf(access.userId()));
         record.setTitle(title(firstPrompt));
         record.setCompacted((byte) 0);
         record.setCreatedAt(now);
@@ -65,13 +67,14 @@ final class JooqAiChatConversationCommands {
                 || !StringUtils.hasText(workerId)) {
             throw new IllegalArgumentException("Child execution conversation identity is incomplete.");
         }
-        ULong parentId = access.lockOwned(parentConversationId);
+        AiChatConversationId parentId = access.lockOwned(parentConversationId);
         String conversationId = UUID.randomUUID().toString();
         LocalDateTime now = LocalDateTime.now();
         dslContext.insertInto(AI_CHAT_CONVERSATION)
                 .set(AI_CHAT_CONVERSATION.GUID, conversationId)
-                .set(AI_CHAT_CONVERSATION.APP_USER_ID, access.userId())
-                .set(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID, parentId)
+                .set(AI_CHAT_CONVERSATION.APP_USER_ID, access.valueOf(access.userId()))
+                .set(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID,
+                        access.valueOf(parentId))
                 .set(AI_CHAT_CONVERSATION.CONVERSATION_KIND, kind.name())
                 .set(AI_CHAT_CONVERSATION.AGENT_ID, workerId.strip())
                 .set(AI_CHAT_CONVERSATION.PARENT_REQUEST_ID, parentRequestId.strip())
@@ -84,16 +87,17 @@ final class JooqAiChatConversationCommands {
     }
 
     AiChatStoredStep append(String conversationId, AiChatTrajectoryStep step) {
-        ULong internalConversationId = access.lockOwned(conversationId);
+        AiChatConversationId internalConversationId = access.lockOwned(conversationId);
         Long nextSequence = dslContext.select(
                         coalesce(max(AI_CHAT_STEP.STEP_SEQUENCE), -1L).add(1L))
                 .from(AI_CHAT_STEP)
-                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
+                .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId)))
                 .fetchOneInto(Long.class);
         long sequence = nextSequence != null ? nextSequence : 0L;
         Instant createdAt = step.createdAt() != null ? step.createdAt() : Instant.now();
         AiChatStepRecord stepRecord = new AiChatStepRecord();
-        stepRecord.setAiChatConversationId(internalConversationId);
+        stepRecord.setAiChatConversationId(access.valueOf(internalConversationId));
         stepRecord.setStepSequence(sequence);
         stepRecord.setRequestId(blankToNull(step.requestId()));
         stepRecord.setSource(step.source());
@@ -110,31 +114,34 @@ final class JooqAiChatConversationCommands {
         stepRecord.setLlmCallCount(step.llmCallCount());
         stepRecord.setIsCopiedContext(byteValue(step.isCopiedContext()));
         stepRecord.setCreatedAt(localDateTime(createdAt));
-        ULong id = dslContext.insertInto(AI_CHAT_STEP)
+        AiChatStepId id = new AiChatStepId(dslContext.insertInto(AI_CHAT_STEP)
                 .set(stepRecord)
                 .returningResult(AI_CHAT_STEP.AI_CHAT_STEP_ID)
-                .fetchSingle(AI_CHAT_STEP.AI_CHAT_STEP_ID);
+                .fetchSingle(AI_CHAT_STEP.AI_CHAT_STEP_ID).toBigInteger());
         dslContext.update(AI_CHAT_CONVERSATION)
                 .set(AI_CHAT_CONVERSATION.UPDATED_AT, localDateTime(createdAt))
-                .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
+                .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId)))
                 .execute();
-        return new AiChatStoredStep(id.longValue(), sequence, createdAt);
+        return new AiChatStoredStep(id, sequence, createdAt);
     }
 
-    void updateObservation(String conversationId, long stepId,
+    void updateObservation(String conversationId, AiChatStepId stepId,
                            Map<String, Object> observation) {
-        ULong internalConversationId = access.lockOwned(conversationId);
+        AiChatConversationId internalConversationId = access.lockOwned(conversationId);
         int updated = dslContext.update(AI_CHAT_STEP)
                 .set(AI_CHAT_STEP.OBSERVATION_JSON, serializer.serialize(observation))
-                .where(AI_CHAT_STEP.AI_CHAT_STEP_ID.eq(ULong.valueOf(stepId))
-                        .and(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId)))
+                .where(AI_CHAT_STEP.AI_CHAT_STEP_ID.eq(access.valueOf(stepId))
+                        .and(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
+                                .eq(access.valueOf(internalConversationId))))
                 .execute();
         if (updated != 1) throw new IllegalArgumentException(
                 "The trajectory step no longer exists.");
     }
 
-    void updateModelCall(String conversationId, long stepId, AiChatTrajectoryStep step) {
-        ULong internalConversationId = access.lockOwned(conversationId);
+    void updateModelCall(String conversationId, AiChatStepId stepId,
+                         AiChatTrajectoryStep step) {
+        AiChatConversationId internalConversationId = access.lockOwned(conversationId);
         int updated = dslContext.update(AI_CHAT_STEP)
                 .set(AI_CHAT_STEP.MODEL_NAME, blankToNull(step.modelName()))
                 .set(AI_CHAT_STEP.REASONING_EFFORT, blankToNull(step.reasoningEffort()))
@@ -143,8 +150,9 @@ final class JooqAiChatConversationCommands {
                 .set(AI_CHAT_STEP.METRICS_JSON, serializer.serialize(step.metrics()))
                 .set(AI_CHAT_STEP.EXTRA_JSON, serializer.serialize(step.extra()))
                 .set(AI_CHAT_STEP.LLM_CALL_COUNT, step.llmCallCount())
-                .where(AI_CHAT_STEP.AI_CHAT_STEP_ID.eq(ULong.valueOf(stepId))
-                        .and(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
+                .where(AI_CHAT_STEP.AI_CHAT_STEP_ID.eq(access.valueOf(stepId))
+                        .and(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
+                                .eq(access.valueOf(internalConversationId)))
                         .and(AI_CHAT_STEP.MESSAGE_KIND.eq("model_call")))
                 .execute();
         if (updated != 1) throw new IllegalArgumentException(
@@ -152,11 +160,12 @@ final class JooqAiChatConversationCommands {
     }
 
     void setCompacted(String conversationId, boolean compacted) {
-        ULong internalConversationId = access.lockOwned(conversationId);
+        AiChatConversationId internalConversationId = access.lockOwned(conversationId);
         dslContext.update(AI_CHAT_CONVERSATION)
                 .set(AI_CHAT_CONVERSATION.COMPACTED, byteValue(compacted))
                 .set(AI_CHAT_CONVERSATION.UPDATED_AT, LocalDateTime.now())
-                .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID.eq(internalConversationId))
+                .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId)))
                 .execute();
     }
 
@@ -164,7 +173,8 @@ final class JooqAiChatConversationCommands {
         access.requireOwned(conversationId);
         return dslContext.deleteFrom(AI_CHAT_CONVERSATION)
                 .where(AI_CHAT_CONVERSATION.GUID.eq(conversationId)
-                        .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(access.userId())))
+                        .and(AI_CHAT_CONVERSATION.APP_USER_ID
+                                .eq(access.valueOf(access.userId()))))
                 .execute() > 0;
     }
 

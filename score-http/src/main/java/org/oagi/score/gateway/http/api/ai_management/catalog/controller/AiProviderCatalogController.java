@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.controller;
 
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderConnectionTestResult;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderView;
@@ -43,20 +44,20 @@ public class AiProviderCatalogController {
 
     @GetMapping("/{providerId}")
     public AiProviderView get(@AuthenticationPrincipal AuthenticatedPrincipal principal,
-                              @PathVariable long providerId) {
+                              @PathVariable AiProviderId providerId) {
         return providers.get(sessions.asScoreUser(principal), providerId);
     }
 
     @GetMapping("/{providerId}/model-profiles")
     public List<AiModelProfileView> modelProfiles(
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
-            @PathVariable long providerId) {
+            @PathVariable AiProviderId providerId) {
         return providers.modelProfiles(sessions.asScoreUser(principal), providerId);
     }
 
     @PutMapping("/{providerId}")
     public AiProviderView update(@AuthenticationPrincipal AuthenticatedPrincipal principal,
-                                 @PathVariable long providerId,
+                                 @PathVariable AiProviderId providerId,
                                  @RequestBody AiProviderUpdate input) {
         return providers.update(sessions.asScoreUser(principal), providerId, input);
     }
@@ -64,7 +65,7 @@ public class AiProviderCatalogController {
     @PostMapping("/{providerId}/connection-tests")
     public AiProviderConnectionTestResult testConnection(
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
-            @PathVariable long providerId,
+            @PathVariable AiProviderId providerId,
             @RequestBody AiProviderUpdate input) {
         return providers.testConnection(sessions.asScoreUser(principal), providerId, input);
     }

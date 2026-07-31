@@ -4,6 +4,7 @@ import org.jooq.DSLContext;
 import org.jooq.types.ULong;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiQuotaWindow;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiCallReservation;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiUsageSettlement;
@@ -55,12 +56,13 @@ class JooqAiQuotaRepositoryIntegrationTest {
         String dailyRequest = "quota-daily-" + UUID.randomUUID();
         String monthlyRequest = "quota-monthly-" + UUID.randomUUID();
         UserId owner = new UserId(userId.toBigInteger());
+        AiModelId catalogModelId = new AiModelId(modelId.toBigInteger());
 
         try {
-            quotas.reserve(dailyCall, dailyRequest, owner, modelId.longValue(), null,
+            quotas.reserve(dailyCall, dailyRequest, owner, catalogModelId, null,
                     "ROOT", "assistant", 10L, 20, true, null, daily);
             quotas.settle(dailyCall, new AiUsageSettlement(11L, 5L, 0L, true));
-            quotas.reserve(monthlyCall, monthlyRequest, owner, modelId.longValue(), null,
+            quotas.reserve(monthlyCall, monthlyRequest, owner, catalogModelId, null,
                     "ROOT", "assistant", 10L, 20, true, null, monthly);
             quotas.settle(monthlyCall, new AiUsageSettlement(12L, 6L, 0L, true));
 
@@ -110,6 +112,7 @@ class JooqAiQuotaRepositoryIntegrationTest {
                 Instant.parse("2098-04-01T00:00:00Z"), 100L);
         String prefix = "quota-race-" + UUID.randomUUID();
         UserId owner = new UserId(userId.toBigInteger());
+        AiModelId catalogModelId = new AiModelId(modelId.toBigInteger());
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch startRace = new CountDownLatch(1);
         AtomicInteger admitted = new AtomicInteger();
@@ -121,7 +124,7 @@ class JooqAiQuotaRepositoryIntegrationTest {
                         startRace.await(10, TimeUnit.SECONDS);
                         try {
                             quotas.reserve(UUID.randomUUID(), prefix + "-" + index, owner,
-                                    modelId.longValue(), null, "ROOT", "assistant",
+                                    catalogModelId, null, "ROOT", "assistant",
                                     10L, 60, true, null, window);
                             admitted.incrementAndGet();
                         } catch (AiQuotaExceededException expected) {
@@ -184,11 +187,12 @@ class JooqAiQuotaRepositoryIntegrationTest {
         assertThat(modelId).isNotNull();
         String prefix = "quota-reconcile-" + UUID.randomUUID();
         UserId owner = new UserId(userId.toBigInteger());
+        AiModelId catalogModelId = new AiModelId(modelId.toBigInteger());
         try {
             for (int index = 0; index < 12; index++) {
                 String requestId = prefix + "-" + index;
                 AiCallReservation reservation = quotas.reserve(UUID.randomUUID(), requestId,
-                        owner, modelId.longValue(), null, "ROOT", "assistant",
+                        owner, catalogModelId, null, "ROOT", "assistant",
                         1L, 1, true, null, null);
                 dsl.update(AI_TOKEN_USAGE_LEDGER)
                         .set(AI_TOKEN_USAGE_LEDGER.RESERVED_AT,

@@ -1,7 +1,8 @@
 package org.oagi.score.gateway.http.api.ai_management.repository.jooq;
 
 import org.jooq.DSLContext;
-import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationId;
 import org.oagi.score.gateway.http.api.ai_management.model.CreateAiChangeConfirmationArguments;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChangeConfirmationCommandRepository;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -60,23 +61,24 @@ public class JooqAiChangeConfirmationCommandRepository extends JooqBaseRepositor
                                 val(localDateTime(arguments.createdAt())))
                         .from(AI_CHAT_CONVERSATION)
                         .where(AI_CHAT_CONVERSATION.GUID.eq(conversationId)
-                                .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(userId()))))
+                                .and(AI_CHAT_CONVERSATION.APP_USER_ID.eq(valueOf(userId())))))
                 .execute() == 1;
     }
 
     @Override
-    public boolean markExpired(long confirmationId, Instant expiredAt) {
+    public boolean markExpired(AiChangeConfirmationId confirmationId, Instant expiredAt) {
         return dslContext().update(AI_CHAT_CHANGE_CONFIRMATION)
                 .set(AI_CHAT_CHANGE_CONFIRMATION.STATUS, "EXPIRED")
                 .set(AI_CHAT_CHANGE_CONFIRMATION.EXPIRED_AT, localDateTime(expiredAt))
                 .setNull(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST)
                 .where(AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID
-                        .eq(ULong.valueOf(confirmationId)))
+                        .eq(valueOf(confirmationId)))
                 .execute() == 1;
     }
 
     @Override
-    public boolean approve(long confirmationId, String grantDigest, Instant approvedAt,
+    public boolean approve(AiChangeConfirmationId confirmationId, String grantDigest,
+                           Instant approvedAt,
                            Instant grantExpiresAt, String argumentsDigest) {
         return dslContext().update(AI_CHAT_CHANGE_CONFIRMATION)
                 .set(AI_CHAT_CHANGE_CONFIRMATION.STATUS, "APPROVED")
@@ -85,37 +87,37 @@ public class JooqAiChangeConfirmationCommandRepository extends JooqBaseRepositor
                 .set(AI_CHAT_CHANGE_CONFIRMATION.EXPIRES_AT, localDateTime(grantExpiresAt))
                 .set(AI_CHAT_CHANGE_CONFIRMATION.ARGUMENTS_DIGEST, argumentsDigest)
                 .where(AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID
-                        .eq(ULong.valueOf(confirmationId))
+                        .eq(valueOf(confirmationId))
                         .and(AI_CHAT_CHANGE_CONFIRMATION.STATUS.eq("REQUESTED")))
                 .execute() == 1;
     }
 
     @Override
-    public boolean deny(long confirmationId, Instant deniedAt) {
+    public boolean deny(AiChangeConfirmationId confirmationId, Instant deniedAt) {
         return dslContext().update(AI_CHAT_CHANGE_CONFIRMATION)
                 .set(AI_CHAT_CHANGE_CONFIRMATION.STATUS, "DENIED")
                 .set(AI_CHAT_CHANGE_CONFIRMATION.DENIED_AT, localDateTime(deniedAt))
                 .setNull(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST)
                 .where(AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID
-                        .eq(ULong.valueOf(confirmationId))
+                        .eq(valueOf(confirmationId))
                         .and(AI_CHAT_CHANGE_CONFIRMATION.STATUS.in("REQUESTED", "APPROVED")))
                 .execute() == 1;
     }
 
     @Override
-    public boolean consume(long confirmationId, Instant consumedAt) {
+    public boolean consume(AiChangeConfirmationId confirmationId, Instant consumedAt) {
         return dslContext().update(AI_CHAT_CHANGE_CONFIRMATION)
                 .set(AI_CHAT_CHANGE_CONFIRMATION.STATUS, "CONSUMED")
                 .set(AI_CHAT_CHANGE_CONFIRMATION.CONSUMED_AT, localDateTime(consumedAt))
                 .setNull(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST)
                 .where(AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID
-                        .eq(ULong.valueOf(confirmationId))
+                        .eq(valueOf(confirmationId))
                         .and(AI_CHAT_CHANGE_CONFIRMATION.STATUS.eq("APPROVED")))
                 .execute() == 1;
     }
 
-    private ULong userId() {
-        return ULong.valueOf(requester().userId().value());
+    private UserId userId() {
+        return requester().userId();
     }
 
     private LocalDateTime localDateTime(Instant value) {

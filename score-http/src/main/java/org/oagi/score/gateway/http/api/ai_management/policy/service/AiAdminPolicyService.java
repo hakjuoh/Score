@@ -4,6 +4,7 @@ import org.jooq.DSLContext;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiCatalogModel;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiModelCatalogService;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiModelAccessMode;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiPolicyUpdate;
@@ -106,7 +107,7 @@ public class AiAdminPolicyService {
         Map<String, AiCatalogModel> models = catalog.activeModels().stream().collect(
                 java.util.stream.Collectors.toMap(model -> model.descriptor().name(),
                         model -> model, (first, ignored) -> first, LinkedHashMap::new));
-        Set<Long> allowedIds = new LinkedHashSet<>();
+        Set<AiModelId> allowedIds = new LinkedHashSet<>();
         if (update.modelAccessMode() == AiModelAccessMode.ALLOW_LIST) {
             update.allowedModelKeys().forEach(key -> allowedIds.add(requireModel(models, key).id()));
             if (update.aiEnabled() && allowedIds.isEmpty()) {
@@ -117,7 +118,7 @@ public class AiAdminPolicyService {
         List<AiCatalogModel> effectiveModels = update.modelAccessMode() == AiModelAccessMode.ALL
                 ? List.copyOf(models.values()) : models.values().stream()
                 .filter(model -> allowedIds.contains(model.id())).toList();
-        Long defaultId = null;
+        AiModelId defaultId = null;
         if (update.defaultModelKey() != null && !update.defaultModelKey().isBlank()) {
             AiCatalogModel defaultModel = requireModel(models, update.defaultModelKey());
             if (!effectiveModels.contains(defaultModel)) {
@@ -129,7 +130,7 @@ public class AiAdminPolicyService {
             throw new IllegalArgumentException("At least one active AI model is required.");
         }
 
-        Map<Long, Set<String>> efforts = new LinkedHashMap<>();
+        Map<AiModelId, Set<String>> efforts = new LinkedHashMap<>();
         update.allowedReasoningEfforts().forEach((modelKey, requestedEfforts) -> {
             AiCatalogModel model = requireModel(models, modelKey);
             if (!effectiveModels.contains(model)) {
@@ -329,7 +330,8 @@ public class AiAdminPolicyService {
 
     private AiCatalogModel requireModel(Map<String, AiCatalogModel> models, String key) {
         AiCatalogModel model = key != null ? models.get(key.strip()) : null;
-        if (model == null || model.id() <= 0) {
+        if (model == null || model.id() == null || model.id().value() == null
+                || model.id().value().signum() <= 0) {
             throw new IllegalArgumentException("Unknown active AI model: " + key);
         }
         return model;

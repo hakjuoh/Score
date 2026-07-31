@@ -8,11 +8,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Correlated tool calls and observations for one stored step. */
 public record AiObservationAccumulator(
-        long stepId,
+        AiChatStepId stepId,
         List<Map<String, Object>> toolCalls,
         Map<String, Map<String, Object>> results) {
 
-    public AiObservationAccumulator(long stepId, List<Map<String, Object>> toolCalls) {
+    public AiObservationAccumulator(AiChatStepId stepId,
+                                    List<Map<String, Object>> toolCalls) {
         this(stepId, List.copyOf(toolCalls), new ConcurrentHashMap<>());
     }
 

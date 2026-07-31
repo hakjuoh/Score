@@ -7,6 +7,7 @@ import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservat
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.model.AiBoundedToolOutput;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.model.AiObservationAccumulator;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApproval;
@@ -169,7 +170,7 @@ final class AiTrajectoryToolCalls {
                         .poll();
                 if (pending == null) {
                     pending = new AiPendingTool(response.id(), response.name(), Map.of(),
-                            new AiObservationAccumulator(0L, List.of()),
+                            new AiObservationAccumulator(AiChatStepId.NONE, List.of()),
                             toolSequence.getAndIncrement());
                 }
                 started(pending);
@@ -228,7 +229,8 @@ final class AiTrajectoryToolCalls {
         else if (queue != null) pending = queue.poll();
         return pending != null ? pending : new AiPendingTool(
                 UUID.randomUUID().toString(), toolName, parsed,
-                new AiObservationAccumulator(0L, List.of()), toolSequence.getAndIncrement());
+                new AiObservationAccumulator(AiChatStepId.NONE, List.of()),
+                toolSequence.getAndIncrement());
     }
 
     private void started(AiPendingTool pending) {
@@ -311,7 +313,7 @@ final class AiTrajectoryToolCalls {
     }
 
     private void updateObservation(AiPendingTool pending) {
-        if (pending.observations().stepId() <= 0) return;
+        if (!pending.observations().stepId().isPersisted()) return;
         Map<String, Object> observation = Map.of(
                 "results", pending.observations().orderedResults());
         if (executionScope == null) {
