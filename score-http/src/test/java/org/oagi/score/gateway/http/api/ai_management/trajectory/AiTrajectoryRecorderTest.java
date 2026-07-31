@@ -9,9 +9,11 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AgentOutputTestFactor
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
+import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiContextUsageInfo;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalBatchNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
 import org.oagi.score.gateway.http.api.ai_management.model.AiElicitationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
@@ -19,6 +21,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationN
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApproval;
 import org.oagi.score.gateway.http.api.ai_management.model.AiUsageSnapshot;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
+import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiChangeToolGuard;
 import org.oagi.score.gateway.http.api.ai_management.tool.AiToolFailureMessage;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
@@ -519,6 +522,92 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
+    void forkSubagentPreservesScopeInitializationAndSharedOrderingAcrossSiblings() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.openChild(eq("conversation-1"), eq("request-1"),
+                eq(AiChatConversationKind.SUBAGENT), anyString(), anyString()))
+                .thenReturn("child-conversation-1", "child-conversation-2");
+        when(repository.append(anyString(), any()))
+                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+        List<ExecutionObservation> observations = new ArrayList<>();
+        var publisher = org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher
+                .forListeners(List.of(observations::add));
+        ExecutionScope rootScope = new ExecutionScope(
+                "request-1", "conversation-1", "requester-7", 4L,
+                ExecutionScope.Purpose.USER_RESPONSE, List.of("guardrail-1", "guardrail-2"));
+        publisher.observe(ExecutionObservation.of("workflow.root.started", rootScope, Map.of()));
+        observations.clear();
+        AiTrajectoryRecorder root = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), mock(ScoreUser.class),
+                "conversation-1", "request-1", "model", "high", ignored -> { },
+                null, 0L, Map.of("trace_id", "trace-1"), rootScope, publisher,
+                ExecutionObservationContext.noop());
+
+        AiTrajectoryRecorder first = root.forkSubagent(
+                "worker-1", "Inspect one", Map.of("node_id", "node-1"));
+        AiTrajectoryRecorder second = root.forkSubagent(
+                "worker-2", "Inspect two", Map.of("node_id", "node-2"));
+        first.lifecycle("subagent_started", "First started.", Map.of());
+        second.lifecycle("subagent_started", "Second started.", Map.of());
+        first.recordingTools(() -> new ToolCallback[]{namedTool("lookup", "{\"one\":1}")})
+                .getToolCallbacks()[0].call("{}", new ToolContext(Map.of()));
+        second.recordingTools(() -> new ToolCallback[]{namedTool("lookup", "{\"two\":2}")})
+                .getToolCallbacks()[0].call("{}", new ToolContext(Map.of()));
+
+        assertThat(first.conversationId()).isEqualTo("child-conversation-1");
+        assertThat(second.conversationId()).isEqualTo("child-conversation-2");
+        assertThat(first.conversationKind()).isEqualTo(AiChatConversationKind.SUBAGENT);
+        verify(repository).openChild("conversation-1", "request-1",
+                AiChatConversationKind.SUBAGENT, "worker-1", "Inspect one");
+        verify(repository).openChild("conversation-1", "request-1",
+                AiChatConversationKind.SUBAGENT, "worker-2", "Inspect two");
+        assertThat(observations).allSatisfy(observation -> {
+            assertThat(observation.scope().requestId()).isEqualTo("request-1");
+            assertThat(observation.scope().requesterId()).isEqualTo("requester-7");
+            assertThat(observation.scope().generation()).isEqualTo(4L);
+            assertThat(observation.scope().purpose()).isEqualTo(ExecutionScope.Purpose.WORKER);
+            assertThat(observation.scope().guardrailDecisionIds())
+                    .containsExactly("guardrail-1", "guardrail-2");
+        });
+        assertThat(observations).extracting(observation -> observation.scope().conversationId())
+                .contains("child-conversation-1", "child-conversation-2");
+
+        ArgumentCaptor<String> conversations = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<AiChatTrajectoryStep> steps =
+                ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
+        verify(repository, times(10)).append(conversations.capture(), steps.capture());
+        List<AiChatTrajectoryStep> firstSteps = new ArrayList<>();
+        List<AiChatTrajectoryStep> secondSteps = new ArrayList<>();
+        for (int index = 0; index < steps.getAllValues().size(); index++) {
+            ("child-conversation-1".equals(conversations.getAllValues().get(index))
+                    ? firstSteps : secondSteps).add(steps.getAllValues().get(index));
+        }
+        assertThat(firstSteps).extracting(AiChatTrajectoryStep::messageKind)
+                .containsExactly("settings_change", "assignment", "agent_lifecycle",
+                        "tool_call_update", "tool_call");
+        assertThat(secondSteps).extracting(AiChatTrajectoryStep::messageKind)
+                .containsExactly("settings_change", "assignment", "agent_lifecycle",
+                        "tool_call_update", "tool_call");
+        assertThat(firstSteps.get(0).extra()).containsEntry("agent_id", "worker-1");
+        assertThat(firstSteps.get(1).message()).isEqualTo("Inspect one");
+        assertThat(firstSteps.get(1).extra()).containsEntry("copied_from_parent", true);
+        assertThat(secondSteps.get(0).extra()).containsEntry("agent_id", "worker-2");
+        assertThat(secondSteps.get(1).message()).isEqualTo("Inspect two");
+        assertThat(secondSteps.get(1).extra()).containsEntry("copied_from_parent", true);
+        assertThat(steps.getAllValues()).allSatisfy(step -> assertThat(step.extra())
+                .containsEntry("conversation_kind", "SUBAGENT")
+                .containsEntry("execution_kind", "multi_agent")
+                .containsEntry("trace_id", "trace-1"));
+        assertThat(steps.getAllValues()).extracting(
+                        step -> step.extra().get("score.event.sequence"))
+                .containsExactly(2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L);
+        assertThat(steps.getAllValues().stream()
+                .filter(step -> step.messageKind().startsWith("tool_call"))
+                .map(step -> step.extra().get("tool_call_sequence")))
+                .containsExactly(0L, 0L, 1L, 1L);
+    }
+
+    @Test
     void forkNamespacesLifecycleTrajectoryAndRealtimeEventsWithTheSameAgentIds() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
@@ -584,6 +673,111 @@ class AiTrajectoryRecorderTest {
         verify(repository, times(1)).append(eq("conversation-1"), any());
         assertThat(events).extracting(AiExecutionEvent::subtype)
                 .containsExactly("subagent_failed");
+    }
+
+    @Test
+    void terminalLifecycleRejectsEveryLateInteractionProjection() {
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                repository, new ObjectMapper(), mock(ScoreUser.class),
+                "conversation-1", "request-1", events::add);
+        Instant expiresAt = Instant.parse("2030-01-02T03:04:05Z");
+        AiContextUsageInfo usage = new AiContextUsageInfo(
+                "model", 10L, 100L, 80L, 70L, 10.0, true, "test");
+
+        recorder.terminalLifecycle("workflow_failed", "Failed.", Map.of("status", "failed"));
+        recorder.lifecycle("late_lifecycle", "late lifecycle", Map.of());
+        recorder.terminalLifecycle("second_terminal", "late terminal", Map.of());
+        assertThat(recorder.guide("late guide", Map.of())).isFalse();
+        recorder.workflowResult(AgentOutputTestFactory.publicOutput("late result"), Map.of());
+        recorder.providerRetry(2, 3, 50L, "late failure", "Failure", 429);
+        recorder.changeConfirmationRequired(new AiChangeConfirmationNotice(
+                "confirmation-1", "REQUESTED", expiresAt, "update_context", "{id: 1}"));
+        recorder.changeApprovalBatchRequired(new AiChangeApprovalBatchNotice(
+                "batch-1", "request-1", "conversation-1", true, expiresAt,
+                List.of(new AiChangeApprovalBatchNotice.Item(
+                        "confirmation-1", "update_context", "{id: 1}", "worker-1", "Worker"))));
+        recorder.changeApprovalDecisionAccepted(
+                new AiChangeApprovalCoordinator.DecisionAcknowledgement("batch-1", 1L, 0L));
+        recorder.elicitationRequired(new AiElicitationNotice(
+                "elicitation-1", "request-1", 7L, "conversation-1",
+                "Choose one", Map.of("type", "object"), expiresAt));
+        recorder.contextCompacted("threshold", 90L, usage, true);
+        recorder.contextUsage(usage);
+
+        verify(repository, times(1)).append(eq("conversation-1"), any());
+        assertThat(events).extracting(AiExecutionEvent::subtype)
+                .containsExactly("workflow_failed");
+    }
+
+    @Test
+    void publishesExactApprovalAndElicitationContracts() {
+        List<AiExecutionEvent> events = new ArrayList<>();
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                mock(AiChatConversationRepository.class), new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", events::add);
+        Instant expiresAt = Instant.parse("2030-01-02T03:04:05Z");
+        Map<String, Object> schema = Map.of(
+                "type", "object", "required", List.of("choice"));
+
+        recorder.changeConfirmationRequired(new AiChangeConfirmationNotice(
+                "confirmation-1", "REQUESTED", expiresAt,
+                "update_context", "{\"id\":1}"));
+        recorder.changeApprovalBatchRequired(new AiChangeApprovalBatchNotice(
+                "batch-1", "request-1", "conversation-1", true, expiresAt,
+                List.of(
+                        new AiChangeApprovalBatchNotice.Item(
+                                "confirmation-1", "update_context", "{\"id\":1}",
+                                "worker-1", "Evidence worker"),
+                        new AiChangeApprovalBatchNotice.Item(
+                                "confirmation-2", "delete_context", "{\"id\":2}",
+                                null, null))));
+        recorder.changeApprovalDecisionAccepted(
+                new AiChangeApprovalCoordinator.DecisionAcknowledgement("batch-1", 1L, 1L));
+        recorder.elicitationRequired(new AiElicitationNotice(
+                "elicitation-1", "request-1", 7L, "conversation-1",
+                "Choose one", schema, expiresAt));
+        recorder.changeApprovalBatchRequired(new AiChangeApprovalBatchNotice(
+                "batch-2", "request-1", "conversation-1", false, expiresAt,
+                List.of(new AiChangeApprovalBatchNotice.Item(
+                        "confirmation-3", "create_context", "{}", null, null))));
+
+        assertThat(events).extracting(AiExecutionEvent::subtype)
+                .containsExactly("change_confirmation_required",
+                        "change_approval_batch_required",
+                        "change_approval_decision_accepted", "elicitation_required",
+                        "change_approval_batch_required");
+        assertThat(events.get(0).content()).isEqualTo("A change requires explicit approval.");
+        assertThat(events.get(0).metadata()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                "confirmationRequestId", "confirmation-1", "status", "REQUESTED",
+                "expiresAt", expiresAt.toString(), "toolName", "update_context",
+                "argumentsSummary", "{\"id\":1}"));
+        assertThat(events.get(1).content()).isEqualTo("2 changes require explicit approval.");
+        assertThat(events.get(1).metadata())
+                .containsEntry("batchId", "batch-1")
+                .containsEntry("expiresAt", expiresAt.toString())
+                .containsEntry("parallel", true);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items =
+                (List<Map<String, Object>>) events.get(1).metadata().get("items");
+        assertThat(items).containsExactly(
+                Map.of("confirmationRequestId", "confirmation-1",
+                        "toolName", "update_context", "argumentsSummary", "{\"id\":1}",
+                        "agentId", "worker-1", "agentLabel", "Evidence worker"),
+                Map.of("confirmationRequestId", "confirmation-2",
+                        "toolName", "delete_context", "argumentsSummary", "{\"id\":2}"));
+        assertThat(events.get(2).content())
+                .isEqualTo("Approved 1 change and denied 1. Continuing the active request.");
+        assertThat(events.get(2).metadata()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                "batchId", "batch-1", "approved", 1L, "denied", 1L));
+        assertThat(events.get(3).content())
+                .isEqualTo("The assistant needs your input before it can continue.");
+        assertThat(events.get(3).metadata()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                "elicitationId", "elicitation-1", "generation", 7L,
+                "expiresAt", expiresAt.toString(), "mode", "form",
+                "message", "Choose one", "requestedSchema", schema));
+        assertThat(events.get(4).content()).isEqualTo("A change requires explicit approval.");
     }
 
     @Test
@@ -1771,6 +1965,14 @@ class AiTrajectoryRecorderTest {
                 .doesNotContainKey("prompt_tokens")
                 .doesNotContainKey("context_scope");
         assertThat(step.getValue().extra()).containsEntry("fanout_id", "fanout-abc");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> agents =
+                (List<Map<String, Object>>) step.getValue().extra().get("agents");
+        assertThat(agents).containsExactly(
+                Map.of("node_id", "fanout-abc-lead", "agent_name", "lead",
+                        "prompt_tokens", 100L, "completion_tokens", 10L, "model_calls", 1L),
+                Map.of("node_id", "fanout-abc-agent-01", "agent_name", "data-investigator",
+                        "prompt_tokens", 200L, "completion_tokens", 20L, "model_calls", 2L));
         assertThat(events).singleElement().satisfies(event -> {
             assertThat(event.subtype()).isEqualTo("context_usage");
             assertThat(event.metadata().get("contextUsage").toString()).contains("fanout_settled");
