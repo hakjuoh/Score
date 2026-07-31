@@ -26,6 +26,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.DefaultUsage;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.model.ToolContext;
@@ -295,6 +296,59 @@ class AiTrajectoryRecorderTest {
                     .isInstanceOf(CancellationException.class);
         } finally {
             releaseAction.countDown();
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void serializesToolOutputReservationWithModelContextFloorUpdates() throws Exception {
+        CountDownLatch readingProviderUsage = new CountDownLatch(1);
+        CountDownLatch releaseProviderUsage = new CountDownLatch(1);
+        Usage usage = mock(Usage.class);
+        when(usage.getPromptTokens()).thenAnswer(ignored -> {
+            readingProviderUsage.countDown();
+            if (!releaseProviderUsage.await(2, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("provider usage was not released");
+            }
+            return 90;
+        });
+        when(usage.getCompletionTokens()).thenReturn(0);
+        AiContextBudget budget = new AiContextBudget(
+                "model", 120L, 10L, 90L, 10L, 100L, false);
+        AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
+                mock(AiChatConversationRepository.class), new ObjectMapper(),
+                mock(ScoreUser.class), "conversation-1", "request-1", "model", "high",
+                ignored -> { }, budget, 50L);
+        recorder.useModelProvider("openai");
+        ChatResponse response = new ChatResponse(
+                List.of(new Generation(new AssistantMessage("done"))),
+                ChatResponseMetadata.builder().usage(usage).build());
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            var model = pool.submit(() -> recorder.recordModelResponse(response, "assistant"));
+            assertThat(readingProviderUsage.await(2, TimeUnit.SECONDS)).isTrue();
+            CountDownLatch reservationAttempted = new CountDownLatch(1);
+            AtomicReference<Thread> reservationThread = new AtomicReference<>();
+            var tool = pool.submit(() -> {
+                reservationThread.set(Thread.currentThread());
+                reservationAttempted.countDown();
+                return recorder.limitToolOutput("x".repeat(1000), 100L, "get_result");
+            });
+            assertThat(reservationAttempted.await(2, TimeUnit.SECONDS)).isTrue();
+            long blockedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (!tool.isDone()
+                    && reservationThread.get().getState() != Thread.State.BLOCKED
+                    && System.nanoTime() < blockedDeadline) {
+                Thread.onSpinWait();
+            }
+            assertThat(reservationThread.get().getState()).isEqualTo(Thread.State.BLOCKED);
+            assertThat(tool.isDone()).isFalse();
+            releaseProviderUsage.countDown();
+            model.get(2, TimeUnit.SECONDS);
+            String bounded = tool.get(2, TimeUnit.SECONDS);
+            assertThat(bounded.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(30);
+        } finally {
+            releaseProviderUsage.countDown();
             pool.shutdownNow();
         }
     }
