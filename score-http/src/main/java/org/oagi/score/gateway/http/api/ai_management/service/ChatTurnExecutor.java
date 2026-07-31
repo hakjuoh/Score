@@ -8,7 +8,6 @@ import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.execution.ChatExecutionContext;
 import org.oagi.score.gateway.http.api.ai_management.execution.WorkflowRequestAdapter;
-import org.oagi.score.gateway.http.api.ai_management.model.AiCompactCommand;
 import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPersistentWorkflowCommand;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
@@ -24,22 +23,20 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-/** Selects the configured workflow/compaction path and returns immutable execution state. */
+/** Selects the configured workflow and automatic-compaction path for a regular turn. */
 final class ChatTurnExecutor {
 
-    private final ChatPromptAssembler prompts;
     private final WorkflowRunner workflow;
     private final org.oagi.score.gateway.http.api.ai_management.memory.AiContextBudgetService
             contextBudgets;
     private final ConversationCompactionSupport compactions;
     private final ChatOutputDiscloser outputDiscloser;
 
-    ChatTurnExecutor(ChatPromptAssembler prompts, WorkflowRunner workflow,
+    ChatTurnExecutor(WorkflowRunner workflow,
                      org.oagi.score.gateway.http.api.ai_management.memory.AiContextBudgetService
                              contextBudgets,
                      ConversationCompactionSupport compactions,
                      ChatOutputDiscloser outputDiscloser) {
-        this.prompts = prompts;
         this.workflow = workflow;
         this.contextBudgets = contextBudgets;
         this.compactions = compactions;
@@ -50,7 +47,6 @@ final class ChatTurnExecutor {
                               UserMessage userMessage, ScoreUser requester,
                               AiTrajectoryRecorder recorder, ExecutionScope scope,
                               Optional<AiContextBudget> budget, long projectedInputTokens,
-                              AiCompactCommand compactCommand,
                               Optional<AiPersistentWorkflowCommand> workflowCommand,
                               Consumer<String> progress) {
         if (workflowCommand.isPresent()) {
@@ -66,13 +62,6 @@ final class ChatTurnExecutor {
                             request.activeWorkflow(), "automatic"));
             return result(new AgentOutput(command.acknowledgement(), metadata), initialHistory);
         }
-        if (compactCommand != null) {
-            progress.accept("Compacting the conversation context.");
-            AgentOutput summary = compactions.executeSummary(request, initialHistory,
-                    userMessage, requester, recorder, true, scope);
-            return result(summary, initialHistory);
-        }
-
         List<Message> history = initialHistory;
         ChatAutomaticCompaction automatic = ChatAutomaticCompaction.none();
         if (!history.isEmpty() && budget.isPresent()
@@ -80,7 +69,7 @@ final class ChatTurnExecutor {
             progress.accept("Compacting the conversation context before continuing.");
             long beforeTokens = projectedInputTokens;
             String summary = compactions.executeSummary(request, history,
-                    prompts.compactMessage(null), requester, recorder, false, scope).content();
+                    compactions.compactMessage(null), requester, recorder, false, scope).content();
             history = List.of(compactions.summaryMessage(summary));
             projectedInputTokens = contextBudgets.estimateInputTokens(
                     history, userMessage, request.pageContext());

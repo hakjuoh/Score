@@ -7,22 +7,23 @@ import {AiChatCommandService} from './ai-chat-command.service';
 describe('AiChatCommandService', () => {
   const service = new AiChatCommandService();
 
-  it('classifies local commands separately from backend prompt commands', () => {
-    expect(service.decide('/clear')).toEqual({kind: 'local', command: 'clear'});
-    expect(service.decide('/cancel')).toEqual({kind: 'local', command: 'cancel'});
-    expect(service.decide('/stop')).toEqual({kind: 'none'});
-    expect(service.decide('/debug')).toEqual({kind: 'local', command: 'debug'});
-    expect(service.decide('/debug on')).toEqual({kind: 'none'});
-    expect(service.decide('/debug off')).toEqual({kind: 'none'});
-    expect(service.decide('/mcp')).toEqual({kind: 'local', command: 'mcp'});
-    expect(service.decide('/model')).toEqual({kind: 'local', command: 'model'});
-    expect(service.decide('/runtime')).toEqual({kind: 'none'});
-    expect(service.decide('/permissions')).toEqual({kind: 'local', command: 'permissions'});
-    expect(service.decide('/agents')).toEqual({kind: 'none'});
-    expect(service.decide('/compact')).toEqual({kind: 'backend'});
-    expect(service.decide('/compact preserve import IDs')).toEqual({kind: 'backend'});
+  it('resolves known command invocations from the shared catalog', () => {
+    expect(service.resolveCommand('/clear')).toBe('/clear');
+    expect(service.resolveCommand('/cancel')).toBe('/cancel');
+    expect(service.resolveCommand('/stop')).toBeUndefined();
+    expect(service.resolveCommand('/debug')).toBe('/debug');
+    expect(service.resolveCommand('/debug on')).toBeUndefined();
+    expect(service.resolveCommand('/debug off')).toBeUndefined();
+    expect(service.resolveCommand('/mcp')).toBe('/mcp');
+    expect(service.resolveCommand('/model')).toBe('/model');
+    expect(service.resolveCommand('/runtime')).toBeUndefined();
+    expect(service.resolveCommand('/permissions')).toBe('/permissions');
+    expect(service.resolveCommand('/agents')).toBeUndefined();
+    expect(service.resolveCommand('/compact')).toBe('/compact');
+    expect(service.resolveCommand('/compact preserve import IDs')).toBe('/compact');
     expect(service.isKnownCommand('/compact preserve import IDs')).toBe(true);
-    expect(service.decide('/compactly')).toEqual({kind: 'none'});
+    expect(service.resolveCommand('/compactly')).toBeUndefined();
+    expect(service.isKnownCommand('/compactly')).toBe(false);
   });
 
   it('returns command suggestions only for slash prompts', () => {

@@ -1,5 +1,5 @@
 /**
- * Handles local commands and command-related socket events for the AI chat panel.
+ * Handles browser-owned commands and command-related socket events for the AI chat panel.
  */
 
 import {Message} from '@stomp/stompjs';
@@ -9,7 +9,7 @@ import {
   agentActivityElapsedLabel,
   isTerminalAgentStatus
 } from './domain/ai-agent-activity';
-import {AiLocalCommand} from './domain/ai-chat-command.service';
+import type {AiChatCommandName} from './domain/ai-chat-panel.constants';
 import {
   AiChatMessage,
   AiChatSocketEvent,
@@ -17,30 +17,30 @@ import {
 } from './domain/ai-chat-panel.model';
 
 export abstract class AiChatPanelCommandController extends AiChatPanelMessageController {
-  protected handleLocalCommand(localCommand: AiLocalCommand, commandText: string): void {
-    if (localCommand === 'clear') {
+  protected tryHandleCommand(command: AiChatCommandName, commandText: string): boolean {
+    if (command === '/clear') {
       this.startNewChat();
-      return;
+      return true;
     }
-    if (localCommand === 'cancel') {
+    if (command === '/cancel') {
       this.state.prompt = '';
       this.resizePromptInput();
       this.cancelActiveRequest();
-      return;
+      return true;
     }
-    if (localCommand === 'model') {
+    if (command === '/model') {
       this.openModelSettings(commandText);
-      return;
+      return true;
     }
-    if (localCommand === 'permissions') {
+    if (command === '/permissions') {
       this.openPermissionSettings(commandText);
-      return;
+      return true;
     }
-    if (localCommand === 'mcp') {
+    if (command === '/mcp') {
       this.reportMcpStatus(commandText);
-      return;
+      return true;
     }
-    if (localCommand === 'debug') {
+    if (command === '/debug') {
       this.state.prompt = '';
       this.state.debugEnabled = !this.state.debugEnabled;
       this.state.messages.push({role: 'user', content: commandText});
@@ -50,7 +50,9 @@ export abstract class AiChatPanelCommandController extends AiChatPanelMessageCon
       });
       this.scrollToBottom(true);
       this.focusPrompt();
+      return true;
     }
+    return false;
   }
 
   private reportMcpStatus(commandText: string): void {

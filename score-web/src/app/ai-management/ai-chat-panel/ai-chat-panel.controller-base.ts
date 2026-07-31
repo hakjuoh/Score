@@ -21,7 +21,8 @@ import {
   AiChatCancellationCallbacks,
   AiChatCancellationService
 } from './domain/ai-chat-cancellation.service';
-import {AiChatCommandService, AiLocalCommand} from './domain/ai-chat-command.service';
+import {AiChatCommandService} from './domain/ai-chat-command.service';
+import type {AiChatCommandName} from './domain/ai-chat-panel.constants';
 import {AiChatContextService} from './domain/ai-chat-context.service';
 import {AiConfirmedChangeRequestCoordinator} from './domain/ai-confirmed-change-request-coordinator';
 import {
@@ -400,7 +401,7 @@ export abstract class AiChatPanelControllerBase {
   abstract focusPrompt(): void;
   protected abstract handleChangeConfirmationNotice(event: AiChatSocketEvent): void;
   protected abstract handleConversationRestoreEvent(event: AiChatSocketEvent): void;
-  protected abstract handleLocalCommand(localCommand: AiLocalCommand, commandText: string): void;
+  protected abstract tryHandleCommand(command: AiChatCommandName, commandText: string): boolean;
   protected abstract handleSocketEvent(event: AiChatSocketEvent): void;
   protected abstract handleSystemEvent(event: AiChatSocketEvent): void;
   protected abstract handleToolCallEvent(event: AiChatSocketEvent): void;
