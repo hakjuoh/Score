@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.configuration.ai;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
 import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiDatabaseCatalogLoader;
+import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,7 @@ public class AiDynamicModelCatalog {
                                  AnthropicChatProperties anthropic,
                                  OpenAiChatProperties openAi,
                                  ScoreAiConfiguration configuration,
+                                 RepositoryFactory repositoryFactory,
                                  ApplicationSecretService secrets,
                                  ObjectMapper objectMapper,
                                  AiCatalogObservability observability) {
@@ -34,7 +36,7 @@ public class AiDynamicModelCatalog {
         this.anthropic = anthropic;
         this.openAi = openAi;
         this.configuration = configuration;
-        this.loader = new AiDatabaseCatalogLoader(dsl, secrets, objectMapper);
+        this.loader = new AiDatabaseCatalogLoader(repositoryFactory, secrets, objectMapper);
         this.observability = observability;
     }
 

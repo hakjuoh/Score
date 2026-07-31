@@ -1,7 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.repository.jooq;
 
 import org.jooq.DSLContext;
-import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationDetails;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatConversationSummary;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatHistoryMessage;
@@ -9,6 +8,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKin
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatLatestUsage;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryData;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
@@ -40,8 +40,7 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
         super(dslContext, requester, repositoryFactory);
         AiChatJsonSerializer requiredSerializer = Objects.requireNonNull(
                 serializer, "serializer must not be null");
-        this.access = new JooqAiChatConversationAccess(dslContext,
-                ULong.valueOf(requester.userId().value()));
+        this.access = new JooqAiChatConversationAccess(dslContext, requester.userId());
         this.commands = new JooqAiChatConversationCommands(
                 dslContext, access, requiredSerializer);
         this.queries = new JooqAiChatConversationQueries(
@@ -99,13 +98,14 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
 
     @Override
     @Transactional
-    public void updateModelCall(String conversationId, long stepId, AiChatTrajectoryStep step) {
+    public void updateModelCall(String conversationId, AiChatStepId stepId,
+                                AiChatTrajectoryStep step) {
         commands.updateModelCall(conversationId, stepId, step);
     }
 
     @Override
     @Transactional
-    public void updateObservation(String conversationId, long stepId,
+    public void updateObservation(String conversationId, AiChatStepId stepId,
                                   Map<String, Object> observation) {
         commands.updateObservation(conversationId, stepId, observation);
     }

@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.policy.model;
 
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 
 import java.util.Map;
 import java.util.Set;
@@ -9,7 +10,7 @@ public record AiUserPolicy(
         UserId userId,
         boolean aiEnabled,
         AiModelAccessMode modelAccessMode,
-        Long defaultModelId,
+        AiModelId defaultModelId,
         boolean multiAgentEnabled,
         int maxAgentsPerRequest,
         int maxActiveRequests,
@@ -18,8 +19,8 @@ public record AiUserPolicy(
         AiQuotaPeriod quotaPeriod,
         Long quotaTokens,
         long policyVersion,
-        Set<Long> allowedModels,
-        Map<Long, Set<String>> allowedReasoningEfforts) {
+        Set<AiModelId> allowedModels,
+        Map<AiModelId, Set<String>> allowedReasoningEfforts) {
 
     public AiUserPolicy {
         allowedModels = allowedModels != null ? Set.copyOf(allowedModels) : Set.of();

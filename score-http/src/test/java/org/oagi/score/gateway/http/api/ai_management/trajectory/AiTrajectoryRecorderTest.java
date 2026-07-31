@@ -11,6 +11,7 @@ import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservat
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservationContext;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiContextUsageInfo;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalBatchNotice;
@@ -70,7 +71,7 @@ class AiTrajectoryRecorderTest {
     void persistsPolicyNoticeMetadataWithoutEmittingItTwice() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(1L), 1L, Instant.now()));
         List<AiExecutionEvent> realtime = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
                 repository, new ObjectMapper(), mock(ScoreUser.class),
@@ -94,7 +95,7 @@ class AiTrajectoryRecorderTest {
     void redactsSensitiveModelToolArgumentsBeforeTrajectoryPersistence() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(1L), 1L, Instant.now()));
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
                 repository, new ObjectMapper(), mock(ScoreUser.class),
                 "conversation-1", "request-1", ignored -> { });
@@ -118,7 +119,7 @@ class AiTrajectoryRecorderTest {
     void persistsExactlyTheCanonicalIdentityDeliveredToExternalListeners() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(1L), 1L, Instant.now()));
         AtomicReference<org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation>
                 observed = new AtomicReference<>();
         var publisher = org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher
@@ -151,8 +152,8 @@ class AiTrajectoryRecorderTest {
     void reservesParallelModelRowsInTheSameStartOrderExportedToTelemetry() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(11L, 1L, Instant.now()),
-                        new AiChatStoredStep(12L, 2L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(11L), 1L, Instant.now()),
+                        new AiChatStoredStep(AiChatStepId.from(12L), 2L, Instant.now()));
         List<ExecutionObservation> exported = new ArrayList<>();
         var publisher = org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher
                 .forListeners(List.of(exported::add));
@@ -192,7 +193,7 @@ class AiTrajectoryRecorderTest {
     void correlatesScopedModelCompletionWithCanonicalStartAndEndIdentities() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 2L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 2L, Instant.now()));
         List<ExecutionObservation> exported = new ArrayList<>();
         var publisher = org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher
                 .forListeners(List.of(exported::add));
@@ -211,7 +212,8 @@ class AiTrajectoryRecorderTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> updated =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository).updateModelCall(eq("conversation-1"), eq(42L), updated.capture());
+        verify(repository).updateModelCall(
+                eq("conversation-1"), eq(AiChatStepId.from(42L)), updated.capture());
         assertThat(exported).extracting(event -> AiExecutionLifecycle.from(event)
                         .orElseThrow().subtype())
                 .containsExactly("model_call_started", "model_call_completed");
@@ -229,7 +231,7 @@ class AiTrajectoryRecorderTest {
         String secret = "provider-secret-account@example.test";
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 2L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 2L, Instant.now()));
         List<ExecutionObservation> exported = new ArrayList<>();
         var publisher = org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher
                 .forListeners(List.of(exported::add));
@@ -248,7 +250,8 @@ class AiTrajectoryRecorderTest {
 
         ArgumentCaptor<AiChatTrajectoryStep> updated =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
-        verify(repository).updateModelCall(eq("conversation-1"), eq(42L), updated.capture());
+        verify(repository).updateModelCall(
+                eq("conversation-1"), eq(AiChatStepId.from(42L)), updated.capture());
         assertThat(exported).extracting(event -> AiExecutionLifecycle.from(event)
                         .orElseThrow().subtype())
                 .containsExactly("model_call_started", "model_call_failed");
@@ -265,7 +268,7 @@ class AiTrajectoryRecorderTest {
     void forkPreservesTheProviderPromptTokenNormalizer() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 1L, Instant.now()));
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(
                 repository, new ObjectMapper(), mock(ScoreUser.class),
                 "conversation-1", "request-1", "claude", "high", ignored -> { });
@@ -552,7 +555,7 @@ class AiTrajectoryRecorderTest {
                 eq(AiChatConversationKind.SUBAGENT), anyString(), anyString()))
                 .thenReturn("child-conversation-1", "child-conversation-2");
         when(repository.append(anyString(), any()))
-                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(1L), 1L, Instant.now()));
         List<ExecutionObservation> observations = new ArrayList<>();
         var publisher = org.oagi.score.gateway.http.api.ai_management.execution.ExecutionEventPublisher
                 .forListeners(List.of(observations::add));
@@ -1104,7 +1107,7 @@ class AiTrajectoryRecorderTest {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", events::add);
@@ -1132,7 +1135,8 @@ class AiTrajectoryRecorderTest {
         assertThat(output).isEqualTo("{\"count\":12}");
         assertThat(recorder.completedDomainToolCallCount()).isEqualTo(1);
         assertThat(recorder.successfulDomainToolCallCount()).isEqualTo(1);
-        verify(repository).updateObservation(eq("conversation-1"), eq(42L), any());
+        verify(repository).updateObservation(
+                eq("conversation-1"), eq(AiChatStepId.from(42L)), any());
         ArgumentCaptor<AiChatTrajectoryStep> steps =
                 ArgumentCaptor.forClass(AiChatTrajectoryStep.class);
         verify(repository, times(3)).append(eq("conversation-1"), steps.capture());
@@ -1157,7 +1161,7 @@ class AiTrajectoryRecorderTest {
     void correlatesSameNamedToolCallsByArgumentsWhenTheyExecuteInReverseOrder() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 1L, Instant.now()));
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
                 repository, new ObjectMapper(), mock(ScoreUser.class),
                 "conversation-1", "request-1", ignored -> { });
@@ -1192,7 +1196,7 @@ class AiTrajectoryRecorderTest {
         @SuppressWarnings("rawtypes")
         ArgumentCaptor<Map> observations = ArgumentCaptor.forClass(Map.class);
         verify(repository, times(2)).updateObservation(
-                eq("conversation-1"), eq(42L), observations.capture());
+                eq("conversation-1"), eq(AiChatStepId.from(42L)), observations.capture());
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> results = (List<Map<String, Object>>)
                 observations.getAllValues().getLast().get("results");
@@ -1383,7 +1387,7 @@ class AiTrajectoryRecorderTest {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(
                 repository, new ObjectMapper(), requester,
@@ -1412,7 +1416,7 @@ class AiTrajectoryRecorderTest {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(
                 repository, new ObjectMapper(), requester,
@@ -1441,7 +1445,7 @@ class AiTrajectoryRecorderTest {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(
                 repository, new ObjectMapper(), requester,
@@ -1686,7 +1690,7 @@ class AiTrajectoryRecorderTest {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(), requester,
                 "conversation-1", "request-1", events::add);
@@ -1737,7 +1741,7 @@ class AiTrajectoryRecorderTest {
     void emitsFallbackRetryNarrationWhenTheModelsGuideWasDeduplicated() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
                 mock(ScoreUser.class), "conversation-1", "request-1", events::add);
@@ -1778,7 +1782,7 @@ class AiTrajectoryRecorderTest {
                 new java.util.concurrent.atomic.AtomicLong(40L);
         when(repository.append(eq("conversation-1"), any()))
                 .thenAnswer(ignored -> new AiChatStoredStep(
-                        storedId.incrementAndGet(), 3L, Instant.now()));
+                        AiChatStepId.from(storedId.incrementAndGet()), 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
                 mock(ScoreUser.class), "conversation-1", "request-1", events::add);
@@ -1814,7 +1818,7 @@ class AiTrajectoryRecorderTest {
     void emitsDeterministicSyntheticRetryNarration() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
                 mock(ScoreUser.class), "conversation-1", "request-1", events::add);
@@ -1844,7 +1848,7 @@ class AiTrajectoryRecorderTest {
     void keepsWorkerRetryNarrationOutOfTheLeadConversation() {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(42L, 3L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(42L), 3L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder root = new AiTrajectoryRecorder(repository, new ObjectMapper(),
                 mock(ScoreUser.class), "conversation-1", "request-1", events::add);
@@ -1874,7 +1878,7 @@ class AiTrajectoryRecorderTest {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(1L), 1L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiContextBudget budget = new AiContextBudget(
                 "claude-fable-5", 200000L, 16000L, 150000L, 8192L, 32000L, false);
@@ -1907,7 +1911,7 @@ class AiTrajectoryRecorderTest {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         ScoreUser requester = mock(ScoreUser.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(1L), 1L, Instant.now()));
         List<AiExecutionEvent> events = new ArrayList<>();
         AiContextBudget budget = new AiContextBudget(
                 "model", 200000L, 16000L, 150000L, 8192L, 32000L, false);
@@ -2188,7 +2192,7 @@ class AiTrajectoryRecorderTest {
             boolean streaming) {
         AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
         when(repository.append(eq("conversation-1"), any()))
-                .thenReturn(new AiChatStoredStep(1L, 1L, Instant.now()));
+                .thenReturn(new AiChatStoredStep(AiChatStepId.from(1L), 1L, Instant.now()));
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(
                 repository, new ObjectMapper(), mock(ScoreUser.class),
                 "conversation-1", "request-1", "model", "high",

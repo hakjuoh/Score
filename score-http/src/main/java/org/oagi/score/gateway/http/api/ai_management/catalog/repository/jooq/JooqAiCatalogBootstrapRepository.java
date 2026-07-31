@@ -4,12 +4,16 @@ import org.jooq.DSLContext;
 import org.jooq.types.UByte;
 import org.jooq.types.UInteger;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogConfigId;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiCatalogBootstrapRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
+import org.oagi.score.gateway.http.security.secret.AppSecretId;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -49,58 +53,59 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
         }
 
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        Map<String, ULong> providerIds = insertProviders(tx, properties, now);
-        Map<String, ULong> modelIds = insertModels(tx, properties, providerIds, now);
+        Map<String, AiProviderId> providerIds = insertProviders(tx, properties, now);
+        Map<String, AiModelId> modelIds = insertModels(tx, properties, providerIds, now);
         insertDefaultModel(tx, properties, modelIds, now);
     }
 
-    private Map<String, ULong> insertProviders(DSLContext tx, ScoreAiProperties properties,
-                                                LocalDateTime now) {
-        Map<String, ULong> providerIds = new LinkedHashMap<>();
+    private Map<String, AiProviderId> insertProviders(
+            DSLContext tx, ScoreAiProperties properties, LocalDateTime now) {
+        Map<String, AiProviderId> providerIds = new LinkedHashMap<>();
         properties.getProviders().forEach((name, provider) -> {
-            ULong secretId = createSecret(tx, name, provider.getKey());
-            ULong id = tx.insertInto(AI_PROVIDER)
+            AppSecretId secretId = createSecret(tx, name, provider.getKey());
+            AiProviderId id = new AiProviderId(tx.insertInto(AI_PROVIDER)
                     .set(AI_PROVIDER.PROVIDER_NAME, name)
                     .set(AI_PROVIDER.PROVIDER_TYPE, normalized(provider.getType(), "anthropic"))
                     .set(AI_PROVIDER.BASE_URL, blankToNull(provider.getBaseUrl()))
                     .set(AI_PROVIDER.MESSAGES_URL, blankToNull(provider.getMessagesUrl()))
                     .set(AI_PROVIDER.ANTHROPIC_VERSION, blankToNull(provider.getAnthropicVersion()))
                     .set(AI_PROVIDER.API_VERSION, blankToNull(provider.getApiVersion()))
-                    .set(AI_PROVIDER.API_KEY_SECRET_ID, secretId)
+                    .set(AI_PROVIDER.API_KEY_SECRET_ID, valueOf(secretId))
                     .set(AI_PROVIDER.ENABLED, (byte) 1)
                     .set(AI_PROVIDER.CREATED_AT, now)
                     .set(AI_PROVIDER.LAST_UPDATED_AT, now)
                     .returning(AI_PROVIDER.AI_PROVIDER_ID)
-                    .fetchOne(AI_PROVIDER.AI_PROVIDER_ID);
+                    .fetchOne(AI_PROVIDER.AI_PROVIDER_ID).toBigInteger());
             providerIds.put(name, id);
         });
         return providerIds;
     }
 
-    private ULong createSecret(DSLContext tx, String providerName, String plaintext) {
+    private AppSecretId createSecret(DSLContext tx, String providerName, String plaintext) {
         if (!StringUtils.hasText(plaintext)) return null;
         char[] value = plaintext.toCharArray();
         try {
-            return secrets.create(tx, "ai-provider/" + providerName + "/api-key", value, null);
+            return new AppSecretId(secrets.create(
+                    tx, "ai-provider/" + providerName + "/api-key", value, null).toBigInteger());
         } finally {
             ApplicationSecretService.clear(value);
         }
     }
 
-    private Map<String, ULong> insertModels(DSLContext tx, ScoreAiProperties properties,
-                                             Map<String, ULong> providerIds,
-                                             LocalDateTime now) {
-        Map<String, ULong> modelIds = new LinkedHashMap<>();
+    private Map<String, AiModelId> insertModels(
+            DSLContext tx, ScoreAiProperties properties,
+            Map<String, AiProviderId> providerIds, LocalDateTime now) {
+        Map<String, AiModelId> modelIds = new LinkedHashMap<>();
         int order = 0;
         for (Map.Entry<String, ScoreAiProperties.Model> entry : properties.getModels().entrySet()) {
             String key = entry.getKey();
             ScoreAiProperties.Model model = entry.getValue();
-            ULong providerId = providerIds.get(model.getProvider());
+            AiProviderId providerId = providerIds.get(model.getProvider());
             validateModel(key, model, providerId);
             var budget = model.getContextBudget();
             var capabilities = model.getModelCapabilities();
-            ULong id = tx.insertInto(AI_MODEL)
-                    .set(AI_MODEL.PROVIDER_ID, providerId)
+            AiModelId id = new AiModelId(tx.insertInto(AI_MODEL)
+                    .set(AI_MODEL.PROVIDER_ID, valueOf(providerId))
                     .set(AI_MODEL.MODEL_KEY, key)
                     .set(AI_MODEL.PROVIDER_MODEL_NAME, normalized(model.getModel(), key))
                     .set(AI_MODEL.DISPLAY_NAME, normalized(model.getDisplayName(), key))
@@ -142,7 +147,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
                     .set(AI_MODEL.CREATED_AT, now)
                     .set(AI_MODEL.LAST_UPDATED_AT, now)
                     .returning(AI_MODEL.AI_MODEL_ID)
-                    .fetchOne(AI_MODEL.AI_MODEL_ID);
+                    .fetchOne(AI_MODEL.AI_MODEL_ID).toBigInteger());
             modelIds.put(key, id);
             insertReasoningEfforts(tx, id, model);
         }
@@ -150,7 +155,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
     }
 
     private static void validateModel(String key, ScoreAiProperties.Model model,
-                                      ULong providerId) {
+                                      AiProviderId providerId) {
         if (providerId == null) {
             throw new IllegalStateException("Unknown AI provider '" + model.getProvider()
                     + "' while bootstrapping model '" + key + "'.");
@@ -161,7 +166,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
         }
     }
 
-    private void insertReasoningEfforts(DSLContext tx, ULong modelId,
+    private void insertReasoningEfforts(DSLContext tx, AiModelId modelId,
                                         ScoreAiProperties.Model model) {
         List<ScoreAiProperties.ReasoningEffort> configured = model.getReasoningEfforts();
         if (configured == null || configured.isEmpty()) return;
@@ -173,7 +178,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
             String name = effort.getName().strip().toLowerCase();
             if ("none".equals(name)) name = "disabled";
             tx.insertInto(AI_MODEL_REASONING_EFFORT)
-                    .set(AI_MODEL_REASONING_EFFORT.AI_MODEL_ID, modelId)
+                    .set(AI_MODEL_REASONING_EFFORT.AI_MODEL_ID, valueOf(modelId))
                     .set(AI_MODEL_REASONING_EFFORT.REASONING_EFFORT, name)
                     .set(AI_MODEL_REASONING_EFFORT.DISPLAY_NAME,
                             normalized(effort.getDisplayName(), effort.getName()))
@@ -186,16 +191,17 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
         }
     }
 
-    private static void insertDefaultModel(DSLContext tx, ScoreAiProperties properties,
-                                           Map<String, ULong> modelIds, LocalDateTime now) {
-        ULong defaultModelId = modelIds.get(properties.getModelName());
+    private void insertDefaultModel(DSLContext tx, ScoreAiProperties properties,
+                                    Map<String, AiModelId> modelIds, LocalDateTime now) {
+        AiModelId defaultModelId = modelIds.get(properties.getModelName());
         if (defaultModelId == null) {
             defaultModelId = modelIds.values().stream().findFirst().orElse(null);
         }
         if (defaultModelId == null) return;
         tx.insertInto(AI_MODEL_CATALOG_CONFIG)
-                .set(AI_MODEL_CATALOG_CONFIG.AI_MODEL_CATALOG_CONFIG_ID, UByte.valueOf(1))
-                .set(AI_MODEL_CATALOG_CONFIG.DEFAULT_AI_MODEL_ID, defaultModelId)
+                .set(AI_MODEL_CATALOG_CONFIG.AI_MODEL_CATALOG_CONFIG_ID,
+                        UByte.valueOf(AiModelCatalogConfigId.GLOBAL.value().intValueExact()))
+                .set(AI_MODEL_CATALOG_CONFIG.DEFAULT_AI_MODEL_ID, valueOf(defaultModelId))
                 .set(AI_MODEL_CATALOG_CONFIG.LAST_UPDATED_AT, now)
                 .execute();
     }

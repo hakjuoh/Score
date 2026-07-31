@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.tool;
 
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.model.AiObservationAccumulator;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingTool;
 
 import java.util.List;
@@ -40,6 +41,7 @@ class AiToolRetryTrackerTest {
 
     private AiPendingTool tool(String id, long modelStepId, Object arguments) {
         return new AiPendingTool(id, "create_item", arguments,
-                new AiObservationAccumulator(modelStepId, List.of()), modelStepId);
+                new AiObservationAccumulator(AiChatStepId.from(modelStepId), List.of()),
+                modelStepId);
     }
 }

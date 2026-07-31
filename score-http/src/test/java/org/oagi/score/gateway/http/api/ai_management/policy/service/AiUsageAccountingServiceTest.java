@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiCatalogModel;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.EffectiveAiPolicy;
 import org.oagi.score.gateway.http.api.ai_management.policy.repository.jooq.JooqAiQuotaRepository;
@@ -62,7 +63,8 @@ class AiUsageAccountingServiceTest {
                         new ScoreAiModelRegistry.ContextBudgetDescriptor(
                                 1000L, 100L, 800L, 100L, 200L, false));
         return new EffectiveAiPolicy(new UserId(BigInteger.ONE), false, true,
-                List.of(new AiCatalogModel(7L, descriptor)), "model-1", true,
-                4, 8, null, null, null, null, 1L, Map.of(7L, efforts));
+                List.of(new AiCatalogModel(AiModelId.from(7L), descriptor)), "model-1", true,
+                4, 8, null, null, null, null, 1L,
+                Map.of(AiModelId.from(7L), efforts));
     }
 }
