@@ -1,3 +1,7 @@
+/**
+ * Manages chat scrolling, scroll controls, and context-budget hover timing.
+ */
+
 import {Injectable} from '@angular/core';
 import {AiChatPanelState} from './ai-chat-panel-state';
 

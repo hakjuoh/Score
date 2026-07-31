@@ -1,3 +1,7 @@
+/**
+ * Registers core-component and data-type resources for AI-assisted navigation.
+ */
+
 import {AiResourceRoute} from '../ai-chat-panel.model';
 import {
   AUTHENTICATED_ROLES,

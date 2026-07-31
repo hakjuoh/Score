@@ -1,3 +1,7 @@
+/**
+ * Defines shared commands, attachment constraints, timing values, and chat defaults.
+ */
+
 import {AiChatCommand} from './ai-chat-panel.model';
 
 export const AI_CHAT_COMMANDS: AiChatCommand[] = [

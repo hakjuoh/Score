@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Chat Cancellation service contract, failure handling, and edge cases.
+ */
+
 import {HttpErrorResponse} from '@angular/common/http';
 import {AiChatCancellationCallbacks} from './ai-chat-cancellation.service';
 import {

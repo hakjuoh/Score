@@ -1,3 +1,7 @@
+/**
+ * Verifies the strict validation boundary for change notices, grants, responses, and conflicts.
+ */
+
 import {
   isCanonicalChangeConfirmationGrant,
   isBoundConfirmedChatResponse,

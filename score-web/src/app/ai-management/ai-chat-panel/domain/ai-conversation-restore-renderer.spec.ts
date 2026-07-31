@@ -1,3 +1,7 @@
+/**
+ * Verifies queued restore rendering, callback ownership, draining, and reset cancellation.
+ */
+
 import {
   AiConversationRestoreRenderCallbacks,
   AiConversationRestoreRenderer

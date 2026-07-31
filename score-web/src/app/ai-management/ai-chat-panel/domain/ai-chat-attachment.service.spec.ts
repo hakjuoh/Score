@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Chat Attachment service contract, failure handling, and edge cases.
+ */
+
 import {AiChatAttachmentService} from './ai-chat-attachment.service';
 
 describe('AiChatAttachmentService', () => {

@@ -1,3 +1,7 @@
+/**
+ * Parses local slash commands and derives context-aware command suggestions.
+ */
+
 import {Injectable} from '@angular/core';
 import {AI_CHAT_COMMANDS} from './ai-chat-panel.constants';
 import {AiChatCommand} from './ai-chat-panel.model';

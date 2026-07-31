@@ -1,3 +1,7 @@
+/**
+ * Formats conversation timestamps into relative age labels for the history list.
+ */
+
 import {Injectable} from '@angular/core';
 import {AiChatConversationSummary} from './ai-chat-panel.model';
 

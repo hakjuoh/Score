@@ -1,3 +1,7 @@
+/**
+ * Verifies AI Chat Window Coordinator coordination, state transitions, and edge cases.
+ */
+
 import {TestBed} from '@angular/core/testing';
 import {AuthService} from '../../../authentication/auth.service';
 import {AiChatWindowCoordinatorService} from './ai-chat-window-coordinator.service';

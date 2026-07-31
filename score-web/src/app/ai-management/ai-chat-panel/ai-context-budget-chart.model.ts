@@ -1,3 +1,7 @@
+/**
+ * Defines context-budget chart data, slice geometry, and display contracts.
+ */
+
 import {AiContextUsage} from './domain/ai-chat-panel.model';
 
 export interface AiContextBudgetData {

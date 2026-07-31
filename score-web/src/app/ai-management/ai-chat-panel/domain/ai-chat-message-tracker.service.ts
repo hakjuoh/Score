@@ -1,3 +1,7 @@
+/**
+ * Merges streamed status and tool events into stable, ordered chat message rows.
+ */
+
 import {Injectable} from '@angular/core';
 import {
   AiToolCallEventSemantics,

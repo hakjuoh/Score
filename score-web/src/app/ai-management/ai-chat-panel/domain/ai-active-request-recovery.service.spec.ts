@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Active Request Recovery service contract, failure handling, and edge cases.
+ */
+
 import {TestBed} from '@angular/core/testing';
 import {of, throwError} from 'rxjs';
 import {AiActiveRequestRecoveryService} from './ai-active-request-recovery.service';

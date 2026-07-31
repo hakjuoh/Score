@@ -1,3 +1,7 @@
+/**
+ * Initializes request state and dispatches normal, revised, and confirmed chat intents.
+ */
+
 import {Injectable} from '@angular/core';
 import {AiChatAttachment} from './ai-chat-panel.model';
 import {AiChatPanelState} from './ai-chat-panel-state';

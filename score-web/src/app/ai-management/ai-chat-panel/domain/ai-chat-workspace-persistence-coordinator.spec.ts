@@ -1,3 +1,7 @@
+/**
+ * Verifies AI Chat Workspace Persistence Coordinator coordination, state transitions, and edge cases.
+ */
+
 import {AiChatPanelState} from './ai-chat-panel-state';
 import {AiChatAttachment} from './ai-chat-panel.model';
 import {AiChatWorkspacePersistenceCoordinator} from './ai-chat-workspace-persistence-coordinator';

@@ -1,3 +1,7 @@
+/**
+ * Verifies the AI Route Registry Context service contract, failure handling, and edge cases.
+ */
+
 import {TestBed} from '@angular/core/testing';
 import {AuthService} from '../../../authentication/auth.service';
 import {AiRouteRegistryContextService} from './ai-route-registry-context.service';

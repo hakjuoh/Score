@@ -1,3 +1,7 @@
+/**
+ * Coordinates queued change approvals, expiry timers, decisions, and acknowledgements.
+ */
+
 import {Injectable, OnDestroy} from '@angular/core';
 import {AiChatPanelState} from './ai-chat-panel-state';
 import {AiChatTransportService} from './ai-chat-transport.service';

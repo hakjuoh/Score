@@ -1,3 +1,7 @@
+/**
+ * Defines user-facing labels and display patterns shared by chat presentation logic.
+ */
+
 export const FORMATTER_META_RESPONSE_PATTERN =
   /\b(ui link formatter|ui formatter|already-correct assistant answer|already-correct assistant answers|do not execute tools|do not answer questions independently|please provide the final answer|provide the final answer text|#\s*UI Formatting Input|##\s*Final Answer|##\s*Resource Route Registry)\b/i;
 

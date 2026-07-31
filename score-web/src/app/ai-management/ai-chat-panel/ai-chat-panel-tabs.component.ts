@@ -1,3 +1,7 @@
+/**
+ * Renders chat and history tabs and emits tab-selection and new-chat actions.
+ */
+
 import {Component, ElementRef, EventEmitter, Input, Output, ViewChild} from '@angular/core';
 import {AiChatPanelTab} from './domain/ai-chat-panel.model';
 
