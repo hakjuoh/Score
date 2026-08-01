@@ -30,7 +30,6 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenU
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserModelAccess;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserModelReasoningAccess;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicy;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicyAudit;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppOauth2User;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppSecret;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser;
@@ -319,11 +318,6 @@ public class Tables {
      * Per-user AI Assistant access and usage limit policy
      */
     public static final AiUserPolicy AI_USER_POLICY = AiUserPolicy.AI_USER_POLICY;
-
-    /**
-     * Audit history of AI user policy changes
-     */
-    public static final AiUserPolicyAudit AI_USER_POLICY_AUDIT = AiUserPolicyAudit.AI_USER_POLICY_AUDIT;
 
     /**
      * This table captures the OpenID Connect claims (such as the sub, name, and

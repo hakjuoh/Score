@@ -1,7 +1,5 @@
 package org.oagi.score.gateway.http.api.ai_management.policy.repository.jooq;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
 import org.jooq.types.UByte;
 import org.jooq.types.ULong;
@@ -27,17 +25,14 @@ import java.util.Set;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_MODEL_ACCESS;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_MODEL_REASONING_ACCESS;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_POLICY;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_POLICY_AUDIT;
 
 @Repository
 public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicyCommandRepository {
 
     private final DSLContext dsl;
-    private final ObjectMapper objectMapper;
 
-    public JooqAiPolicyRepository(DSLContext dsl, ObjectMapper objectMapper) {
+    public JooqAiPolicyRepository(DSLContext dsl) {
         this.dsl = dsl;
-        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -128,10 +123,7 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
                 if (updated != 1) throw new AiPolicyVersionConflictException();
             }
             replaceChildren(tx, policy);
-            AiUserPolicy saved = find(tx, policy.userId()).orElseThrow();
-            audit(tx, policy.userId(), actorUserId, before == null ? "CREATE" : "UPDATE",
-                    before, saved);
-            return saved;
+            return find(tx, policy.userId()).orElseThrow();
         });
     }
 
@@ -186,40 +178,15 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
     }
 
     @Override
-    public void delete(UserId targetUserId, UserId actorUserId, long expectedVersion) {
+    public void delete(UserId targetUserId, long expectedVersion) {
         dsl.transaction(configuration -> {
             DSLContext tx = org.jooq.impl.DSL.using(configuration);
-            AiUserPolicy before = find(tx, targetUserId)
-                    .orElseThrow(AiPolicyVersionConflictException::new);
             int deleted = tx.deleteFrom(AI_USER_POLICY)
                     .where(AI_USER_POLICY.APP_USER_ID.eq(unsigned(targetUserId)))
                     .and(AI_USER_POLICY.POLICY_VERSION.eq(ULong.valueOf(expectedVersion)))
                     .execute();
             if (deleted != 1) throw new AiPolicyVersionConflictException();
-            audit(tx, targetUserId, actorUserId, "DELETE", before, null);
         });
-    }
-
-    private void audit(DSLContext tx, UserId target, UserId actor, String action,
-                       AiUserPolicy before, AiUserPolicy after) {
-        tx.insertInto(AI_USER_POLICY_AUDIT)
-                .set(AI_USER_POLICY_AUDIT.TARGET_APP_USER_ID, unsigned(target))
-                .set(AI_USER_POLICY_AUDIT.ACTOR_APP_USER_ID, unsigned(actor))
-                .set(AI_USER_POLICY_AUDIT.ACTION, action)
-                .set(AI_USER_POLICY_AUDIT.BEFORE_JSON, json(before))
-                .set(AI_USER_POLICY_AUDIT.AFTER_JSON, json(after))
-                .set(AI_USER_POLICY_AUDIT.CREATION_TIMESTAMP, now())
-                .execute();
-    }
-
-    private String json(Object value) {
-        if (value == null) return null;
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not serialize the AI policy audit snapshot.",
-                    exception);
-        }
     }
 
     private static LocalDateTime now() {

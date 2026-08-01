@@ -46,7 +46,6 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenR
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsageLedger.AiTokenUsageLedgerPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsagePeriod.AiTokenUsagePeriodPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicy.AiUserPolicyPath;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicyAudit.AiUserPolicyAuditPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppOauth2User.AppOauth2UserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppSecret.AppSecretPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbie.AsbiePath;
@@ -571,19 +570,6 @@ public class AppUser extends TableImpl<AppUserRecord> {
             _aiTokenUsagePeriod = new AiTokenUsagePeriodPath(this, null, Keys.AI_TOKEN_USAGE_PERIOD_USER_FK.getInverseKey());
 
         return _aiTokenUsagePeriod;
-    }
-
-    private transient AiUserPolicyAuditPath _aiUserPolicyAudit;
-
-    /**
-     * Get the implicit to-many join path to the
-     * <code>oagi.ai_user_policy_audit</code> table
-     */
-    public AiUserPolicyAuditPath aiUserPolicyAudit() {
-        if (_aiUserPolicyAudit == null)
-            _aiUserPolicyAudit = new AiUserPolicyAuditPath(this, null, Keys.AI_USER_POLICY_AUDIT_ACTOR_FK.getInverseKey());
-
-        return _aiUserPolicyAudit;
     }
 
     private transient AiUserPolicyPath _aiUserPolicyCreatedByFk;

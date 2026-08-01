@@ -6,5 +6,5 @@ import org.oagi.score.gateway.http.api.ai_management.policy.model.AiUserPolicy;
 public interface AiPolicyCommandRepository {
     AiUserPolicy save(AiUserPolicy policy, UserId actorUserId, Long expectedVersion);
 
-    void delete(UserId targetUserId, UserId actorUserId, long expectedVersion);
+    void delete(UserId targetUserId, long expectedVersion);
 }

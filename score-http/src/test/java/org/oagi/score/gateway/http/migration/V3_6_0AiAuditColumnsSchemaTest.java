@@ -31,6 +31,11 @@ class V3_6_0AiAuditColumnsSchemaTest {
     }
 
     @Test
+    void userPolicyUsesItsOwnAuditColumnsWithoutAnAuditHistoryTable() throws IOException {
+        assertFalse(readMigration().contains("CREATE TABLE `ai_user_policy_audit`"));
+    }
+
+    @Test
     void canonicalDdlTemplatesMatchTheMigrationAuditContract() throws IOException {
         for (String table : AUDITED_TABLES) {
             assertAuditContract(readResource("/schemas/" + table + ".ddl"), table);
