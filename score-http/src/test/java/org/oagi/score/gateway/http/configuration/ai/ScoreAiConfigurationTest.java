@@ -271,7 +271,7 @@ class ScoreAiConfigurationTest {
     void configuresAzureOpenAiToUseTheResponsesEndpoint() {
         ScoreAiProperties properties = properties("gpt-5.6-sol", "azure-openai");
         ScoreAiProperties.Provider provider = properties.getProviders().get("azure-openai");
-        provider.setType("azure-openai");
+        provider.setType("openai");
         provider.setBaseUrl("https://example.openai.azure.com/");
         provider.setKey("test-key");
         provider.setApiVersion("2024-10-21");
@@ -424,7 +424,7 @@ class ScoreAiConfigurationTest {
     @Test
     void omitsModelsWhoseProviderCredentialsAreNotConfigured() {
         ScoreAiProperties properties = properties("gpt-5.6-sol", "azure-openai");
-        properties.getProviders().get("azure-openai").setType("azure-openai");
+        properties.getProviders().get("azure-openai").setType("openai");
 
         assertTrue(chatModels(properties).isEmpty());
     }
@@ -500,7 +500,7 @@ class ScoreAiConfigurationTest {
     void rejectsAContextThresholdThatConsumesReservedOutputHeadroom() {
         ScoreAiProperties properties = properties("gpt-5.6-sol", "azure-openai");
         ScoreAiProperties.Provider provider = properties.getProviders().get("azure-openai");
-        provider.setType("azure-openai");
+        provider.setType("openai");
         provider.setBaseUrl("https://example.openai.azure.com");
         provider.setKey("test-key");
         ScoreAiProperties.Model model = properties.getModels().get("gpt-5.6-sol");

@@ -133,8 +133,8 @@ public class RepositoryFactory {
     }
 
     public AiProviderCatalogRepository aiProviderCatalogRepository(
-            ApplicationSecretService secrets, ObjectMapper mapper) {
-        return new JooqAiProviderCatalogRepository(dslContext, this, secrets, mapper);
+            ApplicationSecretService secrets) {
+        return new JooqAiProviderCatalogRepository(dslContext, this, secrets);
     }
 
     public AiChatConversationRepository aiChatConversationRepository(

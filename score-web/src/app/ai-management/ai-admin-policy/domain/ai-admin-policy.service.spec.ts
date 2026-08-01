@@ -2,6 +2,7 @@ import {TestBed} from '@angular/core/testing';
 import {provideHttpClient} from '@angular/common/http';
 import {HttpTestingController, provideHttpClientTesting} from '@angular/common/http/testing';
 import {AiAdminPolicyService} from './ai-admin-policy.service';
+import {AiModelListRequest, AiPolicyUserListRequest, AiProviderListRequest} from './ai-admin-policy';
 
 describe('AiAdminPolicyService REST contract', () => {
   let service: AiAdminPolicyService;
@@ -24,6 +25,57 @@ describe('AiAdminPolicyService REST contract', () => {
     request.flush([]);
   });
 
+  it('searches provider, model, and policy lists with pagination and detailed filters', () => {
+    const providers = new AiProviderListRequest();
+    providers.filters = {...providers.filters, name: 'provider', type: 'anthropic',
+      endpoint: 'example.test', enabled: [true], updaterLoginIdList: ['admin']};
+    service.searchProviders(providers).subscribe();
+    let request = http.expectOne(req => req.url === '/api/admin/ai/providers/search');
+    expect(request.request.params.get('name')).toBe('provider');
+    expect(request.request.params.get('type')).toBe('anthropic');
+    expect(request.request.params.get('enabled')).toBe('true');
+    expect(request.request.params.get('updaterLoginIdList')).toBe('admin');
+    expect(request.request.params.get('pageSize')).toBe('10');
+    request.flush({list: [], page: 0, size: 10, length: 0});
+
+    const models = new AiModelListRequest();
+    models.filters = {...models.filters, provider: 'OpenAI', enabled: [true],
+      defaultModel: [false], defaultEffort: 'medium', effort: 'high'};
+    service.searchModels(models).subscribe();
+    request = http.expectOne(req => req.url === '/api/admin/ai/models/search');
+    expect(request.request.params.get('provider')).toBe('OpenAI');
+    expect(request.request.params.get('defaultModel')).toBe('false');
+    expect(request.request.params.get('effort')).toBe('high');
+    request.flush({list: [], page: 0, size: 10, length: 0});
+
+    const users = new AiPolicyUserListRequest();
+    const before = new Date(2026, 6, 31);
+    users.filters = {...users.filters, loginId: 'alice', organization: 'OAGi',
+      multiAgentEnabled: [true], quota: 'NEAR', activeRequests: 1,
+      updatedBefore: before};
+    service.searchUsers(users).subscribe();
+    request = http.expectOne(req => req.url === '/api/admin/ai/users/search');
+    expect(request.request.params.get('loginId')).toBe('alice');
+    expect(request.request.params.get('quota')).toBe('NEAR');
+    expect(request.request.params.get('activeRequests')).toBe('1');
+    const expectedExclusiveBefore = new Date(before);
+    expectedExclusiveBefore.setDate(expectedExclusiveBefore.getDate() + 1);
+    expect(request.request.params.get('updatedBefore')).toBe(expectedExclusiveBefore.toISOString());
+    request.flush({list: [], page: 0, size: 10, length: 0});
+  });
+
+  it('omits a boolean filter when both values are selected', () => {
+    const providers = new AiProviderListRequest();
+    providers.filters.enabled = [true, false];
+
+    service.searchProviders(providers).subscribe();
+
+    const request = http.expectOne(req => req.url === '/api/admin/ai/providers/search');
+    expect(request.request.params.has('enabled')).toBe(false);
+    expect(request.request.params.get('orderBy')).toBe('-updatedOn');
+    request.flush({list: [], page: 0, size: 10, length: 0});
+  });
+
   it('resets a policy with its optimistic version', () => {
     service.reset('17', 3).subscribe();
     const request = http.expectOne(req => req.url === '/api/admin/ai/users/17/policy');
@@ -34,8 +86,8 @@ describe('AiAdminPolicyService REST contract', () => {
   });
 
   it('updates provider settings and API key through one write endpoint', () => {
-    const update = {expectedVersion: 4, providerName: 'OpenAI', providerType: 'openai',
-      baseUrl: 'https://api.openai.com', messagesUrl: null, anthropicVersion: null,
+    const update = {providerName: 'OpenAI', providerType: 'openai',
+      baseUrl: 'https://api.openai.com', messagesUrl: null,
       apiVersion: null, enabled: true, apiKey: ''};
     service.updateProvider(2, update).subscribe();
     const request = http.expectOne('/api/admin/ai/providers/2');
@@ -58,9 +110,9 @@ describe('AiAdminPolicyService REST contract', () => {
   });
 
   it('tests draft provider settings without using the write endpoint', () => {
-    const update = {expectedVersion: 4, providerName: 'Anthropic', providerType: 'anthropic',
+    const update = {providerName: 'Anthropic', providerType: 'anthropic',
       baseUrl: 'https://api.anthropic.com', messagesUrl: null,
-      anthropicVersion: '2023-06-01', apiVersion: null, enabled: true};
+      apiVersion: '2023-06-01', enabled: true};
     service.testProviderConnection(2, update).subscribe();
 
     const request = http.expectOne('/api/admin/ai/providers/2/connection-tests');
@@ -70,7 +122,7 @@ describe('AiAdminPolicyService REST contract', () => {
   });
 
   it('updates a model through the catalog endpoint', () => {
-    const update = {expectedVersion: 2, providerId: 1, modelKey: 'model-key',
+    const update = {providerId: 1, modelKey: 'model-key',
       enabled: true, defaultModel: false, sortOrder: 1, maxTokens: 4096,
       contextWindow: 128000, outputReserveTokens: 4096,
       autoCompactThresholdTokens: 100000, emergencyHeadroomTokens: 4096,

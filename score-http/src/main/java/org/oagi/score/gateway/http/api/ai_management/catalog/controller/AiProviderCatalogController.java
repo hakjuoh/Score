@@ -3,10 +3,11 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.controller;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderApiKeyView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderConnectionTestResult;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderView;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiProviderCatalogService;
+import org.oagi.score.gateway.http.common.model.PageResponse;
 import org.oagi.score.gateway.http.configuration.security.SessionService;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
@@ -19,9 +20,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.List;
+
+import static org.oagi.score.gateway.http.common.util.Utility.separate;
 
 @RestController
 @RequestMapping("/admin/ai/providers")
@@ -38,6 +43,25 @@ public class AiProviderCatalogController {
     @GetMapping
     public List<AiProviderView> list(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
         return providers.list(sessions.asScoreUser(principal));
+    }
+
+    @GetMapping("/search")
+    public PageResponse<AiProviderView> search(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String endpoint,
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) String updaterLoginIdList,
+            @RequestParam(required = false) Instant updatedAfter,
+            @RequestParam(required = false) Instant updatedBefore,
+            @RequestParam(required = false) String orderBy,
+            @RequestParam(required = false) Integer pageIndex,
+            @RequestParam(required = false) Integer pageSize) {
+        return providers.search(sessions.asScoreUser(principal), name, type, endpoint,
+                enabled, separate(updaterLoginIdList).toList(), updatedAfter, updatedBefore,
+                org.oagi.score.gateway.http.common.util.ControllerUtils.pageRequest(
+                        pageIndex, pageSize, orderBy));
     }
 
     @PostMapping

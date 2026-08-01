@@ -38,10 +38,8 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Acc.AccP
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifestTag.AccManifestTagPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdList.AgencyIdListPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue.AgencyIdListValuePath;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiCatalogAudit.AiCatalogAuditPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModel.AiModelPath;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelCatalogConfig.AiModelCatalogConfigPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiProvider.AiProviderPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenQuotaAdjustment.AiTokenQuotaAdjustmentPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenRequestUsage.AiTokenRequestUsagePath;
@@ -458,19 +456,6 @@ public class AppUser extends TableImpl<AppUserRecord> {
         return _agencyIdListValueOwnerUserIdFk;
     }
 
-    private transient AiCatalogAuditPath _aiCatalogAudit;
-
-    /**
-     * Get the implicit to-many join path to the
-     * <code>oagi.ai_catalog_audit</code> table
-     */
-    public AiCatalogAuditPath aiCatalogAudit() {
-        if (_aiCatalogAudit == null)
-            _aiCatalogAudit = new AiCatalogAuditPath(this, null, Keys.AI_CATALOG_AUDIT_ACTOR_FK.getInverseKey());
-
-        return _aiCatalogAudit;
-    }
-
     private transient AiChatConversationPath _aiChatConversation;
 
     /**
@@ -482,19 +467,6 @@ public class AppUser extends TableImpl<AppUserRecord> {
             _aiChatConversation = new AiChatConversationPath(this, null, Keys.AI_CHAT_CONVERSATION_APP_USER_FK.getInverseKey());
 
         return _aiChatConversation;
-    }
-
-    private transient AiModelCatalogConfigPath _aiModelCatalogConfig;
-
-    /**
-     * Get the implicit to-many join path to the
-     * <code>oagi.ai_model_catalog_config</code> table
-     */
-    public AiModelCatalogConfigPath aiModelCatalogConfig() {
-        if (_aiModelCatalogConfig == null)
-            _aiModelCatalogConfig = new AiModelCatalogConfigPath(this, null, Keys.AI_MODEL_CATALOG_CONFIG_LAST_UPDATED_BY_FK.getInverseKey());
-
-        return _aiModelCatalogConfig;
     }
 
     private transient AiModelPath _aiModelCreatedByFk;

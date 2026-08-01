@@ -21,7 +21,7 @@ public class AiModelReasoningEffortRecord extends UpdatableRecordImpl<AiModelRea
 
     /**
      * Setter for <code>oagi.ai_model_reasoning_effort.ai_model_id</code>.
-     * Identifier of the AI model catalog entry
+     * Identifier of the configured AI model
      */
     public void setAiModelId(ULong value) {
         set(0, value);
@@ -29,7 +29,7 @@ public class AiModelReasoningEffortRecord extends UpdatableRecordImpl<AiModelRea
 
     /**
      * Getter for <code>oagi.ai_model_reasoning_effort.ai_model_id</code>.
-     * Identifier of the AI model catalog entry
+     * Identifier of the configured AI model
      */
     public ULong getAiModelId() {
         return (ULong) get(0);

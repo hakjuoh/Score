@@ -1,10 +1,11 @@
-import { Directive, ElementRef, EventEmitter, HostListener, Input, OnChanges, OnInit, Output, Renderer2, SimpleChanges, inject } from '@angular/core';
+import {AfterViewInit, Directive, ElementRef, EventEmitter, HostListener, Input, OnChanges, OnInit, Output, Renderer2, SimpleChanges, inject} from '@angular/core';
 
 @Directive({
   standalone: false,
   selector: '[score-table-column-resize]'
 })
-export class ScoreTableColumnResizeDirective implements OnInit, OnChanges {
+export class ScoreTableColumnResizeDirective implements OnInit, OnChanges, AfterViewInit {
+  private static readonly MAX_WIDTH = 10000;
   private el = inject(ElementRef);
   private renderer = inject(Renderer2);
 
@@ -37,6 +38,10 @@ export class ScoreTableColumnResizeDirective implements OnInit, OnChanges {
     if (changes.resizable) {
       this.applyResizableState();
     }
+  }
+
+  ngAfterViewInit(): void {
+    this.updateAriaValue(this.el.nativeElement.offsetWidth || 0);
   }
 
   get resizing(): boolean {
@@ -91,6 +96,13 @@ export class ScoreTableColumnResizeDirective implements OnInit, OnChanges {
     this.renderer.setStyle(this.resizeHandle, 'height', '100%');
     this.renderer.setStyle(this.resizeHandle, 'cursor', 'col-resize');
     this.renderer.setStyle(this.resizeHandle, 'background-color', 'transparent');
+    this.renderer.setAttribute(this.resizeHandle, 'role', 'separator');
+    this.renderer.setAttribute(this.resizeHandle, 'aria-orientation', 'vertical');
+    this.renderer.setAttribute(this.resizeHandle, 'aria-label', `Resize ${this._title} column`);
+    this.renderer.setAttribute(this.resizeHandle, 'aria-valuemin', '0');
+    this.renderer.setAttribute(this.resizeHandle, 'aria-valuemax',
+      `${ScoreTableColumnResizeDirective.MAX_WIDTH}`);
+    this.renderer.setAttribute(this.resizeHandle, 'tabindex', '0');
 
     this.innerLine = this.renderer.createElement('span');
     this.renderer.setStyle(this.innerLine, 'position', 'absolute');
@@ -121,6 +133,13 @@ export class ScoreTableColumnResizeDirective implements OnInit, OnChanges {
 
       this.onResizeStart(event);
     });
+    this.renderer.listen(this.resizeHandle, 'keydown', (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.stopPropagation();
+      event.preventDefault();
+      const step = event.shiftKey ? 25 : 10;
+      this.resizeBy(event.key === 'ArrowRight' ? step : -step);
+    });
   }
 
   applyResizableState() {
@@ -131,9 +150,11 @@ export class ScoreTableColumnResizeDirective implements OnInit, OnChanges {
     if (this.resizable) {
       this.renderer.removeStyle(this.resizeHandle, 'display');
       this.renderer.setStyle(this.resizeHandle, 'pointer-events', 'auto');
+      this.renderer.setAttribute(this.resizeHandle, 'tabindex', '0');
     } else {
       this.renderer.setStyle(this.resizeHandle, 'display', 'none');
       this.renderer.setStyle(this.resizeHandle, 'pointer-events', 'none');
+      this.renderer.setAttribute(this.resizeHandle, 'tabindex', '-1');
     }
   }
 
@@ -162,11 +183,8 @@ export class ScoreTableColumnResizeDirective implements OnInit, OnChanges {
 
   onMouseMove = (event: MouseEvent) => {
     const deltaX = event.pageX - this.startX;
-    this._width = this.startWidth + deltaX;
-
-    if (this._width < 0) {
-      this._width = 0;
-    } // Avoid negative width
+    this._width = Math.min(ScoreTableColumnResizeDirective.MAX_WIDTH,
+      Math.max(0, this.startWidth + deltaX));
 
     if (this.sibling) {
       const newSiblingWidth = this.startSiblingWidth - deltaX;
@@ -176,6 +194,7 @@ export class ScoreTableColumnResizeDirective implements OnInit, OnChanges {
     }
 
     this.applyWidthToColumn(this.el.nativeElement, this._width);
+    this.updateAriaValue(this._width);
   };
 
   onMouseUp = (event: MouseEvent) => {
@@ -200,6 +219,31 @@ export class ScoreTableColumnResizeDirective implements OnInit, OnChanges {
       this._resizing = false;  // Reset resizing flag
     }, 0);
   };
+
+  private resizeBy(delta: number): void {
+    const width = Math.min(ScoreTableColumnResizeDirective.MAX_WIDTH,
+      Math.max(0, this.el.nativeElement.offsetWidth + delta));
+    const sibling = this.el.nativeElement.nextElementSibling as HTMLElement | null;
+    this._width = width;
+    this.applyWidthToColumn(this.el.nativeElement, width);
+    this.updateAriaValue(width);
+    this.onResize.emit({name: this._title, width});
+
+    if (!sibling) return;
+    const siblingWidth = Math.max(0, sibling.offsetWidth - delta);
+    this.applyWidthToColumn(sibling, siblingWidth);
+    const siblingDiv = sibling.querySelector('div');
+    this.onResize.emit({
+      name: (siblingDiv ? siblingDiv.textContent?.trim() : sibling.textContent?.trim()) || '',
+      width: siblingWidth
+    });
+  }
+
+  private updateAriaValue(width: number): void {
+    if (!this.resizeHandle) return;
+    this.renderer.setAttribute(this.resizeHandle, 'aria-valuenow', `${width}`);
+    this.renderer.setAttribute(this.resizeHandle, 'aria-valuetext', `${width} pixels`);
+  }
 
   private applyWidthToColumn(element: HTMLElement, width: number | string) {
     const targets = this.getColumnElements(element);

@@ -7,13 +7,22 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalo
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ReasoningEffort;
+import org.oagi.score.gateway.http.common.model.PageRequest;
+import org.oagi.score.gateway.http.common.model.PageResponse;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 
 public interface AiModelCatalogRepository {
 
     List<AiModelCatalogView> findAll();
+
+    PageResponse<AiModelCatalogView> search(String model, String provider, Boolean enabled,
+                                            Boolean defaultModel, String defaultEffort,
+                                            String effort, List<String> updaterLoginIdList,
+                                            Instant updatedAfter, Instant updatedBefore,
+                                            PageRequest pageRequest);
 
     Optional<AiModelCatalogView> findById(AiModelId modelId);
 

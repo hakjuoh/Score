@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+import org.jooq.Check;
 import org.jooq.Condition;
 import org.jooq.Field;
 import org.jooq.ForeignKey;
@@ -28,6 +29,7 @@ import org.jooq.TableField;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
@@ -40,7 +42,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.
 
 
 /**
- * AI provider catalog and encrypted API key reference
+ * Configured AI providers and encrypted API key references
  */
 @SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class AiProvider extends TableImpl<AiProviderRecord> {
@@ -74,9 +76,9 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
 
     /**
      * The column <code>oagi.ai_provider.provider_type</code>. Provider adapter
-     * type such as anthropic or azure-openai
+     * type: anthropic or openai
      */
-    public final TableField<AiProviderRecord, String> PROVIDER_TYPE = createField(DSL.name("provider_type"), SQLDataType.VARCHAR(32).nullable(false), this, "Provider adapter type such as anthropic or azure-openai");
+    public final TableField<AiProviderRecord, String> PROVIDER_TYPE = createField(DSL.name("provider_type"), SQLDataType.VARCHAR(32).nullable(false), this, "Provider adapter type: anthropic or openai");
 
     /**
      * The column <code>oagi.ai_provider.base_url</code>. Base endpoint URL of
@@ -91,16 +93,10 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
     public final TableField<AiProviderRecord, String> MESSAGES_URL = createField(DSL.name("messages_url"), SQLDataType.VARCHAR(1000).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Optional provider-specific messages endpoint URL");
 
     /**
-     * The column <code>oagi.ai_provider.anthropic_version</code>. Anthropic API
-     * version sent to the provider
-     */
-    public final TableField<AiProviderRecord, String> ANTHROPIC_VERSION = createField(DSL.name("anthropic_version"), SQLDataType.VARCHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Anthropic API version sent to the provider");
-
-    /**
      * The column <code>oagi.ai_provider.api_version</code>. Provider API
-     * version such as the Azure OpenAI API version
+     * version sent using the provider-specific mechanism
      */
-    public final TableField<AiProviderRecord, String> API_VERSION = createField(DSL.name("api_version"), SQLDataType.VARCHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Provider API version such as the Azure OpenAI API version");
+    public final TableField<AiProviderRecord, String> API_VERSION = createField(DSL.name("api_version"), SQLDataType.VARCHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Provider API version sent using the provider-specific mechanism");
 
     /**
      * The column <code>oagi.ai_provider.api_key_secret_id</code>. Encrypted API
@@ -113,12 +109,6 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
      * provider can serve model requests
      */
     public final TableField<AiProviderRecord, Byte> ENABLED = createField(DSL.name("enabled"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.TINYINT)), this, "Indicates whether the provider can serve model requests");
-
-    /**
-     * The column <code>oagi.ai_provider.catalog_version</code>. Optimistic
-     * locking and cache invalidation version
-     */
-    public final TableField<AiProviderRecord, ULong> CATALOG_VERSION = createField(DSL.name("catalog_version"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.BIGINTUNSIGNED)), this, "Optimistic locking and cache invalidation version");
 
     /**
      * The column <code>oagi.ai_provider.created_by</code>. Identifier of the
@@ -149,7 +139,7 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
     }
 
     private AiProvider(Name alias, Table<AiProviderRecord> aliased, Field<?>[] parameters, Condition where) {
-        super(alias, null, aliased, parameters, DSL.comment("AI provider catalog and encrypted API key reference"), TableOptions.table(), where);
+        super(alias, null, aliased, parameters, DSL.comment("Configured AI providers and encrypted API key references"), TableOptions.table(), where);
     }
 
     /**
@@ -280,6 +270,13 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
             _aiModel = new AiModelPath(this, null, Keys.AI_MODEL_PROVIDER_FK.getInverseKey());
 
         return _aiModel;
+    }
+
+    @Override
+    public List<Check<AiProviderRecord>> getChecks() {
+        return Arrays.asList(
+            Internal.createCheck(this, DSL.name("ai_provider_type_ck"), "`provider_type` in ('anthropic','openai')", true)
+        );
     }
 
     @Override

@@ -1,6 +1,6 @@
 CREATE TABLE `ai_model_reasoning_effort`
 (
-    `ai_model_id`     bigint unsigned NOT NULL COMMENT 'Identifier of the AI model catalog entry',
+    `ai_model_id`     bigint unsigned NOT NULL COMMENT 'Identifier of the configured AI model',
     `reasoning_effort` varchar(32) NOT NULL COMMENT 'Canonical reasoning effort name',
     `display_name`    varchar(120) NOT NULL COMMENT 'Display name of the reasoning effort',
     `description`     varchar(500) NOT NULL COMMENT 'Human-readable description of the reasoning effort',

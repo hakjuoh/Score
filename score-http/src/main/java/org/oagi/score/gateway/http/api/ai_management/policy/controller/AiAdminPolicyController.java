@@ -2,12 +2,13 @@ package org.oagi.score.gateway.http.api.ai_management.policy.controller;
 
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiModelCatalogService;
+import org.oagi.score.gateway.http.api.ai_management.policy.model.AiAdminUsageView;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiPolicyUpdate;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiPolicyUserSummary;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiPolicyView;
-import org.oagi.score.gateway.http.api.ai_management.policy.model.AiAdminUsageView;
 import org.oagi.score.gateway.http.api.ai_management.policy.model.AiQuotaAdjustmentRequest;
 import org.oagi.score.gateway.http.api.ai_management.policy.service.AiAdminPolicyService;
+import org.oagi.score.gateway.http.common.model.PageResponse;
 import org.oagi.score.gateway.http.configuration.security.SessionService;
 import org.springframework.security.core.AuthenticatedPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,7 +21,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.List;
+
+import static org.oagi.score.gateway.http.common.util.Utility.separate;
 
 @RestController
 @RequestMapping("/admin/ai")
@@ -42,6 +46,30 @@ public class AiAdminPolicyController {
     public List<AiPolicyUserSummary> users(
             @AuthenticationPrincipal AuthenticatedPrincipal principal) {
         return policies.users(sessions.asScoreUser(principal));
+    }
+
+    @GetMapping("/users/search")
+    public PageResponse<AiPolicyUserSummary> searchUsers(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @RequestParam(required = false) String loginId,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String organization,
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) Integer modelCount,
+            @RequestParam(required = false) Boolean multiAgentEnabled,
+            @RequestParam(required = false) String quota,
+            @RequestParam(required = false) Integer activeRequests,
+            @RequestParam(required = false) String updaterLoginIdList,
+            @RequestParam(required = false) Instant updatedAfter,
+            @RequestParam(required = false) Instant updatedBefore,
+            @RequestParam(required = false) String orderBy,
+            @RequestParam(required = false) Integer pageIndex,
+            @RequestParam(required = false) Integer pageSize) {
+        return policies.searchUsers(sessions.asScoreUser(principal), loginId, name,
+                organization, enabled, modelCount, multiAgentEnabled, quota, activeRequests,
+                separate(updaterLoginIdList).toList(), updatedAfter, updatedBefore,
+                org.oagi.score.gateway.http.common.util.ControllerUtils.pageRequest(
+                        pageIndex, pageSize, orderBy));
     }
 
     @GetMapping("/users/{userId}/policy")

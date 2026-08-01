@@ -3,7 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.model;
 import java.util.List;
 import java.util.Map;
 
-public record AiModelCatalogUpdate(Long expectedVersion, AiProviderId providerId, String modelKey,
+public record AiModelCatalogUpdate(AiProviderId providerId, String modelKey,
                                    boolean enabled, boolean defaultModel, int sortOrder,
                                    Integer maxTokens, long contextWindow,
                                    Long outputReserveTokens, Long autoCompactThresholdTokens,
@@ -17,7 +17,7 @@ public record AiModelCatalogUpdate(Long expectedVersion, AiProviderId providerId
                                    String defaultThinking,
                                    Map<String, Object> modelOptions,
                                    List<ReasoningEffortUpdate> reasoningEfforts) {
-    public AiModelCatalogUpdate(Long expectedVersion, AiProviderId providerId, String modelKey,
+    public AiModelCatalogUpdate(AiProviderId providerId, String modelKey,
                                 boolean enabled, boolean defaultModel, int sortOrder,
                                 Integer maxTokens, long contextWindow,
                                 Long outputReserveTokens, Long autoCompactThresholdTokens,
@@ -30,7 +30,7 @@ public record AiModelCatalogUpdate(Long expectedVersion, AiProviderId providerId
                                 Boolean temperatureSupported, List<String> thinkingModes,
                                 String defaultThinking,
                                 List<ReasoningEffortUpdate> reasoningEfforts) {
-        this(expectedVersion, providerId, modelKey, enabled, defaultModel, sortOrder,
+        this(providerId, modelKey, enabled, defaultModel, sortOrder,
                 maxTokens, contextWindow, outputReserveTokens, autoCompactThresholdTokens,
                 emergencyHeadroomTokens, toolOutputTokenLimit, providerCompactionEnabled,
                 temperature, thinkingBudgetTokens, adaptiveThinking, outputEffort,

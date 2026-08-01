@@ -181,14 +181,12 @@ CREATE TABLE `ai_provider`
 (
     `ai_provider_id`     bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the AI provider',
     `provider_name`      varchar(120) NOT NULL COMMENT 'Unique application-facing name of the AI provider',
-    `provider_type`      varchar(32) NOT NULL COMMENT 'Provider adapter type such as anthropic or azure-openai',
+    `provider_type`      varchar(32) NOT NULL COMMENT 'Provider adapter type: anthropic or openai',
     `base_url`           varchar(1000) NULL COMMENT 'Base endpoint URL of the AI provider',
     `messages_url`       varchar(1000) NULL COMMENT 'Optional provider-specific messages endpoint URL',
-    `anthropic_version`  varchar(64) NULL COMMENT 'Anthropic API version sent to the provider',
-    `api_version`        varchar(64) NULL COMMENT 'Provider API version such as the Azure OpenAI API version',
+    `api_version`        varchar(64) NULL COMMENT 'Provider API version sent using the provider-specific mechanism',
     `api_key_secret_id`  bigint unsigned NULL COMMENT 'Encrypted API key referenced from app_secret',
     `enabled`            tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Indicates whether the provider can serve model requests',
-    `catalog_version`    bigint unsigned NOT NULL DEFAULT 1 COMMENT 'Optimistic locking and cache invalidation version',
     `created_by`         bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the provider',
     `last_updated_by`    bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the provider',
     `created_at`         datetime(6) NOT NULL COMMENT 'Date and time when the provider was created',
@@ -196,6 +194,7 @@ CREATE TABLE `ai_provider`
     PRIMARY KEY (`ai_provider_id`),
     UNIQUE KEY `ai_provider_name_uk` (`provider_name`),
     UNIQUE KEY `ai_provider_api_key_secret_uk` (`api_key_secret_id`),
+    CONSTRAINT `ai_provider_type_ck` CHECK (`provider_type` IN ('anthropic', 'openai')),
     CONSTRAINT `ai_provider_api_key_secret_fk`
         FOREIGN KEY (`api_key_secret_id`) REFERENCES `app_secret` (`app_secret_id`) ON DELETE RESTRICT,
     CONSTRAINT `ai_provider_created_by_fk`
@@ -203,18 +202,19 @@ CREATE TABLE `ai_provider`
     CONSTRAINT `ai_provider_last_updated_by_fk`
         FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='AI provider catalog and encrypted API key reference';
+  COMMENT='Configured AI providers and encrypted API key references';
 
 CREATE TABLE `ai_model`
 (
-    `ai_model_id`                  bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the AI model catalog entry',
+    `ai_model_id`                  bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the configured AI model',
     `provider_id`                  bigint unsigned NOT NULL COMMENT 'Identifier of the provider that serves the model',
     `model_key`                    varchar(240) NOT NULL COMMENT 'Stable application-facing model key',
     `provider_model_name`          varchar(240) NOT NULL COMMENT 'Model or deployment name sent to the provider',
     `display_name`                 varchar(240) NOT NULL COMMENT 'Display name shown to administrators and users',
     `description`                  varchar(1000) NOT NULL COMMENT 'Human-readable description of the model',
     `enabled`                      tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Indicates whether the model is available for new requests',
-    `sort_order`                   int unsigned NOT NULL DEFAULT 0 COMMENT 'Stable display and fallback ordering of catalog models',
+    `default_model`                tinyint(1) NULL DEFAULT NULL COMMENT 'Set to 1 only for the global default AI model',
+    `sort_order`                   int unsigned NOT NULL DEFAULT 0 COMMENT 'Stable display and fallback ordering of AI models',
     `max_tokens`                   int unsigned NULL COMMENT 'Maximum output-token budget for one provider call',
     `context_window`               bigint unsigned NOT NULL COMMENT 'Maximum context window size in tokens',
     `output_reserve_tokens`        bigint unsigned NULL COMMENT 'Output tokens reserved during context budget calculation',
@@ -222,14 +222,15 @@ CREATE TABLE `ai_model`
     `emergency_headroom_tokens`    bigint unsigned NOT NULL DEFAULT 4096 COMMENT 'Emergency context headroom in tokens',
     `tool_output_token_limit`      bigint unsigned NOT NULL DEFAULT 32000 COMMENT 'Maximum tool output tokens retained in context',
     `model_options_json`           JSON NULL COMMENT 'Configured Spring AI model options as a JSON object',
-    `catalog_version`              bigint unsigned NOT NULL DEFAULT 1 COMMENT 'Optimistic locking and cache invalidation version',
     `created_by`                   bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the model',
     `last_updated_by`              bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the model',
     `created_at`                   datetime(6) NOT NULL COMMENT 'Date and time when the model was created',
     `last_updated_at`              datetime(6) NOT NULL COMMENT 'Date and time when the model was last updated',
     PRIMARY KEY (`ai_model_id`),
     UNIQUE KEY `ai_model_key_uk` (`model_key`),
+    UNIQUE KEY `ai_model_default_model_uk` (`default_model`),
     KEY `ai_model_provider_idx` (`provider_id`),
+    CONSTRAINT `ai_model_default_model_ck` CHECK (`default_model` = 1 OR `default_model` IS NULL),
     CONSTRAINT `ai_model_provider_fk`
         FOREIGN KEY (`provider_id`) REFERENCES `ai_provider` (`ai_provider_id`) ON DELETE RESTRICT,
     CONSTRAINT `ai_model_created_by_fk`
@@ -237,11 +238,11 @@ CREATE TABLE `ai_model`
     CONSTRAINT `ai_model_last_updated_by_fk`
         FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Database-backed AI model catalog';
+  COMMENT='Configured AI models and provider-specific runtime options';
 
 CREATE TABLE `ai_model_reasoning_effort`
 (
-    `ai_model_id`     bigint unsigned NOT NULL COMMENT 'Identifier of the AI model catalog entry',
+    `ai_model_id`     bigint unsigned NOT NULL COMMENT 'Identifier of the configured AI model',
     `reasoning_effort` varchar(32) NOT NULL COMMENT 'Canonical reasoning effort name',
     `display_name`    varchar(120) NOT NULL COMMENT 'Display name of the reasoning effort',
     `description`     varchar(500) NOT NULL COMMENT 'Human-readable description of the reasoning effort',
@@ -252,21 +253,6 @@ CREATE TABLE `ai_model_reasoning_effort`
         FOREIGN KEY (`ai_model_id`) REFERENCES `ai_model` (`ai_model_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Reasoning efforts supported by each AI model';
-
-CREATE TABLE `ai_model_catalog_config`
-(
-    `ai_model_catalog_config_id` tinyint unsigned NOT NULL COMMENT 'Singleton AI model catalog configuration identifier',
-    `default_ai_model_id`        bigint unsigned NOT NULL COMMENT 'Identifier of the global default AI model',
-    `catalog_version`            bigint unsigned NOT NULL DEFAULT 1 COMMENT 'Optimistic locking and cache invalidation version',
-    `last_updated_by`            bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the catalog configuration',
-    `last_updated_at`            datetime(6) NOT NULL COMMENT 'Date and time when the catalog configuration was last updated',
-    PRIMARY KEY (`ai_model_catalog_config_id`),
-    CONSTRAINT `ai_model_catalog_config_default_model_fk`
-        FOREIGN KEY (`default_ai_model_id`) REFERENCES `ai_model` (`ai_model_id`) ON DELETE RESTRICT,
-    CONSTRAINT `ai_model_catalog_config_last_updated_by_fk`
-        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Singleton global AI model catalog configuration';
 
 CREATE TABLE `ai_user_policy`
 (
@@ -387,24 +373,6 @@ CREATE TABLE `ai_token_usage_ledger`
         FOREIGN KEY (`ai_model_id`) REFERENCES `ai_model` (`ai_model_id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Token reservation and usage ledger for each provider call attempt';
-
-CREATE TABLE `ai_catalog_audit`
-(
-    `ai_catalog_audit_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the AI catalog audit entry',
-    `entity_type`         varchar(32) NOT NULL COMMENT 'Catalog entity type such as PROVIDER or MODEL',
-    `entity_id`           bigint unsigned NOT NULL COMMENT 'Identifier of the changed catalog entity',
-    `actor_app_user_id`   bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who changed the catalog',
-    `action`              varchar(16) NOT NULL COMMENT 'Catalog change action such as CREATE, UPDATE, DISABLE, or ROTATE_KEY',
-    `before_json`         JSON NULL COMMENT 'Non-secret catalog snapshot before the change',
-    `after_json`          JSON NULL COMMENT 'Non-secret catalog snapshot after the change',
-    `reason`              varchar(500) NULL COMMENT 'Reason or administrator comment for the catalog change',
-    `created_at`          datetime(6) NOT NULL COMMENT 'Date and time when the catalog was changed',
-    PRIMARY KEY (`ai_catalog_audit_id`),
-    KEY `ai_catalog_audit_entity_time_idx` (`entity_type`, `entity_id`, `created_at`),
-    CONSTRAINT `ai_catalog_audit_actor_fk`
-        FOREIGN KEY (`actor_app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Audit history of AI provider and model catalog changes';
 
 CREATE TABLE `ai_user_policy_audit`
 (
