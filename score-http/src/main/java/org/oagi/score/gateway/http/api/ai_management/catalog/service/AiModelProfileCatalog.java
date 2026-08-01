@@ -1,16 +1,8 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.service;
 
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ReasoningEffort;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeFable5Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeHaiku45Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeOpus5Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeSonnet5Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.Gpt56LunaProfile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.Gpt56SolProfile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.Gpt56TerraProfile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelOptions;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.*;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 
 import java.util.LinkedHashMap;
@@ -27,9 +19,16 @@ import java.util.Optional;
  */
 public final class AiModelProfileCatalog {
     private static final List<AiModelProfile> PROFILES = List.of(
-            new ClaudeFable5Profile(), new ClaudeOpus5Profile(),
-            new ClaudeSonnet5Profile(), new ClaudeHaiku45Profile(),
-            new Gpt56SolProfile(), new Gpt56TerraProfile(), new Gpt56LunaProfile());
+            new ClaudeHaiku45Profile(),
+            new ClaudeSonnet45Profile(), new ClaudeSonnet46Profile(),
+            new ClaudeSonnet5Profile(),
+            new ClaudeOpus45Profile(), new ClaudeOpus46Profile(),
+            new ClaudeOpus47Profile(), new ClaudeOpus48Profile(), new ClaudeOpus5Profile(),
+            new ClaudeFable5Profile(), new ClaudeMythos5Profile(),
+            new Gpt56SolProfile(), new Gpt56TerraProfile(), new Gpt56LunaProfile(),
+            new Gpt55Profile(), new Gpt55ProProfile(),
+            new Gpt54Profile(), new Gpt54ProProfile(),
+            new Gpt54MiniProfile(), new Gpt54NanoProfile());
 
     private AiModelProfileCatalog() {}
 
@@ -97,6 +96,7 @@ public final class AiModelProfileCatalog {
         model.setAdaptiveThinking(feature.adaptiveThinking().defaultEnabled());
         model.setOutputEffort(view.outputEffort());
         model.setCacheStrategy(view.cacheStrategy());
+        model.setModelOptions(AiModelOptions.profileDefaults(profile));
 
         ScoreAiProperties.ContextBudget budget = new ScoreAiProperties.ContextBudget();
         budget.setOutputReserveTokens(values.outputReserveTokens().defaultValue());

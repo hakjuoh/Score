@@ -9,6 +9,7 @@ import {MaterialModule} from '../../material.module';
 import {AiProviderDetailComponent} from './ai-provider-detail.component';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiProviderView} from './domain/ai-admin-policy';
+import {FontAwesomeModule} from '@fortawesome/angular-fontawesome';
 
 describe('AiProviderDetailComponent', () => {
   const provider: AiProviderView = {aiProviderId: 7, providerName: 'OpenAI',
@@ -41,7 +42,9 @@ describe('AiProviderDetailComponent', () => {
 
   it('updates a replacement key through the provider Update action', () => {
     const configured = {...provider, apiKeyConfigured: true};
-    const service = {provider: vi.fn(() => of(configured)), updateProvider: vi.fn(() => of(configured))};
+    const service = {provider: vi.fn(() => of(configured)),
+      maskedProviderApiKey: vi.fn(() => of({value: '••••••', revealed: false})),
+      updateProvider: vi.fn(() => of(configured))};
     TestBed.configureTestingModule({providers: [
       {provide: AiAdminPolicyService, useValue: service},
       {provide: ActivatedRoute, useValue: {snapshot: {paramMap: convertToParamMap({id: '7'})}}},
@@ -55,7 +58,9 @@ describe('AiProviderDetailComponent', () => {
 
   it('removes a configured key when its masked value is cleared before Update', () => {
     const configured = {...provider, apiKeyConfigured: true};
-    const service = {provider: vi.fn(() => of(configured)), updateProvider: vi.fn(() => of(provider))};
+    const service = {provider: vi.fn(() => of(configured)),
+      maskedProviderApiKey: vi.fn(() => of({value: '••••••', revealed: false})),
+      updateProvider: vi.fn(() => of(provider))};
     TestBed.configureTestingModule({providers: [
       {provide: AiAdminPolicyService, useValue: service}, {provide: ActivatedRoute, useValue: {snapshot: {paramMap: convertToParamMap({id: '7'})}}},
       {provide: Router, useValue: {navigate: vi.fn()}}, {provide: MatSnackBar, useValue: {open: vi.fn()}}
@@ -69,7 +74,9 @@ describe('AiProviderDetailComponent', () => {
 
   it('keeps a configured key when its masked value is unchanged', () => {
     const configured = {...provider, apiKeyConfigured: true};
-    const service = {provider: vi.fn(() => of(configured)), updateProvider: vi.fn(() => of(configured))};
+    const service = {provider: vi.fn(() => of(configured)),
+      maskedProviderApiKey: vi.fn(() => of({value: '••••••', revealed: false})),
+      updateProvider: vi.fn(() => of(configured))};
     TestBed.configureTestingModule({providers: [
       {provide: AiAdminPolicyService, useValue: service}, {provide: ActivatedRoute, useValue: {snapshot: {paramMap: convertToParamMap({id: '7'})}}},
       {provide: Router, useValue: {navigate: vi.fn()}}, {provide: MatSnackBar, useValue: {open: vi.fn()}}
@@ -83,6 +90,7 @@ describe('AiProviderDetailComponent', () => {
   it('tests the current draft with the stored key without saving changes', () => {
     const configured = {...provider, apiKeyConfigured: true};
     const service = {provider: vi.fn(() => of(configured)),
+      maskedProviderApiKey: vi.fn(() => of({value: '••••••', revealed: false})),
       testProviderConnection: vi.fn(() => of({successful: true,
         message: 'Connection successful.', statusCode: 200}))};
     const snackBar = {open: vi.fn()};
@@ -108,6 +116,7 @@ describe('AiProviderDetailComponent', () => {
   it('tests a replacement key without exposing the masked stored value', () => {
     const configured = {...provider, apiKeyConfigured: true};
     const service = {provider: vi.fn(() => of(configured)),
+      maskedProviderApiKey: vi.fn(() => of({value: '••••••', revealed: false})),
       testProviderConnection: vi.fn(() => of({successful: false,
         message: 'Authentication failed.', statusCode: 401}))};
     const snackBar = {open: vi.fn()};
@@ -124,6 +133,88 @@ describe('AiProviderDetailComponent', () => {
 
     expect(service.testProviderConnection.mock.calls[0][1].apiKey).toBe('replacement-key');
     expect(snackBar.open).toHaveBeenCalledWith('Authentication failed.', '', {duration: 5000});
+  });
+
+  it('uses a full-length mask and reveals the stored key only on demand', () => {
+    const configured = {...provider, apiKeyConfigured: true};
+    const storedKey = 'sk-full-length-secret';
+    const maskedValue = '•'.repeat(storedKey.length);
+    const service = {provider: vi.fn(() => of(configured)),
+      maskedProviderApiKey: vi.fn(() => of({value: maskedValue, revealed: false})),
+      revealProviderApiKey: vi.fn(() => of({value: storedKey, revealed: true})),
+      updateProvider: vi.fn(() => of(configured))};
+    TestBed.configureTestingModule({providers: [
+      {provide: AiAdminPolicyService, useValue: service},
+      {provide: ActivatedRoute, useValue: {snapshot: {paramMap: convertToParamMap({id: '7'})}}},
+      {provide: Router, useValue: {navigate: vi.fn()}},
+      {provide: MatSnackBar, useValue: {open: vi.fn()}}
+    ]});
+    const component = TestBed.runInInjectionContext(() => new AiProviderDetailComponent());
+
+    component.ngOnInit();
+    expect(component.apiKey).toBe(maskedValue);
+    expect(component.apiKey.length).toBe(storedKey.length);
+    expect(component.canRevealStoredApiKey).toBe(true);
+
+    component.toggleApiKeyVisibility();
+    expect(service.revealProviderApiKey).toHaveBeenCalledWith(7);
+    expect(component.apiKeyVisible).toBe(true);
+    expect(component.apiKey).toBe(storedKey);
+
+    component.toggleApiKeyVisibility();
+    expect(component.apiKeyVisible).toBe(false);
+    expect(component.apiKey).toBe(maskedValue);
+
+    component.form.baseUrl = 'https://gateway.example.com';
+    component.save();
+    expect(service.updateProvider.mock.calls[0][1].apiKey).toBeUndefined();
+
+    component.apiKey = 'replacement-key';
+    expect(component.apiKeyVisible).toBe(false);
+    expect(component.canRevealStoredApiKey).toBe(false);
+  });
+
+  it('does not restore a revealed key from a response arriving after destruction', () => {
+    const configured = {...provider, apiKeyConfigured: true};
+    const reveal = new Subject<{value: string; revealed: boolean}>();
+    const service = {provider: vi.fn(() => of(configured)),
+      maskedProviderApiKey: vi.fn(() => of({value: '••••••', revealed: false})),
+      revealProviderApiKey: vi.fn(() => reveal.asObservable())};
+    TestBed.configureTestingModule({providers: [
+      {provide: AiAdminPolicyService, useValue: service},
+      {provide: ActivatedRoute, useValue: {snapshot: {paramMap: convertToParamMap({id: '7'})}}},
+      {provide: Router, useValue: {navigate: vi.fn()}},
+      {provide: MatSnackBar, useValue: {open: vi.fn()}}
+    ]});
+    const component = TestBed.runInInjectionContext(() => new AiProviderDetailComponent());
+    component.ngOnInit();
+    component.toggleApiKeyVisibility();
+
+    component.ngOnDestroy();
+    reveal.next({value: 'late-secret', revealed: true});
+
+    expect(component.apiKey).toBe('');
+    expect(component.apiKeyVisible).toBe(false);
+  });
+
+  it('rejects a revealed credential returned by the masking endpoint', () => {
+    const configured = {...provider, apiKeyConfigured: true};
+    const snackBar = {open: vi.fn()};
+    const service = {provider: vi.fn(() => of(configured)),
+      maskedProviderApiKey: vi.fn(() => of({value: 'unexpected-secret', revealed: true}))};
+    TestBed.configureTestingModule({providers: [
+      {provide: AiAdminPolicyService, useValue: service},
+      {provide: ActivatedRoute, useValue: {snapshot: {paramMap: convertToParamMap({id: '7'})}}},
+      {provide: Router, useValue: {navigate: vi.fn()}},
+      {provide: MatSnackBar, useValue: snackBar}
+    ]});
+    const component = TestBed.runInInjectionContext(() => new AiProviderDetailComponent());
+
+    component.ngOnInit();
+
+    expect(component.apiKey).toBe('');
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'The stored API key mask response was invalid.', '', {duration: 5000});
   });
 
   it('does not report a key deletion when an unconfigured key field stays empty', () => {
@@ -182,7 +273,7 @@ describe('AiProviderDetailComponent', () => {
         message: 'Connection successful.', statusCode: 200}))};
     await TestBed.configureTestingModule({
       declarations: [AiProviderDetailComponent],
-      imports: [CommonModule, FormsModule, MaterialModule, NoopAnimationsModule,
+      imports: [CommonModule, FormsModule, MaterialModule, FontAwesomeModule, NoopAnimationsModule,
         RouterModule.forRoot([])],
       providers: [
         {provide: AiAdminPolicyService, useValue: service},
@@ -199,6 +290,15 @@ describe('AiProviderDetailComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Test Connection');
     expect(fixture.nativeElement.textContent).toContain('API Version');
     expect(fixture.nativeElement.textContent).not.toContain('Anthropic Version');
+    const settingsPanel = fixture.nativeElement.querySelector(
+      'mat-expansion-panel.static-detail-panel') as HTMLElement;
+    const settingsHeader = settingsPanel.querySelector(
+      'mat-expansion-panel-header') as HTMLElement;
+    expect(settingsHeader.textContent).toContain('Provider Settings');
+    expect(settingsHeader.getAttribute('aria-expanded')).toBe('true');
+    expect(settingsHeader.getAttribute('aria-disabled')).toBe('true');
+    expect(settingsHeader.querySelector('.mat-expansion-indicator')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Show API key"]')).toBeNull();
 
     fixture.componentInstance.setProviderType('anthropic');
     fixture.changeDetectorRef.detectChanges();

@@ -1,0 +1,12 @@
+<div class="json-editor" [class.json-editor-invalid]="!!error">
+  <pre #highlight class="json-editor-highlight" aria-hidden="true"
+    [innerHTML]="highlightedValue"></pre>
+  <textarea #input class="json-editor-input" rows="7"
+    [id]="controlId" [value]="value" (input)="onInput($event)" (scroll)="synchronizeScroll()"
+    [attr.aria-invalid]="!!error" [attr.aria-describedby]="describedBy"
+    autocomplete="off" autocapitalize="off" autocorrect="off"
+    spellcheck="false" wrap="off"></textarea>
+</div>
+@if (error) {
+  <mat-error class="json-editor-error" role="alert" [id]="errorId">{{error}}</mat-error>
+}

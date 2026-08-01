@@ -46,6 +46,19 @@ export interface AiCapabilityConstraint {
   defaultEnabled: boolean;
 }
 
+export type AiModelOptionType = 'boolean' | 'integer' | 'decimal' | 'string' | 'json' | 'enum';
+
+export interface AiModelOption {
+  key: string;
+  type: AiModelOptionType;
+  value: AiModelOptionValue;
+  description: string;
+  allowedValues: string[];
+}
+
+export type AiModelOptionValue = boolean | number | string |
+  Record<string, unknown> | unknown[] | null;
+
 export interface AiModelCapabilityConstraints {
   reasoningOptions: AiCapabilityConstraint;
   outputEffort: AiCapabilityConstraint;
@@ -84,6 +97,8 @@ export interface AiModelProfile {
   thinkingModes: string[];
   defaultThinking: string | null;
   reasoningEfforts: AiReasoningEffort[];
+  options: AiModelOption[];
+  chatCompletionsCompatible: boolean;
   configurationConstraints: AiModelConfigurationConstraints;
   capabilityConstraints: AiModelCapabilityConstraints;
 }
@@ -119,6 +134,7 @@ export interface AiAdminModel {
   defaultThinking: string | null;
   catalogVersion: number;
   reasoningEfforts: AiReasoningEffort[];
+  modelOptions: Record<string, AiModelOptionValue>;
 }
 
 export interface AiModelUpdate {
@@ -150,6 +166,7 @@ export interface AiModelUpdate {
   thinkingModes: string[];
   defaultThinking: string | null;
   reasoningEfforts: AiReasoningEffort[];
+  modelOptions: Record<string, AiModelOptionValue>;
 }
 
 export interface AiModelCommand {
@@ -178,6 +195,7 @@ export interface AiModelCommand {
   thinkingModes: string[];
   defaultThinking: string | null;
   reasoningEfforts: Array<{name: string; defaultEffort: boolean; sortOrder: number}>;
+  modelOptions: Record<string, AiModelOptionValue>;
 }
 
 export interface AiAdminUsage {
@@ -255,6 +273,11 @@ export interface AiProviderUpdate {
   apiVersion: string | null;
   enabled: boolean;
   apiKey?: string;
+}
+
+export interface AiProviderApiKeyView {
+  value: string;
+  revealed: boolean;
 }
 
 export interface AiProviderConnectionTestResult {

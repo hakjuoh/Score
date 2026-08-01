@@ -45,6 +45,31 @@ class AiModelProfileSettingsValidatorTest {
     }
 
     @Test
+    void rejectsOutputAndCompactionLimitsThatReachTheSelectedContextWindow() {
+        assertThatThrownBy(() -> AiModelProfileSettingsValidator.validate(
+                profile, update(100_000L, 70_000L, false, List.of())))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Max output tokens must be smaller");
+
+        assertThatThrownBy(() -> AiModelProfileSettingsValidator.validate(
+                profile, update(900_000L, 900_000L, false, List.of())))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("compaction threshold");
+    }
+
+    @Test
+    void rejectsToolOutputLimitAboveTheSafeInputBudget() {
+        var input = new AiModelCatalogUpdate(1L, AiProviderId.from(1L), profile.getModelKey(),
+                true, true, 0, 100_000, 900_000L, 100_000L, 700_000L,
+                8_192L, 791_809L, false, null, null, false, null, null,
+                true, false, true, false, List.of(), null, List.of());
+
+        assertThatThrownBy(() -> AiModelProfileSettingsValidator.validate(profile, input))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tool limit");
+    }
+
+    @Test
     void rejectsAnEffortThatTheProfileDoesNotAllow() {
         var unsupported = new AiModelCatalogUpdate.ReasoningEffortUpdate(
                 "ultra", true, 0);
@@ -115,6 +140,19 @@ class AiModelProfileSettingsValidatorTest {
     }
 
     @Test
+    void rejectsDisablingProviderEnforcedAdaptiveThinking() {
+        var claude = new ClaudeFable5Profile();
+        var input = new AiModelCatalogUpdate(1L, AiProviderId.from(1L), claude.getModelKey(), true, false, 0,
+                100_000, 900_000L, 100_000L, 700_000L, 8_192L, 32_000L,
+                false, null, null, false, "high", "conversation-history",
+                null, true, null, false, List.of(), null, List.of());
+
+        assertThatThrownBy(() -> AiModelProfileSettingsValidator.validate(claude, input))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Provider-enforced thinking modes");
+    }
+
+    @Test
     void rejectsFixedThinkingWithoutAnExplicitModeAndDefault() {
         var haiku = new ClaudeHaiku45Profile();
         var input = new AiModelCatalogUpdate(1L, AiProviderId.from(1L), haiku.getModelKey(), true, false, 0,
@@ -129,8 +167,14 @@ class AiModelProfileSettingsValidatorTest {
 
     private AiModelCatalogUpdate update(long contextWindow, boolean temperatureSupported,
                                         List<AiModelCatalogUpdate.ReasoningEffortUpdate> efforts) {
+        return update(contextWindow, 700_000L, temperatureSupported, efforts);
+    }
+
+    private AiModelCatalogUpdate update(long contextWindow, long autoCompactThreshold,
+                                        boolean temperatureSupported,
+                                        List<AiModelCatalogUpdate.ReasoningEffortUpdate> efforts) {
         return new AiModelCatalogUpdate(1L, AiProviderId.from(1L), profile.getModelKey(), true, true, 0,
-                100_000, contextWindow, 100_000L, 700_000L, 8_192L, 32_000L,
+                100_000, contextWindow, 100_000L, autoCompactThreshold, 8_192L, 32_000L,
                 false, null, null, false, null, null, true, false, true,
                 temperatureSupported, List.of(), null, efforts);
     }

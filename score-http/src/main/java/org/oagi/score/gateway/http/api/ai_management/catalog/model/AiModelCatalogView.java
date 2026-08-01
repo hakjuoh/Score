@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.model;
 
 import java.util.List;
+import java.util.Map;
 
 public record AiModelCatalogView(AiModelId aiModelId, AiProviderId providerId, String provider,
                                  String modelKey, String providerModelName,
@@ -15,6 +16,7 @@ public record AiModelCatalogView(AiModelId aiModelId, AiProviderId providerId, S
                                  Boolean outputEffortSupported, Boolean verbositySupported,
                                  Boolean temperatureSupported, List<String> thinkingModes,
                                  String defaultThinking,
+                                 Map<String, Object> modelOptions,
                                  long catalogVersion, List<ReasoningEffortView> reasoningEfforts) {
     public record ReasoningEffortView(String name, String displayName, String description,
                                       boolean defaultEffort, int sortOrder) {}
