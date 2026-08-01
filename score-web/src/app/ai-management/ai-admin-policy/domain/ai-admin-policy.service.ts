@@ -33,10 +33,10 @@ export class AiAdminPolicyService {
     params = this.text(params, 'name', request.filters.name);
     params = this.text(params, 'organization', request.filters.organization);
     params = this.value(params, 'enabled', this.singleBoolean(request.filters.enabled));
-    params = this.value(params, 'modelCount', request.filters.modelCount);
+    params = this.text(params, 'model', request.filters.model);
     params = this.value(params, 'multiAgentEnabled',
       this.singleBoolean(request.filters.multiAgentEnabled));
-    params = this.text(params, 'quota', request.filters.quota);
+    params = this.value(params, 'quotaTokens', request.filters.quotaTokens);
     params = this.value(params, 'activeRequests', request.filters.activeRequests);
     params = this.list(params, 'updaterLoginIdList', request.filters.updaterLoginIdList);
     params = this.date(params, 'updatedAfter', request.filters.updatedAfter);
@@ -79,8 +79,12 @@ export class AiAdminPolicyService {
     return this.http.put<AiAdminModel>(`/api/admin/ai/models/${modelId}`, update);
   }
 
-  usage(userId: string): Observable<AiAdminUsage> {
-    return this.http.get<AiAdminUsage>(`/api/admin/ai/users/${userId}/usage`);
+  usage(userId: string, page = new PageRequest('time', 'desc', 0, 10),
+        start: Date | null = null, end: Date | null = null): Observable<AiAdminUsage> {
+    let params = this.pageParams(page);
+    params = this.date(params, 'start', start);
+    params = this.date(params, 'end', end, true);
+    return this.http.get<AiAdminUsage>(`/api/admin/ai/users/${userId}/usage`, {params});
   }
 
   adjustQuota(userId: string, deltaTokens: number): Observable<AiAdminUsage> {

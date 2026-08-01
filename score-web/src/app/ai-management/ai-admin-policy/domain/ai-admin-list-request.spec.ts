@@ -41,9 +41,9 @@ describe('AI administration list URL state', () => {
   it('round-trips policy numeric and boolean filters', () => {
     const request = new AiPolicyUserListRequest();
     request.filters.enabled = [false];
-    request.filters.modelCount = 4;
+    request.filters.model = 'GPT-5';
     request.filters.multiAgentEnabled = [true];
-    request.filters.quota = 'NEAR';
+    request.filters.quotaTokens = 1000000;
     request.filters.activeRequests = 2;
 
     const restored = restore(request,
