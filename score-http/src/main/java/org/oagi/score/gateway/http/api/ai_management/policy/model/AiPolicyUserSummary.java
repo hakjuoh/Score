@@ -1,5 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.policy.model;
 
+import java.util.List;
+
 public record AiPolicyUserSummary(
         String userId,
         String loginId,
@@ -9,6 +11,7 @@ public record AiPolicyUserSummary(
         boolean enabled,
         boolean multiAgentEnabled,
         int allowedModelCount,
+        List<String> availableModels,
         Long quotaLimitTokens,
         long quotaConsumedTokens,
         long quotaReservedTokens,

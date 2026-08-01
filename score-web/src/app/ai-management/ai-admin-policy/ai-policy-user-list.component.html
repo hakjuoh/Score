@@ -1,51 +1,45 @@
 <div class="context-section ai-admin-page">
-  <div class="ps-2 pe-2"><mat-toolbar class="bg-white"><span class="title">AI Assistant Policy</span></mat-toolbar></div>
+  <div class="ps-2 pe-2"><mat-toolbar class="bg-white"><span class="title">AI Assistant Policy &amp; Usage</span></mat-toolbar></div>
   <mat-card class="pt-3">
     <score-search-bar placeholder="Search by Login ID" [(model)]="request.filters.loginId" (searchTriggered)="onSearch()">
       <div advancedSearchContent style="padding-left: 3rem;"><mat-card-content class="mat-card-container">
-        <div class="container-fluid" style="padding: 0;">
-          <div class="row">
-            <div class="col-md-2 col-sm-12"><mat-form-field><mat-label>Name</mat-label>
+        <div class="ai-policy-filter-grid">
+            <div><mat-form-field><mat-label>Name</mat-label>
               <input matInput [(ngModel)]="request.filters.name" (keyup.enter)="onSearch()"></mat-form-field></div>
-            <div class="col-md-2 col-sm-12"><mat-form-field><mat-label>Organization</mat-label>
+            <div><mat-form-field><mat-label>Organization</mat-label>
               <input matInput [(ngModel)]="request.filters.organization" (keyup.enter)="onSearch()"></mat-form-field></div>
-            <div class="col-md-2 col-sm-12"><mat-form-field><mat-label>AI Access</mat-label>
+            <div><mat-form-field><mat-label>AI Access</mat-label>
               <mat-select [(ngModel)]="request.filters.enabled" multiple>
                 <mat-option [value]="true">True</mat-option><mat-option [value]="false">False</mat-option>
               </mat-select></mat-form-field></div>
-            <div class="col-md-2 col-sm-12"><mat-form-field><mat-label>Models</mat-label>
-              <input matInput type="number" min="0" [(ngModel)]="request.filters.modelCount" (keyup.enter)="onSearch()"></mat-form-field></div>
-            <div class="col-md-2 col-sm-12"><mat-form-field><mat-label>Multi-agent</mat-label>
+            <div><mat-form-field><mat-label>Available Model</mat-label>
+              <input matInput [(ngModel)]="request.filters.model" (keyup.enter)="onSearch()"></mat-form-field></div>
+            <div><mat-form-field><mat-label>Multi-agent</mat-label>
               <mat-select [(ngModel)]="request.filters.multiAgentEnabled" multiple>
                 <mat-option [value]="true">True</mat-option><mat-option [value]="false">False</mat-option>
               </mat-select></mat-form-field></div>
-          </div>
-          <div class="row">
-            <div class="col-md-2 col-sm-12"><mat-form-field><mat-label>Quota</mat-label>
-              <mat-select [(ngModel)]="request.filters.quota"><mat-option value="ALL">All</mat-option>
-                <mat-option value="AVAILABLE">Available</mat-option><mat-option value="NEAR">Near limit</mat-option>
-                <mat-option value="EXHAUSTED">Exhausted</mat-option><mat-option value="UNLIMITED">Unlimited</mat-option>
-              </mat-select></mat-form-field></div>
-            <div class="col-md-2 col-sm-12"><mat-form-field><mat-label>Active Requests</mat-label>
+            <div><mat-form-field><mat-label>Quota Limit Tokens</mat-label>
+              <input matInput type="number" min="0" [(ngModel)]="request.filters.quotaTokens"
+                (keyup.enter)="onSearch()"></mat-form-field></div>
+            <div><mat-form-field><mat-label>Active Requests</mat-label>
               <input matInput type="number" min="0" [(ngModel)]="request.filters.activeRequests" (keyup.enter)="onSearch()"></mat-form-field></div>
-            <div class="col-md-2 col-sm-12"><score-tab-filter-select label="Updater"
+            <div><score-tab-filter-select label="Policy Updater"
               [(ngModel)]="request.filters.updaterLoginIdList" [options]="loginIdList"
               [tabs]="[{id: 'updated', label: 'Updated by'}, {id: 'notUpdated', label: 'Not updated by', valuePrefix: '!', selectedLabelPrefix: 'Not '}]"
               [noEntriesFoundLabel]="'No matching updater found.'"/></div>
-            <div class="col-md-3 col-sm-12"><mat-form-field><mat-label>Updated start date</mat-label>
+            <div><mat-form-field><mat-label>Policy updated start date</mat-label>
               <input matInput [matDatepicker]="updatedAfter" [(ngModel)]="request.filters.updatedAfter"
                 [max]="request.filters.updatedBefore">
               <mat-datepicker-toggle matSuffix [for]="updatedAfter"/><mat-datepicker #updatedAfter/>
             </mat-form-field></div>
-            <div class="col-md-3 col-sm-12"><mat-form-field><mat-label>Updated end date</mat-label>
+            <div><mat-form-field><mat-label>Policy updated end date</mat-label>
               <input matInput [matDatepicker]="updatedBefore" [(ngModel)]="request.filters.updatedBefore"
                 [min]="request.filters.updatedAfter">
               <mat-datepicker-toggle matSuffix [for]="updatedBefore"/><mat-datepicker #updatedBefore/>
             </mat-form-field></div>
-            @if (invalidDateRange) { <div class="col-12 text-danger" role="alert">
+            @if (invalidDateRange) { <div class="ai-policy-filter-error text-danger" role="alert">
               Updated end date must be on or after the start date.
             </div> }
-          </div>
         </div>
       </mat-card-content></div>
     </score-search-bar>
@@ -69,8 +63,8 @@
             score-table-column-resize [defaultWidth]="width('AI Access')" (onResize)="onResizeWidth($event)">AI Access</th>
             <td mat-cell *matCellDef="let user"><span class="status-pill" [class.disabled]="!user.enabled">{{user.enabled ? 'Enabled' : 'Disabled'}}</span></td></ng-container>
           <ng-container matColumnDef="models"><th mat-header-cell *matHeaderCellDef mat-sort-header
-            score-table-column-resize [defaultWidth]="width('Models')" (onResize)="onResizeWidth($event)">Models</th>
-            <td mat-cell *matCellDef="let user">{{user.allowedModelCount}}</td></ng-container>
+            score-table-column-resize [defaultWidth]="width('Available Models')" (onResize)="onResizeWidth($event)">Available Models</th>
+            <td mat-cell *matCellDef="let user" [matTooltip]="user.availableModels.join(', ')">{{user.allowedModelCount}}</td></ng-container>
           <ng-container matColumnDef="multiAgent"><th mat-header-cell *matHeaderCellDef mat-sort-header
             score-table-column-resize [defaultWidth]="width('Multi-agent')" (onResize)="onResizeWidth($event)">Multi-agent</th>
             <td mat-cell *matCellDef="let user">{{user.multiAgentEnabled ? 'Enabled' : 'Disabled'}}</td></ng-container>
@@ -82,7 +76,7 @@
             <td mat-cell *matCellDef="let user">{{user.activeRequests}}</td></ng-container>
           <ng-container matColumnDef="updatedOn"><th mat-header-cell *matHeaderCellDef mat-sort-header
             score-table-column-resize [defaultWidth]="width('Updated On')" (onResize)="onResizeWidth($event)">Updated on</th>
-            <td mat-cell *matCellDef="let user"><div>{{user.lastUpdatedAt ? (user.lastUpdatedAt | date: 'yyyy-MM-dd HH:mm:ss') : '—'}}</div>
+            <td mat-cell *matCellDef="let user"><div>{{user.lastUpdatedAt ? (user.lastUpdatedAt | date: 'yyyy-MM-dd HH:mm:ss') : 'Never changed'}}</div>
               @if (user.lastUpdatedAt) { <div class="description">by <b>{{user.updaterLoginId || 'Unknown'}}</b></div> }
             </td></ng-container>
           <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr><tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
