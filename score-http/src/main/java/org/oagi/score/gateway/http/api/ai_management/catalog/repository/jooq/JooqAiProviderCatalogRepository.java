@@ -1,58 +1,135 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
+import org.jooq.Condition;
+import org.jooq.Field;
+import org.jooq.SortField;
 import org.jooq.Record;
-import org.jooq.types.ULong;
+import org.jooq.impl.DSL;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiProviderCatalogRepository;
-import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
-import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
+import org.oagi.score.gateway.http.api.ai_management.AiAdminPage;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
 import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.security.secret.AppSecretId;
 import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
+import org.oagi.score.gateway.http.common.model.PageRequest;
+import org.oagi.score.gateway.http.common.model.PageResponse;
+import org.oagi.score.gateway.http.common.model.SortDirection;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.ArrayList;
 
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CATALOG_AUDIT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_PROVIDER;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.APP_USER;
 
 public class JooqAiProviderCatalogRepository extends JooqBaseRepository
         implements AiProviderCatalogRepository {
 
+    private static final org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser
+            UPDATER = APP_USER.as("updater");
+    private static final Field<String> UPDATER_LOGIN_ID =
+            UPDATER.LOGIN_ID.as("updater_login_id");
+
     private final ApplicationSecretService secrets;
-    private final ObjectMapper objectMapper;
 
     public JooqAiProviderCatalogRepository(DSLContext dslContext,
                                            RepositoryFactory repositoryFactory,
-                                           ApplicationSecretService secrets,
-                                           ObjectMapper objectMapper) {
+                                           ApplicationSecretService secrets) {
         super(dslContext, null, repositoryFactory);
         this.secrets = secrets;
-        this.objectMapper = objectMapper;
     }
 
     @Override
     public List<AiProviderView> findAll() {
-        return dslContext().selectFrom(AI_PROVIDER).orderBy(AI_PROVIDER.PROVIDER_NAME)
+        return dslContext().select(AI_PROVIDER.fields()).select(UPDATER_LOGIN_ID)
+                .from(AI_PROVIDER).leftJoin(UPDATER)
+                .on(UPDATER.APP_USER_ID.eq(AI_PROVIDER.LAST_UPDATED_BY))
+                .orderBy(AI_PROVIDER.PROVIDER_NAME)
                 .fetch(this::view);
     }
 
     @Override
+    public PageResponse<AiProviderView> search(String name, String type, String endpoint,
+                                               Boolean enabled, List<String> updaterLoginIdList,
+                                               Instant updatedAfter, Instant updatedBefore,
+                                               PageRequest pageRequest) {
+        AiAdminPage.validate(pageRequest);
+        Condition condition = DSL.trueCondition();
+        if (StringUtils.hasText(name)) {
+            condition = condition.and(AI_PROVIDER.PROVIDER_NAME.containsIgnoreCase(name.strip()));
+        }
+        if (StringUtils.hasText(type)) {
+            condition = condition.and(AI_PROVIDER.PROVIDER_TYPE.containsIgnoreCase(type.strip()));
+        }
+        if (StringUtils.hasText(endpoint)) {
+            String value = endpoint.strip();
+            condition = condition.and(AI_PROVIDER.BASE_URL.containsIgnoreCase(value)
+                    .or(AI_PROVIDER.MESSAGES_URL.containsIgnoreCase(value)));
+        }
+        if (enabled != null) {
+            condition = condition.and(AI_PROVIDER.ENABLED.eq(flag(enabled)));
+        }
+        condition = condition.and(AiAdminPage.loginIdSelection(
+                UPDATER.LOGIN_ID, updaterLoginIdList));
+        if (updatedAfter != null) {
+            condition = condition.and(AI_PROVIDER.LAST_UPDATED_AT.ge(
+                    updatedAfter.atZone(ZoneOffset.UTC).toLocalDateTime()));
+        }
+        if (updatedBefore != null) {
+            condition = condition.and(AI_PROVIDER.LAST_UPDATED_AT.lt(
+                    updatedBefore.atZone(ZoneOffset.UTC).toLocalDateTime()));
+        }
+        var candidates = DSL.selectOne().from(AI_PROVIDER).leftJoin(UPDATER)
+                .on(UPDATER.APP_USER_ID.eq(AI_PROVIDER.LAST_UPDATED_BY)).where(condition);
+        int total = dslContext().fetchCount(candidates);
+        long offset = AiAdminPage.offset(pageRequest);
+        if (offset >= total) {
+            return new PageResponse<>(List.of(), pageRequest.pageIndex(),
+                    pageRequest.pageSize(), total);
+        }
+        Field<String> endpointField = DSL.coalesce(AI_PROVIDER.BASE_URL,
+                AI_PROVIDER.MESSAGES_URL);
+        List<SortField<?>> order = new ArrayList<>();
+        pageRequest.sorts().forEach(sort -> {
+            Field<?> field = switch (sort.field()) {
+                case "name" -> AI_PROVIDER.PROVIDER_NAME;
+                case "type" -> AI_PROVIDER.PROVIDER_TYPE;
+                case "endpoint" -> endpointField;
+                case "status" -> AI_PROVIDER.ENABLED;
+                case "updater" -> UPDATER.LOGIN_ID;
+                case "updatedOn" -> AI_PROVIDER.LAST_UPDATED_AT;
+                default -> null;
+            };
+            if (field != null) order.add(sort.direction() == SortDirection.DESC
+                    ? field.desc() : field.asc());
+        });
+        if (order.isEmpty()) order.add(AI_PROVIDER.LAST_UPDATED_AT.desc());
+        order.add(AI_PROVIDER.AI_PROVIDER_ID.asc());
+        List<AiProviderView> page = dslContext().select(AI_PROVIDER.fields())
+                .select(UPDATER_LOGIN_ID).from(AI_PROVIDER).leftJoin(UPDATER)
+                .on(UPDATER.APP_USER_ID.eq(AI_PROVIDER.LAST_UPDATED_BY))
+                .where(condition).orderBy(order).limit((int) offset, pageRequest.pageSize())
+                .fetch(this::view);
+        return new PageResponse<>(page, pageRequest.pageIndex(), pageRequest.pageSize(), total);
+    }
+
+    @Override
     public Optional<AiProviderView> findById(AiProviderId providerId) {
-        Record row = dslContext().selectFrom(AI_PROVIDER)
+        Record row = dslContext().select(AI_PROVIDER.fields()).select(UPDATER_LOGIN_ID)
+                .from(AI_PROVIDER).leftJoin(UPDATER)
+                .on(UPDATER.APP_USER_ID.eq(AI_PROVIDER.LAST_UPDATED_BY))
                 .where(AI_PROVIDER.AI_PROVIDER_ID.eq(valueOf(providerId))).fetchOne();
         return Optional.ofNullable(row).map(this::view);
     }
@@ -71,8 +148,6 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
                                 input.providerType().strip().toLowerCase())
                         .set(AI_PROVIDER.BASE_URL, nullable(input.baseUrl()))
                         .set(AI_PROVIDER.MESSAGES_URL, nullable(input.messagesUrl()))
-                        .set(AI_PROVIDER.ANTHROPIC_VERSION,
-                                nullable(input.anthropicVersion()))
                         .set(AI_PROVIDER.API_VERSION, nullable(input.apiVersion()))
                         .set(AI_PROVIDER.API_KEY_SECRET_ID, valueOf(secretId))
                         .set(AI_PROVIDER.ENABLED, flag(input.enabled()))
@@ -82,12 +157,10 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
                         .set(AI_PROVIDER.LAST_UPDATED_AT, now)
                         .returning(AI_PROVIDER.AI_PROVIDER_ID)
                         .fetchOne(AI_PROVIDER.AI_PROVIDER_ID).toBigInteger());
-                AiProviderView after = view(requireProvider(tx, id));
-                audit(tx, id, actorUserId, "CREATE", null, after);
-                return after;
+                return view(requireProvider(tx, id));
             });
         } catch (org.jooq.exception.IntegrityConstraintViolationException exception) {
-            throw conflict();
+            throw new IllegalArgumentException("A provider with this name already exists.", exception);
         }
     }
 
@@ -100,11 +173,10 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
                     .where(AI_PROVIDER.AI_PROVIDER_ID.eq(valueOf(providerId)))
                     .forUpdate().fetchOne();
             if (existing == null) throw new NotFoundException();
-            AiProviderView before = view(existing);
-            if (before.catalogVersion() != input.expectedVersion()) throw conflict();
             requireCompatibleProviderFamily(
-                    tx, providerId, before.providerType(), input.providerType());
-            if (!input.enabled() && before.enabled() && tx.fetchExists(tx.selectOne()
+                    tx, providerId, existing.get(AI_PROVIDER.PROVIDER_TYPE), input.providerType());
+            if (!input.enabled() && existing.get(AI_PROVIDER.ENABLED) == 1
+                    && tx.fetchExists(tx.selectOne()
                     .from(AI_MODEL).where(AI_MODEL.PROVIDER_ID.eq(valueOf(providerId)))
                     .and(AI_MODEL.ENABLED.eq((byte) 1)))) {
                 throw new IllegalArgumentException(
@@ -121,27 +193,19 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
                             input.providerType().strip().toLowerCase())
                     .set(AI_PROVIDER.BASE_URL, nullable(input.baseUrl()))
                     .set(AI_PROVIDER.MESSAGES_URL, nullable(input.messagesUrl()))
-                    .set(AI_PROVIDER.ANTHROPIC_VERSION, nullable(input.anthropicVersion()))
                     .set(AI_PROVIDER.API_VERSION, nullable(input.apiVersion()))
                     .set(AI_PROVIDER.API_KEY_SECRET_ID, valueOf(nextSecretId))
                     .set(AI_PROVIDER.ENABLED, flag(input.enabled()))
-                    .set(AI_PROVIDER.CATALOG_VERSION, AI_PROVIDER.CATALOG_VERSION.plus(1))
                     .set(AI_PROVIDER.LAST_UPDATED_BY, valueOf(actorUserId))
                     .set(AI_PROVIDER.LAST_UPDATED_AT, now())
                     .where(AI_PROVIDER.AI_PROVIDER_ID.eq(valueOf(providerId)))
-                    .and(AI_PROVIDER.CATALOG_VERSION.eq(
-                            ULong.valueOf(input.expectedVersion())))
                     .execute();
-            if (changed != 1) throw conflict();
+            if (changed != 1) throw new NotFoundException();
             if (input.apiKey() != null && !StringUtils.hasText(input.apiKey())
                     && oldSecretId != null) {
                 secrets.delete(tx, valueOf(oldSecretId));
             }
-            AiProviderView after = view(requireProvider(tx, providerId));
-            audit(tx, providerId, actorUserId,
-                    auditAction(input.apiKey(), oldSecretId != null, after.enabled()),
-                    before, after);
-            return after;
+            return view(requireProvider(tx, providerId));
         });
     }
 
@@ -153,7 +217,6 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
         AppSecretId secretId = row.get(AI_PROVIDER.API_KEY_SECRET_ID) != null
                 ? new AppSecretId(row.get(AI_PROVIDER.API_KEY_SECRET_ID).toBigInteger()) : null;
         return Optional.of(new ConnectionDetails(
-                row.get(AI_PROVIDER.CATALOG_VERSION).longValue(),
                 row.get(AI_PROVIDER.PROVIDER_TYPE), row.get(AI_PROVIDER.BASE_URL),
                 row.get(AI_PROVIDER.MESSAGES_URL),
                 secretId));
@@ -172,16 +235,6 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
             throw new IllegalStateException("Provider secret encryption is not configured.");
         }
         return secrets.decrypt(dslContext(), valueOf(storedSecretId));
-    }
-
-    @Override
-    public void recordApiKeyReveal(AiProviderId providerId, UserId actorUserId) {
-        dslContext().insertInto(AI_CATALOG_AUDIT)
-                .set(AI_CATALOG_AUDIT.ENTITY_TYPE, "PROVIDER")
-                .set(AI_CATALOG_AUDIT.ENTITY_ID, valueOf(providerId))
-                .set(AI_CATALOG_AUDIT.ACTOR_APP_USER_ID, valueOf(actorUserId))
-                .set(AI_CATALOG_AUDIT.ACTION, "REVEAL_KEY")
-                .set(AI_CATALOG_AUDIT.CREATED_AT, now()).execute();
     }
 
     @Override
@@ -207,12 +260,6 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
         } finally {
             ApplicationSecretService.clear(key);
         }
-    }
-
-    static String auditAction(String requestedKey, boolean hadStoredKey, boolean enabled) {
-        if (StringUtils.hasText(requestedKey)) return "ROTATE_KEY";
-        if (requestedKey != null && hadStoredKey) return "DELETE_KEY";
-        return enabled ? "UPDATE" : "DISABLE";
     }
 
     static void requireCompatibleProviderFamily(DSLContext tx, AiProviderId providerId,
@@ -241,7 +288,9 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
     }
 
     private Record requireProvider(DSLContext tx, AiProviderId id) {
-        Record row = tx.selectFrom(AI_PROVIDER)
+        Record row = tx.select(AI_PROVIDER.fields()).select(UPDATER_LOGIN_ID)
+                .from(AI_PROVIDER).leftJoin(UPDATER)
+                .on(UPDATER.APP_USER_ID.eq(AI_PROVIDER.LAST_UPDATED_BY))
                 .where(AI_PROVIDER.AI_PROVIDER_ID.eq(valueOf(id))).fetchOne();
         if (row == null) throw new NotFoundException();
         return row;
@@ -252,32 +301,17 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
                 new AiProviderId(row.get(AI_PROVIDER.AI_PROVIDER_ID).toBigInteger()),
                 row.get(AI_PROVIDER.PROVIDER_NAME), row.get(AI_PROVIDER.PROVIDER_TYPE),
                 row.get(AI_PROVIDER.BASE_URL), row.get(AI_PROVIDER.MESSAGES_URL),
-                row.get(AI_PROVIDER.ANTHROPIC_VERSION), row.get(AI_PROVIDER.API_VERSION),
+                row.get(AI_PROVIDER.API_VERSION),
                 row.get(AI_PROVIDER.ENABLED) == 1,
                 row.get(AI_PROVIDER.API_KEY_SECRET_ID) != null,
-                row.get(AI_PROVIDER.CATALOG_VERSION).longValue());
+                updaterLoginId(row), utc(row.get(AI_PROVIDER.LAST_UPDATED_AT)));
     }
 
-    private void audit(DSLContext tx, AiProviderId entityId, UserId actorUserId, String action,
-                       AiProviderView before, AiProviderView after) {
-        tx.insertInto(AI_CATALOG_AUDIT)
-                .set(AI_CATALOG_AUDIT.ENTITY_TYPE, "PROVIDER")
-                .set(AI_CATALOG_AUDIT.ENTITY_ID, valueOf(entityId))
-                .set(AI_CATALOG_AUDIT.ACTOR_APP_USER_ID, valueOf(actorUserId))
-                .set(AI_CATALOG_AUDIT.ACTION, action)
-                .set(AI_CATALOG_AUDIT.BEFORE_JSON, json(before))
-                .set(AI_CATALOG_AUDIT.AFTER_JSON, json(after))
-                .set(AI_CATALOG_AUDIT.CREATED_AT, now()).execute();
-    }
-
-    private String json(Object value) {
-        if (value == null) return null;
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException(
-                    "Could not serialize the catalog audit snapshot.", exception);
-        }
+    private String updaterLoginId(Record row) {
+        if (row.indexOf(UPDATER_LOGIN_ID) >= 0) return row.get(UPDATER_LOGIN_ID);
+        var updaterId = row.get(AI_PROVIDER.LAST_UPDATED_BY);
+        return updaterId != null ? dslContext().select(APP_USER.LOGIN_ID).from(APP_USER)
+                .where(APP_USER.APP_USER_ID.eq(updaterId)).fetchOne(APP_USER.LOGIN_ID) : null;
     }
 
     private static char[] chars(String value) {
@@ -296,8 +330,8 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
         return LocalDateTime.now(ZoneOffset.UTC);
     }
 
-    private static AiPolicyViolationException conflict() {
-        return new AiPolicyViolationException(AiPolicyErrorCode.AI_CATALOG_VERSION_CONFLICT,
-                "The provider catalog changed while it was being edited.");
+    private static Instant utc(LocalDateTime value) {
+        return value != null ? value.toInstant(ZoneOffset.UTC) : null;
     }
+
 }

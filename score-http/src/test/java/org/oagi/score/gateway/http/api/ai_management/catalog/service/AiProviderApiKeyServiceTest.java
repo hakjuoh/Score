@@ -29,7 +29,6 @@ class AiProviderApiKeyServiceTest {
     private final ApplicationSecretService secrets = mock(ApplicationSecretService.class);
     private final AiAdminPolicyService authorization = mock(AiAdminPolicyService.class);
     private final AiProviderCatalogRepository repository = mock(AiProviderCatalogRepository.class);
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final ScoreUser actor = mock(ScoreUser.class);
     private final UserId actorId = new UserId(BigInteger.valueOf(42));
     private final AiProviderId providerId = AiProviderId.from(7L);
@@ -39,13 +38,13 @@ class AiProviderApiKeyServiceTest {
     @BeforeEach
     void setUp() {
         var details = new AiProviderCatalogRepository.ConnectionDetails(
-                3L, "openai", "https://api.openai.com", null, secretId);
-        when(repositoryFactory.aiProviderCatalogRepository(secrets, objectMapper))
+                "openai", "https://api.openai.com", null, secretId);
+        when(repositoryFactory.aiProviderCatalogRepository(secrets))
                 .thenReturn(repository);
         when(repository.findConnectionDetails(providerId)).thenReturn(Optional.of(details));
         when(actor.userId()).thenReturn(actorId);
         service = new AiProviderCatalogService(repositoryFactory, secrets, authorization,
-                objectMapper, mock(AiProviderConnectionTester.class));
+                mock(AiProviderConnectionTester.class));
     }
 
     @Test
@@ -58,11 +57,10 @@ class AiProviderApiKeyServiceTest {
         assertThat(masked.value()).isEqualTo("•".repeat("secret-value".length()));
         assertThat(masked.revealed()).isFalse();
         assertThat(decrypted).containsOnly('\0');
-        verify(repository, never()).recordApiKeyReveal(providerId, actorId);
     }
 
     @Test
-    void auditsAnExplicitRevealAndClearsTheDecryptedBuffer() {
+    void revealsTheKeyAndClearsTheDecryptedBuffer() {
         char[] decrypted = "secret-value".toCharArray();
         when(repository.loadStoredApiKey(secretId)).thenReturn(decrypted);
 
@@ -72,7 +70,6 @@ class AiProviderApiKeyServiceTest {
         assertThat(revealed.revealed()).isTrue();
         assertThat(revealed.toString()).doesNotContain("secret-value").contains("REDACTED");
         assertThat(decrypted).containsOnly('\0');
-        verify(repository).recordApiKeyReveal(providerId, actorId);
     }
 
     @Test
@@ -82,7 +79,7 @@ class AiProviderApiKeyServiceTest {
 
         assertThatThrownBy(() -> service.revealApiKey(actor, providerId)).isSameAs(denied);
 
-        verify(repositoryFactory, never()).aiProviderCatalogRepository(secrets, objectMapper);
+        verify(repositoryFactory, never()).aiProviderCatalogRepository(secrets);
         verify(repository, never()).loadStoredApiKey(secretId);
     }
 
@@ -93,7 +90,6 @@ class AiProviderApiKeyServiceTest {
         assertThat(service.maskedApiKey(actor, providerId).value()).isEmpty();
         assertThat(service.revealApiKey(actor, providerId).value()).isEmpty();
 
-        verify(repository, never()).recordApiKeyReveal(providerId, actorId);
     }
 
     @Test
@@ -103,6 +99,5 @@ class AiProviderApiKeyServiceTest {
 
         assertThatThrownBy(() -> service.revealApiKey(actor, providerId)).isSameAs(failure);
 
-        verify(repository, never()).recordApiKeyReveal(providerId, actorId);
     }
 }

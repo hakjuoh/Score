@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
+import org.jooq.Field;
 import org.jooq.Record;
 import org.jooq.Result;
 import org.jooq.SQLDialect;
@@ -17,6 +18,9 @@ import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
+
+import java.util.Arrays;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,11 +39,6 @@ class AiProviderModelProfileServiceTest {
                         "claude-opus-4_6", "claude-opus-4_7", "claude-opus-4_8",
                         "claude-opus-5", "claude-fable-5", "claude-mythos-5");
         assertThat(service("openai").modelProfiles(actor(), AiProviderId.from(1L)))
-                .extracting(profile -> profile.modelKey())
-                .containsExactly("gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna",
-                        "gpt-5_5", "gpt-5_5-pro", "gpt-5_4", "gpt-5_4-pro",
-                        "gpt-5_4-mini", "gpt-5_4-nano");
-        assertThat(service("azure-openai").modelProfiles(actor(), AiProviderId.from(1L)))
                 .extracting(profile -> profile.modelKey())
                 .containsExactly("gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna",
                         "gpt-5_5", "gpt-5_5-pro", "gpt-5_4", "gpt-5_4-pro",
@@ -66,20 +65,23 @@ class AiProviderModelProfileServiceTest {
         DSLContext dsl = DSL.using(new MockConnection(provider(providerType)), SQLDialect.MARIADB);
         return new AiProviderCatalogService(new RepositoryFactory(dsl),
                 mock(ApplicationSecretService.class),
-                authorization, new ObjectMapper(), mock(AiProviderConnectionTester.class));
+                authorization, mock(AiProviderConnectionTester.class));
     }
 
     private MockDataProvider provider(String providerType) {
         return context -> {
             DSLContext create = DSL.using(SQLDialect.MARIADB);
-            Result<Record> result = create.newResult(AI_PROVIDER.fields());
+            Field<String> updaterLoginId = DSL.field(
+                    DSL.name("updater_login_id"), String.class);
+            Field<?>[] fields = Stream.concat(Arrays.stream(AI_PROVIDER.fields()),
+                    Stream.of(updaterLoginId)).toArray(Field<?>[]::new);
+            Result<Record> result = create.newResult(fields);
             if (providerType != null) {
-                Record record = create.newRecord(AI_PROVIDER);
+                Record record = create.newRecord(fields);
                 record.set(AI_PROVIDER.AI_PROVIDER_ID, ULong.valueOf(1));
                 record.set(AI_PROVIDER.PROVIDER_NAME, "provider");
                 record.set(AI_PROVIDER.PROVIDER_TYPE, providerType);
                 record.set(AI_PROVIDER.ENABLED, (byte) 1);
-                record.set(AI_PROVIDER.CATALOG_VERSION, ULong.valueOf(1));
                 result.add(record);
             }
             return new MockResult[]{new MockResult(result.size(), result)};

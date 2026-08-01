@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
 import org.jooq.Record;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogConfigId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelOptions;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfile;
@@ -23,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL_CATALOG_CONFIG;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL_REASONING_EFFORT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_PROVIDER;
 
@@ -60,7 +58,6 @@ public class JooqAiDatabaseCatalogRepository extends JooqBaseRepository
                 provider.setType(row.get(AI_PROVIDER.PROVIDER_TYPE));
                 provider.setBaseUrl(row.get(AI_PROVIDER.BASE_URL));
                 provider.setMessagesUrl(row.get(AI_PROVIDER.MESSAGES_URL));
-                provider.setAnthropicVersion(row.get(AI_PROVIDER.ANTHROPIC_VERSION));
                 provider.setApiVersion(row.get(AI_PROVIDER.API_VERSION));
                 provider.setKey(new String(plaintext));
                 String name = row.get(AI_PROVIDER.PROVIDER_NAME);
@@ -173,13 +170,10 @@ public class JooqAiDatabaseCatalogRepository extends JooqBaseRepository
             models.put(key, model);
             modelKeys.put(modelId, key);
         }
-        String defaultKey = dslContext().select(AI_MODEL_CATALOG_CONFIG.DEFAULT_AI_MODEL_ID)
-                .from(AI_MODEL_CATALOG_CONFIG)
-                .where(AI_MODEL_CATALOG_CONFIG.AI_MODEL_CATALOG_CONFIG_ID.eq(
-                        org.jooq.types.UByte.valueOf(
-                                AiModelCatalogConfigId.GLOBAL.value().intValueExact())))
-                .fetchOptional(AI_MODEL_CATALOG_CONFIG.DEFAULT_AI_MODEL_ID)
-                .map(id -> modelKeys.get(new AiModelId(id.toBigInteger())))
+        String defaultKey = dslContext().select(AI_MODEL.MODEL_KEY).from(AI_MODEL)
+                .where(AI_MODEL.DEFAULT_MODEL.eq((byte) 1))
+                .and(AI_MODEL.ENABLED.eq((byte) 1))
+                .fetchOptional(AI_MODEL.MODEL_KEY)
                 .orElseGet(() -> models.keySet().stream().findFirst().orElse(null));
         properties.setProviders(providers);
         properties.setModels(models);

@@ -14,7 +14,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModel;
 
 
 /**
- * Database-backed AI model catalog
+ * Configured AI models and provider-specific runtime options
  */
 @SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
@@ -22,16 +22,16 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_model.ai_model_id</code>. Identifier of the AI
-     * model catalog entry
+     * Setter for <code>oagi.ai_model.ai_model_id</code>. Identifier of the
+     * configured AI model
      */
     public void setAiModelId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.ai_model_id</code>. Identifier of the AI
-     * model catalog entry
+     * Getter for <code>oagi.ai_model.ai_model_id</code>. Identifier of the
+     * configured AI model
      */
     public ULong getAiModelId() {
         return (ULong) get(0);
@@ -134,19 +134,35 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_model.sort_order</code>. Stable display and
-     * fallback ordering of catalog models
+     * Setter for <code>oagi.ai_model.default_model</code>. Set to 1 only for
+     * the global default AI model
      */
-    public void setSortOrder(UInteger value) {
+    public void setDefaultModel(Byte value) {
         set(7, value);
     }
 
     /**
+     * Getter for <code>oagi.ai_model.default_model</code>. Set to 1 only for
+     * the global default AI model
+     */
+    public Byte getDefaultModel() {
+        return (Byte) get(7);
+    }
+
+    /**
+     * Setter for <code>oagi.ai_model.sort_order</code>. Stable display and
+     * fallback ordering of AI models
+     */
+    public void setSortOrder(UInteger value) {
+        set(8, value);
+    }
+
+    /**
      * Getter for <code>oagi.ai_model.sort_order</code>. Stable display and
-     * fallback ordering of catalog models
+     * fallback ordering of AI models
      */
     public UInteger getSortOrder() {
-        return (UInteger) get(7);
+        return (UInteger) get(8);
     }
 
     /**
@@ -154,7 +170,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * budget for one provider call
      */
     public void setMaxTokens(UInteger value) {
-        set(8, value);
+        set(9, value);
     }
 
     /**
@@ -162,7 +178,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * budget for one provider call
      */
     public UInteger getMaxTokens() {
-        return (UInteger) get(8);
+        return (UInteger) get(9);
     }
 
     /**
@@ -170,7 +186,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * window size in tokens
      */
     public void setContextWindow(ULong value) {
-        set(9, value);
+        set(10, value);
     }
 
     /**
@@ -178,7 +194,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * window size in tokens
      */
     public ULong getContextWindow() {
-        return (ULong) get(9);
+        return (ULong) get(10);
     }
 
     /**
@@ -186,7 +202,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * tokens reserved during context budget calculation
      */
     public void setOutputReserveTokens(ULong value) {
-        set(10, value);
+        set(11, value);
     }
 
     /**
@@ -194,7 +210,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * tokens reserved during context budget calculation
      */
     public ULong getOutputReserveTokens() {
-        return (ULong) get(10);
+        return (ULong) get(11);
     }
 
     /**
@@ -202,7 +218,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Context token threshold that triggers automatic compaction
      */
     public void setAutoCompactThresholdTokens(ULong value) {
-        set(11, value);
+        set(12, value);
     }
 
     /**
@@ -210,7 +226,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Context token threshold that triggers automatic compaction
      */
     public ULong getAutoCompactThresholdTokens() {
-        return (ULong) get(11);
+        return (ULong) get(12);
     }
 
     /**
@@ -218,7 +234,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Emergency context headroom in tokens
      */
     public void setEmergencyHeadroomTokens(ULong value) {
-        set(12, value);
+        set(13, value);
     }
 
     /**
@@ -226,7 +242,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Emergency context headroom in tokens
      */
     public ULong getEmergencyHeadroomTokens() {
-        return (ULong) get(12);
+        return (ULong) get(13);
     }
 
     /**
@@ -234,7 +250,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * tool output tokens retained in context
      */
     public void setToolOutputTokenLimit(ULong value) {
-        set(13, value);
+        set(14, value);
     }
 
     /**
@@ -242,7 +258,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * tool output tokens retained in context
      */
     public ULong getToolOutputTokenLimit() {
-        return (ULong) get(13);
+        return (ULong) get(14);
     }
 
     /**
@@ -250,7 +266,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Spring AI model options as a JSON object
      */
     public void setModelOptionsJson(String value) {
-        set(14, value);
+        set(15, value);
     }
 
     /**
@@ -258,23 +274,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Spring AI model options as a JSON object
      */
     public String getModelOptionsJson() {
-        return (String) get(14);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.catalog_version</code>. Optimistic locking
-     * and cache invalidation version
-     */
-    public void setCatalogVersion(ULong value) {
-        set(15, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.catalog_version</code>. Optimistic locking
-     * and cache invalidation version
-     */
-    public ULong getCatalogVersion() {
-        return (ULong) get(15);
+        return (String) get(15);
     }
 
     /**
@@ -364,7 +364,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     /**
      * Create a detached, initialised AiModelRecord
      */
-    public AiModelRecord(ULong aiModelId, ULong providerId, String modelKey, String providerModelName, String displayName, String description, Byte enabled, UInteger sortOrder, UInteger maxTokens, ULong contextWindow, ULong outputReserveTokens, ULong autoCompactThresholdTokens, ULong emergencyHeadroomTokens, ULong toolOutputTokenLimit, String modelOptionsJson, ULong catalogVersion, ULong createdBy, ULong lastUpdatedBy, LocalDateTime createdAt, LocalDateTime lastUpdatedAt) {
+    public AiModelRecord(ULong aiModelId, ULong providerId, String modelKey, String providerModelName, String displayName, String description, Byte enabled, Byte defaultModel, UInteger sortOrder, UInteger maxTokens, ULong contextWindow, ULong outputReserveTokens, ULong autoCompactThresholdTokens, ULong emergencyHeadroomTokens, ULong toolOutputTokenLimit, String modelOptionsJson, ULong createdBy, ULong lastUpdatedBy, LocalDateTime createdAt, LocalDateTime lastUpdatedAt) {
         super(AiModel.AI_MODEL);
 
         setAiModelId(aiModelId);
@@ -374,6 +374,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
         setDisplayName(displayName);
         setDescription(description);
         setEnabled(enabled);
+        setDefaultModel(defaultModel);
         setSortOrder(sortOrder);
         setMaxTokens(maxTokens);
         setContextWindow(contextWindow);
@@ -382,7 +383,6 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
         setEmergencyHeadroomTokens(emergencyHeadroomTokens);
         setToolOutputTokenLimit(toolOutputTokenLimit);
         setModelOptionsJson(modelOptionsJson);
-        setCatalogVersion(catalogVersion);
         setCreatedBy(createdBy);
         setLastUpdatedBy(lastUpdatedBy);
         setCreatedAt(createdAt);

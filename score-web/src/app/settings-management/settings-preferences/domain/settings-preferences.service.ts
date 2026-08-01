@@ -28,6 +28,9 @@ export class SettingsPreferencesService {
   TABLE_COLUMNS_FOR_NAMESPACE_PAGE_KEY = 'TableColumns-NamespacePage';
 
   TABLE_COLUMNS_FOR_CONTEXT_CATEGORY_PAGE_KEY = 'TableColumns-ContextCategoryPage';
+  TABLE_COLUMNS_FOR_AI_PROVIDER_PAGE_KEY = 'TableColumns-AiProviderPage';
+  TABLE_COLUMNS_FOR_AI_MODEL_PAGE_KEY = 'TableColumns-AiModelPage';
+  TABLE_COLUMNS_FOR_AI_POLICY_PAGE_KEY = 'TableColumns-AiPolicyPage';
   TABLE_COLUMNS_FOR_CONTEXT_SCHEME_PAGE_KEY = 'TableColumns-ContextSchemePage';
   TABLE_COLUMNS_FOR_CONTEXT_SCHEME_VALUE_PAGE_KEY = 'TableColumns-ContextSchemeValuePage';
   TABLE_COLUMNS_FOR_BUSINESS_CONTEXT_PAGE_KEY = 'TableColumns-BusinessContextPage';
@@ -67,8 +70,10 @@ export class SettingsPreferencesService {
     let properties: TableColumnsProperty[] = preferencesInfo.tableColumnsInfo[propertyName];
     properties = JSON.parse(loadProperty(userToken, key, JSON.stringify(properties)));
 
-    // If the default column properties hasn't changed
-    if (properties.length === preferencesInfo.tableColumnsInfo[propertyName].length) {
+    const defaults: TableColumnsProperty[] = preferencesInfo.tableColumnsInfo[propertyName];
+    const matchesCurrentColumns = properties.length === defaults.length
+      && defaults.every(defaultColumn => properties.some(column => column.name === defaultColumn.name));
+    if (matchesCurrentColumns) {
       preferencesInfo.tableColumnsInfo[propertyName] = properties;
     }
   }
@@ -117,6 +122,12 @@ export class SettingsPreferencesService {
 
       this.loadColumnsInfo(preferencesInfo, userToken,
           this.TABLE_COLUMNS_FOR_CONTEXT_CATEGORY_PAGE_KEY, 'columnsOfContextCategoryPage');
+      this.loadColumnsInfo(preferencesInfo, userToken,
+          this.TABLE_COLUMNS_FOR_AI_PROVIDER_PAGE_KEY, 'columnsOfAiProviderPage');
+      this.loadColumnsInfo(preferencesInfo, userToken,
+          this.TABLE_COLUMNS_FOR_AI_MODEL_PAGE_KEY, 'columnsOfAiModelPage');
+      this.loadColumnsInfo(preferencesInfo, userToken,
+          this.TABLE_COLUMNS_FOR_AI_POLICY_PAGE_KEY, 'columnsOfAiPolicyPage');
       this.loadColumnsInfo(preferencesInfo, userToken,
           this.TABLE_COLUMNS_FOR_CONTEXT_SCHEME_PAGE_KEY, 'columnsOfContextSchemePage');
       this.loadColumnsInfo(preferencesInfo, userToken,
@@ -266,6 +277,21 @@ export class SettingsPreferencesService {
   updateTableColumnsForContextCategoryPage(userToken: UserToken, preferencesInfo: PreferencesInfo): Observable<any> {
     return this.updateTableColumnsInfo(userToken, this.TABLE_COLUMNS_FOR_CONTEXT_CATEGORY_PAGE_KEY,
       preferencesInfo.tableColumnsInfo.columnsOfContextCategoryPage);
+  }
+
+  updateTableColumnsForAiProviderPage(userToken: UserToken, preferencesInfo: PreferencesInfo): Observable<any> {
+    return this.updateTableColumnsInfo(userToken, this.TABLE_COLUMNS_FOR_AI_PROVIDER_PAGE_KEY,
+      preferencesInfo.tableColumnsInfo.columnsOfAiProviderPage);
+  }
+
+  updateTableColumnsForAiModelPage(userToken: UserToken, preferencesInfo: PreferencesInfo): Observable<any> {
+    return this.updateTableColumnsInfo(userToken, this.TABLE_COLUMNS_FOR_AI_MODEL_PAGE_KEY,
+      preferencesInfo.tableColumnsInfo.columnsOfAiModelPage);
+  }
+
+  updateTableColumnsForAiPolicyPage(userToken: UserToken, preferencesInfo: PreferencesInfo): Observable<any> {
+    return this.updateTableColumnsInfo(userToken, this.TABLE_COLUMNS_FOR_AI_POLICY_PAGE_KEY,
+      preferencesInfo.tableColumnsInfo.columnsOfAiPolicyPage);
   }
 
   updateTableColumnsForContextSchemePage(userToken: UserToken, preferencesInfo: PreferencesInfo): Observable<any> {

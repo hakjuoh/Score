@@ -9,11 +9,38 @@ import org.oagi.score.gateway.http.configuration.security.SessionService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.AuthenticatedPrincipal;
 
+import java.time.Instant;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AiProviderCatalogControllerTest {
+
+    @Test
+    void mapsCsvUpdaterSelectionAndUpdatedOnPagingContract() {
+        AiProviderCatalogService providers = mock(AiProviderCatalogService.class);
+        SessionService sessions = mock(SessionService.class);
+        AuthenticatedPrincipal principal = mock(AuthenticatedPrincipal.class);
+        ScoreUser actor = mock(ScoreUser.class);
+        when(sessions.asScoreUser(principal)).thenReturn(actor);
+        AiProviderCatalogController controller =
+                new AiProviderCatalogController(providers, sessions);
+        Instant after = Instant.parse("2026-07-01T00:00:00Z");
+        Instant before = Instant.parse("2026-08-01T00:00:00Z");
+
+        controller.search(principal, "anth", "anthropic", "messages", true,
+                "admin,!reviewer", after, before, "-updatedOn", 2, 25);
+
+        verify(providers).search(actor, "anth", "anthropic", "messages", true,
+                List.of("admin", "!reviewer"), after, before,
+                new org.oagi.score.gateway.http.common.model.PageRequest(2, 25,
+                        List.of(new org.oagi.score.gateway.http.common.model.Sort(
+                                "updatedOn",
+                                org.oagi.score.gateway.http.common.model.SortDirection.DESC))));
+    }
 
     @Test
     void preventsCredentialResponsesFromBeingCached() {

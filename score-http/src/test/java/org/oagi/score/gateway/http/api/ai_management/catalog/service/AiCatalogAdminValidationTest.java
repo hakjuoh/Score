@@ -27,7 +27,7 @@ class AiCatalogAdminValidationTest {
                 new ObjectMapper());
 
         assertThatThrownBy(() -> service.create(actor,
-                new AiModelCatalogUpdate(null, AiProviderId.from(1L), "gpt-5_6-sol",
+                new AiModelCatalogUpdate(AiProviderId.from(1L), "gpt-5_6-sol",
                         true, false, -1,
                         4096, 128000L, 4096L, 100000L, 4096L, 16000L,
                         false, null, null, false, null, null,
@@ -40,27 +40,27 @@ class AiCatalogAdminValidationTest {
     void rejectsUnsupportedProviderTypesAndMalformedEndpoints() {
         AiProviderCatalogService service = new AiProviderCatalogService(
                 mock(RepositoryFactory.class), mock(ApplicationSecretService.class),
-                mock(AiAdminPolicyService.class), new ObjectMapper(),
+                mock(AiAdminPolicyService.class),
                 mock(AiProviderConnectionTester.class));
 
-        assertThatThrownBy(() -> service.create(actor, new AiProviderUpdate(null,
+        assertThatThrownBy(() -> service.create(actor, new AiProviderUpdate(
                 "provider", "unsupported", "https://example.test", null,
-                null, null, true, null)))
+                null, true, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Unsupported");
-        assertThatThrownBy(() -> service.create(actor, new AiProviderUpdate(null,
+        assertThatThrownBy(() -> service.create(actor, new AiProviderUpdate(
                 "provider", "openai", "not a URL", null,
-                null, null, true, null)))
+                null, true, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid AI provider base URL");
     }
 
     @Test
     void storedConnectionTestKeyIsRestrictedToThePersistedEndpoint() {
-        var unchanged = new AiProviderUpdate(3L, "provider", "openai",
-                "https://api.openai.com/v1", null, null, null, true, null);
-        var changed = new AiProviderUpdate(3L, "provider", "openai",
-                "https://attacker.example/v1", null, null, null, true, null);
+        var unchanged = new AiProviderUpdate("provider", "openai",
+                "https://api.openai.com/v1", null, null, true, null);
+        var changed = new AiProviderUpdate("provider", "openai",
+                "https://attacker.example/v1", null, null, true, null);
 
         assertThat(AiProviderCatalogService.sameConnectionTarget("openai",
                 "https://api.openai.com/v1", null, unchanged)).isTrue();

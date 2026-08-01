@@ -10,12 +10,15 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.Reaso
 import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiModelCatalogRepository;
 import org.oagi.score.gateway.http.api.ai_management.policy.service.AiAdminPolicyService;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
+import org.oagi.score.gateway.http.common.model.PageRequest;
+import org.oagi.score.gateway.http.common.model.PageResponse;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.time.Instant;
 
 @Service
 public class AiModelCatalogAdminService {
@@ -37,6 +40,19 @@ public class AiModelCatalogAdminService {
         return repository().findAll();
     }
 
+    public PageResponse<AiModelCatalogView> search(ScoreUser actor, String model,
+                                                   String provider, Boolean enabled,
+                                                   Boolean defaultModel,
+                                                   String defaultEffort, String effort,
+                                                   List<String> updaterLoginIdList,
+                                                   Instant updatedAfter, Instant updatedBefore,
+                                                   PageRequest pageRequest) {
+        authorization.requireAdministrator(actor);
+        return repository().search(model, provider, enabled, defaultModel,
+                defaultEffort, effort, updaterLoginIdList,
+                updatedAfter, updatedBefore, pageRequest);
+    }
+
     public AiModelCatalogView get(ScoreUser actor, AiModelId modelId) {
         authorization.requireAdministrator(actor);
         return repository().findById(modelId).orElseThrow(NotFoundException::new);
@@ -44,7 +60,7 @@ public class AiModelCatalogAdminService {
 
     public AiModelCatalogView create(ScoreUser actor, AiModelCatalogUpdate input) {
         authorization.requireAdministrator(actor);
-        validate(input, false);
+        validate(input);
         AiModelCatalogRepository repository = repository();
         String providerType = enabledProviderType(repository, input.providerId());
         AiModelProfile profile = requireModelProfile(providerType, input.modelKey());
@@ -55,7 +71,7 @@ public class AiModelCatalogAdminService {
     public AiModelCatalogView update(ScoreUser actor, AiModelId modelId,
                                      AiModelCatalogUpdate input) {
         authorization.requireAdministrator(actor);
-        validate(input, true);
+        validate(input);
         AiModelCatalogRepository repository = repository();
         AiModelCatalogView existing = repository.findById(modelId)
                 .orElseThrow(NotFoundException::new);
@@ -86,12 +102,9 @@ public class AiModelCatalogAdminService {
                         "The selected model is not supported by this provider."));
     }
 
-    private static void validate(AiModelCatalogUpdate input, boolean update) {
+    private static void validate(AiModelCatalogUpdate input) {
         if (input == null || !StringUtils.hasText(input.modelKey())) {
             throw new IllegalArgumentException("A model is required.");
-        }
-        if (update && input.expectedVersion() == null) {
-            throw new IllegalArgumentException("Expected catalog version is required.");
         }
         if (input.providerId() == null || input.providerId().value() == null
                 || input.providerId().value().signum() <= 0 || input.sortOrder() < 0) {

@@ -15,6 +15,9 @@ import {SearchBarModule} from '../../common/search-bar/search-bar.module';
 import {ColumnSelectorModule} from '../../common/column-selector/column-selector.module';
 import {JsonOptionEditorComponent} from './json-option-editor.component';
 import {FontAwesomeModule} from '@fortawesome/angular-fontawesome';
+import {ScoreCommonModule} from '../../common/score-common.module';
+import {AccountListService} from '../../account-management/domain/account-list.service';
+import {AiAdminListNavigationService} from './domain/ai-admin-list-navigation.service';
 
 export const AI_ADMIN_ROUTES: Routes = [
   {path: 'ai-admin/users', component: AiPolicyUserListComponent,
@@ -33,10 +36,10 @@ export const AI_ADMIN_ROUTES: Routes = [
 
 @NgModule({
   imports: [CommonModule, FormsModule, MaterialModule, SearchBarModule, ColumnSelectorModule,
-    FontAwesomeModule, RouterModule.forChild(AI_ADMIN_ROUTES)],
+    ScoreCommonModule, FontAwesomeModule, RouterModule.forChild(AI_ADMIN_ROUTES)],
   declarations: [AiPolicyUserListComponent, AiPolicyUserDetailComponent, AiModelListComponent,
     AiProviderListComponent, AiProviderDetailComponent, AiModelDetailComponent,
     JsonOptionEditorComponent],
-  providers: [AiAdminPolicyService]
+  providers: [AiAdminPolicyService, AccountListService, AiAdminListNavigationService]
 })
 export class AiAdminPolicyModule {}

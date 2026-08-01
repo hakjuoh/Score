@@ -38,7 +38,6 @@ import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelCatalogConfig.AiModelCatalogConfigPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelReasoningEffort.AiModelReasoningEffortPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiProvider.AiProviderPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsageLedger.AiTokenUsageLedgerPath;
@@ -49,7 +48,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.
 
 
 /**
- * Database-backed AI model catalog
+ * Configured AI models and provider-specific runtime options
  */
 @SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class AiModel extends TableImpl<AiModelRecord> {
@@ -70,10 +69,10 @@ public class AiModel extends TableImpl<AiModelRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_model.ai_model_id</code>. Identifier of the AI
-     * model catalog entry
+     * The column <code>oagi.ai_model.ai_model_id</code>. Identifier of the
+     * configured AI model
      */
-    public final TableField<AiModelRecord, ULong> AI_MODEL_ID = createField(DSL.name("ai_model_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Identifier of the AI model catalog entry");
+    public final TableField<AiModelRecord, ULong> AI_MODEL_ID = createField(DSL.name("ai_model_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Identifier of the configured AI model");
 
     /**
      * The column <code>oagi.ai_model.provider_id</code>. Identifier of the
@@ -112,10 +111,16 @@ public class AiModel extends TableImpl<AiModelRecord> {
     public final TableField<AiModelRecord, Byte> ENABLED = createField(DSL.name("enabled"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.TINYINT)), this, "Indicates whether the model is available for new requests");
 
     /**
-     * The column <code>oagi.ai_model.sort_order</code>. Stable display and
-     * fallback ordering of catalog models
+     * The column <code>oagi.ai_model.default_model</code>. Set to 1 only for
+     * the global default AI model
      */
-    public final TableField<AiModelRecord, UInteger> SORT_ORDER = createField(DSL.name("sort_order"), SQLDataType.INTEGERUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.INTEGERUNSIGNED)), this, "Stable display and fallback ordering of catalog models");
+    public final TableField<AiModelRecord, Byte> DEFAULT_MODEL = createField(DSL.name("default_model"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Set to 1 only for the global default AI model");
+
+    /**
+     * The column <code>oagi.ai_model.sort_order</code>. Stable display and
+     * fallback ordering of AI models
+     */
+    public final TableField<AiModelRecord, UInteger> SORT_ORDER = createField(DSL.name("sort_order"), SQLDataType.INTEGERUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.INTEGERUNSIGNED)), this, "Stable display and fallback ordering of AI models");
 
     /**
      * The column <code>oagi.ai_model.max_tokens</code>. Maximum output-token
@@ -160,12 +165,6 @@ public class AiModel extends TableImpl<AiModelRecord> {
     public final TableField<AiModelRecord, String> MODEL_OPTIONS_JSON = createField(DSL.name("model_options_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Configured Spring AI model options as a JSON object");
 
     /**
-     * The column <code>oagi.ai_model.catalog_version</code>. Optimistic locking
-     * and cache invalidation version
-     */
-    public final TableField<AiModelRecord, ULong> CATALOG_VERSION = createField(DSL.name("catalog_version"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.BIGINTUNSIGNED)), this, "Optimistic locking and cache invalidation version");
-
-    /**
      * The column <code>oagi.ai_model.created_by</code>. Identifier of the
      * administrator who created the model
      */
@@ -194,7 +193,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
     }
 
     private AiModel(Name alias, Table<AiModelRecord> aliased, Field<?>[] parameters, Condition where) {
-        super(alias, null, aliased, parameters, DSL.comment("Database-backed AI model catalog"), TableOptions.table(), where);
+        super(alias, null, aliased, parameters, DSL.comment("Configured AI models and provider-specific runtime options"), TableOptions.table(), where);
     }
 
     /**
@@ -273,7 +272,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
 
     @Override
     public List<UniqueKey<AiModelRecord>> getUniqueKeys() {
-        return Arrays.asList(Keys.KEY_AI_MODEL_AI_MODEL_KEY_UK);
+        return Arrays.asList(Keys.KEY_AI_MODEL_AI_MODEL_DEFAULT_MODEL_UK, Keys.KEY_AI_MODEL_AI_MODEL_KEY_UK);
     }
 
     @Override
@@ -317,19 +316,6 @@ public class AiModel extends TableImpl<AiModelRecord> {
             _aiProvider = new AiProviderPath(this, Keys.AI_MODEL_PROVIDER_FK, null);
 
         return _aiProvider;
-    }
-
-    private transient AiModelCatalogConfigPath _aiModelCatalogConfig;
-
-    /**
-     * Get the implicit to-many join path to the
-     * <code>oagi.ai_model_catalog_config</code> table
-     */
-    public AiModelCatalogConfigPath aiModelCatalogConfig() {
-        if (_aiModelCatalogConfig == null)
-            _aiModelCatalogConfig = new AiModelCatalogConfigPath(this, null, Keys.AI_MODEL_CATALOG_CONFIG_DEFAULT_MODEL_FK.getInverseKey());
-
-        return _aiModelCatalogConfig;
     }
 
     private transient AiModelReasoningEffortPath _aiModelReasoningEffort;
@@ -387,6 +373,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
     @Override
     public List<Check<AiModelRecord>> getChecks() {
         return Arrays.asList(
+            Internal.createCheck(this, DSL.name("ai_model_default_model_ck"), "`default_model` = 1 or `default_model` is null", true),
             Internal.createCheck(this, DSL.name("model_options_json"), "json_valid(`model_options_json`)", true)
         );
     }

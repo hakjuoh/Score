@@ -5,7 +5,7 @@ import org.oagi.score.gateway.http.common.model.Id;
 
 import java.math.BigInteger;
 
-/** Identifies a persisted AI model catalog entry. */
+/** Identifies a configured AI model. */
 public record AiModelId(BigInteger value) implements Id {
 
     @JsonCreator

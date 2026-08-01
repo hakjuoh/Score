@@ -9,8 +9,8 @@ class AiProviderUpdateTest {
 
     @Test
     void apiKeyIsWriteOnlyAndRedactedFromStringRepresentations() throws Exception {
-        AiProviderUpdate update = new AiProviderUpdate(null, "provider", "anthropic",
-                "https://example.test", null, null, null, false,
+        AiProviderUpdate update = new AiProviderUpdate("provider", "anthropic",
+                "https://example.test", null, null, false,
                 "highly-sensitive-key");
 
         String json = JsonMapper.builder().build().writeValueAsString(update);

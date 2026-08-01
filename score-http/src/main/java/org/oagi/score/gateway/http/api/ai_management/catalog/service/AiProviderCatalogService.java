@@ -1,6 +1,5 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderApiKeyView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderConnectionTestResult;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
@@ -8,10 +7,10 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderUpd
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiProviderCatalogRepository;
-import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
-import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
 import org.oagi.score.gateway.http.api.ai_management.policy.service.AiAdminPolicyService;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
+import org.oagi.score.gateway.http.common.model.PageRequest;
+import org.oagi.score.gateway.http.common.model.PageResponse;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
@@ -19,11 +18,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 
 /**
  * Provider catalog management with encrypted credentials. Normal provider views omit credential
- * values; an administrator can explicitly reveal one through the audited reveal operation.
+ * values; an administrator can explicitly reveal one through the dedicated reveal operation.
  */
 @Service
 public class AiProviderCatalogService {
@@ -31,24 +31,31 @@ public class AiProviderCatalogService {
     private final RepositoryFactory repositoryFactory;
     private final ApplicationSecretService secrets;
     private final AiAdminPolicyService authorization;
-    private final ObjectMapper objectMapper;
     private final AiProviderConnectionTester connectionTester;
 
     public AiProviderCatalogService(RepositoryFactory repositoryFactory,
                                     ApplicationSecretService secrets,
                                     AiAdminPolicyService authorization,
-                                    ObjectMapper objectMapper,
                                     AiProviderConnectionTester connectionTester) {
         this.repositoryFactory = repositoryFactory;
         this.secrets = secrets;
         this.authorization = authorization;
-        this.objectMapper = objectMapper;
         this.connectionTester = connectionTester;
     }
 
     public List<AiProviderView> list(ScoreUser actor) {
         authorization.requireAdministrator(actor);
         return repository().findAll();
+    }
+
+    public PageResponse<AiProviderView> search(ScoreUser actor, String name, String type,
+                                               String endpoint, Boolean enabled,
+                                               List<String> updaterLoginIdList,
+                                               Instant updatedAfter, Instant updatedBefore,
+                                               PageRequest pageRequest) {
+        authorization.requireAdministrator(actor);
+        return repository().search(name, type, endpoint, enabled, updaterLoginIdList,
+                updatedAfter, updatedBefore, pageRequest);
     }
 
     public AiProviderView get(ScoreUser actor, AiProviderId providerId) {
@@ -78,7 +85,6 @@ public class AiProviderCatalogService {
         char[] apiKey = repository.loadStoredApiKey(details.secretId());
         try {
             if (apiKey == null) return new AiProviderApiKeyView("", true);
-            repository.recordApiKeyReveal(providerId, actor.userId());
             return new AiProviderApiKeyView(new String(apiKey), true);
         } finally {
             ApplicationSecretService.clear(apiKey);
@@ -93,25 +99,24 @@ public class AiProviderCatalogService {
 
     public AiProviderView create(ScoreUser actor, AiProviderUpdate input) {
         authorization.requireAdministrator(actor);
-        validate(input, false);
+        validate(input);
         return repository().create(actor.userId(), input);
     }
 
     public AiProviderView update(ScoreUser actor, AiProviderId providerId,
                                  AiProviderUpdate input) {
         authorization.requireAdministrator(actor);
-        validate(input, true);
+        validate(input);
         return repository().update(actor.userId(), providerId, input);
     }
 
     public AiProviderConnectionTestResult testConnection(ScoreUser actor, AiProviderId providerId,
                                                          AiProviderUpdate input) {
         authorization.requireAdministrator(actor);
-        validate(input, true);
+        validate(input);
         AiProviderCatalogRepository repository = repository();
         AiProviderCatalogRepository.ConnectionDetails existing = repository
                 .findConnectionDetails(providerId).orElseThrow(NotFoundException::new);
-        if (existing.catalogVersion() != input.expectedVersion()) throw conflict();
         if (input.apiKey() == null && !sameConnectionTarget(
                 existing.providerType(), existing.baseUrl(), existing.messagesUrl(), input)) {
             throw new IllegalArgumentException(
@@ -142,27 +147,24 @@ public class AiProviderCatalogService {
     }
 
     private AiProviderCatalogRepository repository() {
-        return repositoryFactory.aiProviderCatalogRepository(secrets, objectMapper);
+        return repositoryFactory.aiProviderCatalogRepository(secrets);
     }
 
     private static boolean sameText(String stored, String requested) {
         return java.util.Objects.equals(nullable(stored), nullable(requested));
     }
 
-    private static void validate(AiProviderUpdate input, boolean update) {
+    private static void validate(AiProviderUpdate input) {
         if (input == null || !StringUtils.hasText(input.providerName())
                 || !StringUtils.hasText(input.providerType())) {
             throw new IllegalArgumentException("Provider name and type are required.");
-        }
-        if (update && input.expectedVersion() == null) {
-            throw new IllegalArgumentException("Expected catalog version is required.");
         }
         if (input.enabled() && !StringUtils.hasText(input.baseUrl())
                 && !StringUtils.hasText(input.messagesUrl())) {
             throw new IllegalArgumentException("An enabled provider requires an endpoint URL.");
         }
         String type = input.providerType().strip().toLowerCase();
-        if (!java.util.Set.of("anthropic", "azure-openai", "openai").contains(type)) {
+        if (!java.util.Set.of("anthropic", "openai").contains(type)) {
             throw new IllegalArgumentException("Unsupported AI provider type: " + type);
         }
         validateEndpoint(input.baseUrl(), "base URL");
@@ -187,8 +189,4 @@ public class AiProviderCatalogService {
         return StringUtils.hasText(value) ? value.strip() : null;
     }
 
-    private static AiPolicyViolationException conflict() {
-        return new AiPolicyViolationException(AiPolicyErrorCode.AI_CATALOG_VERSION_CONFLICT,
-                "The provider catalog changed while it was being edited.");
-    }
 }

@@ -59,7 +59,7 @@ class AiModelProfileSettingsValidatorTest {
 
     @Test
     void rejectsToolOutputLimitAboveTheSafeInputBudget() {
-        var input = new AiModelCatalogUpdate(1L, AiProviderId.from(1L), profile.getModelKey(),
+        var input = new AiModelCatalogUpdate(AiProviderId.from(1L), profile.getModelKey(),
                 true, true, 0, 100_000, 900_000L, 100_000L, 700_000L,
                 8_192L, 791_809L, false, null, null, false, null, null,
                 true, false, true, false, List.of(), null, List.of());
@@ -85,8 +85,8 @@ class AiModelProfileSettingsValidatorTest {
         AiModelCatalogUpdate input = update(900_000L, false,
                 List.of(new AiModelCatalogUpdate.ReasoningEffortUpdate(
                         "medium", true, 0)));
-        input = new AiModelCatalogUpdate(input.expectedVersion(), input.providerId(),
-                input.modelKey(), input.enabled(), input.defaultModel(), input.sortOrder(),
+        input = new AiModelCatalogUpdate(input.providerId(), input.modelKey(),
+                input.enabled(), input.defaultModel(), input.sortOrder(),
                 input.maxTokens(), input.contextWindow(), input.outputReserveTokens(),
                 input.autoCompactThresholdTokens(), input.emergencyHeadroomTokens(),
                 input.toolOutputTokenLimit(), input.providerCompactionEnabled(),
@@ -103,7 +103,7 @@ class AiModelProfileSettingsValidatorTest {
     @Test
     void rejectsThinkingBudgetAtOrAboveTheConfiguredOutputLimit() {
         var haiku = new ClaudeHaiku45Profile();
-        var input = new AiModelCatalogUpdate(1L, AiProviderId.from(1L), haiku.getModelKey(), true, false, 0,
+        var input = new AiModelCatalogUpdate(AiProviderId.from(1L), haiku.getModelKey(), true, false, 0,
                 2_000, 100_000L, 10_000L, 80_000L, 4_096L, 16_000L,
                 false, null, 4_096, false, null, "conversation-history",
                 null, false, null, false, List.of("disabled"), "disabled", List.of());
@@ -116,7 +116,7 @@ class AiModelProfileSettingsValidatorTest {
     @Test
     void validatesTheEffectiveThinkingDefaultAgainstConfiguredOutputLimit() {
         var haiku = new ClaudeHaiku45Profile();
-        var input = new AiModelCatalogUpdate(1L, AiProviderId.from(1L), haiku.getModelKey(), true, false, 0,
+        var input = new AiModelCatalogUpdate(AiProviderId.from(1L), haiku.getModelKey(), true, false, 0,
                 2_000, 100_000L, 10_000L, 80_000L, 4_096L, 16_000L,
                 false, null, null, false, null, "conversation-history",
                 null, false, null, false, List.of("enabled", "disabled"), "enabled", List.of());
@@ -129,7 +129,7 @@ class AiModelProfileSettingsValidatorTest {
     @Test
     void requiresAdaptiveFlagAndModeToChangeTogether() {
         var claude = new ClaudeFable5Profile();
-        var input = new AiModelCatalogUpdate(1L, AiProviderId.from(1L), claude.getModelKey(), true, false, 0,
+        var input = new AiModelCatalogUpdate(AiProviderId.from(1L), claude.getModelKey(), true, false, 0,
                 100_000, 900_000L, 100_000L, 700_000L, 8_192L, 32_000L,
                 false, null, null, false, "high", "conversation-history",
                 null, true, null, false, List.of("adaptive"), "adaptive", List.of());
@@ -142,7 +142,7 @@ class AiModelProfileSettingsValidatorTest {
     @Test
     void rejectsDisablingProviderEnforcedAdaptiveThinking() {
         var claude = new ClaudeFable5Profile();
-        var input = new AiModelCatalogUpdate(1L, AiProviderId.from(1L), claude.getModelKey(), true, false, 0,
+        var input = new AiModelCatalogUpdate(AiProviderId.from(1L), claude.getModelKey(), true, false, 0,
                 100_000, 900_000L, 100_000L, 700_000L, 8_192L, 32_000L,
                 false, null, null, false, "high", "conversation-history",
                 null, true, null, false, List.of(), null, List.of());
@@ -155,7 +155,7 @@ class AiModelProfileSettingsValidatorTest {
     @Test
     void rejectsFixedThinkingWithoutAnExplicitModeAndDefault() {
         var haiku = new ClaudeHaiku45Profile();
-        var input = new AiModelCatalogUpdate(1L, AiProviderId.from(1L), haiku.getModelKey(), true, false, 0,
+        var input = new AiModelCatalogUpdate(AiProviderId.from(1L), haiku.getModelKey(), true, false, 0,
                 64_000, 200_000L, 64_000L, 120_000L, 8_192L, 32_000L,
                 false, null, 4_096, false, null, "conversation-history",
                 null, false, null, false, List.of(), null, List.of());
@@ -173,7 +173,7 @@ class AiModelProfileSettingsValidatorTest {
     private AiModelCatalogUpdate update(long contextWindow, long autoCompactThreshold,
                                         boolean temperatureSupported,
                                         List<AiModelCatalogUpdate.ReasoningEffortUpdate> efforts) {
-        return new AiModelCatalogUpdate(1L, AiProviderId.from(1L), profile.getModelKey(), true, true, 0,
+        return new AiModelCatalogUpdate(AiProviderId.from(1L), profile.getModelKey(), true, true, 0,
                 100_000, contextWindow, 100_000L, autoCompactThreshold, 8_192L, 32_000L,
                 false, null, null, false, null, null, true, false, true,
                 temperatureSupported, List.of(), null, efforts);

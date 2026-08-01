@@ -1,43 +1,75 @@
 <div class="context-section ai-admin-page">
-  <div class="ps-2 pe-2">
-    <mat-toolbar class="bg-white">
-      <span class="title">AI Model Catalog</span>
-      <span class="flex-11-auto"></span>
-      <a mat-raised-button class="ms-2" color="primary" routerLink="/ai-admin/models/new">Add Model</a>
-    </mat-toolbar>
-  </div>
-
+  <div class="ps-2 pe-2"><mat-toolbar class="bg-white"><span class="title">AI Model Catalog</span>
+    <span class="flex-11-auto"></span><a mat-raised-button class="ms-2" color="primary"
+      routerLink="/ai-admin/models/new">Add Model</a></mat-toolbar></div>
   <mat-card class="pt-3">
-    <score-search-bar placeholder="Search by Model Name" [model]="filter"
-      (modelChange)="onFilterChange($event)"
-      [advancedSearch]="false" (searchTriggered)="onSearch()"/>
-
+    <score-search-bar placeholder="Search by Model Name" [(model)]="request.filters.model"
+      (searchTriggered)="onSearch()">
+      <div advancedSearchContent style="padding-left: 3rem;"><mat-card-content class="mat-card-container">
+        <div class="container-fluid" style="padding: 0;"><div class="row">
+          <div class="col-md-2 col-sm-12"><mat-form-field><mat-label>Provider</mat-label>
+            <input matInput [(ngModel)]="request.filters.provider" (keyup.enter)="onSearch()"></mat-form-field></div>
+          <div class="col-md-2 col-sm-12"><mat-form-field><mat-label>Status</mat-label>
+            <mat-select [(ngModel)]="request.filters.enabled" multiple>
+              <mat-option [value]="true">True</mat-option><mat-option [value]="false">False</mat-option>
+            </mat-select></mat-form-field></div>
+          <div class="col-md-2 col-sm-12"><mat-form-field><mat-label>Default Model</mat-label>
+            <mat-select [(ngModel)]="request.filters.defaultModel" multiple>
+              <mat-option [value]="true">True</mat-option><mat-option [value]="false">False</mat-option>
+            </mat-select></mat-form-field></div>
+          <div class="col-md-3 col-sm-12"><mat-form-field><mat-label>Default Effort</mat-label>
+            <input matInput [(ngModel)]="request.filters.defaultEffort" (keyup.enter)="onSearch()"></mat-form-field></div>
+          <div class="col-md-3 col-sm-12"><mat-form-field><mat-label>Efforts</mat-label>
+            <input matInput [(ngModel)]="request.filters.effort" (keyup.enter)="onSearch()"></mat-form-field></div>
+          <div class="col-md-2 col-sm-12"><score-tab-filter-select label="Updater"
+            [(ngModel)]="request.filters.updaterLoginIdList" [options]="loginIdList"
+            [tabs]="[{id: 'updated', label: 'Updated by'}, {id: 'notUpdated', label: 'Not updated by', valuePrefix: '!', selectedLabelPrefix: 'Not '}]"
+            [noEntriesFoundLabel]="'No matching updater found.'"/></div>
+          <div class="col-md-3 col-sm-12"><mat-form-field><mat-label>Updated start date</mat-label>
+            <input matInput [matDatepicker]="updatedAfter" [(ngModel)]="request.filters.updatedAfter"
+              [max]="request.filters.updatedBefore"><mat-datepicker-toggle matSuffix [for]="updatedAfter"/>
+            <mat-datepicker #updatedAfter/></mat-form-field></div>
+          <div class="col-md-3 col-sm-12"><mat-form-field><mat-label>Updated end date</mat-label>
+            <input matInput [matDatepicker]="updatedBefore" [(ngModel)]="request.filters.updatedBefore"
+              [min]="request.filters.updatedAfter"><mat-datepicker-toggle matSuffix [for]="updatedBefore"/>
+            <mat-datepicker #updatedBefore/></mat-form-field></div>
+          @if (invalidDateRange) { <div class="col-12 text-danger" role="alert">
+            Updated end date must be on or after the start date.</div> }
+        </div></div>
+      </mat-card-content></div>
+    </score-search-bar>
     <mat-card-content class="mat-card-container">
-      @if (loading) {
-        <div class="loading-container"><mat-spinner [diameter]="40"></mat-spinner></div>
-      } @else if (loadFailed) {
-        <div class="load-error" role="alert">Models could not be loaded.
-          <button mat-stroked-button (click)="load()">Retry</button>
-        </div>
-      } @else {
-        <div class="table-container">
-          <div class="score-column-container align-items-center">
-            <score-column-selector [columns]="columns"
-              (columnsChange)="onColumnsChange($event)" (onReset)="onColumnsReset()"/>
-          </div>
-          <div class="mat-elevation-z1 table-wrapper mt-3">
-            <table mat-table matSort matSortStart="desc" [dataSource]="dataSource">
-              <ng-container matColumnDef="model"><th mat-header-cell *matHeaderCellDef mat-sort-header>Model</th><td mat-cell *matCellDef="let model"><a [routerLink]="['/ai-admin/models', model.aiModelId]">{{model.displayName}}</a>@if (model.defaultModel) { <span class="default-badge">Default</span> }<small class="d-block">{{model.modelKey}}</small></td></ng-container>
-              <ng-container matColumnDef="provider"><th mat-header-cell *matHeaderCellDef mat-sort-header>Provider</th><td mat-cell *matCellDef="let model">{{model.provider}}</td></ng-container>
-              <ng-container matColumnDef="status"><th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th><td mat-cell *matCellDef="let model"><span class="status-pill" [class.disabled]="!model.enabled">{{model.enabled ? 'Enabled' : 'Disabled'}}</span></td></ng-container>
-              <ng-container matColumnDef="defaultEffort"><th mat-header-cell *matHeaderCellDef mat-sort-header>Default Effort</th><td mat-cell *matCellDef="let model">{{defaultEffort(model)}}</td></ng-container>
-              <ng-container matColumnDef="efforts"><th mat-header-cell *matHeaderCellDef mat-sort-header>Efforts</th><td mat-cell *matCellDef="let model">{{effortNames(model)}}</td></ng-container>
-              <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-              <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-            </table>
-          </div>
-        </div>
-      }
+      @if (loading) { <div class="loading-container"><mat-spinner [diameter]="40"></mat-spinner></div> }
+      @if (loadFailed) { <div class="load-error" role="alert">Models could not be loaded.
+        <button mat-stroked-button (click)="load()">Retry</button></div> }
+      <div class="table-container"><div class="score-column-container align-items-center">
+        <score-column-selector [columns]="columns" (columnsChange)="onColumnsChange($event)" (onReset)="onColumnsReset()"/>
+      </div><div class="mat-elevation-z1 table-wrapper mt-3">
+        <table mat-table matSort [matSortActive]="sort.active" [matSortDirection]="sort.direction"
+          matSortStart="desc" [dataSource]="dataSource">
+          <ng-container matColumnDef="model"><th mat-header-cell *matHeaderCellDef mat-sort-header
+            score-table-column-resize [defaultWidth]="width('Model')" (onResize)="onResizeWidth($event)">Model</th>
+            <td mat-cell *matCellDef="let model"><a [routerLink]="['/ai-admin/models', model.aiModelId]">{{model.displayName}}</a>
+              @if (model.defaultModel) { <span class="default-badge">Default</span> }<small class="d-block">{{model.modelKey}}</small></td></ng-container>
+          <ng-container matColumnDef="provider"><th mat-header-cell *matHeaderCellDef mat-sort-header
+            score-table-column-resize [defaultWidth]="width('Provider')" (onResize)="onResizeWidth($event)">Provider</th>
+            <td mat-cell *matCellDef="let model">{{model.provider}}</td></ng-container>
+          <ng-container matColumnDef="efforts"><th mat-header-cell *matHeaderCellDef mat-sort-header
+            score-table-column-resize [defaultWidth]="width('Efforts')" (onResize)="onResizeWidth($event)">Efforts</th>
+            <td mat-cell *matCellDef="let model">{{effortNames(model)}}</td></ng-container>
+          <ng-container matColumnDef="defaultEffort"><th mat-header-cell *matHeaderCellDef mat-sort-header
+            score-table-column-resize [defaultWidth]="width('Default Efforts')" (onResize)="onResizeWidth($event)">Default Efforts</th>
+            <td mat-cell *matCellDef="let model">{{defaultEffort(model)}}</td></ng-container>
+          <ng-container matColumnDef="status"><th mat-header-cell *matHeaderCellDef mat-sort-header
+            score-table-column-resize [defaultWidth]="width('Status')" (onResize)="onResizeWidth($event)">Status</th>
+            <td mat-cell *matCellDef="let model"><span class="status-pill" [class.disabled]="!model.enabled">{{model.enabled ? 'Enabled' : 'Disabled'}}</span></td></ng-container>
+          <ng-container matColumnDef="updatedOn"><th mat-header-cell *matHeaderCellDef mat-sort-header
+            score-table-column-resize [defaultWidth]="width('Updated On')" (onResize)="onResizeWidth($event)">Updated on</th>
+            <td mat-cell *matCellDef="let model"><div>{{model.lastUpdatedAt | date: 'yyyy-MM-dd HH:mm:ss'}}</div>
+              <div class="description">by <b>{{model.updaterLoginId || 'Unknown'}}</b></div></td></ng-container>
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr><tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table><mat-paginator [pageSizeOptions]="[10, 25, 50]" (page)="onPageChange($event)" showFirstLastButtons/>
+      </div></div>
     </mat-card-content>
   </mat-card>
 </div>

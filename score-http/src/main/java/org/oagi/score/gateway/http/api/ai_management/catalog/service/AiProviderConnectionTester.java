@@ -17,6 +17,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import org.springframework.util.StringUtils;
 
 /** Performs a bounded, read-only provider API call without persisting draft settings. */
 @Service
@@ -81,10 +82,8 @@ public class AiProviderConnectionTester {
         String endpoint = switch (type) {
             case "anthropic" -> AiProviderEndpointResolver.anthropicBaseUrl(
                     provider.baseUrl(), provider.messagesUrl()) + "/v1/messages/count_tokens";
-            case "azure-openai" -> AiProviderEndpointResolver.openAiResponsesBaseUrl(
-                    provider.baseUrl(), true) + "/models";
             case "openai" -> AiProviderEndpointResolver.openAiResponsesBaseUrl(
-                    provider.baseUrl(), false) + "/models";
+                    provider.baseUrl(), StringUtils.hasText(provider.apiVersion())) + "/models";
             default -> throw new IllegalArgumentException("Unsupported provider type");
         };
         URI endpointUri = URI.create(endpoint);
@@ -95,13 +94,13 @@ public class AiProviderConnectionTester {
         if ("anthropic".equals(type)) {
             request.header("x-api-key", apiKey)
                     .header("anthropic-version", textOrDefault(
-                            provider.anthropicVersion(), DEFAULT_ANTHROPIC_VERSION))
+                            provider.apiVersion(), DEFAULT_ANTHROPIC_VERSION))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(
                             Map.of("model", providerModelName,
                                     "messages", List.of(Map.of("role", "user",
                                             "content", "connection test"))))));
-        } else if ("azure-openai".equals(type)) {
+        } else if (StringUtils.hasText(provider.apiVersion())) {
             request.header("api-key", apiKey).GET();
         } else {
             request.header("Authorization", "Bearer " + apiKey).GET();
@@ -144,7 +143,7 @@ public class AiProviderConnectionTester {
         boolean trusted = switch (providerType) {
             case "anthropic" -> host.equals("api.anthropic.com")
                     || host.endsWith(".services.ai.azure.com");
-            case "openai", "azure-openai" -> host.equals("api.openai.com")
+            case "openai" -> host.equals("api.openai.com")
                     || host.endsWith(".openai.azure.com")
                     || host.endsWith(".services.ai.azure.com");
             default -> false;

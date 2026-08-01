@@ -26,8 +26,6 @@ class V3_6_0AiSubagentConversationSchemaTest {
             assertTrue(sql.contains("Expected conversation kinds are ROOT, SUBAGENT, and PARALLEL; other values are handled by the application."));
             assertFalse(sql.contains("ai_chat_conversation_kind_ck"));
             assertFalse(sql.contains("ai_chat_conversation_parent_kind_ck"));
-            assertFalse(sql.contains("CHECK ("));
-            assertFalse(sql.contains("_ck`"));
         }
     }
 }

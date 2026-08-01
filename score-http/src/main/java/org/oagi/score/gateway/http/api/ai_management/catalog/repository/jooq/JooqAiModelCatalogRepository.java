@@ -3,13 +3,15 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
+import org.jooq.Condition;
+import org.jooq.Field;
+import org.jooq.SortField;
 import org.jooq.Record;
-import org.jooq.types.UByte;
+import org.jooq.impl.DSL;
 import org.jooq.types.UInteger;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogConfigId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelOptions;
@@ -18,31 +20,39 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ReasoningEffort;
 import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiModelCatalogRepository;
+import org.oagi.score.gateway.http.api.ai_management.AiAdminPage;
 import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiModelProfileCatalog;
-import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
-import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
 import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiModelRecord;
+import org.oagi.score.gateway.http.common.model.PageRequest;
+import org.oagi.score.gateway.http.common.model.PageResponse;
+import org.oagi.score.gateway.http.common.model.SortDirection;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.ArrayList;
 
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CATALOG_AUDIT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL_CATALOG_CONFIG;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL_REASONING_EFFORT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_PROVIDER;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_MODEL_REASONING_ACCESS;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.APP_USER;
 
 public class JooqAiModelCatalogRepository extends JooqBaseRepository
         implements AiModelCatalogRepository {
+
+    private static final org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser
+            UPDATER = APP_USER.as("updater");
+    private static final Field<String> UPDATER_LOGIN_ID =
+            UPDATER.LOGIN_ID.as("updater_login_id");
 
     private final ObjectMapper objectMapper;
 
@@ -55,14 +65,110 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
 
     @Override
     public List<AiModelCatalogView> findAll() {
-        return dslContext().selectFrom(AI_MODEL)
+        return dslContext().select(AI_MODEL.fields()).select(UPDATER_LOGIN_ID)
+                .from(AI_MODEL).leftJoin(UPDATER)
+                .on(UPDATER.APP_USER_ID.eq(AI_MODEL.LAST_UPDATED_BY))
                 .orderBy(AI_MODEL.SORT_ORDER, AI_MODEL.AI_MODEL_ID)
                 .fetch(row -> view(dslContext(), row));
     }
 
     @Override
+    public PageResponse<AiModelCatalogView> search(String model, String provider,
+                                                   Boolean enabled, Boolean defaultModel,
+                                                   String defaultEffort, String effort,
+                                                   List<String> updaterLoginIdList,
+                                                   Instant updatedAfter, Instant updatedBefore,
+                                                   PageRequest pageRequest) {
+        AiAdminPage.validate(pageRequest);
+        Condition condition = DSL.trueCondition();
+        if (StringUtils.hasText(model)) {
+            String value = model.strip();
+            condition = condition.and(AI_MODEL.DISPLAY_NAME.containsIgnoreCase(value)
+                    .or(AI_MODEL.MODEL_KEY.containsIgnoreCase(value))
+                    .or(AI_MODEL.PROVIDER_MODEL_NAME.containsIgnoreCase(value)));
+        }
+        if (StringUtils.hasText(provider)) {
+            condition = condition.and(
+                    AI_PROVIDER.PROVIDER_NAME.containsIgnoreCase(provider.strip()));
+        }
+        if (enabled != null) condition = condition.and(AI_MODEL.ENABLED.eq(flag(enabled)));
+        if (defaultModel != null) {
+            condition = condition.and(defaultModel
+                    ? AI_MODEL.DEFAULT_MODEL.eq((byte) 1)
+                    : AI_MODEL.DEFAULT_MODEL.isNull());
+        }
+        var effortFilter = AI_MODEL_REASONING_EFFORT.as("effort_filter");
+        if (StringUtils.hasText(defaultEffort)) {
+            condition = condition.andExists(DSL.selectOne().from(effortFilter)
+                    .where(effortFilter.AI_MODEL_ID.eq(AI_MODEL.AI_MODEL_ID))
+                    .and(effortFilter.DEFAULT_EFFORT.eq((byte) 1))
+                    .and(effortFilter.DISPLAY_NAME.containsIgnoreCase(defaultEffort.strip())));
+        }
+        if (StringUtils.hasText(effort)) {
+            condition = condition.andExists(DSL.selectOne().from(effortFilter)
+                    .where(effortFilter.AI_MODEL_ID.eq(AI_MODEL.AI_MODEL_ID))
+                    .and(effortFilter.DISPLAY_NAME.containsIgnoreCase(effort.strip())));
+        }
+        condition = condition.and(AiAdminPage.loginIdSelection(
+                UPDATER.LOGIN_ID, updaterLoginIdList));
+        if (updatedAfter != null) {
+            condition = condition.and(AI_MODEL.LAST_UPDATED_AT.ge(
+                    updatedAfter.atZone(ZoneOffset.UTC).toLocalDateTime()));
+        }
+        if (updatedBefore != null) {
+            condition = condition.and(AI_MODEL.LAST_UPDATED_AT.lt(
+                    updatedBefore.atZone(ZoneOffset.UTC).toLocalDateTime()));
+        }
+        var candidates = DSL.selectOne().from(AI_MODEL).join(AI_PROVIDER)
+                .on(AI_PROVIDER.AI_PROVIDER_ID.eq(AI_MODEL.PROVIDER_ID))
+                .leftJoin(UPDATER).on(UPDATER.APP_USER_ID.eq(AI_MODEL.LAST_UPDATED_BY))
+                .where(condition);
+        int total = dslContext().fetchCount(candidates);
+        long offset = AiAdminPage.offset(pageRequest);
+        if (offset >= total) {
+            return new PageResponse<>(List.of(), pageRequest.pageIndex(),
+                    pageRequest.pageSize(), total);
+        }
+        Field<String> defaultEffortField = DSL.field("(select min(e.display_name) from "
+                + "ai_model_reasoning_effort e where e.ai_model_id = ai_model.ai_model_id "
+                + "and e.default_effort = 1)", String.class);
+        Field<String> effortsField = DSL.field("(select group_concat(e.display_name order by "
+                + "e.sort_order separator ', ') from ai_model_reasoning_effort e "
+                + "where e.ai_model_id = ai_model.ai_model_id)", String.class);
+        List<SortField<?>> order = new ArrayList<>();
+        pageRequest.sorts().forEach(sort -> {
+            Field<?> field = switch (sort.field()) {
+                case "model" -> AI_MODEL.DISPLAY_NAME;
+                case "provider" -> AI_PROVIDER.PROVIDER_NAME;
+                case "status" -> AI_MODEL.ENABLED;
+                case "defaultEffort" -> defaultEffortField;
+                case "efforts" -> effortsField;
+                case "updater" -> UPDATER.LOGIN_ID;
+                case "updatedOn" -> AI_MODEL.LAST_UPDATED_AT;
+                default -> null;
+            };
+            if (field != null) order.add(sort.direction() == SortDirection.DESC
+                    ? field.desc() : field.asc());
+        });
+        if (order.isEmpty()) {
+            order.add(AI_MODEL.LAST_UPDATED_AT.desc());
+        }
+        order.add(AI_MODEL.AI_MODEL_ID.asc());
+        List<AiModelCatalogView> page = dslContext().select(AI_MODEL.fields())
+                .select(UPDATER_LOGIN_ID)
+                .from(AI_MODEL).join(AI_PROVIDER)
+                .on(AI_PROVIDER.AI_PROVIDER_ID.eq(AI_MODEL.PROVIDER_ID))
+                .leftJoin(UPDATER).on(UPDATER.APP_USER_ID.eq(AI_MODEL.LAST_UPDATED_BY))
+                .where(condition).orderBy(order).limit((int) offset, pageRequest.pageSize())
+                .fetch(row -> view(dslContext(), row));
+        return new PageResponse<>(page, pageRequest.pageIndex(), pageRequest.pageSize(), total);
+    }
+
+    @Override
     public Optional<AiModelCatalogView> findById(AiModelId modelId) {
-        var row = dslContext().selectFrom(AI_MODEL)
+        var row = dslContext().select(AI_MODEL.fields()).select(UPDATER_LOGIN_ID)
+                .from(AI_MODEL).leftJoin(UPDATER)
+                .on(UPDATER.APP_USER_ID.eq(AI_MODEL.LAST_UPDATED_BY))
                 .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(modelId))).fetchOne();
         return Optional.ofNullable(row).map(value -> view(dslContext(), value));
     }
@@ -89,6 +195,7 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                         .set(AI_MODEL.PROVIDER_ID, valueOf(input.providerId()))
                         .set(AI_MODEL.MODEL_KEY, input.modelKey().strip())
                         .set(AI_MODEL.ENABLED, flag(input.enabled()))
+                        .setNull(AI_MODEL.DEFAULT_MODEL)
                         .set(AI_MODEL.SORT_ORDER, UInteger.valueOf(input.sortOrder()))
                         .set(AI_MODEL.CREATED_BY, valueOf(actorUserId))
                         .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
@@ -97,15 +204,15 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                         .returning(AI_MODEL.AI_MODEL_ID).fetchOne(
                                 AI_MODEL.AI_MODEL_ID).toBigInteger());
                 replaceEfforts(tx, id, reasoningEfforts);
-                updateDefault(tx, id, input.defaultModel()
-                        || !tx.fetchExists(tx.selectOne().from(AI_MODEL_CATALOG_CONFIG)),
+                boolean hasDefault = tx.fetchExists(tx.selectOne().from(AI_MODEL)
+                        .where(AI_MODEL.DEFAULT_MODEL.eq((byte) 1)));
+                updateDefault(tx, id, shouldMakeDefault(
+                                input.defaultModel(), input.enabled(), hasDefault),
                         actorUserId, now);
-                AiModelCatalogView after = view(tx, requireModel(tx, id));
-                audit(tx, id, actorUserId, "CREATE", null, after);
-                return after;
+                return view(tx, requireModel(tx, id));
             });
         } catch (org.jooq.exception.IntegrityConstraintViolationException exception) {
-            throw conflict();
+            throw new IllegalArgumentException("A model with this key already exists.", exception);
         }
     }
 
@@ -122,7 +229,6 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 throw new IllegalArgumentException("The model key is immutable.");
             }
             requireEnabledProvider(tx, input.providerId(), providerType);
-            AiModelCatalogView before = view(tx, existing);
             if (isDefault(tx, modelId) && !input.defaultModel()) {
                 throw new IllegalArgumentException(
                         "Choose another global default model before disabling this model.");
@@ -133,24 +239,21 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 throw new IllegalArgumentException("At least one active AI model is required.");
             }
             LocalDateTime now = now();
-            int changed = tx.update(AI_MODEL)
+            tx.update(AI_MODEL)
                     .set(configurationRecord(tx, profile, input))
                     .set(AI_MODEL.PROVIDER_ID, valueOf(input.providerId()))
                     .set(AI_MODEL.ENABLED, flag(input.enabled()))
                     .set(AI_MODEL.SORT_ORDER, UInteger.valueOf(input.sortOrder()))
-                    .set(AI_MODEL.CATALOG_VERSION, AI_MODEL.CATALOG_VERSION.plus(1))
                     .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
                     .set(AI_MODEL.LAST_UPDATED_AT, now)
                     .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(modelId)))
-                    .and(AI_MODEL.CATALOG_VERSION.eq(ULong.valueOf(input.expectedVersion())))
                     .execute();
-            if (changed != 1) throw conflict();
             replaceEfforts(tx, modelId, reasoningEfforts);
-            updateDefault(tx, modelId, input.defaultModel(), actorUserId, now);
-            AiModelCatalogView after = view(tx, requireModel(tx, modelId));
-            audit(tx, modelId, actorUserId,
-                    after.enabled() ? "UPDATE" : "DISABLE", before, after);
-            return after;
+            boolean hasDefault = tx.fetchExists(tx.selectOne().from(AI_MODEL)
+                    .where(AI_MODEL.DEFAULT_MODEL.eq((byte) 1)));
+            updateDefault(tx, modelId, shouldMakeDefault(
+                    input.defaultModel(), input.enabled(), hasDefault), actorUserId, now);
+            return view(tx, requireModel(tx, modelId));
         });
     }
 
@@ -166,12 +269,9 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 .fetch(row -> new ActiveModel(
                         new AiModelId(row.get(AI_MODEL.AI_MODEL_ID).toBigInteger()),
                         row.get(AI_MODEL.MODEL_KEY)));
-        String defaultModelKey = dslContext().select(AI_MODEL.MODEL_KEY)
-                .from(AI_MODEL_CATALOG_CONFIG)
-                .join(AI_MODEL).on(AI_MODEL.AI_MODEL_ID.eq(
-                        AI_MODEL_CATALOG_CONFIG.DEFAULT_AI_MODEL_ID))
-                .where(AI_MODEL_CATALOG_CONFIG.AI_MODEL_CATALOG_CONFIG_ID.eq(
-                        catalogConfigValue()))
+        String defaultModelKey = dslContext().select(AI_MODEL.MODEL_KEY).from(AI_MODEL)
+                .where(AI_MODEL.DEFAULT_MODEL.eq((byte) 1))
+                .and(AI_MODEL.ENABLED.eq((byte) 1))
                 .fetchOne(AI_MODEL.MODEL_KEY);
         return new ActiveCatalog(models, defaultModelKey);
     }
@@ -257,20 +357,28 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
     private void updateDefault(DSLContext tx, AiModelId id, boolean makeDefault,
                                UserId actorUserId, LocalDateTime now) {
         if (!makeDefault) return;
-        tx.insertInto(AI_MODEL_CATALOG_CONFIG)
-                .set(AI_MODEL_CATALOG_CONFIG.AI_MODEL_CATALOG_CONFIG_ID, catalogConfigValue())
-                .set(AI_MODEL_CATALOG_CONFIG.DEFAULT_AI_MODEL_ID, valueOf(id))
-                .set(AI_MODEL_CATALOG_CONFIG.LAST_UPDATED_BY, valueOf(actorUserId))
-                .set(AI_MODEL_CATALOG_CONFIG.LAST_UPDATED_AT, now)
-                .onDuplicateKeyUpdate()
-                .set(AI_MODEL_CATALOG_CONFIG.DEFAULT_AI_MODEL_ID, valueOf(id))
-                .set(AI_MODEL_CATALOG_CONFIG.LAST_UPDATED_BY, valueOf(actorUserId))
-                .set(AI_MODEL_CATALOG_CONFIG.LAST_UPDATED_AT, now).execute();
+        tx.update(AI_MODEL)
+                .setNull(AI_MODEL.DEFAULT_MODEL)
+                .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
+                .set(AI_MODEL.LAST_UPDATED_AT, now)
+                .where(AI_MODEL.DEFAULT_MODEL.eq((byte) 1))
+                .and(AI_MODEL.AI_MODEL_ID.ne(valueOf(id))).execute();
+        tx.update(AI_MODEL)
+                .set(AI_MODEL.DEFAULT_MODEL, (byte) 1)
+                .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
+                .set(AI_MODEL.LAST_UPDATED_AT, now)
+                .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(id))).execute();
+    }
+
+    static boolean shouldMakeDefault(boolean requestedDefault, boolean enabled,
+                                     boolean hasDefault) {
+        return requestedDefault || enabled && !hasDefault;
     }
 
     private boolean isDefault(DSLContext tx, AiModelId id) {
-        return tx.fetchExists(tx.selectOne().from(AI_MODEL_CATALOG_CONFIG)
-                .where(AI_MODEL_CATALOG_CONFIG.DEFAULT_AI_MODEL_ID.eq(valueOf(id))));
+        return tx.fetchExists(tx.selectOne().from(AI_MODEL)
+                .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(id)))
+                .and(AI_MODEL.DEFAULT_MODEL.eq((byte) 1)));
     }
 
     private AiModelCatalogView view(DSLContext tx, Record row) {
@@ -296,7 +404,8 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 new AiProviderId(row.get(AI_MODEL.PROVIDER_ID).toBigInteger()),
                 provider, row.get(AI_MODEL.MODEL_KEY), row.get(AI_MODEL.PROVIDER_MODEL_NAME),
                 row.get(AI_MODEL.DISPLAY_NAME), row.get(AI_MODEL.DESCRIPTION),
-                row.get(AI_MODEL.ENABLED) == 1, isDefault(tx, id),
+                row.get(AI_MODEL.ENABLED) == 1,
+                java.util.Objects.equals(row.get(AI_MODEL.DEFAULT_MODEL), (byte) 1),
                 row.get(AI_MODEL.SORT_ORDER).intValue(),
                 row.get(AI_MODEL.MAX_TOKENS) != null
                         ? row.get(AI_MODEL.MAX_TOKENS).intValue() : null,
@@ -316,26 +425,15 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 nullableBoolean(options.get("verbositySupported")),
                 nullableBoolean(options.get("temperatureSupported")),
                 stringList(options.get("thinkingModes")),
-                stringValue(options.get("defaultThinking")), editableOptions,
-                row.get(AI_MODEL.CATALOG_VERSION).longValue(), efforts);
+                stringValue(options.get("defaultThinking")), editableOptions, efforts,
+                updaterLoginId(tx, row), utc(row.get(AI_MODEL.LAST_UPDATED_AT)));
     }
 
-    private void audit(DSLContext tx, AiModelId id, UserId actorUserId, String action,
-                       Object before, Object after) {
-        try {
-            tx.insertInto(AI_CATALOG_AUDIT)
-                    .set(AI_CATALOG_AUDIT.ENTITY_TYPE, "MODEL")
-                    .set(AI_CATALOG_AUDIT.ENTITY_ID, valueOf(id))
-                    .set(AI_CATALOG_AUDIT.ACTOR_APP_USER_ID, valueOf(actorUserId))
-                    .set(AI_CATALOG_AUDIT.ACTION, action)
-                    .set(AI_CATALOG_AUDIT.BEFORE_JSON,
-                            before != null ? objectMapper.writeValueAsString(before) : null)
-                    .set(AI_CATALOG_AUDIT.AFTER_JSON,
-                            after != null ? objectMapper.writeValueAsString(after) : null)
-                    .set(AI_CATALOG_AUDIT.CREATED_AT, now()).execute();
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not serialize model catalog audit.", exception);
-        }
+    private String updaterLoginId(DSLContext tx, Record row) {
+        if (row.indexOf(UPDATER_LOGIN_ID) >= 0) return row.get(UPDATER_LOGIN_ID);
+        ULong updaterId = row.get(AI_MODEL.LAST_UPDATED_BY);
+        return updaterId != null ? tx.select(APP_USER.LOGIN_ID).from(APP_USER)
+                .where(APP_USER.APP_USER_ID.eq(updaterId)).fetchOne(APP_USER.LOGIN_ID) : null;
     }
 
     private String json(Object value) {
@@ -393,8 +491,8 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
         return LocalDateTime.now(ZoneOffset.UTC);
     }
 
-    private static UByte catalogConfigValue() {
-        return UByte.valueOf(AiModelCatalogConfigId.GLOBAL.value().intValueExact());
+    private static Instant utc(LocalDateTime value) {
+        return value != null ? value.toInstant(ZoneOffset.UTC) : null;
     }
 
     private static byte flag(boolean value) {
@@ -413,8 +511,4 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
         return value != null ? value.longValue() : null;
     }
 
-    private static AiPolicyViolationException conflict() {
-        return new AiPolicyViolationException(AiPolicyErrorCode.AI_CATALOG_VERSION_CONFLICT,
-                "The model catalog changed while it was being edited.");
-    }
 }

@@ -84,7 +84,7 @@ public class ScoreResponseEntityExceptionHandler extends ResponseEntityException
         HttpStatus status = switch (ex.code()) {
             case AI_QUOTA_EXHAUSTED, AI_REQUEST_TOKEN_LIMIT_EXHAUSTED,
                     AI_ACTIVE_REQUEST_LIMIT -> HttpStatus.TOO_MANY_REQUESTS;
-            case AI_POLICY_VERSION_CONFLICT, AI_CATALOG_VERSION_CONFLICT -> HttpStatus.CONFLICT;
+            case AI_POLICY_VERSION_CONFLICT -> HttpStatus.CONFLICT;
             case AI_PROVIDER_NOT_CONFIGURED -> HttpStatus.SERVICE_UNAVAILABLE;
             case AI_DISABLED_BY_POLICY, AI_MODEL_NOT_ALLOWED,
                     AI_REASONING_EFFORT_NOT_ALLOWED, AI_NO_ALLOWED_MODELS -> HttpStatus.FORBIDDEN;

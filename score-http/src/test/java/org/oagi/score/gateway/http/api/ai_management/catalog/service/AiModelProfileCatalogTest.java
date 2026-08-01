@@ -38,11 +38,6 @@ class AiModelProfileCatalogTest {
                         Gpt55Profile.class, Gpt55ProProfile.class,
                         Gpt54Profile.class, Gpt54ProProfile.class,
                         Gpt54MiniProfile.class, Gpt54NanoProfile.class);
-        assertThat(AiModelProfileCatalog.modelsFor("azure-openai"))
-                .extracting(profile -> profile.getModelKey())
-                .containsExactly("gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna",
-                        "gpt-5_5", "gpt-5_5-pro", "gpt-5_4", "gpt-5_4-pro",
-                        "gpt-5_4-mini", "gpt-5_4-nano");
     }
 
     @Test
@@ -347,7 +342,7 @@ class AiModelProfileCatalogTest {
         ScoreAiProperties.Provider anthropic = new ScoreAiProperties.Provider();
         anthropic.setType("anthropic");
         ScoreAiProperties.Provider openAi = new ScoreAiProperties.Provider();
-        openAi.setType("azure-openai");
+        openAi.setType("openai");
         ScoreAiProperties properties = new ScoreAiProperties();
         properties.setProviders(new LinkedHashMap<>(Map.of(
                 "azure-foundry", anthropic, "azure-openai", openAi)));
@@ -457,7 +452,7 @@ class AiModelProfileCatalogTest {
     @Test
     void resolvesEditableSettingsWithinProfileLimitsForPersistence() {
         var profile = new ClaudeHaiku45Profile();
-        var update = new AiModelCatalogUpdate(null, AiProviderId.from(1L), profile.getModelKey(),
+        var update = new AiModelCatalogUpdate(AiProviderId.from(1L), profile.getModelKey(),
                 true, false, 0, 32_000, 100_000L, 32_000L, 60_000L,
                 4_096L, 16_000L, false, null, 2_048, false,
                 null, "conversation-history", null, false, null, false,
@@ -477,7 +472,7 @@ class AiModelProfileCatalogTest {
     @Test
     void normalizesOptionalNullSettingsToProfileDefaultsBeforePersistence() {
         var profile = new ClaudeHaiku45Profile();
-        var update = new AiModelCatalogUpdate(null, AiProviderId.from(1L), profile.getModelKey(),
+        var update = new AiModelCatalogUpdate(AiProviderId.from(1L), profile.getModelKey(),
                 true, false, 0, null, 200_000L, null, null,
                 8_192L, 32_000L, false, null, null, false,
                 null, "conversation-history", null, false, null, false,

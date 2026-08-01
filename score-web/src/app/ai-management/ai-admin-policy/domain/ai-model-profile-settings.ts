@@ -18,7 +18,7 @@ export function isImplicitUnsetEffort(
 }
 
 export function modelCommand(form: AiModelUpdate): AiModelCommand {
-  return {expectedVersion: form.expectedVersion, providerId: form.providerId,
+  return {providerId: form.providerId,
     modelKey: form.modelKey, enabled: form.enabled, defaultModel: form.defaultModel,
     sortOrder: form.sortOrder, maxTokens: form.maxTokens, contextWindow: form.contextWindow,
     outputReserveTokens: form.outputReserveTokens,
@@ -40,8 +40,7 @@ export function modelCommand(form: AiModelUpdate): AiModelCommand {
 }
 
 export function editableModelState(form: AiModelUpdate): object {
-  const {expectedVersion: _expectedVersion, ...editable} = modelCommand(form);
-  return {...editable, profileIdentity: {providerModelName: form.providerModelName,
+  return {...modelCommand(form), profileIdentity: {providerModelName: form.providerModelName,
     displayName: form.displayName, description: form.description},
   effortMetadata: form.reasoningEfforts.map(effort => ({name: effort.name,
     displayName: effort.displayName, description: effort.description}))};

@@ -24,8 +24,9 @@ describe('AiPolicyUserDetailComponent', () => {
     toolOutputTokenLimit: 32000, providerCompactionEnabled: true, temperature: null,
     thinkingBudgetTokens: null, adaptiveThinking: false, outputEffort: null, cacheStrategy: null,
     reasoningModelSupported: true, outputEffortSupported: false, verbositySupported: false,
-    temperatureSupported: true, thinkingModes: [], defaultThinking: null, catalogVersion: 1,
-    reasoningEfforts: [{name: 'high', displayName: 'High', description: '', defaultEffort: true, sortOrder: 0}]
+    temperatureSupported: true, thinkingModes: [], defaultThinking: null,
+    reasoningEfforts: [{name: 'high', displayName: 'High', description: '', defaultEffort: true, sortOrder: 0}],
+    modelOptions: {}, updaterLoginId: 'admin', lastUpdatedAt: null
   });
 
   const policy = (): AiPolicyView => ({

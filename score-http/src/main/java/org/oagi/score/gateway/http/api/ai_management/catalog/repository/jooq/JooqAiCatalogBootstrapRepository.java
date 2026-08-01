@@ -1,12 +1,11 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq;
 
 import org.jooq.DSLContext;
-import org.jooq.types.UByte;
 import org.jooq.types.UInteger;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogConfigId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
 import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiCatalogBootstrapRepository;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatJsonSerializer;
 import org.oagi.score.gateway.http.common.repository.jooq.JooqBaseRepository;
@@ -23,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL_CATALOG_CONFIG;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL_REASONING_EFFORT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_PROVIDER;
 
@@ -47,8 +45,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
     }
 
     private void bootstrap(DSLContext tx, ScoreAiProperties properties) {
-        if (tx.fetchCount(AI_PROVIDER) != 0 || tx.fetchCount(AI_MODEL) != 0
-                || tx.fetchCount(AI_MODEL_CATALOG_CONFIG) != 0) {
+        if (tx.fetchCount(AI_PROVIDER) != 0 || tx.fetchCount(AI_MODEL) != 0) {
             return;
         }
 
@@ -65,10 +62,10 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
             AppSecretId secretId = createSecret(tx, name, provider.getKey());
             AiProviderId id = new AiProviderId(tx.insertInto(AI_PROVIDER)
                     .set(AI_PROVIDER.PROVIDER_NAME, name)
-                    .set(AI_PROVIDER.PROVIDER_TYPE, normalized(provider.getType(), "anthropic"))
+                    .set(AI_PROVIDER.PROVIDER_TYPE, AiProviderType.from(
+                            normalized(provider.getType(), "anthropic")).value())
                     .set(AI_PROVIDER.BASE_URL, blankToNull(provider.getBaseUrl()))
                     .set(AI_PROVIDER.MESSAGES_URL, blankToNull(provider.getMessagesUrl()))
-                    .set(AI_PROVIDER.ANTHROPIC_VERSION, blankToNull(provider.getAnthropicVersion()))
                     .set(AI_PROVIDER.API_VERSION, blankToNull(provider.getApiVersion()))
                     .set(AI_PROVIDER.API_KEY_SECRET_ID, valueOf(secretId))
                     .set(AI_PROVIDER.ENABLED, (byte) 1)
@@ -205,12 +202,10 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
             defaultModelId = modelIds.values().stream().findFirst().orElse(null);
         }
         if (defaultModelId == null) return;
-        tx.insertInto(AI_MODEL_CATALOG_CONFIG)
-                .set(AI_MODEL_CATALOG_CONFIG.AI_MODEL_CATALOG_CONFIG_ID,
-                        UByte.valueOf(AiModelCatalogConfigId.GLOBAL.value().intValueExact()))
-                .set(AI_MODEL_CATALOG_CONFIG.DEFAULT_AI_MODEL_ID, valueOf(defaultModelId))
-                .set(AI_MODEL_CATALOG_CONFIG.LAST_UPDATED_AT, now)
-                .execute();
+        tx.update(AI_MODEL)
+                .set(AI_MODEL.DEFAULT_MODEL, (byte) 1)
+                .set(AI_MODEL.LAST_UPDATED_AT, now)
+                .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(defaultModelId))).execute();
     }
 
     private static String normalized(String value, String fallback) {

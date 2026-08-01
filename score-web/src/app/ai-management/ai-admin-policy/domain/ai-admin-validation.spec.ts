@@ -2,11 +2,11 @@ import {AiModelUpdate, AiProviderUpdate} from './ai-admin-policy';
 import {httpErrorMessage, validModelUpdate, validProviderUpdate} from './ai-admin-validation';
 
 describe('AI admin validation', () => {
-  const provider = (): AiProviderUpdate => ({expectedVersion: null, providerName: 'OpenAI',
+  const provider = (): AiProviderUpdate => ({providerName: 'OpenAI',
     providerType: 'openai', baseUrl: 'https://api.openai.com', messagesUrl: null,
-    anthropicVersion: null, apiVersion: null, enabled: true});
+    apiVersion: null, enabled: true});
 
-  const model = (): AiModelUpdate => ({expectedVersion: null, providerId: 1,
+  const model = (): AiModelUpdate => ({providerId: 1,
     modelKey: 'model', providerModelName: 'model', displayName: 'Model', description: '',
     enabled: true, defaultModel: true, sortOrder: 0, maxTokens: 4096,
     contextWindow: 128000, outputReserveTokens: 4096, autoCompactThresholdTokens: 100000,

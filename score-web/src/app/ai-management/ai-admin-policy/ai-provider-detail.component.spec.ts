@@ -14,10 +14,10 @@ import {FontAwesomeModule} from '@fortawesome/angular-fontawesome';
 describe('AiProviderDetailComponent', () => {
   const provider: AiProviderView = {aiProviderId: 7, providerName: 'OpenAI',
     providerType: 'openai', baseUrl: 'https://api.openai.com', messagesUrl: null,
-    anthropicVersion: null, apiVersion: null, enabled: true, apiKeyConfigured: false,
-    catalogVersion: 3};
+    apiVersion: null, enabled: true, apiKeyConfigured: false,
+    updaterLoginId: 'admin', lastUpdatedAt: null};
 
-  it('offers a conflict reload and refreshes the catalog version', () => {
+  it('offers a conflict reload', () => {
     const reload = new Subject<void>();
     const service = {provider: vi.fn(() => of(provider)), updateProvider: vi.fn(() =>
       throwError(() => ({status: 409, error: {message: 'Version conflict'}})))};
@@ -303,31 +303,11 @@ describe('AiProviderDetailComponent', () => {
     fixture.componentInstance.setProviderType('anthropic');
     fixture.changeDetectorRef.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Anthropic Version');
-    expect(fixture.nativeElement.textContent).not.toContain('API Version');
+    expect(fixture.nativeElement.textContent).toContain('API Version');
+    expect(fixture.nativeElement.textContent).toContain('anthropic-version');
   });
 
-  it('presents a legacy Azure OpenAI provider as OpenAI without changing its adapter', () => {
-    const legacy = {...provider, providerType: 'azure-openai', apiVersion: '2025-04-01-preview'};
-    const updated = {...legacy, providerName: 'Azure OpenAI Updated'};
-    const service = {provider: vi.fn(() => of(legacy)), updateProvider: vi.fn(() => of(updated))};
-    TestBed.configureTestingModule({providers: [
-      {provide: AiAdminPolicyService, useValue: service},
-      {provide: ActivatedRoute, useValue: {snapshot: {paramMap: convertToParamMap({id: '7'})}}},
-      {provide: Router, useValue: {navigate: vi.fn()}}, {provide: MatSnackBar, useValue: {open: vi.fn()}}
-    ]});
-    const component = TestBed.runInInjectionContext(() => new AiProviderDetailComponent());
-    component.ngOnInit();
-    expect(component.form.providerType).toBe('openai');
-    expect(component.isAnthropicProvider).toBe(false);
-
-    component.form.providerName = updated.providerName;
-    component.save();
-
-    expect(service.updateProvider.mock.calls[0][1].providerType).toBe('azure-openai');
-  });
-
-  it('clears the version setting that does not belong to the selected provider type', () => {
+  it('keeps the single API version when the provider type changes', () => {
     const service = {provider: vi.fn(() => of({...provider, apiVersion: 'v1'}))};
     TestBed.configureTestingModule({providers: [
       {provide: AiAdminPolicyService, useValue: service},
@@ -338,10 +318,9 @@ describe('AiProviderDetailComponent', () => {
     component.ngOnInit();
 
     component.setProviderType('anthropic');
-    expect(component.form.apiVersion).toBeNull();
-    component.form.anthropicVersion = '2023-06-01';
+    expect(component.form.apiVersion).toBe('v1');
     component.setProviderType('openai');
-    expect(component.form.anthropicVersion).toBeNull();
+    expect(component.form.apiVersion).toBe('v1');
   });
 
   it('shows a safe server error when disabling a provider is rejected', () => {

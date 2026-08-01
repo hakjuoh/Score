@@ -14,8 +14,8 @@ import {JsonOptionEditorComponent} from './json-option-editor.component';
 describe('AiModelDetailComponent', () => {
   const provider: AiProviderView = {aiProviderId: 1, providerName: 'OpenAI',
     providerType: 'openai', baseUrl: 'https://example.com', messagesUrl: null,
-    anthropicVersion: null, apiVersion: null, enabled: true, apiKeyConfigured: false,
-    catalogVersion: 1};
+    apiVersion: null, enabled: true, apiKeyConfigured: false,
+    updaterLoginId: 'admin', lastUpdatedAt: null};
   const anthropicProvider: AiProviderView = {...provider, aiProviderId: 2,
     providerName: 'Anthropic', providerType: 'anthropic'};
   const efforts = [
@@ -151,7 +151,8 @@ describe('AiModelDetailComponent', () => {
     verbositySupported: openAiProfile.verbositySupported,
     temperatureSupported: openAiProfile.temperatureSupported,
     thinkingModes: openAiProfile.thinkingModes, defaultThinking: openAiProfile.defaultThinking,
-    catalogVersion: 2, reasoningEfforts: efforts, modelOptions: {store: false}
+    reasoningEfforts: efforts, modelOptions: {store: false},
+    updaterLoginId: 'admin', lastUpdatedAt: null
   };
 
   it('loads backend profiles and enables Update only after a change', () => {
@@ -242,7 +243,7 @@ describe('AiModelDetailComponent', () => {
       option => option.key === 'citationsEnabled')!, true);
     component.save();
 
-    expect(service.updateModel.mock.calls[0][1]).toMatchObject({expectedVersion: 2, providerId: 2,
+    expect(service.updateModel.mock.calls[0][1]).toMatchObject({providerId: 2,
       modelKey: 'claude-haiku-4_5', enabled: true, defaultModel: true,
       contextWindow: 200000, reasoningEfforts: [],
       modelOptions: expect.objectContaining({citationsEnabled: true})});
