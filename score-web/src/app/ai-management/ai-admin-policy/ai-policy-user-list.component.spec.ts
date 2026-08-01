@@ -8,6 +8,9 @@ import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiPolicyUserSummary} from './domain/ai-admin-policy';
 import {AccountListService} from '../../account-management/domain/account-list.service';
 import {AiAdminListNavigationService} from './domain/ai-admin-list-navigation.service';
+import {AiAdminPolicyModule} from './ai-admin-policy.module';
+import {NoopAnimationsModule} from '@angular/platform-browser/animations';
+import {provideRouter} from '@angular/router';
 
 describe('AiPolicyUserListComponent', () => {
   const response = <T>(list: T[]) => ({list, page: 0, size: 10, length: list.length});
@@ -37,6 +40,30 @@ describe('AiPolicyUserListComponent', () => {
     return component;
   };
 
+  const render = async (searchUsers: () => ReturnType<typeof of> | ReturnType<typeof throwError>) => {
+    await TestBed.configureTestingModule({
+      imports: [AiAdminPolicyModule, NoopAnimationsModule],
+      providers: [
+        provideRouter([]),
+        {provide: AiAdminPolicyService, useValue: {searchUsers}},
+        {provide: SettingsPreferencesService, useValue: {
+          load: () => of(new PreferencesInfo()),
+          updateTableColumnsForAiPolicyPage: () => of(undefined)
+        }},
+        {provide: AccountListService, useValue: {getAccountNames: () => of(['admin'])}},
+        {provide: AiAdminListNavigationService, useValue: {
+          queryParamMap: {get: () => null}, restoreAdvancedSearch: vi.fn(), replaceState: vi.fn()
+        }},
+        {provide: AuthService, useValue: {getUserToken: () => ({})}}
+      ]
+    }).compileComponents();
+    const fixture = TestBed.createComponent(AiPolicyUserListComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  };
+
   it('sends all detailed filters to the paginated search', () => {
     const searchUsers = vi.fn(request => of(response([user('alice')])));
     const component = configure({searchUsers});
@@ -51,14 +78,27 @@ describe('AiPolicyUserListComponent', () => {
     expect(component.paginator.length).toBe(1);
   });
 
-  it('exposes an error state and retries loading', () => {
+  it('allows the user to load again after a failed request', () => {
     let attempts = 0;
     const component = configure({searchUsers: () => ++attempts === 1
       ? throwError(() => new Error('offline')) : of(response([]))});
-    expect(component.loadFailed).toBe(true);
     component.load();
-    expect(component.loadFailed).toBe(false);
     expect(attempts).toBe(2);
+  });
+
+  it('renders no inline alert or retry control when loading fails', async () => {
+    const element = await render(() => throwError(() => new Error('offline')));
+
+    expect(element.querySelector('[role="alert"]')).toBeNull();
+    expect(element.textContent).not.toContain('Retry');
+    expect(element.textContent).not.toContain('Users could not be loaded.');
+  });
+
+  it('renders an em dash instead of Inherited when no policy update exists', async () => {
+    const element = await render(() => of(response([user('alice')])));
+
+    expect(element.textContent).toContain('—');
+    expect(element.textContent).not.toContain('Inherited');
   });
 
   it('updates and resets visible table columns', () => {

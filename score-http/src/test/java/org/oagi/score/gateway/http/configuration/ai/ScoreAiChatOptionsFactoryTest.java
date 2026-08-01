@@ -51,6 +51,25 @@ class ScoreAiChatOptionsFactoryTest {
     }
 
     @Test
+    void appliesOpus45OutputEffortWhileFixedThinkingDefaultsToDisabled() {
+        var configuration = new ScoreAiModelRegistry.ModelConfiguration(
+                "claude-opus-4_5", "claude-opus-4-5", "anthropic",
+                64_000, 0.7, 4_096, false, "high", "conversation-history",
+                List.of(new ScoreAiModelRegistry.ReasoningEffortDescriptor(
+                        "low", "Low", "Lighter reasoning.")),
+                false, true, false, true,
+                List.of("enabled", "disabled"), "disabled");
+        when(models.modelConfiguration("claude-opus-4_5")).thenReturn(configuration);
+
+        ChatOptions options = factory.create("claude-opus-4_5", "low", null);
+
+        assertThat(options).isInstanceOfSatisfying(AnthropicChatOptions.class, anthropic -> {
+            assertThat(anthropic.getThinking()).isNotNull();
+            assertThat(anthropic.getOutputConfig().toString()).containsIgnoringCase("low");
+        });
+    }
+
+    @Test
     void createsAzureOpenAiOptionsAndUsesTheRouteManifestAsTheCacheKey() {
         when(models.modelConfiguration("gpt-test")).thenReturn(configuration(
                 "gpt-test", "gpt-deployment", "azure-openai", 8_000,

@@ -138,25 +138,25 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
      * The column <code>oagi.ai_user_policy.created_by</code>. Identifier of the
      * administrator who created the policy
      */
-    public final TableField<AiUserPolicyRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Identifier of the administrator who created the policy");
+    public final TableField<AiUserPolicyRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who created the policy");
 
     /**
      * The column <code>oagi.ai_user_policy.last_updated_by</code>. Identifier
      * of the administrator who last updated the policy
      */
-    public final TableField<AiUserPolicyRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Identifier of the administrator who last updated the policy");
+    public final TableField<AiUserPolicyRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who last updated the policy");
 
     /**
-     * The column <code>oagi.ai_user_policy.created_at</code>. Date and time
-     * when the policy was created
+     * The column <code>oagi.ai_user_policy.creation_timestamp</code>. Date and
+     * time when the policy was created
      */
-    public final TableField<AiUserPolicyRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the policy was created");
+    public final TableField<AiUserPolicyRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the policy was created");
 
     /**
-     * The column <code>oagi.ai_user_policy.last_updated_at</code>. Date and
-     * time when the policy was last updated
+     * The column <code>oagi.ai_user_policy.last_update_timestamp</code>. Date
+     * and time when the policy was last updated
      */
-    public final TableField<AiUserPolicyRecord, LocalDateTime> LAST_UPDATED_AT = createField(DSL.name("last_updated_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the policy was last updated");
+    public final TableField<AiUserPolicyRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the policy was last updated");
 
     private AiUserPolicy(Name alias, Table<AiUserPolicyRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

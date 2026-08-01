@@ -1,4 +1,6 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai;
+
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ReasoningEffort;
 
 import java.util.List;
 
@@ -27,6 +29,7 @@ record OpenAiModelProfileSpec(long contextWindow, long maxOutputTokens,
 
     private static String displayName(String name) {
         return switch (name) {
+            case "disabled" -> "Disabled";
             case "low" -> "Low";
             case "medium" -> "Medium";
             case "high" -> "High";
@@ -38,6 +41,7 @@ record OpenAiModelProfileSpec(long contextWindow, long maxOutputTokens,
 
     private static String description(String name) {
         return switch (name) {
+            case "disabled" -> "Disable additional reasoning; requests send OpenAI's none value.";
             case "low" -> "Fast responses with lighter reasoning.";
             case "medium" -> "Balanced speed and reasoning depth for everyday tasks.";
             case "high" -> "Greater reasoning depth for complex problems.";

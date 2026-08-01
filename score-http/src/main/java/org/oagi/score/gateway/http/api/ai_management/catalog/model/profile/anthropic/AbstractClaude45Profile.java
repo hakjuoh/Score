@@ -1,6 +1,7 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic;
 
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.*;
 
 import java.util.List;
 
@@ -13,10 +14,17 @@ abstract class AbstractClaude45Profile extends AbstractAiModelProfile
     protected AbstractClaude45Profile(String modelKey, String providerModelName,
                                       String displayName, String description,
                                       long contextWindow, long maxOutputTokens) {
+        this(modelKey, providerModelName, displayName, description, contextWindow,
+                maxOutputTokens, AnthropicChatOptionSupport.claude45());
+    }
+
+    protected AbstractClaude45Profile(String modelKey, String providerModelName,
+                                      String displayName, String description,
+                                      long contextWindow, long maxOutputTokens,
+                                      AnthropicChatOptionSupport optionSupport) {
         super(modelKey, providerModelName, displayName, description,
                 AnthropicChatOptionProfiles.options(providerModelName,
-                        Math.toIntExact(maxOutputTokens),
-                        AnthropicChatOptionSupport.claude45()));
+                        Math.toIntExact(maxOutputTokens), optionSupport));
         this.contextWindow = contextWindow;
         this.maxOutputTokens = maxOutputTokens;
     }

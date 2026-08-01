@@ -8,16 +8,16 @@ CREATE TABLE `app_secret`
     `nonce`              binary(12) NOT NULL COMMENT 'Unique 96-bit AES-GCM nonce for this encrypted value',
     `encryption_key_id`  varchar(64) NOT NULL COMMENT 'Identifier of the application encryption key used for this value',
     `encryption_version` smallint unsigned NOT NULL DEFAULT 1 COMMENT 'Version of the encryption payload format',
-    `created_by`         bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the secret',
-    `last_updated_by`    bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the secret',
-    `created_at`         datetime(6) NOT NULL COMMENT 'Date and time when the secret was created',
-    `last_updated_at`    datetime(6) NOT NULL COMMENT 'Date and time when the secret was last updated',
+    `created_by`         bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who created the secret',
+    `last_updated_by`    bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who last updated the secret',
+    `creation_timestamp` datetime(6) NOT NULL COMMENT 'Date and time when the secret was created',
+    `last_update_timestamp` datetime(6) NOT NULL COMMENT 'Date and time when the secret was last updated',
     PRIMARY KEY (`app_secret_id`),
     UNIQUE KEY `app_secret_guid_uk` (`secret_guid`),
     UNIQUE KEY `app_secret_name_uk` (`secret_name`),
     CONSTRAINT `app_secret_created_by_fk`
-        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`),
     CONSTRAINT `app_secret_last_updated_by_fk`
-        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Encrypted application secrets; initially limited to AI provider API keys';

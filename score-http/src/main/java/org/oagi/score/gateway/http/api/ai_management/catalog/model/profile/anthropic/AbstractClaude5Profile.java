@@ -1,6 +1,7 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic;
 
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.*;
 
 import java.util.List;
 
@@ -37,15 +38,6 @@ abstract class AbstractClaude5Profile extends AbstractAiModelProfile
     @Override public List<String> getThinkingModes() { return thinkingModes; }
     @Override public final String getDefaultThinking() { return "adaptive"; }
     @Override public final List<ReasoningEffort> getOutputEfforts() {
-        return List.of(
-                effort("low", "Low", "Fast responses with lighter reasoning.", false, 0),
-                effort("medium", "Medium", "Balances speed and reasoning depth for everyday tasks.", false, 1),
-                effort("high", "High", "Greater reasoning depth for complex problems.", true, 2),
-                effort("max", "Maximum", "Maximum capability without token-spending constraints.", false, 3));
-    }
-
-    private static ReasoningEffort effort(String name, String displayName, String description,
-                                           boolean defaultEffort, int sortOrder) {
-        return new ReasoningEffort(name, displayName, description, defaultEffort, sortOrder);
+        return AnthropicOutputEfforts.profiles(AnthropicOutputEfforts.THROUGH_XHIGH_AND_MAX);
     }
 }

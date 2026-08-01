@@ -31,7 +31,6 @@ export class AiProviderListComponent implements OnInit {
 
   request = new AiProviderListRequest(this.navigation.queryParamMap);
   loading = false;
-  loadFailed = false;
   private loadSequence = 0;
   preferencesInfo: PreferencesInfo;
   loginIdList: string[] = [];
@@ -90,7 +89,6 @@ export class AiProviderListComponent implements OnInit {
     if (this.invalidDateRange) return;
     const sequence = ++this.loadSequence;
     this.loading = true;
-    this.loadFailed = false;
     this.request.page = new PageRequest(this.sort.active, this.sort.direction,
       this.paginator.pageIndex, this.paginator.pageSize);
     this.service.searchProviders(this.request).pipe(finalize(() => {
@@ -105,7 +103,6 @@ export class AiProviderListComponent implements OnInit {
         if (sequence !== this.loadSequence) return;
         this.dataSource.data = [];
         this.paginator.length = 0;
-        this.loadFailed = true;
       }});
   }
 
