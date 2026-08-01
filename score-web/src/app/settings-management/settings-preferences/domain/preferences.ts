@@ -206,7 +206,7 @@ export class TableColumnsInfo {
     {name: 'Name', selected: true, width: 180},
     {name: 'Organization', selected: true, width: 220},
     {name: 'AI Access', selected: true, width: 120},
-    {name: 'Models', selected: true, width: 100},
+    {name: 'Available Models', selected: true, width: 130},
     {name: 'Multi-agent', selected: true, width: 130},
     {name: 'Quota', selected: true, width: 220},
     {name: 'Active', selected: true, width: 100},

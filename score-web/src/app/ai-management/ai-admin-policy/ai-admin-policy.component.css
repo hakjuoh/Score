@@ -123,6 +123,27 @@ mat-radio-group {
   padding: 1rem;
 }
 
+.detail-surface {
+  border: 1px solid rgba(0, 0, 0, .12);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ai-policy-filter-grid {
+  display: grid;
+  gap: 0 1.5rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.ai-policy-filter-grid mat-form-field,
+.ai-policy-filter-grid score-tab-filter-select {
+  width: 100%;
+}
+
+.ai-policy-filter-error {
+  grid-column: 1 / -1;
+}
+
 .policy-source-panel {
   display: flex;
   align-items: center;
@@ -298,30 +319,191 @@ mat-radio-group {
   gap: .5rem;
 }
 
-.usage-summary-grid {
+.usage-overview-header,
+.usage-chart-header,
+.usage-meter-legend,
+.active-requests-summary {
+  display: flex;
+  align-items: center;
+}
+
+.usage-overview {
+  padding: 0 1rem .5rem;
+}
+
+.usage-overview-header {
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.usage-overview-header h3 {
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.active-requests-summary {
+  gap: .35rem;
+}
+
+.activity-dot {
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: #98a2b3;
+}
+
+.activity-dot.active {
+  background: #12b76a;
+}
+
+.usage-overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+}
+
+.usage-chart {
+  display: grid;
+  grid-template-rows: auto 3.5rem 1rem auto;
+  min-width: 0;
+  padding: .25rem 1.5rem .5rem 0;
+}
+
+.usage-chart + .usage-chart {
+  border-left: 1px solid rgba(0, 0, 0, .12);
+  padding-left: 1.5rem;
+  padding-right: 0;
+}
+
+.usage-chart-header {
+  justify-content: space-between;
   gap: 1rem;
 }
 
-.usage-stat {
+.usage-odometer {
+  align-items: baseline;
   display: flex;
-  flex-direction: column;
-  gap: .35rem;
-  border: 1px solid rgba(0, 0, 0, .12);
-  border-radius: 4px;
-  padding: 1rem;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin: .75rem 0 .5rem;
 }
 
-.usage-stat span,
-.hint,
-small {
+.usage-odometer strong {
+  font-size: 1.65rem;
+  font-weight: 500;
+}
+
+.usage-odometer span {
   color: #667085;
 }
 
-.usage-stat strong {
-  font-size: 1.35rem;
+.usage-meter {
+  background: #eaecf0;
+  border-radius: .5rem;
+  display: flex;
+  height: 1rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.usage-meter-segment.charged,
+.legend-swatch.charged {
+  background: #4f7f8f;
+}
+
+.usage-meter-segment.reserved,
+.legend-swatch.reserved {
+  background: #e5a03a;
+}
+
+.usage-meter-segment.available,
+.legend-swatch.available {
+  background: #eaecf0;
+}
+
+.usage-meter-legend {
+  color: #667085;
+  flex-wrap: wrap;
+  gap: .5rem 1rem;
+  margin-top: .75rem;
+}
+
+.usage-meter-legend > span {
+  align-items: center;
+  display: inline-flex;
+  gap: .3rem;
+}
+
+.usage-meter-legend strong {
+  color: #344054;
   font-weight: 500;
+}
+
+.legend-swatch {
+  border-radius: 2px;
+  display: inline-block;
+  height: .65rem;
+  width: .65rem;
+}
+
+.unlimited-quota {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: .2rem;
+  margin-bottom: .5rem;
+  min-height: 0;
+}
+
+.unlimited-legend {
+  padding-top: 0;
+}
+
+.unlimited-meter {
+  background: repeating-linear-gradient(
+    135deg,
+    #eaecf0,
+    #eaecf0 .5rem,
+    #f2f4f7 .5rem,
+    #f2f4f7 1rem
+  );
+}
+
+.usage-period-filter {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.usage-date-field {
+  flex: 0 0 12rem;
+  width: 12rem;
+}
+
+.usage-date-field mat-form-field {
+  width: 100%;
+}
+
+.usage-period-filter > .hint {
+  white-space: nowrap;
+}
+
+.usage-section {
+  border-top: 1px solid rgba(0, 0, 0, .12);
+  padding: 1.25rem 1rem .5rem;
+}
+
+.usage-section h3 {
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0 0 1rem;
+}
+
+.usage-table-wrapper {
+  border: 1px solid rgba(0, 0, 0, .12);
 }
 
 .operation-grid {
@@ -339,7 +521,7 @@ small {
 
 @media (max-width: 1199px) {
   .detail-form-grid-4,
-  .usage-summary-grid {
+  .ai-policy-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -355,12 +537,33 @@ small {
   .toggle-grid,
   .toggle-grid-3,
   .model-option-grid,
-  .usage-summary-grid,
+  .usage-overview-grid,
+  .ai-policy-filter-grid,
   .operation-grid,
   .quota-adjustment-grid,
   .effort-access-row,
   .reasoning-effort-row {
     grid-template-columns: 1fr;
+  }
+
+  .usage-chart {
+    padding: 0 0 1.25rem;
+  }
+
+  .usage-chart + .usage-chart {
+    border-left: 0;
+    border-top: 1px solid rgba(0, 0, 0, .12);
+    padding: 1.25rem 0 0;
+  }
+
+  .usage-date-field {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .usage-period-filter {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .profile-option {
