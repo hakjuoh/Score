@@ -25,11 +25,11 @@
     <div class="p-3 container-fluid">
       <div class="row g-3">
         <div class="col-12">
-          <mat-card>
-            <mat-card-header>
-              <mat-card-title>Provider Settings</mat-card-title>
-            </mat-card-header>
-            <mat-card-content class="mat-card-container">
+          <mat-expansion-panel class="static-detail-panel" expanded disabled hideToggle>
+            <mat-expansion-panel-header>
+              <mat-panel-title>Provider Settings</mat-panel-title>
+            </mat-expansion-panel-header>
+            <div class="mat-card-container">
               <div class="detail-form-grid">
                 <mat-form-field>
                   <mat-label>Provider Name</mat-label>
@@ -65,16 +65,28 @@
                 <div class="detail-span-2 api-key-field">
                   <mat-form-field class="w-100">
                     <mat-label>API Key{{isNew ? ' (optional)' : ''}}</mat-label>
-                    <input matInput type="password" autocomplete="new-password" [(ngModel)]="apiKey">
+                    <input matInput [type]="apiKeyVisible ? 'text' : 'password'"
+                      autocomplete="new-password" [(ngModel)]="apiKey">
+                    @if (canRevealStoredApiKey) {
+                      <button mat-icon-button matSuffix type="button"
+                        class="api-key-visibility-button"
+                        [attr.aria-label]="apiKeyVisible ? 'Hide API key' : 'Show API key'"
+                        [disabled]="apiKeyLoading" (click)="toggleApiKeyVisibility()">
+                        <fa-icon class="api-key-visibility-icon"
+                          [icon]="apiKeyVisible ? visibilityOffIcon : visibilityIcon"/>
+                      </button>
+                    }
                     @if (!isNew) {
-                      <mat-hint>Keep the masked value, enter a replacement, or clear it to remove the key.</mat-hint>
+                      <mat-hint>Use the visibility button to verify the stored key, enter a replacement,
+                        or clear it to remove the key.</mat-hint>
                     }
                   </mat-form-field>
                 </div>
               </div>
-              <mat-slide-toggle [(ngModel)]="form.enabled">Enabled</mat-slide-toggle>
-            </mat-card-content>
-          </mat-card>
+              <mat-slide-toggle class="provider-enabled-toggle"
+                [(ngModel)]="form.enabled">Enabled</mat-slide-toggle>
+            </div>
+          </mat-expansion-panel>
         </div>
       </div>
 

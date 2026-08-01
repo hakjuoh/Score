@@ -2,13 +2,13 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
 
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
 
-import java.util.List;
-
 public final class ClaudeHaiku45Profile extends AbstractAiModelProfile
         implements FixedThinkingModelProfile, CacheModelProfile {
     public ClaudeHaiku45Profile() {
         super("claude-haiku-4_5", "claude-haiku-4-5", "Claude Haiku 4.5",
-                "Fast and efficient Claude model for lightweight everyday tasks.");
+                "Fast and efficient Claude model for lightweight everyday tasks.",
+                AnthropicChatOptionProfiles.options("claude-haiku-4-5", 64_000,
+                        AnthropicChatOptionSupport.haiku45()));
     }
 
     @Override public String getProviderType() { return AiProviderType.ANTHROPIC.value(); }
@@ -19,6 +19,8 @@ public final class ClaudeHaiku45Profile extends AbstractAiModelProfile
         return new NumericConstraint(4_096L, 1_024L, 63_999L, true);
     }
     @Override public String getDefaultCacheStrategy() { return "conversation-history"; }
-    @Override public List<String> getThinkingModes() { return List.of("enabled", "disabled"); }
+    @Override public java.util.List<String> getThinkingModes() {
+        return java.util.List.of("enabled", "disabled");
+    }
     @Override public String getDefaultThinking() { return "disabled"; }
 }

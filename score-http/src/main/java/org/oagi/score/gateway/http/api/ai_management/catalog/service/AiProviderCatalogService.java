@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderApiKeyView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderConnectionTestResult;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderUpdate;
@@ -20,7 +21,10 @@ import org.springframework.util.StringUtils;
 import java.net.URI;
 import java.util.List;
 
-/** Provider catalog management with write-only encrypted credentials. */
+/**
+ * Provider catalog management with encrypted credentials. Normal provider views omit credential
+ * values; an administrator can explicitly reveal one through the audited reveal operation.
+ */
 @Service
 public class AiProviderCatalogService {
 
@@ -50,6 +54,35 @@ public class AiProviderCatalogService {
     public AiProviderView get(ScoreUser actor, AiProviderId providerId) {
         authorization.requireAdministrator(actor);
         return repository().findById(providerId).orElseThrow(NotFoundException::new);
+    }
+
+    public AiProviderApiKeyView maskedApiKey(ScoreUser actor, AiProviderId providerId) {
+        authorization.requireAdministrator(actor);
+        AiProviderCatalogRepository repository = repository();
+        AiProviderCatalogRepository.ConnectionDetails details = repository
+                .findConnectionDetails(providerId).orElseThrow(NotFoundException::new);
+        char[] apiKey = repository.loadStoredApiKey(details.secretId());
+        try {
+            String value = apiKey == null ? "" : "•".repeat(apiKey.length);
+            return new AiProviderApiKeyView(value, false);
+        } finally {
+            ApplicationSecretService.clear(apiKey);
+        }
+    }
+
+    public AiProviderApiKeyView revealApiKey(ScoreUser actor, AiProviderId providerId) {
+        authorization.requireAdministrator(actor);
+        AiProviderCatalogRepository repository = repository();
+        AiProviderCatalogRepository.ConnectionDetails details = repository
+                .findConnectionDetails(providerId).orElseThrow(NotFoundException::new);
+        char[] apiKey = repository.loadStoredApiKey(details.secretId());
+        try {
+            if (apiKey == null) return new AiProviderApiKeyView("", true);
+            repository.recordApiKeyReveal(providerId, actor.userId());
+            return new AiProviderApiKeyView(new String(apiKey), true);
+        } finally {
+            ApplicationSecretService.clear(apiKey);
+        }
     }
 
     public List<AiModelProfileView> modelProfiles(ScoreUser actor, AiProviderId providerId) {

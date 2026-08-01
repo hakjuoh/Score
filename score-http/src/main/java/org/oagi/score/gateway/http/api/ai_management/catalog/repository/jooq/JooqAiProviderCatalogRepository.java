@@ -162,11 +162,26 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
     @Override
     public char[] loadConnectionTestKey(AppSecretId storedSecretId, String requestedKey) {
         if (requestedKey != null) return chars(requestedKey);
+        return loadStoredApiKey(storedSecretId);
+    }
+
+    @Override
+    public char[] loadStoredApiKey(AppSecretId storedSecretId) {
         if (storedSecretId == null) return null;
         if (!secrets.isEncryptionConfigured()) {
             throw new IllegalStateException("Provider secret encryption is not configured.");
         }
         return secrets.decrypt(dslContext(), valueOf(storedSecretId));
+    }
+
+    @Override
+    public void recordApiKeyReveal(AiProviderId providerId, UserId actorUserId) {
+        dslContext().insertInto(AI_CATALOG_AUDIT)
+                .set(AI_CATALOG_AUDIT.ENTITY_TYPE, "PROVIDER")
+                .set(AI_CATALOG_AUDIT.ENTITY_ID, valueOf(providerId))
+                .set(AI_CATALOG_AUDIT.ACTOR_APP_USER_ID, valueOf(actorUserId))
+                .set(AI_CATALOG_AUDIT.ACTION, "REVEAL_KEY")
+                .set(AI_CATALOG_AUDIT.CREATED_AT, now()).execute();
     }
 
     @Override

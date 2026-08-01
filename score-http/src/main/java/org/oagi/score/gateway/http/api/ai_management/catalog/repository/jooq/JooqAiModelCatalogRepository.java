@@ -12,11 +12,13 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogConfigId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogView;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelOptions;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelProfileSettingsResolver;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ReasoningEffort;
 import org.oagi.score.gateway.http.api.ai_management.catalog.repository.AiModelCatalogRepository;
+import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiModelProfileCatalog;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
 import org.oagi.score.gateway.http.common.model.NotFoundException;
@@ -27,7 +29,9 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CATALOG_AUDIT;
@@ -186,19 +190,7 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
         record.setAutoCompactThresholdTokens(unsigned(settings.autoCompactThresholdTokens()));
         record.setEmergencyHeadroomTokens(ULong.valueOf(input.emergencyHeadroomTokens()));
         record.setToolOutputTokenLimit(ULong.valueOf(input.toolOutputTokenLimit()));
-        record.setProviderCompactionEnabled(flag(input.providerCompactionEnabled()));
-        record.setTemperature(settings.temperature() != null
-                ? java.math.BigDecimal.valueOf(settings.temperature()) : null);
-        record.setThinkingBudgetTokens(unsigned(settings.thinkingBudgetTokens()));
-        record.setAdaptiveThinking(flag(input.adaptiveThinking()));
-        record.setOutputEffort(normalized(input.outputEffort()));
-        record.setCacheStrategy(normalized(input.cacheStrategy()));
-        record.setReasoningModelSupported(flag(settings.reasoningOptionsEnabled()));
-        record.setOutputEffortSupported(flag(settings.outputEffortEnabled()));
-        record.setVerbositySupported(flag(settings.verbosityEnabled()));
-        record.setTemperatureSupported(flag(settings.temperatureEnabled()));
-        record.setThinkingModesJson(json(input.thinkingModes()));
-        record.setDefaultThinking(normalized(input.defaultThinking()));
+        record.setModelOptionsJson(json(AiModelOptions.persisted(profile, input, settings)));
         return record;
     }
 
@@ -283,9 +275,16 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
 
     private AiModelCatalogView view(DSLContext tx, Record row) {
         AiModelId id = new AiModelId(row.get(AI_MODEL.AI_MODEL_ID).toBigInteger());
-        String provider = tx.select(AI_PROVIDER.PROVIDER_NAME).from(AI_PROVIDER)
+        Map<String, Object> options = parseJsonObject(row.get(AI_MODEL.MODEL_OPTIONS_JSON));
+        var providerRecord = tx.select(AI_PROVIDER.PROVIDER_NAME, AI_PROVIDER.PROVIDER_TYPE)
+                .from(AI_PROVIDER)
                 .where(AI_PROVIDER.AI_PROVIDER_ID.eq(row.get(AI_MODEL.PROVIDER_ID)))
-                .fetchOne(AI_PROVIDER.PROVIDER_NAME);
+                .fetchOne();
+        String provider = providerRecord != null ? providerRecord.value1() : null;
+        String providerType = providerRecord != null ? providerRecord.value2() : null;
+        Map<String, Object> editableOptions = AiModelProfileCatalog
+                .find(providerType, row.get(AI_MODEL.MODEL_KEY))
+                .map(profile -> AiModelOptions.editable(profile, options)).orElse(Map.of());
         var efforts = tx.selectFrom(AI_MODEL_REASONING_EFFORT)
                 .where(AI_MODEL_REASONING_EFFORT.AI_MODEL_ID.eq(valueOf(id)))
                 .orderBy(AI_MODEL_REASONING_EFFORT.SORT_ORDER)
@@ -306,19 +305,18 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 longValue(row.get(AI_MODEL.AUTO_COMPACT_THRESHOLD_TOKENS)),
                 row.get(AI_MODEL.EMERGENCY_HEADROOM_TOKENS).longValue(),
                 row.get(AI_MODEL.TOOL_OUTPUT_TOKEN_LIMIT).longValue(),
-                row.get(AI_MODEL.PROVIDER_COMPACTION_ENABLED) == 1,
-                row.get(AI_MODEL.TEMPERATURE) != null
-                        ? row.get(AI_MODEL.TEMPERATURE).doubleValue() : null,
-                row.get(AI_MODEL.THINKING_BUDGET_TOKENS) != null
-                        ? row.get(AI_MODEL.THINKING_BUDGET_TOKENS).intValue() : null,
-                row.get(AI_MODEL.ADAPTIVE_THINKING) == 1,
-                row.get(AI_MODEL.OUTPUT_EFFORT), row.get(AI_MODEL.CACHE_STRATEGY),
-                nullableBoolean(row.get(AI_MODEL.REASONING_MODEL_SUPPORTED)),
-                nullableBoolean(row.get(AI_MODEL.OUTPUT_EFFORT_SUPPORTED)),
-                nullableBoolean(row.get(AI_MODEL.VERBOSITY_SUPPORTED)),
-                nullableBoolean(row.get(AI_MODEL.TEMPERATURE_SUPPORTED)),
-                parseJsonList(row.get(AI_MODEL.THINKING_MODES_JSON)),
-                row.get(AI_MODEL.DEFAULT_THINKING),
+                booleanValue(options, "providerCompactionEnabled", false),
+                doubleValue(options.get("temperature")),
+                integerValue(options.get("thinkingBudgetTokens")),
+                booleanValue(options, "adaptiveThinking", false),
+                stringValue(options.get("outputEffort")),
+                cacheStrategy(options.get("cacheStrategy")),
+                nullableBoolean(options.get("reasoningModelSupported")),
+                nullableBoolean(options.get("outputEffortSupported")),
+                nullableBoolean(options.get("verbositySupported")),
+                nullableBoolean(options.get("temperatureSupported")),
+                stringList(options.get("thinkingModes")),
+                stringValue(options.get("defaultThinking")), editableOptions,
                 row.get(AI_MODEL.CATALOG_VERSION).longValue(), efforts);
     }
 
@@ -340,24 +338,55 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
         }
     }
 
-    private String json(List<String> values) {
-        if (values == null || values.isEmpty()) return null;
+    private String json(Object value) {
         try {
-            return objectMapper.writeValueAsString(values.stream().map(String::strip).toList());
+            return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("Could not serialize thinking modes.", exception);
+            throw new IllegalArgumentException("Could not serialize model options.", exception);
         }
     }
 
-    private List<String> parseJsonList(String value) {
-        if (!StringUtils.hasText(value)) return List.of();
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseJsonObject(String value) {
+        if (!StringUtils.hasText(value)) return Map.of();
         try {
-            return objectMapper.readValue(value, objectMapper.getTypeFactory()
-                    .constructCollectionType(List.class, String.class));
+            return objectMapper.readValue(value, LinkedHashMap.class);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException(
-                    "Invalid model thinking mode catalog JSON.", exception);
+                    "Invalid model options catalog JSON.", exception);
         }
+    }
+
+    private static boolean booleanValue(Map<String, Object> values, String key,
+                                        boolean fallback) {
+        return values.get(key) instanceof Boolean value ? value : fallback;
+    }
+
+    private static Boolean nullableBoolean(Object value) {
+        return value instanceof Boolean flag ? flag : null;
+    }
+
+    private static Double doubleValue(Object value) {
+        return value instanceof Number number ? number.doubleValue() : null;
+    }
+
+    private static Integer integerValue(Object value) {
+        return value instanceof Number number ? number.intValue() : null;
+    }
+
+    private static String stringValue(Object value) {
+        return value instanceof String text ? text : null;
+    }
+
+    private static String cacheStrategy(Object value) {
+        String strategy = stringValue(value);
+        return strategy != null && !"NONE".equalsIgnoreCase(strategy)
+                ? strategy.toLowerCase(java.util.Locale.ROOT).replace('_', '-') : null;
+    }
+
+    private static List<String> stringList(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        return list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
     }
 
     private static LocalDateTime now() {
@@ -370,14 +399,6 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
 
     private static byte flag(boolean value) {
         return (byte) (value ? 1 : 0);
-    }
-
-    private static Boolean nullableBoolean(Byte value) {
-        return value != null ? value == 1 : null;
-    }
-
-    private static String normalized(String value) {
-        return StringUtils.hasText(value) ? value.strip() : null;
     }
 
     private static UInteger unsigned(Integer value) {
