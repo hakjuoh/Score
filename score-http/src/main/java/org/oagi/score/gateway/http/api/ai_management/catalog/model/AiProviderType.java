@@ -21,7 +21,7 @@ public enum AiProviderType {
                 ? providerType.strip().toLowerCase(Locale.ROOT) : "";
         return switch (normalized) {
             case "anthropic" -> ANTHROPIC;
-            case "openai", "azure-openai" -> OPENAI;
+            case "openai" -> OPENAI;
             default -> throw new IllegalArgumentException(
                     "Unsupported AI provider type: " + providerType);
         };

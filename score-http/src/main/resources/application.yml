@@ -226,7 +226,7 @@ score:
         base-url: ${AZURE_FOUNDRY_BASE_URL:${ANTHROPIC_FOUNDRY_BASE_URL:}}
         key: ${AZURE_FOUNDRY_API_KEY:${ANTHROPIC_FOUNDRY_API_KEY:}}
       azure-openai:
-        type: azure-openai
+        type: openai
         base-url: ${AZURE_OPENAI_ENDPOINT:}
         key: ${AZURE_OPENAI_API_KEY:}
         api-version: ${AZURE_OPENAI_API_VERSION:2024-10-21}

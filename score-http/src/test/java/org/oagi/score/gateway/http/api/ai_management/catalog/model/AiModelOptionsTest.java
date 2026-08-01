@@ -92,7 +92,7 @@ class AiModelOptionsTest {
     void fixedThinkingDefaultsRoundTripWithTheirDormantBudget() {
         var profile = new ClaudeHaiku45Profile();
         var view = AiModelProfileView.from(profile);
-        var input = new AiModelCatalogUpdate(1L, AiProviderId.from(1L),
+        var input = new AiModelCatalogUpdate(AiProviderId.from(1L),
                 profile.getModelKey(), true, false, 0, view.maxTokens(),
                 view.contextWindow(), view.outputReserveTokens(),
                 view.autoCompactThresholdTokens(), view.emergencyHeadroomTokens(),

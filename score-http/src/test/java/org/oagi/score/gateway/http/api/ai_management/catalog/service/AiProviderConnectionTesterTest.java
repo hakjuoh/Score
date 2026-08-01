@@ -50,7 +50,7 @@ class AiProviderConnectionTesterTest {
 
     @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
-    void preservesTheLegacyAzureOpenAiAdapterAndClassifiesAuthenticationFailure() throws Exception {
+    void usesTheAzureOpenAiAdapterWhenOpenAiHasAnApiVersion() throws Exception {
         HttpClient client = mock(HttpClient.class);
         HttpResponse<Void> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(401);
@@ -58,8 +58,9 @@ class AiProviderConnectionTesterTest {
                 .thenReturn(response);
         AiProviderConnectionTester tester = tester(client);
 
-        var result = tester.test(provider("azure-openai",
-                "https://unit.openai.azure.com", null), "test-key".toCharArray(), null);
+        var result = tester.test(provider("openai",
+                "https://unit.openai.azure.com", "2024-10-21"),
+                "test-key".toCharArray(), null);
 
         ArgumentCaptor<HttpRequest> request = ArgumentCaptor.forClass(HttpRequest.class);
         verify(client).send(request.capture(), any(HttpResponse.BodyHandler.class));
@@ -169,8 +170,8 @@ class AiProviderConnectionTesterTest {
                 new InetAddress[]{InetAddress.getByName("203.0.113.10")});
     }
 
-    private AiProviderUpdate provider(String type, String baseUrl, String anthropicVersion) {
-        return new AiProviderUpdate(3L, "provider", type, baseUrl, null,
-                anthropicVersion, null, true, null);
+    private AiProviderUpdate provider(String type, String baseUrl, String apiVersion) {
+        return new AiProviderUpdate("provider", type, baseUrl, null,
+                apiVersion, true, null);
     }
 }

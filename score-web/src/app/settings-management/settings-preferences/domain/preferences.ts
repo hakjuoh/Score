@@ -184,6 +184,35 @@ export class TableColumnsInfo {
     {name: 'Updated On', selected: true, width: 160}
   ];
 
+  columnsOfAiProviderPage: TableColumnsProperty[] = [
+    {name: 'Name', selected: true, width: 220},
+    {name: 'Type', selected: true, width: 140},
+    {name: 'Endpoint', selected: true, width: 0},
+    {name: 'Status', selected: true, width: 120},
+    {name: 'Updated On', selected: true, width: 180}
+  ];
+
+  columnsOfAiModelPage: TableColumnsProperty[] = [
+    {name: 'Model', selected: true, width: 300},
+    {name: 'Provider', selected: true, width: 180},
+    {name: 'Efforts', selected: true, width: 0},
+    {name: 'Default Efforts', selected: true, width: 160},
+    {name: 'Status', selected: true, width: 120},
+    {name: 'Updated On', selected: true, width: 180}
+  ];
+
+  columnsOfAiPolicyPage: TableColumnsProperty[] = [
+    {name: 'Login ID', selected: true, width: 180},
+    {name: 'Name', selected: true, width: 180},
+    {name: 'Organization', selected: true, width: 220},
+    {name: 'AI Access', selected: true, width: 120},
+    {name: 'Models', selected: true, width: 100},
+    {name: 'Multi-agent', selected: true, width: 130},
+    {name: 'Quota', selected: true, width: 220},
+    {name: 'Active', selected: true, width: 100},
+    {name: 'Updated On', selected: true, width: 180}
+  ];
+
   columnsOfContextSchemePage: TableColumnsProperty[] = [
     {name: 'Name', selected: true, width: 0},
     {name: 'Context Category', selected: true, width: 400},

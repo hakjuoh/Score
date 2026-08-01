@@ -14,5 +14,6 @@ public record AiPolicyUserSummary(
         long quotaReservedTokens,
         Long quotaRemainingTokens,
         int activeRequests,
-        java.time.Instant lastPolicyChange) {
+        String updaterLoginId,
+        java.time.Instant lastUpdatedAt) {
 }

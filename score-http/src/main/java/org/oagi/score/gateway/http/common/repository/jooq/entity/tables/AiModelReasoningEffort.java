@@ -61,9 +61,9 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
 
     /**
      * The column <code>oagi.ai_model_reasoning_effort.ai_model_id</code>.
-     * Identifier of the AI model catalog entry
+     * Identifier of the configured AI model
      */
-    public final TableField<AiModelReasoningEffortRecord, ULong> AI_MODEL_ID = createField(DSL.name("ai_model_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the AI model catalog entry");
+    public final TableField<AiModelReasoningEffortRecord, ULong> AI_MODEL_ID = createField(DSL.name("ai_model_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the configured AI model");
 
     /**
      * The column <code>oagi.ai_model_reasoning_effort.reasoning_effort</code>.

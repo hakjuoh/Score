@@ -21,7 +21,6 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyId
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValueManifest;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiCatalogAudit;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatChangeConfirmation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatFile;
@@ -29,7 +28,6 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatFi
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatStep;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModel;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelCatalogConfig;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelReasoningEffort;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiProvider;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenQuotaAdjustment;
@@ -255,11 +253,6 @@ public class Oagi extends SchemaImpl {
     public final AgencyIdListValueManifest AGENCY_ID_LIST_VALUE_MANIFEST = AgencyIdListValueManifest.AGENCY_ID_LIST_VALUE_MANIFEST;
 
     /**
-     * Audit history of AI provider and model catalog changes
-     */
-    public final AiCatalogAudit AI_CATALOG_AUDIT = AiCatalogAudit.AI_CATALOG_AUDIT;
-
-    /**
      * One-time server-authoritative grants for AI change tool calls.
      */
     public final AiChatChangeConfirmation AI_CHAT_CHANGE_CONFIRMATION = AiChatChangeConfirmation.AI_CHAT_CHANGE_CONFIRMATION;
@@ -292,14 +285,9 @@ public class Oagi extends SchemaImpl {
     public final AiChatStep AI_CHAT_STEP = AiChatStep.AI_CHAT_STEP;
 
     /**
-     * Database-backed AI model catalog
+     * Configured AI models and provider-specific runtime options
      */
     public final AiModel AI_MODEL = AiModel.AI_MODEL;
-
-    /**
-     * Singleton global AI model catalog configuration
-     */
-    public final AiModelCatalogConfig AI_MODEL_CATALOG_CONFIG = AiModelCatalogConfig.AI_MODEL_CATALOG_CONFIG;
 
     /**
      * Reasoning efforts supported by each AI model
@@ -307,7 +295,7 @@ public class Oagi extends SchemaImpl {
     public final AiModelReasoningEffort AI_MODEL_REASONING_EFFORT = AiModelReasoningEffort.AI_MODEL_REASONING_EFFORT;
 
     /**
-     * AI provider catalog and encrypted API key reference
+     * Configured AI providers and encrypted API key references
      */
     public final AiProvider AI_PROVIDER = AiProvider.AI_PROVIDER;
 
@@ -1223,7 +1211,6 @@ public class Oagi extends SchemaImpl {
             AgencyIdListManifest.AGENCY_ID_LIST_MANIFEST,
             AgencyIdListValue.AGENCY_ID_LIST_VALUE,
             AgencyIdListValueManifest.AGENCY_ID_LIST_VALUE_MANIFEST,
-            AiCatalogAudit.AI_CATALOG_AUDIT,
             AiChatChangeConfirmation.AI_CHAT_CHANGE_CONFIRMATION,
             AiChatConversation.AI_CHAT_CONVERSATION,
             AiChatFile.AI_CHAT_FILE,
@@ -1231,7 +1218,6 @@ public class Oagi extends SchemaImpl {
             AiChatMemory.AI_CHAT_MEMORY,
             AiChatStep.AI_CHAT_STEP,
             AiModel.AI_MODEL,
-            AiModelCatalogConfig.AI_MODEL_CATALOG_CONFIG,
             AiModelReasoningEffort.AI_MODEL_REASONING_EFFORT,
             AiProvider.AI_PROVIDER,
             AiTokenQuotaAdjustment.AI_TOKEN_QUOTA_ADJUSTMENT,

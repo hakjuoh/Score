@@ -5,7 +5,7 @@ import org.oagi.score.gateway.http.common.model.Id;
 
 import java.math.BigInteger;
 
-/** Identifies a persisted AI provider catalog entry. */
+/** Identifies a configured AI provider. */
 public record AiProviderId(BigInteger value) implements Id {
 
     @JsonCreator
