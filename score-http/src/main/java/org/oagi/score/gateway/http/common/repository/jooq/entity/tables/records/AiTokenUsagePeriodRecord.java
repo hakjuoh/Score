@@ -37,34 +37,36 @@ public class AiTokenUsagePeriodRecord extends UpdatableRecordImpl<AiTokenUsagePe
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_period.period_start</code>.
-     * Inclusive start of the quota period in UTC
+     * Setter for
+     * <code>oagi.ai_token_usage_period.period_start_timestamp</code>. Inclusive
+     * start of the quota period in UTC
      */
-    public void setPeriodStart(LocalDateTime value) {
+    public void setPeriodStartTimestamp(LocalDateTime value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_period.period_start</code>.
-     * Inclusive start of the quota period in UTC
+     * Getter for
+     * <code>oagi.ai_token_usage_period.period_start_timestamp</code>. Inclusive
+     * start of the quota period in UTC
      */
-    public LocalDateTime getPeriodStart() {
+    public LocalDateTime getPeriodStartTimestamp() {
         return (LocalDateTime) get(1);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_period.period_end</code>. Exclusive
-     * end of the quota period in UTC
+     * Setter for <code>oagi.ai_token_usage_period.period_end_timestamp</code>.
+     * Exclusive end of the quota period in UTC
      */
-    public void setPeriodEnd(LocalDateTime value) {
+    public void setPeriodEndTimestamp(LocalDateTime value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_period.period_end</code>. Exclusive
-     * end of the quota period in UTC
+     * Getter for <code>oagi.ai_token_usage_period.period_end_timestamp</code>.
+     * Exclusive end of the quota period in UTC
      */
-    public LocalDateTime getPeriodEnd() {
+    public LocalDateTime getPeriodEndTimestamp() {
         return (LocalDateTime) get(2);
     }
 
@@ -101,19 +103,35 @@ public class AiTokenUsagePeriodRecord extends UpdatableRecordImpl<AiTokenUsagePe
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_period.updated_at</code>. Date and
-     * time when the period counter was last updated
+     * Setter for <code>oagi.ai_token_usage_period.creation_timestamp</code>.
+     * Date and time when the period counter was created
      */
-    public void setUpdatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_period.updated_at</code>. Date and
-     * time when the period counter was last updated
+     * Getter for <code>oagi.ai_token_usage_period.creation_timestamp</code>.
+     * Date and time when the period counter was created
      */
-    public LocalDateTime getUpdatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(5);
+    }
+
+    /**
+     * Setter for <code>oagi.ai_token_usage_period.last_update_timestamp</code>.
+     * Date and time when the period counter was last updated
+     */
+    public void setLastUpdateTimestamp(LocalDateTime value) {
+        set(6, value);
+    }
+
+    /**
+     * Getter for <code>oagi.ai_token_usage_period.last_update_timestamp</code>.
+     * Date and time when the period counter was last updated
+     */
+    public LocalDateTime getLastUpdateTimestamp() {
+        return (LocalDateTime) get(6);
     }
 
     // -------------------------------------------------------------------------
@@ -139,15 +157,16 @@ public class AiTokenUsagePeriodRecord extends UpdatableRecordImpl<AiTokenUsagePe
     /**
      * Create a detached, initialised AiTokenUsagePeriodRecord
      */
-    public AiTokenUsagePeriodRecord(ULong appUserId, LocalDateTime periodStart, LocalDateTime periodEnd, ULong consumedTokens, ULong reservedTokens, LocalDateTime updatedAt) {
+    public AiTokenUsagePeriodRecord(ULong appUserId, LocalDateTime periodStartTimestamp, LocalDateTime periodEndTimestamp, ULong consumedTokens, ULong reservedTokens, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
         super(AiTokenUsagePeriod.AI_TOKEN_USAGE_PERIOD);
 
         setAppUserId(appUserId);
-        setPeriodStart(periodStart);
-        setPeriodEnd(periodEnd);
+        setPeriodStartTimestamp(periodStartTimestamp);
+        setPeriodEndTimestamp(periodEndTimestamp);
         setConsumedTokens(consumedTokens);
         setReservedTokens(reservedTokens);
-        setUpdatedAt(updatedAt);
+        setCreationTimestamp(creationTimestamp);
+        setLastUpdateTimestamp(lastUpdateTimestamp);
         resetTouchedOnNotNull();
     }
 }

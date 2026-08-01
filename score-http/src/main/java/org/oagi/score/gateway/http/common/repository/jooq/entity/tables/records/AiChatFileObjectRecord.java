@@ -52,18 +52,18 @@ public class AiChatFileObjectRecord extends UpdatableRecordImpl<AiChatFileObject
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file_object.created_at</code>. Object
-     * creation timestamp.
+     * Setter for <code>oagi.ai_chat_file_object.creation_timestamp</code>.
+     * Object creation timestamp.
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file_object.created_at</code>. Object
-     * creation timestamp.
+     * Getter for <code>oagi.ai_chat_file_object.creation_timestamp</code>.
+     * Object creation timestamp.
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(2);
     }
 
@@ -90,12 +90,12 @@ public class AiChatFileObjectRecord extends UpdatableRecordImpl<AiChatFileObject
     /**
      * Create a detached, initialised AiChatFileObjectRecord
      */
-    public AiChatFileObjectRecord(String storageLocation, byte[] content, LocalDateTime createdAt) {
+    public AiChatFileObjectRecord(String storageLocation, byte[] content, LocalDateTime creationTimestamp) {
         super(AiChatFileObject.AI_CHAT_FILE_OBJECT);
 
         setStorageLocation(storageLocation);
         setContent(content);
-        setCreatedAt(createdAt);
+        setCreationTimestamp(creationTimestamp);
         resetTouchedOnNotNull();
     }
 }

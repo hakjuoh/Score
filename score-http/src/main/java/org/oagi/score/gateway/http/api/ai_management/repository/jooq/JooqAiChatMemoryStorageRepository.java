@@ -93,7 +93,7 @@ public class JooqAiChatMemoryStorageRepository extends JooqBaseRepository
             record.setMessageType(entry.messageType());
             record.setContent(Objects.requireNonNullElse(entry.content(), ""));
             record.setMetadataJson(serializer.serialize(entry.metadata()));
-            record.setCreatedAt(LocalDateTime.ofInstant(now, ZoneId.systemDefault()));
+            record.setCreationTimestamp(LocalDateTime.ofInstant(now, ZoneId.systemDefault()));
             dslContext().insertInto(AI_CHAT_MEMORY).set(record).execute();
         }
     }

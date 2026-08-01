@@ -66,16 +66,17 @@ public class AiTokenUsagePeriod extends TableImpl<AiTokenUsagePeriodRecord> {
     public final TableField<AiTokenUsagePeriodRecord, ULong> APP_USER_ID = createField(DSL.name("app_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the user whose token usage is aggregated");
 
     /**
-     * The column <code>oagi.ai_token_usage_period.period_start</code>.
-     * Inclusive start of the quota period in UTC
+     * The column
+     * <code>oagi.ai_token_usage_period.period_start_timestamp</code>. Inclusive
+     * start of the quota period in UTC
      */
-    public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> PERIOD_START = createField(DSL.name("period_start"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Inclusive start of the quota period in UTC");
+    public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> PERIOD_START_TIMESTAMP = createField(DSL.name("period_start_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Inclusive start of the quota period in UTC");
 
     /**
-     * The column <code>oagi.ai_token_usage_period.period_end</code>. Exclusive
-     * end of the quota period in UTC
+     * The column <code>oagi.ai_token_usage_period.period_end_timestamp</code>.
+     * Exclusive end of the quota period in UTC
      */
-    public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> PERIOD_END = createField(DSL.name("period_end"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Exclusive end of the quota period in UTC");
+    public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> PERIOD_END_TIMESTAMP = createField(DSL.name("period_end_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Exclusive end of the quota period in UTC");
 
     /**
      * The column <code>oagi.ai_token_usage_period.consumed_tokens</code>.
@@ -90,10 +91,16 @@ public class AiTokenUsagePeriod extends TableImpl<AiTokenUsagePeriodRecord> {
     public final TableField<AiTokenUsagePeriodRecord, ULong> RESERVED_TOKENS = createField(DSL.name("reserved_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of tokens reserved by in-progress calls during the period");
 
     /**
-     * The column <code>oagi.ai_token_usage_period.updated_at</code>. Date and
-     * time when the period counter was last updated
+     * The column <code>oagi.ai_token_usage_period.creation_timestamp</code>.
+     * Date and time when the period counter was created
      */
-    public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> UPDATED_AT = createField(DSL.name("updated_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the period counter was last updated");
+    public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the period counter was created");
+
+    /**
+     * The column <code>oagi.ai_token_usage_period.last_update_timestamp</code>.
+     * Date and time when the period counter was last updated
+     */
+    public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the period counter was last updated");
 
     private AiTokenUsagePeriod(Name alias, Table<AiTokenUsagePeriodRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

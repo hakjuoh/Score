@@ -48,8 +48,8 @@ public class JooqAiChangeConfirmationCommandRepository extends JooqBaseRepositor
                         AI_CHAT_CHANGE_CONFIRMATION.TOOL_NAME,
                         AI_CHAT_CHANGE_CONFIRMATION.ARGUMENTS_DIGEST,
                         AI_CHAT_CHANGE_CONFIRMATION.STATUS,
-                        AI_CHAT_CHANGE_CONFIRMATION.EXPIRES_AT,
-                        AI_CHAT_CHANGE_CONFIRMATION.CREATED_AT)
+                        AI_CHAT_CHANGE_CONFIRMATION.EXPIRATION_TIMESTAMP,
+                        AI_CHAT_CHANGE_CONFIRMATION.CREATION_TIMESTAMP)
                 .select(dslContext().select(
                                 val(arguments.guid()),
                                 AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID,
@@ -69,7 +69,7 @@ public class JooqAiChangeConfirmationCommandRepository extends JooqBaseRepositor
     public boolean markExpired(AiChangeConfirmationId confirmationId, Instant expiredAt) {
         return dslContext().update(AI_CHAT_CHANGE_CONFIRMATION)
                 .set(AI_CHAT_CHANGE_CONFIRMATION.STATUS, "EXPIRED")
-                .set(AI_CHAT_CHANGE_CONFIRMATION.EXPIRED_AT, localDateTime(expiredAt))
+                .set(AI_CHAT_CHANGE_CONFIRMATION.EXPIRED_TIMESTAMP, localDateTime(expiredAt))
                 .setNull(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST)
                 .where(AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID
                         .eq(valueOf(confirmationId)))
@@ -83,8 +83,8 @@ public class JooqAiChangeConfirmationCommandRepository extends JooqBaseRepositor
         return dslContext().update(AI_CHAT_CHANGE_CONFIRMATION)
                 .set(AI_CHAT_CHANGE_CONFIRMATION.STATUS, "APPROVED")
                 .set(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST, grantDigest)
-                .set(AI_CHAT_CHANGE_CONFIRMATION.APPROVED_AT, localDateTime(approvedAt))
-                .set(AI_CHAT_CHANGE_CONFIRMATION.EXPIRES_AT, localDateTime(grantExpiresAt))
+                .set(AI_CHAT_CHANGE_CONFIRMATION.APPROVED_TIMESTAMP, localDateTime(approvedAt))
+                .set(AI_CHAT_CHANGE_CONFIRMATION.EXPIRATION_TIMESTAMP, localDateTime(grantExpiresAt))
                 .set(AI_CHAT_CHANGE_CONFIRMATION.ARGUMENTS_DIGEST, argumentsDigest)
                 .where(AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID
                         .eq(valueOf(confirmationId))
@@ -96,7 +96,7 @@ public class JooqAiChangeConfirmationCommandRepository extends JooqBaseRepositor
     public boolean deny(AiChangeConfirmationId confirmationId, Instant deniedAt) {
         return dslContext().update(AI_CHAT_CHANGE_CONFIRMATION)
                 .set(AI_CHAT_CHANGE_CONFIRMATION.STATUS, "DENIED")
-                .set(AI_CHAT_CHANGE_CONFIRMATION.DENIED_AT, localDateTime(deniedAt))
+                .set(AI_CHAT_CHANGE_CONFIRMATION.DENIED_TIMESTAMP, localDateTime(deniedAt))
                 .setNull(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST)
                 .where(AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID
                         .eq(valueOf(confirmationId))
@@ -108,7 +108,7 @@ public class JooqAiChangeConfirmationCommandRepository extends JooqBaseRepositor
     public boolean consume(AiChangeConfirmationId confirmationId, Instant consumedAt) {
         return dslContext().update(AI_CHAT_CHANGE_CONFIRMATION)
                 .set(AI_CHAT_CHANGE_CONFIRMATION.STATUS, "CONSUMED")
-                .set(AI_CHAT_CHANGE_CONFIRMATION.CONSUMED_AT, localDateTime(consumedAt))
+                .set(AI_CHAT_CHANGE_CONFIRMATION.CONSUMED_TIMESTAMP, localDateTime(consumedAt))
                 .setNull(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST)
                 .where(AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID
                         .eq(valueOf(confirmationId))

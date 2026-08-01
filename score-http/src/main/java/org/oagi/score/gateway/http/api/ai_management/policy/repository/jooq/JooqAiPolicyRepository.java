@@ -208,7 +208,7 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
                 .set(AI_USER_POLICY_AUDIT.ACTION, action)
                 .set(AI_USER_POLICY_AUDIT.BEFORE_JSON, json(before))
                 .set(AI_USER_POLICY_AUDIT.AFTER_JSON, json(after))
-                .set(AI_USER_POLICY_AUDIT.CREATED_AT, now())
+                .set(AI_USER_POLICY_AUDIT.CREATION_TIMESTAMP, now())
                 .execute();
     }
 

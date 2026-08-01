@@ -41,11 +41,11 @@ public class JooqAiQuotaRepository {
             DSLContext tx = org.jooq.impl.DSL.using(configuration);
             LocalDateTime now = now();
             ULong owner = ULong.valueOf(userId.value());
-            tx.insertInto(AI_TOKEN_REQUEST_USAGE)
+            int requestInserted = tx.insertInto(AI_TOKEN_REQUEST_USAGE)
                     .set(AI_TOKEN_REQUEST_USAGE.REQUEST_ID, requestId)
                     .set(AI_TOKEN_REQUEST_USAGE.APP_USER_ID, owner)
-                    .set(AI_TOKEN_REQUEST_USAGE.CREATED_AT, now)
-                    .set(AI_TOKEN_REQUEST_USAGE.UPDATED_AT, now)
+                    .set(AI_TOKEN_REQUEST_USAGE.CREATION_TIMESTAMP, now)
+                    .set(AI_TOKEN_REQUEST_USAGE.LAST_UPDATE_TIMESTAMP, now)
                     .onDuplicateKeyIgnore().execute();
             var request = tx.selectFrom(AI_TOKEN_REQUEST_USAGE)
                     .where(AI_TOKEN_REQUEST_USAGE.REQUEST_ID.eq(requestId))
@@ -55,20 +55,28 @@ public class JooqAiQuotaRepository {
             }
 
             org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiTokenUsagePeriodRecord period = null;
+            int periodInserted = 0;
             if (window != null) {
                 LocalDateTime start = local(window.start());
-                tx.insertInto(AI_TOKEN_USAGE_PERIOD)
+                periodInserted = tx.insertInto(AI_TOKEN_USAGE_PERIOD)
                         .set(AI_TOKEN_USAGE_PERIOD.APP_USER_ID, owner)
-                        .set(AI_TOKEN_USAGE_PERIOD.PERIOD_START, start)
-                        .set(AI_TOKEN_USAGE_PERIOD.PERIOD_END, local(window.end()))
-                        .set(AI_TOKEN_USAGE_PERIOD.UPDATED_AT, now)
+                        .set(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP, start)
+                        .set(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP, local(window.end()))
+                        .set(AI_TOKEN_USAGE_PERIOD.CREATION_TIMESTAMP, now)
+                        .set(AI_TOKEN_USAGE_PERIOD.LAST_UPDATE_TIMESTAMP, now)
                         .onDuplicateKeyIgnore().execute();
                 period = tx.selectFrom(AI_TOKEN_USAGE_PERIOD)
                         .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(owner))
-                        .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(start))
-                        .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END.eq(local(window.end())))
+                        .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(start))
+                        .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP.eq(local(window.end())))
                         .forUpdate().fetchOne();
             }
+
+            LocalDateTime mutationTimestamp = now();
+            LocalDateTime requestUpdateTimestamp = requestInserted == 1
+                    ? now : mutationTimestamp;
+            LocalDateTime periodUpdateTimestamp = periodInserted == 1
+                    ? now : mutationTimestamp;
 
             long requestAvailable = remaining(requestLimit,
                     request.getConsumedTokens().longValue(), request.getReservedTokens().longValue());
@@ -94,21 +102,21 @@ public class JooqAiQuotaRepository {
                     .set(AI_TOKEN_USAGE_LEDGER.EXECUTION_KIND, executionKind)
                     .set(AI_TOKEN_USAGE_LEDGER.AGENT_ID, agentId)
                     .set(AI_TOKEN_USAGE_LEDGER.RESERVED_TOKENS, ULong.valueOf(reserved))
-                    .set(AI_TOKEN_USAGE_LEDGER.QUOTA_PERIOD_START,
+                    .set(AI_TOKEN_USAGE_LEDGER.QUOTA_PERIOD_START_TIMESTAMP,
                             window != null ? local(window.start()) : null)
-                    .set(AI_TOKEN_USAGE_LEDGER.QUOTA_PERIOD_END,
+                    .set(AI_TOKEN_USAGE_LEDGER.QUOTA_PERIOD_END_TIMESTAMP,
                             window != null ? local(window.end()) : null)
                     .set(AI_TOKEN_USAGE_LEDGER.STATUS, "RESERVED")
-                    .set(AI_TOKEN_USAGE_LEDGER.RESERVED_AT, now)
+                    .set(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP, mutationTimestamp)
                     .execute();
             request.setReservedTokens(ULong.valueOf(
                     Math.addExact(request.getReservedTokens().longValue(), reserved)));
-            request.setUpdatedAt(now);
+            request.setLastUpdateTimestamp(requestUpdateTimestamp);
             request.update();
             if (period != null) {
                 period.setReservedTokens(ULong.valueOf(
                         Math.addExact(period.getReservedTokens().longValue(), reserved)));
-                period.setUpdatedAt(now);
+                period.setLastUpdateTimestamp(periodUpdateTimestamp);
                 period.update();
             }
             return new AiCallReservation(callId, requestId, userId, reserved,
@@ -135,20 +143,21 @@ public class JooqAiQuotaRepository {
             updateCounter(request.getReservedTokens().longValue(),
                     request.getConsumedTokens().longValue(), reserved, charged,
                     request::setReservedTokens, request::setConsumedTokens);
-            request.setUpdatedAt(now);
+            request.setLastUpdateTimestamp(now);
             request.update();
 
-            LocalDateTime periodStart = ledger.getQuotaPeriodStart();
+            LocalDateTime periodStart = ledger.getQuotaPeriodStartTimestamp();
             var period = periodStart != null ? tx.selectFrom(AI_TOKEN_USAGE_PERIOD)
                     .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(ledger.getAppUserId()))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(periodStart))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END.eq(ledger.getQuotaPeriodEnd()))
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(periodStart))
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP.eq(
+                            ledger.getQuotaPeriodEndTimestamp()))
                     .forUpdate().fetchOne() : null;
             if (period != null) {
                 updateCounter(period.getReservedTokens().longValue(),
                         period.getConsumedTokens().longValue(), reserved, charged,
                         period::setReservedTokens, period::setConsumedTokens);
-                period.setUpdatedAt(now);
+                period.setLastUpdateTimestamp(now);
                 period.update();
             }
             ledger.setPromptTokens(ULong.valueOf(usage.promptTokens()));
@@ -157,7 +166,7 @@ public class JooqAiQuotaRepository {
             ledger.setChargedTokens(ULong.valueOf(charged));
             ledger.setUsageComplete((byte) (usage.complete() ? 1 : 0));
             ledger.setStatus(usage.complete() ? "SETTLED" : "ESTIMATED");
-            ledger.setSettledAt(now);
+            ledger.setSettledTimestamp(now);
             ledger.update();
             return true;
         });
@@ -178,25 +187,26 @@ public class JooqAiQuotaRepository {
             requireReserved(request.getReservedTokens().longValue(), reserved);
             request.setReservedTokens(ULong.valueOf(
                     request.getReservedTokens().longValue() - reserved));
-            request.setUpdatedAt(now);
+            request.setLastUpdateTimestamp(now);
             request.update();
-            LocalDateTime periodStart = ledger.getQuotaPeriodStart();
+            LocalDateTime periodStart = ledger.getQuotaPeriodStartTimestamp();
             var period = periodStart != null ? tx.selectFrom(AI_TOKEN_USAGE_PERIOD)
                     .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(ledger.getAppUserId()))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(periodStart))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END.eq(ledger.getQuotaPeriodEnd()))
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(periodStart))
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP.eq(
+                            ledger.getQuotaPeriodEndTimestamp()))
                     .forUpdate().fetchOne() : null;
             if (period != null) {
                 requireReserved(period.getReservedTokens().longValue(), reserved);
                 period.setReservedTokens(ULong.valueOf(
                         period.getReservedTokens().longValue() - reserved));
-                period.setUpdatedAt(now);
+                period.setLastUpdateTimestamp(now);
                 period.update();
             }
             ledger.setStatus("RELEASED");
             ledger.setFailureType(failureType != null
                     ? failureType.substring(0, Math.min(240, failureType.length())) : null);
-            ledger.setSettledAt(now);
+            ledger.setSettledTimestamp(now);
             ledger.update();
             return true;
         });
@@ -226,24 +236,24 @@ public class JooqAiQuotaRepository {
                 int pageSize = Math.max(batchSize, Math.min(1000, batchSize * 10));
                 while (reconciled < batchSize) {
                     var condition = AI_TOKEN_USAGE_LEDGER.STATUS.eq("RESERVED")
-                            .and(AI_TOKEN_USAGE_LEDGER.RESERVED_AT.lt(cutoff));
+                            .and(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP.lt(cutoff));
                     if (cursorTime != null) {
-                        condition = condition.and(AI_TOKEN_USAGE_LEDGER.RESERVED_AT.gt(cursorTime)
-                                .or(AI_TOKEN_USAGE_LEDGER.RESERVED_AT.eq(cursorTime)
+                        condition = condition.and(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP.gt(cursorTime)
+                                .or(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP.eq(cursorTime)
                                         .and(AI_TOKEN_USAGE_LEDGER.CALL_ID.gt(cursorCallId))));
                     }
                     var rows = dsl.select(AI_TOKEN_USAGE_LEDGER.CALL_ID,
                                     AI_TOKEN_USAGE_LEDGER.REQUEST_ID,
-                                    AI_TOKEN_USAGE_LEDGER.RESERVED_AT,
+                                    AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP,
                                     AI_TOKEN_USAGE_LEDGER.RESERVED_TOKENS)
                             .from(AI_TOKEN_USAGE_LEDGER)
                             .where(condition)
-                            .orderBy(AI_TOKEN_USAGE_LEDGER.RESERVED_AT.asc(),
+                            .orderBy(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP.asc(),
                                     AI_TOKEN_USAGE_LEDGER.CALL_ID.asc())
                             .limit(pageSize).fetch();
                     if (rows.isEmpty()) break;
                     for (var row : rows) {
-                        cursorTime = row.get(AI_TOKEN_USAGE_LEDGER.RESERVED_AT);
+                        cursorTime = row.get(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP);
                         cursorCallId = row.get(AI_TOKEN_USAGE_LEDGER.CALL_ID);
                         String requestId = row.get(AI_TOKEN_USAGE_LEDGER.REQUEST_ID);
                         if (requestId != null && requestIsActive.test(requestId)) continue;
@@ -273,8 +283,8 @@ public class JooqAiQuotaRepository {
                         AI_TOKEN_USAGE_PERIOD.RESERVED_TOKENS)
                 .from(AI_TOKEN_USAGE_PERIOD)
                 .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(ULong.valueOf(userId.value())))
-                .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(local(window.start())))
-                .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END.eq(local(window.end())))
+                .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(local(window.start())))
+                .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP.eq(local(window.end())))
                 .fetchOne();
         return row != null && row.get(AI_TOKEN_USAGE_PERIOD.CONSUMED_TOKENS).longValue()
                 + row.get(AI_TOKEN_USAGE_PERIOD.RESERVED_TOKENS).longValue()

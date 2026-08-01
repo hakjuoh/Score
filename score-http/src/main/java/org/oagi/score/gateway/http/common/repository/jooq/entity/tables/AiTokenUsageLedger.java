@@ -117,16 +117,18 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
     public final TableField<AiTokenUsageLedgerRecord, ULong> RESERVED_TOKENS = createField(DSL.name("reserved_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of tokens reserved before the provider call");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.quota_period_start</code>.
+     * The column
+     * <code>oagi.ai_token_usage_ledger.quota_period_start_timestamp</code>.
      * Exact inclusive quota window start reserved by this call
      */
-    public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> QUOTA_PERIOD_START = createField(DSL.name("quota_period_start"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Exact inclusive quota window start reserved by this call");
+    public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> QUOTA_PERIOD_START_TIMESTAMP = createField(DSL.name("quota_period_start_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Exact inclusive quota window start reserved by this call");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.quota_period_end</code>.
-     * Exact exclusive quota window end reserved by this call
+     * The column
+     * <code>oagi.ai_token_usage_ledger.quota_period_end_timestamp</code>. Exact
+     * exclusive quota window end reserved by this call
      */
-    public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> QUOTA_PERIOD_END = createField(DSL.name("quota_period_end"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Exact exclusive quota window end reserved by this call");
+    public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> QUOTA_PERIOD_END_TIMESTAMP = createField(DSL.name("quota_period_end_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Exact exclusive quota window end reserved by this call");
 
     /**
      * The column <code>oagi.ai_token_usage_ledger.prompt_tokens</code>.
@@ -171,16 +173,16 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
     public final TableField<AiTokenUsageLedgerRecord, String> FAILURE_TYPE = createField(DSL.name("failure_type"), SQLDataType.VARCHAR(240).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Failure class or error code");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.reserved_at</code>. Date and
-     * time when the tokens were reserved
+     * The column <code>oagi.ai_token_usage_ledger.reserved_timestamp</code>.
+     * Date and time when the tokens were reserved
      */
-    public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> RESERVED_AT = createField(DSL.name("reserved_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the tokens were reserved");
+    public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> RESERVED_TIMESTAMP = createField(DSL.name("reserved_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the tokens were reserved");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.settled_at</code>. Date and
-     * time when the usage was settled or released
+     * The column <code>oagi.ai_token_usage_ledger.settled_timestamp</code>.
+     * Date and time when the usage was settled or released
      */
-    public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> SETTLED_AT = createField(DSL.name("settled_at"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Date and time when the usage was settled or released");
+    public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> SETTLED_TIMESTAMP = createField(DSL.name("settled_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Date and time when the usage was settled or released");
 
     private AiTokenUsageLedger(Name alias, Table<AiTokenUsageLedgerRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

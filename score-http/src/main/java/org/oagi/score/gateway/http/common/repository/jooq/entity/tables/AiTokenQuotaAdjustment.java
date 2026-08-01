@@ -81,10 +81,11 @@ public class AiTokenQuotaAdjustment extends TableImpl<AiTokenQuotaAdjustmentReco
     public final TableField<AiTokenQuotaAdjustmentRecord, ULong> ACTOR_APP_USER_ID = createField(DSL.name("actor_app_user_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Identifier of the administrator who adjusted the quota");
 
     /**
-     * The column <code>oagi.ai_token_quota_adjustment.period_start</code>.
-     * Start of the adjusted quota period in UTC
+     * The column
+     * <code>oagi.ai_token_quota_adjustment.period_start_timestamp</code>. Start
+     * of the adjusted quota period in UTC
      */
-    public final TableField<AiTokenQuotaAdjustmentRecord, LocalDateTime> PERIOD_START = createField(DSL.name("period_start"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Start of the adjusted quota period in UTC");
+    public final TableField<AiTokenQuotaAdjustmentRecord, LocalDateTime> PERIOD_START_TIMESTAMP = createField(DSL.name("period_start_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Start of the adjusted quota period in UTC");
 
     /**
      * The column <code>oagi.ai_token_quota_adjustment.delta_tokens</code>.
@@ -99,10 +100,11 @@ public class AiTokenQuotaAdjustment extends TableImpl<AiTokenQuotaAdjustmentReco
     public final TableField<AiTokenQuotaAdjustmentRecord, String> REASON = createField(DSL.name("reason"), SQLDataType.VARCHAR(500).nullable(false), this, "Reason for the quota adjustment");
 
     /**
-     * The column <code>oagi.ai_token_quota_adjustment.created_at</code>. Date
-     * and time when the quota was adjusted
+     * The column
+     * <code>oagi.ai_token_quota_adjustment.creation_timestamp</code>. Date and
+     * time when the quota was adjusted
      */
-    public final TableField<AiTokenQuotaAdjustmentRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the quota was adjusted");
+    public final TableField<AiTokenQuotaAdjustmentRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the quota was adjusted");
 
     private AiTokenQuotaAdjustment(Name alias, Table<AiTokenQuotaAdjustmentRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

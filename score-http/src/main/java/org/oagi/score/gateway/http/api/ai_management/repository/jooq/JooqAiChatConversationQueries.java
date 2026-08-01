@@ -94,7 +94,7 @@ final class JooqAiChatConversationQueries {
     Optional<AiChatLatestUsage> latestUsage(String conversationId) {
         AiChatConversationId internalConversationId = access.ownedId(conversationId);
         return dslContext.select(AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.METRICS_JSON,
-                        AI_CHAT_STEP.CREATED_AT)
+                        AI_CHAT_STEP.CREATION_TIMESTAMP)
                 .from(AI_CHAT_STEP)
                 .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
                         .eq(access.valueOf(internalConversationId))
@@ -109,7 +109,7 @@ final class JooqAiChatConversationQueries {
                     if (inputTokens <= 0) inputTokens = number(metrics.get("prompt_tokens"));
                     return new AiChatLatestUsage(record.get(AI_CHAT_STEP.MODEL_NAME), inputTokens,
                             Boolean.TRUE.equals(metrics.get("context_estimated")),
-                            instant(record.get(AI_CHAT_STEP.CREATED_AT)));
+                            instant(record.get(AI_CHAT_STEP.CREATION_TIMESTAMP)));
                 });
     }
 
@@ -118,8 +118,8 @@ final class JooqAiChatConversationQueries {
                 .filterWhere(AI_CHAT_STEP.MESSAGE_KIND.in("user", "assistant", "error"))
                 .as("message_count");
         return dslContext.select(AI_CHAT_CONVERSATION.GUID, AI_CHAT_CONVERSATION.TITLE,
-                        AI_CHAT_CONVERSATION.COMPACTED, AI_CHAT_CONVERSATION.CREATED_AT,
-                        AI_CHAT_CONVERSATION.UPDATED_AT, messageCount)
+                        AI_CHAT_CONVERSATION.COMPACTED, AI_CHAT_CONVERSATION.CREATION_TIMESTAMP,
+                        AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP, messageCount)
                 .from(AI_CHAT_CONVERSATION)
                 .leftJoin(AI_CHAT_STEP).on(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
                         .eq(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID))
@@ -127,26 +127,26 @@ final class JooqAiChatConversationQueries {
                         .and(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID.isNull()))
                 .groupBy(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID,
                         AI_CHAT_CONVERSATION.GUID, AI_CHAT_CONVERSATION.TITLE,
-                        AI_CHAT_CONVERSATION.COMPACTED, AI_CHAT_CONVERSATION.CREATED_AT,
-                        AI_CHAT_CONVERSATION.UPDATED_AT)
-                .orderBy(AI_CHAT_CONVERSATION.UPDATED_AT.desc())
+                        AI_CHAT_CONVERSATION.COMPACTED, AI_CHAT_CONVERSATION.CREATION_TIMESTAMP,
+                        AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP)
+                .orderBy(AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP.desc())
                 .fetch(record -> new ChatConversationSummary(
                         record.get(AI_CHAT_CONVERSATION.GUID),
                         record.get(AI_CHAT_CONVERSATION.TITLE), record.get(messageCount),
                         Boolean.TRUE.equals(byteBoolean(record.get(AI_CHAT_CONVERSATION.COMPACTED))),
-                        instant(record.get(AI_CHAT_CONVERSATION.CREATED_AT)),
-                        instant(record.get(AI_CHAT_CONVERSATION.UPDATED_AT))));
+                        instant(record.get(AI_CHAT_CONVERSATION.CREATION_TIMESTAMP)),
+                        instant(record.get(AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP))));
     }
 
     ChatConversationDetails get(String conversationId) {
         AiChatConversationId internalConversationId = access.ownedId(conversationId);
         Header header = dslContext.select(AI_CHAT_CONVERSATION.TITLE,
-                        AI_CHAT_CONVERSATION.UPDATED_AT)
+                        AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP)
                 .from(AI_CHAT_CONVERSATION)
                 .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
                         .eq(access.valueOf(internalConversationId)))
                 .fetchSingle(record -> new Header(record.get(AI_CHAT_CONVERSATION.TITLE),
-                        instant(record.get(AI_CHAT_CONVERSATION.UPDATED_AT))));
+                        instant(record.get(AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP))));
         AiChatConversationSettings settings = latestSettings(internalConversationId);
         String permissionMode = latestPermissionMode(internalConversationId);
         List<AiChatConversationId> childIds = dslContext
@@ -166,7 +166,7 @@ final class JooqAiChatConversationQueries {
                         AI_CHAT_STEP.MESSAGE, AI_CHAT_STEP.REASONING_CONTENT,
                         AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.TOOL_CALLS_JSON,
                         AI_CHAT_STEP.OBSERVATION_JSON, AI_CHAT_STEP.EXTRA_JSON,
-                        AI_CHAT_STEP.CREATED_AT)
+                        AI_CHAT_STEP.CREATION_TIMESTAMP)
                 .from(AI_CHAT_STEP)
                 .where(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
                         .eq(access.valueOf(internalConversationId))
@@ -174,7 +174,7 @@ final class JooqAiChatConversationQueries {
                                 : AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID.in(
                                                 childIds.stream().map(access::valueOf).toList())
                                         .and(visibleChildKinds)))
-                .orderBy(AI_CHAT_STEP.CREATED_AT.desc(), AI_CHAT_STEP.AI_CHAT_STEP_ID.desc())
+                .orderBy(AI_CHAT_STEP.CREATION_TIMESTAMP.desc(), AI_CHAT_STEP.AI_CHAT_STEP_ID.desc())
                 .fetch(this::historyMessage);
         Collections.reverse(messages);
         messages = coalesceFinalWorkflowResult(messages);
@@ -219,10 +219,10 @@ final class JooqAiChatConversationQueries {
                         AI_CHAT_STEP.REASONING_EFFORT, AI_CHAT_STEP.TOOL_CALLS_JSON,
                         AI_CHAT_STEP.OBSERVATION_JSON, AI_CHAT_STEP.METRICS_JSON,
                         AI_CHAT_STEP.EXTRA_JSON, AI_CHAT_STEP.LLM_CALL_COUNT,
-                        AI_CHAT_STEP.IS_COPIED_CONTEXT, AI_CHAT_STEP.CREATED_AT)
+                        AI_CHAT_STEP.IS_COPIED_CONTEXT, AI_CHAT_STEP.CREATION_TIMESTAMP)
                 .from(AI_CHAT_STEP)
                 .where(conversationScope)
-                .orderBy(AI_CHAT_STEP.CREATED_AT.desc(), AI_CHAT_STEP.AI_CHAT_STEP_ID.desc())
+                .orderBy(AI_CHAT_STEP.CREATION_TIMESTAMP.desc(), AI_CHAT_STEP.AI_CHAT_STEP_ID.desc())
                 .fetch(this::trajectoryRow);
         Collections.reverse(rows);
 
@@ -310,7 +310,7 @@ final class JooqAiChatConversationQueries {
     }
 
     private TrajectoryRow trajectoryRow(Record record) {
-        LocalDateTime createdAt = record.get(AI_CHAT_STEP.CREATED_AT);
+        LocalDateTime createdAt = record.get(AI_CHAT_STEP.CREATION_TIMESTAMP);
         String messageKind = record.get(AI_CHAT_STEP.MESSAGE_KIND);
         String modelName = record.get(AI_CHAT_STEP.MODEL_NAME);
         String reasoningEffort = record.get(AI_CHAT_STEP.REASONING_EFFORT);

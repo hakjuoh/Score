@@ -27,7 +27,7 @@ class DatabaseAiFileStorageTest {
                 CREATE TABLE ai_chat_file_object (
                     storage_location VARCHAR(512) PRIMARY KEY,
                     content BLOB NOT NULL,
-                    created_at TIMESTAMP(6) NOT NULL)
+                    creation_timestamp TIMESTAMP(6) NOT NULL)
                 """);
         DSLContext dsl = DSL.using(dataSource, SQLDialect.H2,
                 new Settings().withRenderSchema(false));

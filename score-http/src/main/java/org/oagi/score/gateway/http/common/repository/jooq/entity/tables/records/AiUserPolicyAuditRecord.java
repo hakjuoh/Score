@@ -135,18 +135,18 @@ public class AiUserPolicyAuditRecord extends UpdatableRecordImpl<AiUserPolicyAud
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy_audit.created_at</code>. Date and
-     * time when the policy was changed
+     * Setter for <code>oagi.ai_user_policy_audit.creation_timestamp</code>.
+     * Date and time when the policy was changed
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy_audit.created_at</code>. Date and
-     * time when the policy was changed
+     * Getter for <code>oagi.ai_user_policy_audit.creation_timestamp</code>.
+     * Date and time when the policy was changed
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(7);
     }
 
@@ -173,7 +173,7 @@ public class AiUserPolicyAuditRecord extends UpdatableRecordImpl<AiUserPolicyAud
     /**
      * Create a detached, initialised AiUserPolicyAuditRecord
      */
-    public AiUserPolicyAuditRecord(ULong aiUserPolicyAuditId, ULong targetAppUserId, ULong actorAppUserId, String action, String beforeJson, String afterJson, String reason, LocalDateTime createdAt) {
+    public AiUserPolicyAuditRecord(ULong aiUserPolicyAuditId, ULong targetAppUserId, ULong actorAppUserId, String action, String beforeJson, String afterJson, String reason, LocalDateTime creationTimestamp) {
         super(AiUserPolicyAudit.AI_USER_POLICY_AUDIT);
 
         setAiUserPolicyAuditId(aiUserPolicyAuditId);
@@ -183,7 +183,7 @@ public class AiUserPolicyAuditRecord extends UpdatableRecordImpl<AiUserPolicyAud
         setBeforeJson(beforeJson);
         setAfterJson(afterJson);
         setReason(reason);
-        setCreatedAt(createdAt);
+        setCreationTimestamp(creationTimestamp);
         resetTouchedOnNotNull();
     }
 }
