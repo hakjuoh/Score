@@ -2,7 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
 
 import java.util.List;
 
-abstract class AbstractAiModelProfile implements AiModelProfile {
+public abstract class AbstractAiModelProfile implements AiModelProfile {
     private final String modelKey;
     private final String providerModelName;
     private final String displayName;

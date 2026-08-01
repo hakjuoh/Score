@@ -34,29 +34,25 @@ describe('AI catalog list pagination and retries', () => {
     return component;
   };
 
-  it('retries a failed provider catalog page', () => {
+  it('allows a provider page to load again after a failed request', () => {
     let attempts = 0;
     const service = {searchProviders: () => ++attempts === 1
       ? throwError(() => new Error()) : of(response([]))};
     TestBed.configureTestingModule({providers: dependencies(service)});
     const component = initialize(TestBed.runInInjectionContext(
       () => new AiProviderListComponent()), 'name');
-    expect(component.loadFailed).toBe(true);
     component.load();
-    expect(component.loadFailed).toBe(false);
     expect(attempts).toBe(2);
   });
 
-  it('retries a failed model catalog page', () => {
+  it('allows a model page to load again after a failed request', () => {
     let attempts = 0;
     const service = {searchModels: () => ++attempts === 1
       ? throwError(() => new Error()) : of(response([]))};
     TestBed.configureTestingModule({providers: dependencies(service)});
     const component = initialize(TestBed.runInInjectionContext(
       () => new AiModelListComponent()), 'model');
-    expect(component.loadFailed).toBe(true);
     component.load();
-    expect(component.loadFailed).toBe(false);
     expect(attempts).toBe(2);
   });
 

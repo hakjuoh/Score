@@ -57,17 +57,17 @@ class ScoreAiConfigurationTest {
 
         assertThat(properties.getModels()).isEmpty();
         AiModelProfileCatalog.install(properties);
-        assertThat(properties.getModels()).hasSize(20).containsKey("claude-opus-5");
+        assertThat(properties.getModels()).hasSize(19).containsKey("claude-opus-5");
         assertThat(properties.getModels().get("claude-haiku-4_5").getReasoningEfforts())
                 .isEmpty();
         assertThat(properties.getModels().get("claude-haiku-4_5").getThinkingBudgetTokens())
                 .isEqualTo(4096);
         assertThat(properties.getModels().get("claude-opus-5").getReasoningEfforts())
                 .extracting(ScoreAiProperties.ReasoningEffort::getName)
-                .containsExactly("low", "medium", "high", "max");
+                .containsExactly("low", "medium", "high", "xhigh", "max");
         assertThat(properties.getModels().get("gpt-5_6-sol").getReasoningEfforts())
                 .extracting(ScoreAiProperties.ReasoningEffort::getName)
-                .containsExactly("low", "medium", "high", "xhigh", "max");
+                .containsExactly("disabled", "low", "medium", "high", "xhigh", "max");
         assertThat(properties.getModels().get("gpt-5_6-sol").getContextWindow())
                 .isEqualTo(1_050_000L);
         assertThat(properties.getTools().getToolSearch().isEnabled()).isTrue();
@@ -328,7 +328,7 @@ class ScoreAiConfigurationTest {
                         "claude-opus-4_7", "claude-opus-4_8", "claude-opus-5",
                         "claude-fable-5", "claude-mythos-5",
                         "gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna",
-                        "gpt-5_5", "gpt-5_5-pro", "gpt-5_4", "gpt-5_4-pro",
+                        "gpt-5_5", "gpt-5_4", "gpt-5_4-pro",
                         "gpt-5_4-mini", "gpt-5_4-nano"),
                 properties.getModels().keySet());
         assertEquals("claude-opus-5", properties.getModels().get("claude-opus-5").getModel());
@@ -469,6 +469,32 @@ class ScoreAiConfigurationTest {
         assertEquals("disabled", registry.resolveReasoningEffort("claude-sonnet-5", "none"));
         assertEquals(1, registry.availableModels().getFirst().reasoningEfforts().stream()
                 .filter(effort -> "disabled".equals(effort.name())).count());
+    }
+
+    @Test
+    void doesNotInventDisabledReasoningForOpenAiModelsThatRejectNone() {
+        ScoreAiProperties properties = properties("gpt-5.4-pro", "azure-openai");
+        ScoreAiProperties.Provider provider = properties.getProviders().get("azure-openai");
+        provider.setType("openai");
+        provider.setBaseUrl("https://example.openai.azure.com");
+        provider.setKey("test-key");
+        ScoreAiProperties.Model model = properties.getModels().get("gpt-5.4-pro");
+        model.setReasoningEffort("medium");
+        model.setReasoningEfforts(List.of(
+                reasoningEffort("medium", "Medium", "Balanced reasoning."),
+                reasoningEffort("high", "High", "Deeper reasoning."),
+                reasoningEffort("xhigh", "Extra High", "Deepest reasoning.")));
+        model.getModelCapabilities().setReasoningModel(true);
+        model.getModelCapabilities().setThinkingModes(List.of());
+
+        ScoreAiModelRegistry registry = new ScoreAiModelRegistry(
+                properties, Map.of("gpt-5.4-pro", mock(ChatModel.class)));
+
+        assertThat(registry.availableModels().getFirst().reasoningEfforts())
+                .extracting(ScoreAiModelRegistry.ReasoningEffortDescriptor::name)
+                .containsExactly("medium", "high", "xhigh");
+        assertThatThrownBy(() -> registry.resolveReasoningEffort("gpt-5.4-pro", "disabled"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

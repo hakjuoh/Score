@@ -12,17 +12,17 @@ CREATE TABLE `ai_user_policy`
     `quota_period`                 varchar(16) NULL COMMENT 'Cumulative token quota period: DAILY or MONTHLY',
     `quota_tokens`                 bigint unsigned NULL COMMENT 'Maximum cumulative tokens allowed during the quota period',
     `policy_version`               bigint unsigned NOT NULL DEFAULT 1 COMMENT 'Policy version used for optimistic locking',
-    `created_by`                   bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the policy',
-    `last_updated_by`              bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the policy',
-    `created_at`                   datetime(6) NOT NULL COMMENT 'Date and time when the policy was created',
-    `last_updated_at`              datetime(6) NOT NULL COMMENT 'Date and time when the policy was last updated',
+    `created_by`                   bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who created the policy',
+    `last_updated_by`              bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who last updated the policy',
+    `creation_timestamp`           datetime(6) NOT NULL COMMENT 'Date and time when the policy was created',
+    `last_update_timestamp`        datetime(6) NOT NULL COMMENT 'Date and time when the policy was last updated',
     PRIMARY KEY (`app_user_id`),
     CONSTRAINT `ai_user_policy_user_fk`
         FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE,
     CONSTRAINT `ai_user_policy_created_by_fk`
-        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`),
     CONSTRAINT `ai_user_policy_last_updated_by_fk`
-        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`),
     CONSTRAINT `ai_user_policy_default_model_fk`
         FOREIGN KEY (`default_ai_model_id`) REFERENCES `ai_model` (`ai_model_id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci

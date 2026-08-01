@@ -338,11 +338,6 @@ export class AiModelDetailComponent implements OnInit {
       ? `${descriptionId} ${this.optionErrorId(option.key)}` : descriptionId;
   }
 
-  retryLoad(): void {
-    this.loadProviders();
-    if (!this.isNew) this.load();
-  }
-
   save(): void {
     if (this.saving || !this.isChanged) return;
     if (this.invalid) {

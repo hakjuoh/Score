@@ -163,17 +163,17 @@ CREATE TABLE `app_secret`
     `nonce`              binary(12) NOT NULL COMMENT 'Unique 96-bit AES-GCM nonce for this encrypted value',
     `encryption_key_id`  varchar(64) NOT NULL COMMENT 'Identifier of the application encryption key used for this value',
     `encryption_version` smallint unsigned NOT NULL DEFAULT 1 COMMENT 'Version of the encryption payload format',
-    `created_by`         bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the secret',
-    `last_updated_by`    bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the secret',
-    `created_at`         datetime(6) NOT NULL COMMENT 'Date and time when the secret was created',
-    `last_updated_at`    datetime(6) NOT NULL COMMENT 'Date and time when the secret was last updated',
+    `created_by`         bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who created the secret',
+    `last_updated_by`    bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who last updated the secret',
+    `creation_timestamp` datetime(6) NOT NULL COMMENT 'Date and time when the secret was created',
+    `last_update_timestamp` datetime(6) NOT NULL COMMENT 'Date and time when the secret was last updated',
     PRIMARY KEY (`app_secret_id`),
     UNIQUE KEY `app_secret_guid_uk` (`secret_guid`),
     UNIQUE KEY `app_secret_name_uk` (`secret_name`),
     CONSTRAINT `app_secret_created_by_fk`
-        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`),
     CONSTRAINT `app_secret_last_updated_by_fk`
-        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Encrypted application secrets; initially limited to AI provider API keys';
 
@@ -187,10 +187,10 @@ CREATE TABLE `ai_provider`
     `api_version`        varchar(64) NULL COMMENT 'Provider API version sent using the provider-specific mechanism',
     `api_key_secret_id`  bigint unsigned NULL COMMENT 'Encrypted API key referenced from app_secret',
     `enabled`            tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Indicates whether the provider can serve model requests',
-    `created_by`         bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the provider',
-    `last_updated_by`    bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the provider',
-    `created_at`         datetime(6) NOT NULL COMMENT 'Date and time when the provider was created',
-    `last_updated_at`    datetime(6) NOT NULL COMMENT 'Date and time when the provider was last updated',
+    `created_by`         bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who created the provider',
+    `last_updated_by`    bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who last updated the provider',
+    `creation_timestamp` datetime(6) NOT NULL COMMENT 'Date and time when the provider was created',
+    `last_update_timestamp` datetime(6) NOT NULL COMMENT 'Date and time when the provider was last updated',
     PRIMARY KEY (`ai_provider_id`),
     UNIQUE KEY `ai_provider_name_uk` (`provider_name`),
     UNIQUE KEY `ai_provider_api_key_secret_uk` (`api_key_secret_id`),
@@ -198,9 +198,9 @@ CREATE TABLE `ai_provider`
     CONSTRAINT `ai_provider_api_key_secret_fk`
         FOREIGN KEY (`api_key_secret_id`) REFERENCES `app_secret` (`app_secret_id`) ON DELETE RESTRICT,
     CONSTRAINT `ai_provider_created_by_fk`
-        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`),
     CONSTRAINT `ai_provider_last_updated_by_fk`
-        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Configured AI providers and encrypted API key references';
 
@@ -222,10 +222,10 @@ CREATE TABLE `ai_model`
     `emergency_headroom_tokens`    bigint unsigned NOT NULL DEFAULT 4096 COMMENT 'Emergency context headroom in tokens',
     `tool_output_token_limit`      bigint unsigned NOT NULL DEFAULT 32000 COMMENT 'Maximum tool output tokens retained in context',
     `model_options_json`           JSON NULL COMMENT 'Configured Spring AI model options as a JSON object',
-    `created_by`                   bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the model',
-    `last_updated_by`              bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the model',
-    `created_at`                   datetime(6) NOT NULL COMMENT 'Date and time when the model was created',
-    `last_updated_at`              datetime(6) NOT NULL COMMENT 'Date and time when the model was last updated',
+    `created_by`                   bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who created the model',
+    `last_updated_by`              bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who last updated the model',
+    `creation_timestamp`           datetime(6) NOT NULL COMMENT 'Date and time when the model was created',
+    `last_update_timestamp`        datetime(6) NOT NULL COMMENT 'Date and time when the model was last updated',
     PRIMARY KEY (`ai_model_id`),
     UNIQUE KEY `ai_model_key_uk` (`model_key`),
     UNIQUE KEY `ai_model_default_model_uk` (`default_model`),
@@ -234,9 +234,9 @@ CREATE TABLE `ai_model`
     CONSTRAINT `ai_model_provider_fk`
         FOREIGN KEY (`provider_id`) REFERENCES `ai_provider` (`ai_provider_id`) ON DELETE RESTRICT,
     CONSTRAINT `ai_model_created_by_fk`
-        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`),
     CONSTRAINT `ai_model_last_updated_by_fk`
-        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Configured AI models and provider-specific runtime options';
 
@@ -268,17 +268,17 @@ CREATE TABLE `ai_user_policy`
     `quota_period`                 varchar(16) NULL COMMENT 'Cumulative token quota period: DAILY or MONTHLY',
     `quota_tokens`                 bigint unsigned NULL COMMENT 'Maximum cumulative tokens allowed during the quota period',
     `policy_version`               bigint unsigned NOT NULL DEFAULT 1 COMMENT 'Policy version used for optimistic locking',
-    `created_by`                   bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the policy',
-    `last_updated_by`              bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the policy',
-    `created_at`                   datetime(6) NOT NULL COMMENT 'Date and time when the policy was created',
-    `last_updated_at`              datetime(6) NOT NULL COMMENT 'Date and time when the policy was last updated',
+    `created_by`                   bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who created the policy',
+    `last_updated_by`              bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who last updated the policy',
+    `creation_timestamp`           datetime(6) NOT NULL COMMENT 'Date and time when the policy was created',
+    `last_update_timestamp`        datetime(6) NOT NULL COMMENT 'Date and time when the policy was last updated',
     PRIMARY KEY (`app_user_id`),
     CONSTRAINT `ai_user_policy_user_fk`
         FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE,
     CONSTRAINT `ai_user_policy_created_by_fk`
-        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`),
     CONSTRAINT `ai_user_policy_last_updated_by_fk`
-        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`),
     CONSTRAINT `ai_user_policy_default_model_fk`
         FOREIGN KEY (`default_ai_model_id`) REFERENCES `ai_model` (`ai_model_id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci

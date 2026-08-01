@@ -91,8 +91,7 @@ public final class ScoreAiChatOptionsFactory {
         String thinking = string(options, "thinking").orElse(model.resolvedDefaultThinking());
         String normalizedReasoningEffort = StringUtils.hasText(reasoningEffort)
                 ? reasoningEffort.strip().toLowerCase() : "";
-        boolean thinkingDisabled = "disabled".equals(normalizedReasoningEffort)
-                || "disabled".equals(thinking);
+        boolean reasoningDisabled = "disabled".equals(normalizedReasoningEffort);
         String thinkingDisplay = string(options, "thinkingDisplay").orElse(null);
         if ("disabled".equals(normalizedReasoningEffort)) {
             builder.thinkingDisabled();
@@ -114,7 +113,7 @@ public final class ScoreAiChatOptionsFactory {
                 ? normalizedReasoningEffort
                 : StringUtils.hasText(compositeOutputEffort)
                 ? compositeOutputEffort : model.outputEffort();
-        if (!thinkingDisabled && model.supportsOutputEffort()
+        if (!reasoningDisabled && model.supportsOutputEffort()
                 && StringUtils.hasText(effectiveOutputEffort)) {
             builder.effort(OutputConfig.Effort.of(effectiveOutputEffort.toLowerCase()));
         }

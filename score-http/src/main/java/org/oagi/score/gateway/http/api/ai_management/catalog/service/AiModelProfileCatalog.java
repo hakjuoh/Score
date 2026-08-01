@@ -3,6 +3,8 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.service;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelOptions;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.*;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.*;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai.*;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 
 import java.util.LinkedHashMap;
@@ -26,7 +28,7 @@ public final class AiModelProfileCatalog {
             new ClaudeOpus47Profile(), new ClaudeOpus48Profile(), new ClaudeOpus5Profile(),
             new ClaudeFable5Profile(), new ClaudeMythos5Profile(),
             new Gpt56SolProfile(), new Gpt56TerraProfile(), new Gpt56LunaProfile(),
-            new Gpt55Profile(), new Gpt55ProProfile(),
+            new Gpt55Profile(),
             new Gpt54Profile(), new Gpt54ProProfile(),
             new Gpt54MiniProfile(), new Gpt54NanoProfile());
 

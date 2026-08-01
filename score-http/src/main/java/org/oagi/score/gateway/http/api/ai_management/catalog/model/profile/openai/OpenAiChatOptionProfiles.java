@@ -1,4 +1,7 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai;
+
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelOption;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ReasoningEffort;
 
 import java.util.ArrayList;
 import java.util.List;
