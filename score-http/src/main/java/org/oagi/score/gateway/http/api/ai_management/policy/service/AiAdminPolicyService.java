@@ -34,7 +34,6 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -47,7 +46,6 @@ import java.util.ArrayList;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_TOKEN_USAGE_PERIOD;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_TOKEN_QUOTA_ADJUSTMENT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_POLICY;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_POLICY_AUDIT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.APP_USER;
 
 @Service
@@ -55,33 +53,8 @@ public class AiAdminPolicyService {
 
     private static final org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser
             POLICY_UPDATER = APP_USER.as("policy_updater");
-    private static final org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser
-            LEGACY_POLICY_UPDATER = APP_USER.as("legacy_policy_updater");
-    private static final Field<LocalDateTime> AUDIT_LAST_UPDATED_AT = DSL
-            .select(DSL.max(AI_USER_POLICY_AUDIT.CREATION_TIMESTAMP))
-            .from(AI_USER_POLICY_AUDIT)
-            .where(AI_USER_POLICY_AUDIT.TARGET_APP_USER_ID.eq(APP_USER.APP_USER_ID))
-            .asField();
-    private static final Field<LocalDateTime> POLICY_LAST_UPDATED_AT = DSL.coalesce(
-            AUDIT_LAST_UPDATED_AT, AI_USER_POLICY.LAST_UPDATE_TIMESTAMP)
-            .as("policy_last_updated_at");
-    private static final Field<String> AUDIT_UPDATER_LOGIN_ID = DSL
-            .select(POLICY_UPDATER.LOGIN_ID)
-            .from(AI_USER_POLICY_AUDIT)
-            .leftJoin(POLICY_UPDATER)
-            .on(POLICY_UPDATER.APP_USER_ID.eq(AI_USER_POLICY_AUDIT.ACTOR_APP_USER_ID))
-            .where(AI_USER_POLICY_AUDIT.TARGET_APP_USER_ID.eq(APP_USER.APP_USER_ID))
-            .orderBy(AI_USER_POLICY_AUDIT.CREATION_TIMESTAMP.desc(),
-                    AI_USER_POLICY_AUDIT.AI_USER_POLICY_AUDIT_ID.desc())
-            .limit(1).asField();
-    private static final Field<String> LEGACY_UPDATER_LOGIN_ID = DSL
-            .select(LEGACY_POLICY_UPDATER.LOGIN_ID)
-            .from(LEGACY_POLICY_UPDATER)
-            .where(LEGACY_POLICY_UPDATER.APP_USER_ID.eq(AI_USER_POLICY.LAST_UPDATED_BY))
-            .asField();
-    private static final Field<String> POLICY_UPDATER_LOGIN_ID = DSL.coalesce(
-            AUDIT_UPDATER_LOGIN_ID, LEGACY_UPDATER_LOGIN_ID)
-            .as("policy_updater_login_id");
+    private static final Field<String> POLICY_UPDATER_LOGIN_ID =
+            POLICY_UPDATER.LOGIN_ID.as("policy_updater_login_id");
 
     private final DSLContext dsl;
     private final AiPolicyQueryRepository queries;
@@ -121,10 +94,12 @@ public class AiAdminPolicyService {
         return dsl.select(APP_USER.APP_USER_ID, APP_USER.LOGIN_ID, APP_USER.NAME,
                         APP_USER.ORGANIZATION, AI_USER_POLICY.AI_ENABLED,
                         AI_USER_POLICY.MULTI_AGENT_ENABLED,
-                        POLICY_LAST_UPDATED_AT, POLICY_UPDATER_LOGIN_ID)
+                        AI_USER_POLICY.LAST_UPDATE_TIMESTAMP, POLICY_UPDATER_LOGIN_ID)
                 .from(APP_USER)
                 .leftJoin(AI_USER_POLICY)
                 .on(AI_USER_POLICY.APP_USER_ID.eq(APP_USER.APP_USER_ID))
+                .leftJoin(POLICY_UPDATER)
+                .on(POLICY_UPDATER.APP_USER_ID.eq(AI_USER_POLICY.LAST_UPDATED_BY))
                 .where(basicUserCondition(loginId, name, organization,
                         updaterLoginIdList, updatedAfter, updatedBefore))
                 .orderBy(APP_USER.LOGIN_ID)
@@ -214,7 +189,10 @@ public class AiAdminPolicyService {
         Condition condition = basicUserCondition(loginId, name, organization,
                 updaterLoginIdList, updatedAfter, updatedBefore);
         var candidates = DSL.selectOne().from(APP_USER).leftJoin(AI_USER_POLICY)
-                .on(AI_USER_POLICY.APP_USER_ID.eq(APP_USER.APP_USER_ID)).where(condition);
+                .on(AI_USER_POLICY.APP_USER_ID.eq(APP_USER.APP_USER_ID))
+                .leftJoin(POLICY_UPDATER)
+                .on(POLICY_UPDATER.APP_USER_ID.eq(AI_USER_POLICY.LAST_UPDATED_BY))
+                .where(condition);
         int total = dsl.fetchCount(candidates);
         long offset = AiAdminPage.offset(request);
         if (offset >= total) {
@@ -227,20 +205,22 @@ public class AiAdminPolicyService {
                 case "name" -> APP_USER.NAME;
                 case "organization" -> APP_USER.ORGANIZATION;
                 case "updater" -> POLICY_UPDATER_LOGIN_ID;
-                case "updatedOn" -> POLICY_LAST_UPDATED_AT;
+                case "updatedOn" -> AI_USER_POLICY.LAST_UPDATE_TIMESTAMP;
                 default -> null;
             };
             if (field != null) order.add(sort.direction() == SortDirection.DESC
                     ? field.desc() : field.asc());
         });
-        if (order.isEmpty()) order.add(POLICY_LAST_UPDATED_AT.desc());
+        if (order.isEmpty()) order.add(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP.desc());
         order.add(APP_USER.APP_USER_ID.asc());
         List<AiPolicyUserSummary> page = dsl.select(APP_USER.APP_USER_ID, APP_USER.LOGIN_ID,
                         APP_USER.NAME, APP_USER.ORGANIZATION, AI_USER_POLICY.AI_ENABLED,
-                        AI_USER_POLICY.MULTI_AGENT_ENABLED, POLICY_LAST_UPDATED_AT,
+                        AI_USER_POLICY.MULTI_AGENT_ENABLED, AI_USER_POLICY.LAST_UPDATE_TIMESTAMP,
                         POLICY_UPDATER_LOGIN_ID)
                 .from(APP_USER).leftJoin(AI_USER_POLICY)
                 .on(AI_USER_POLICY.APP_USER_ID.eq(APP_USER.APP_USER_ID))
+                .leftJoin(POLICY_UPDATER)
+                .on(POLICY_UPDATER.APP_USER_ID.eq(AI_USER_POLICY.LAST_UPDATED_BY))
                 .where(condition).orderBy(order).limit((int) offset, request.pageSize())
                 .fetch(this::summary);
         return new PageResponse<>(page, request.pageIndex(), request.pageSize(), total);
@@ -262,13 +242,13 @@ public class AiAdminPolicyService {
                     APP_USER.ORGANIZATION.containsIgnoreCase(organization.strip()));
         }
         condition = condition.and(AiAdminPage.loginIdSelection(
-                POLICY_UPDATER_LOGIN_ID, updaterLoginIdList));
+                POLICY_UPDATER.LOGIN_ID, updaterLoginIdList));
         if (updatedAfter != null) {
-            condition = condition.and(POLICY_LAST_UPDATED_AT.ge(
+            condition = condition.and(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP.ge(
                     updatedAfter.atZone(ZoneOffset.UTC).toLocalDateTime()));
         }
         if (updatedBefore != null) {
-            condition = condition.and(POLICY_LAST_UPDATED_AT.lt(
+            condition = condition.and(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP.lt(
                     updatedBefore.atZone(ZoneOffset.UTC).toLocalDateTime()));
         }
         return condition;
@@ -290,7 +270,8 @@ public class AiAdminPolicyService {
                 availableModels,
                 quota.limitTokens(), quota.consumedTokens(), quota.reservedTokens(),
                 quota.remainingTokens(), requests.activeCountByUser(effective.userId()),
-                record.get(POLICY_UPDATER_LOGIN_ID), utc(record.get(POLICY_LAST_UPDATED_AT)));
+                record.get(POLICY_UPDATER_LOGIN_ID),
+                utc(record.get(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP)));
     }
 
     static boolean matchesModel(AiPolicyUserSummary user, String model) {
@@ -383,7 +364,7 @@ public class AiAdminPolicyService {
 
     public void delete(ScoreUser actor, UserId targetUserId, long expectedVersion) {
         requireAdministrator(actor);
-        commands.delete(targetUserId, actor.userId(), expectedVersion);
+        commands.delete(targetUserId, expectedVersion);
     }
 
     public AiAdminUsageView usage(ScoreUser actor, UserId targetUserId,
