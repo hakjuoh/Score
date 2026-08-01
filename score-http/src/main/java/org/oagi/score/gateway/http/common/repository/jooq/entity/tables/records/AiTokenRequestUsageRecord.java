@@ -85,34 +85,36 @@ public class AiTokenRequestUsageRecord extends UpdatableRecordImpl<AiTokenReques
     }
 
     /**
-     * Setter for <code>oagi.ai_token_request_usage.created_at</code>. Date and
-     * time when the request usage counter was created
+     * Setter for <code>oagi.ai_token_request_usage.creation_timestamp</code>.
+     * Date and time when the request usage counter was created
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_request_usage.created_at</code>. Date and
-     * time when the request usage counter was created
+     * Getter for <code>oagi.ai_token_request_usage.creation_timestamp</code>.
+     * Date and time when the request usage counter was created
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(4);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_request_usage.updated_at</code>. Date and
+     * Setter for
+     * <code>oagi.ai_token_request_usage.last_update_timestamp</code>. Date and
      * time when the request usage counter was last updated
      */
-    public void setUpdatedAt(LocalDateTime value) {
+    public void setLastUpdateTimestamp(LocalDateTime value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_request_usage.updated_at</code>. Date and
+     * Getter for
+     * <code>oagi.ai_token_request_usage.last_update_timestamp</code>. Date and
      * time when the request usage counter was last updated
      */
-    public LocalDateTime getUpdatedAt() {
+    public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(5);
     }
 
@@ -139,15 +141,15 @@ public class AiTokenRequestUsageRecord extends UpdatableRecordImpl<AiTokenReques
     /**
      * Create a detached, initialised AiTokenRequestUsageRecord
      */
-    public AiTokenRequestUsageRecord(String requestId, ULong appUserId, ULong consumedTokens, ULong reservedTokens, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public AiTokenRequestUsageRecord(String requestId, ULong appUserId, ULong consumedTokens, ULong reservedTokens, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
         super(AiTokenRequestUsage.AI_TOKEN_REQUEST_USAGE);
 
         setRequestId(requestId);
         setAppUserId(appUserId);
         setConsumedTokens(consumedTokens);
         setReservedTokens(reservedTokens);
-        setCreatedAt(createdAt);
-        setUpdatedAt(updatedAt);
+        setCreationTimestamp(creationTimestamp);
+        setLastUpdateTimestamp(lastUpdateTimestamp);
         resetTouchedOnNotNull();
     }
 }

@@ -15,12 +15,12 @@ CREATE TABLE `ai_chat_conversation`
     `parent_request_id`              varchar(128) COLLATE utf8mb4_bin NULL COMMENT 'Root request that created this child execution conversation.',
     `title`                          varchar(240)                 NOT NULL COMMENT 'The display title of the conversation, derived from its first prompt.',
     `compacted`                      tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Indicates whether the conversation model context has been compacted (0 = False, 1 = True).',
-    `created_at`                     datetime(6) NOT NULL COMMENT 'The timestamp when the conversation was created.',
-    `updated_at`                     datetime(6) NOT NULL COMMENT 'The timestamp of the most recent activity in the conversation.',
+    `creation_timestamp`             datetime(6) NOT NULL COMMENT 'The timestamp when the conversation was created.',
+    `last_update_timestamp`          datetime(6) NOT NULL COMMENT 'The timestamp of the most recent activity in the conversation.',
     PRIMARY KEY (`ai_chat_conversation_id`),
     UNIQUE KEY `ai_chat_conversation_guid_uk` (`guid`),
-    KEY                              `ai_chat_conversation_owner_updated_idx` (`app_user_id`, `updated_at`),
-    KEY                              `ai_chat_conversation_parent_idx` (`parent_ai_chat_conversation_id`, `created_at`),
+    KEY                              `ai_chat_conversation_owner_updated_idx` (`app_user_id`, `last_update_timestamp`),
+    KEY                              `ai_chat_conversation_parent_idx` (`parent_ai_chat_conversation_id`, `creation_timestamp`),
     KEY                              `ai_chat_conversation_parent_request_idx` (`parent_ai_chat_conversation_id`, `parent_request_id`),
     CONSTRAINT `ai_chat_conversation_app_user_fk`
         FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE,
@@ -40,7 +40,7 @@ CREATE TABLE `ai_chat_memory`
     `message_type`            varchar(16) NULL COMMENT 'Expected model-context roles are USER, ASSISTANT, SYSTEM, and TOOL; other values are handled by the application.',
     `content`                 longtext    NOT NULL COMMENT 'The text content supplied to the model as conversation memory.',
     `metadata_json`           JSON NULL COMMENT 'Optional JSON metadata associated with the model-context message.',
-    `created_at`              datetime(6) NOT NULL COMMENT 'The timestamp when the memory record was created.',
+    `creation_timestamp`      datetime(6) NOT NULL COMMENT 'The timestamp when the memory record was created.',
     PRIMARY KEY (`ai_chat_memory_id`),
     UNIQUE KEY `ai_chat_memory_conversation_sequence_uk` (`ai_chat_conversation_id`, `memory_sequence`),
     CONSTRAINT `ai_chat_memory_conversation_fk`
@@ -69,12 +69,12 @@ CREATE TABLE `ai_chat_step`
     `extra_json`              JSON NULL COMMENT 'JSON object containing additional ATIF or application-specific step metadata.',
     `llm_call_count`          int NULL COMMENT 'The number of language-model calls represented by the step.',
     `is_copied_context`       tinyint(1) NULL COMMENT 'Indicates whether the step was copied into the model context (0 = False, 1 = True).',
-    `created_at`              datetime(6) NOT NULL COMMENT 'The timestamp when the trajectory step was created.',
+    `creation_timestamp`      datetime(6) NOT NULL COMMENT 'The timestamp when the trajectory step was created.',
     PRIMARY KEY (`ai_chat_step_id`),
     UNIQUE KEY `ai_chat_step_conversation_sequence_uk` (`ai_chat_conversation_id`, `step_sequence`),
     KEY                       `ai_chat_step_request_idx` (`ai_chat_conversation_id`, `request_id`),
     KEY                       `ai_chat_step_settings_idx` (`ai_chat_conversation_id`, `message_kind`, `step_sequence`),
-    KEY                       `ai_chat_step_created_idx` (`ai_chat_conversation_id`, `created_at`),
+    KEY                       `ai_chat_step_created_idx` (`ai_chat_conversation_id`, `creation_timestamp`),
     CONSTRAINT `ai_chat_step_conversation_fk`
         FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE
 ) ENGINE = InnoDB
@@ -92,17 +92,17 @@ CREATE TABLE `ai_chat_change_confirmation`
     `arguments_digest`                 char(64) COLLATE ascii_bin       NOT NULL COMMENT 'The SHA-256 digest binding the tool name to its canonicalized arguments.',
     `status`                           varchar(16)                      NULL DEFAULT 'REQUESTED' COMMENT 'Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and EXPIRED; other values are handled by the application.',
     `grant_digest`                     char(64) COLLATE ascii_bin NULL COMMENT 'The SHA-256 digest of the one-time approval grant; cleared after consumption, denial, or expiration.',
-    `expires_at`                       datetime(6) NOT NULL COMMENT 'The timestamp after which the confirmation request or approval grant is invalid.',
-    `approved_at`                      datetime(6) NULL COMMENT 'The timestamp when the change request was approved.',
-    `denied_at`                        datetime(6) NULL COMMENT 'The timestamp when the change request was denied.',
-    `consumed_at`                      datetime(6) NULL COMMENT 'The timestamp when the one-time approval grant was consumed.',
-    `expired_at`                       datetime(6) NULL COMMENT 'The timestamp when the confirmation request or approval grant expired.',
-    `created_at`                       datetime(6) NOT NULL COMMENT 'The timestamp when the change confirmation request was created.',
+    `expiration_timestamp`             datetime(6) NOT NULL COMMENT 'The timestamp after which the confirmation request or approval grant is invalid.',
+    `approved_timestamp`               datetime(6) NULL COMMENT 'The timestamp when the change request was approved.',
+    `denied_timestamp`                 datetime(6) NULL COMMENT 'The timestamp when the change request was denied.',
+    `consumed_timestamp`               datetime(6) NULL COMMENT 'The timestamp when the one-time approval grant was consumed.',
+    `expired_timestamp`                datetime(6) NULL COMMENT 'The timestamp when the confirmation request or approval grant expired.',
+    `creation_timestamp`               datetime(6) NOT NULL COMMENT 'The timestamp when the change confirmation request was created.',
     PRIMARY KEY (`ai_chat_change_confirmation_id`),
     UNIQUE KEY `ai_chat_change_confirmation_guid_uk` (`guid`),
     UNIQUE KEY `ai_chat_change_confirmation_grant_uk` (`grant_digest`),
     KEY                                `ai_chat_change_confirmation_request_idx` (`ai_chat_conversation_id`, `request_id`, `tool_name`, `arguments_digest`),
-    KEY                                `ai_chat_change_confirmation_expiry_idx` (`status`, `expires_at`),
+    KEY                                `ai_chat_change_confirmation_expiry_idx` (`status`, `expiration_timestamp`),
     CONSTRAINT `ai_chat_change_confirmation_conversation_fk`
         FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE
 ) ENGINE = InnoDB
@@ -123,14 +123,14 @@ CREATE TABLE `ai_chat_file`
     `sha256`                  char(64) COLLATE ascii_bin NOT NULL COMMENT 'SHA-256 digest of stored content.',
     `storage_provider`        varchar(64) NOT NULL COMMENT 'Configured file storage provider identifier.',
     `storage_location`        varchar(1024) COLLATE utf8mb4_bin NOT NULL COMMENT 'Provider-owned opaque object location.',
-    `created_at`              datetime(6) NOT NULL COMMENT 'File creation timestamp.',
-    `expires_at`              datetime(6) NOT NULL COMMENT 'File retention deadline.',
+    `creation_timestamp`      datetime(6) NOT NULL COMMENT 'File creation timestamp.',
+    `expiration_timestamp`    datetime(6) NOT NULL COMMENT 'File retention deadline.',
     PRIMARY KEY (`ai_chat_file_id`),
     UNIQUE KEY `ai_chat_file_guid_uk` (`guid`),
     UNIQUE KEY `ai_chat_file_request_digest_uk`
         (`ai_chat_conversation_id`, `request_id`, `filename`, `sha256`),
-    KEY `ai_chat_file_request_idx` (`ai_chat_conversation_id`, `request_id`, `created_at`),
-    KEY `ai_chat_file_expiry_idx` (`expires_at`),
+    KEY `ai_chat_file_request_idx` (`ai_chat_conversation_id`, `request_id`, `creation_timestamp`),
+    KEY `ai_chat_file_expiry_idx` (`expiration_timestamp`),
     CONSTRAINT `ai_chat_file_conversation_fk`
         FOREIGN KEY (`ai_chat_conversation_id`) REFERENCES `ai_chat_conversation` (`ai_chat_conversation_id`) ON DELETE CASCADE
 ) ENGINE = InnoDB
@@ -142,7 +142,7 @@ CREATE TABLE `ai_chat_file_object`
 (
     `storage_location` varchar(512) COLLATE utf8mb4_bin NOT NULL COMMENT 'Opaque database-storage object key.',
     `content`          longblob NOT NULL COMMENT 'File bytes for the database storage provider.',
-    `created_at`       datetime(6) NOT NULL COMMENT 'Object creation timestamp.',
+    `creation_timestamp` datetime(6) NOT NULL COMMENT 'Object creation timestamp.',
     PRIMARY KEY (`storage_location`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
@@ -313,13 +313,14 @@ CREATE TABLE `ai_user_model_reasoning_access`
 CREATE TABLE `ai_token_usage_period`
 (
     `app_user_id`     bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user whose token usage is aggregated',
-    `period_start`    datetime(6) NOT NULL COMMENT 'Inclusive start of the quota period in UTC',
-    `period_end`      datetime(6) NOT NULL COMMENT 'Exclusive end of the quota period in UTC',
+    `period_start_timestamp` datetime(6) NOT NULL COMMENT 'Inclusive start of the quota period in UTC',
+    `period_end_timestamp` datetime(6) NOT NULL COMMENT 'Exclusive end of the quota period in UTC',
     `consumed_tokens` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens consumed during the period',
     `reserved_tokens` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens reserved by in-progress calls during the period',
-    `updated_at`      datetime(6) NOT NULL COMMENT 'Date and time when the period counter was last updated',
-    PRIMARY KEY (`app_user_id`, `period_start`, `period_end`),
-    KEY `ai_token_usage_period_end_idx` (`period_end`),
+    `creation_timestamp` datetime(6) NOT NULL COMMENT 'Date and time when the period counter was created',
+    `last_update_timestamp` datetime(6) NOT NULL COMMENT 'Date and time when the period counter was last updated',
+    PRIMARY KEY (`app_user_id`, `period_start_timestamp`, `period_end_timestamp`),
+    KEY `ai_token_usage_period_end_idx` (`period_end_timestamp`),
     CONSTRAINT `ai_token_usage_period_user_fk`
         FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
@@ -331,10 +332,10 @@ CREATE TABLE `ai_token_request_usage`
     `app_user_id`     bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user who submitted the AI request',
     `consumed_tokens` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens consumed by the request',
     `reserved_tokens` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens reserved by in-progress calls for the request',
-    `created_at`      datetime(6) NOT NULL COMMENT 'Date and time when the request usage counter was created',
-    `updated_at`      datetime(6) NOT NULL COMMENT 'Date and time when the request usage counter was last updated',
+    `creation_timestamp` datetime(6) NOT NULL COMMENT 'Date and time when the request usage counter was created',
+    `last_update_timestamp` datetime(6) NOT NULL COMMENT 'Date and time when the request usage counter was last updated',
     PRIMARY KEY (`request_id`),
-    KEY `ai_token_request_usage_user_created_idx` (`app_user_id`, `created_at`),
+    KEY `ai_token_request_usage_user_created_idx` (`app_user_id`, `creation_timestamp`),
     CONSTRAINT `ai_token_request_usage_user_fk`
         FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
@@ -351,8 +352,8 @@ CREATE TABLE `ai_token_usage_ledger`
     `execution_kind`            varchar(64) NULL COMMENT 'Execution kind such as assistant, planner, or worker',
     `agent_id`                  varchar(64) NULL COMMENT 'Identifier of the agent that performed the call',
     `reserved_tokens`           bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of tokens reserved before the provider call',
-    `quota_period_start`        datetime(6) NULL COMMENT 'Exact inclusive quota window start reserved by this call',
-    `quota_period_end`          datetime(6) NULL COMMENT 'Exact exclusive quota window end reserved by this call',
+    `quota_period_start_timestamp` datetime(6) NULL COMMENT 'Exact inclusive quota window start reserved by this call',
+    `quota_period_end_timestamp` datetime(6) NULL COMMENT 'Exact exclusive quota window end reserved by this call',
     `prompt_tokens`             bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Normalized input tokens reported by the provider',
     `completion_tokens`         bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Output tokens reported by the provider',
     `cached_tokens`             bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Number of input tokens served from cache',
@@ -360,13 +361,13 @@ CREATE TABLE `ai_token_usage_ledger`
     `usage_complete`            tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Indicates whether the provider usage data is complete',
     `status`                    varchar(16) NOT NULL COMMENT 'Reservation and settlement status',
     `failure_type`              varchar(240) NULL COMMENT 'Failure class or error code',
-    `reserved_at`               datetime(6) NOT NULL COMMENT 'Date and time when the tokens were reserved',
-    `settled_at`                datetime(6) NULL COMMENT 'Date and time when the usage was settled or released',
+    `reserved_timestamp`        datetime(6) NOT NULL COMMENT 'Date and time when the tokens were reserved',
+    `settled_timestamp`         datetime(6) NULL COMMENT 'Date and time when the usage was settled or released',
     PRIMARY KEY (`ai_token_usage_ledger_id`),
     UNIQUE KEY `ai_token_usage_ledger_call_uk` (`call_id`),
-    KEY `ai_token_usage_ledger_user_time_idx` (`app_user_id`, `reserved_at`),
-    KEY `ai_token_usage_ledger_request_idx` (`request_id`, `reserved_at`),
-    KEY `ai_token_usage_ledger_stale_reservation_idx` (`status`, `reserved_at`),
+    KEY `ai_token_usage_ledger_user_time_idx` (`app_user_id`, `reserved_timestamp`),
+    KEY `ai_token_usage_ledger_request_idx` (`request_id`, `reserved_timestamp`),
+    KEY `ai_token_usage_ledger_stale_reservation_idx` (`status`, `reserved_timestamp`),
     CONSTRAINT `ai_token_usage_ledger_user_fk`
         FOREIGN KEY (`app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE CASCADE,
     CONSTRAINT `ai_token_usage_ledger_model_fk`
@@ -383,9 +384,9 @@ CREATE TABLE `ai_user_policy_audit`
     `before_json`             JSON NULL COMMENT 'Canonical policy snapshot before the change',
     `after_json`              JSON NULL COMMENT 'Canonical policy snapshot after the change',
     `reason`                  varchar(500) NULL COMMENT 'Reason or administrator comment for the policy change',
-    `created_at`              datetime(6) NOT NULL COMMENT 'Date and time when the policy was changed',
+    `creation_timestamp`     datetime(6) NOT NULL COMMENT 'Date and time when the policy was changed',
     PRIMARY KEY (`ai_user_policy_audit_id`),
-    KEY `ai_user_policy_audit_target_time_idx` (`target_app_user_id`, `created_at`),
+    KEY `ai_user_policy_audit_target_time_idx` (`target_app_user_id`, `creation_timestamp`),
     CONSTRAINT `ai_user_policy_audit_actor_fk`
         FOREIGN KEY (`actor_app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
@@ -396,13 +397,13 @@ CREATE TABLE `ai_token_quota_adjustment`
     `ai_token_quota_adjustment_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'Identifier of the token quota adjustment',
     `target_app_user_id`           bigint(20) unsigned NOT NULL COMMENT 'Identifier of the user whose quota was adjusted',
     `actor_app_user_id`            bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who adjusted the quota',
-    `period_start`                 datetime(6) NOT NULL COMMENT 'Start of the adjusted quota period in UTC',
+    `period_start_timestamp`       datetime(6) NOT NULL COMMENT 'Start of the adjusted quota period in UTC',
     `delta_tokens`                 bigint NOT NULL COMMENT 'Positive or negative token amount applied to consumed usage',
     `reason`                       varchar(500) NOT NULL COMMENT 'Reason for the quota adjustment',
-    `created_at`                   datetime(6) NOT NULL COMMENT 'Date and time when the quota was adjusted',
+    `creation_timestamp`           datetime(6) NOT NULL COMMENT 'Date and time when the quota was adjusted',
     PRIMARY KEY (`ai_token_quota_adjustment_id`),
     KEY `ai_token_quota_adjustment_target_time_idx`
-        (`target_app_user_id`, `created_at`),
+        (`target_app_user_id`, `creation_timestamp`),
     CONSTRAINT `ai_token_quota_adjustment_actor_fk`
         FOREIGN KEY (`actor_app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
@@ -422,8 +423,8 @@ CREATE TABLE `activity_event`
     `event_name`          varchar(100) NOT NULL COMMENT 'The stable dot-notation event name defined by the activity event catalog.',
     `source`              varchar(32) NOT NULL COMMENT 'The application-validated producer of the event, such as UI, SCORE_HTTP_API, CONNECT_CENTER_MCP, or AI_ASSISTANT.',
     `outcome`             varchar(16) NOT NULL COMMENT 'The application-validated event outcome such as OBSERVED, STARTED, SUCCEEDED, FAILED, or CANCELED.',
-    `occurred_at`         datetime(6) NOT NULL COMMENT 'The UTC timestamp when the represented activity occurred.',
-    `recorded_at`         datetime(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'The UTC timestamp when the server persisted the activity event.',
+    `occurred_timestamp`  datetime(6) NOT NULL COMMENT 'The UTC timestamp when the represented activity occurred.',
+    `recorded_timestamp`  datetime(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'The UTC timestamp when the server persisted the activity event.',
     `client_sequence`     bigint unsigned NULL COMMENT 'The monotonically increasing sequence assigned within a browser client session.',
     `client_session_guid` char(36) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT 'The browser tab session UUID used to reconstruct recent user journey order.',
     `correlation_id`      varchar(128) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT 'The identifier correlating UI intent, service calls, and resulting audit events.',
@@ -440,11 +441,11 @@ CREATE TABLE `activity_event`
     UNIQUE KEY `activity_event_guid_uk` (`event_guid`),
     UNIQUE KEY `activity_event_legacy_log_uk` (`legacy_log_id`),
     KEY `activity_event_actor_time_idx`
-        (`actor_app_user_id`, `occurred_at`, `activity_event_id`),
+        (`actor_app_user_id`, `occurred_timestamp`, `activity_event_id`),
     KEY `activity_event_actor_scope_time_idx`
-        (`actor_app_user_id`, `event_scope`, `occurred_at`, `activity_event_id`),
+        (`actor_app_user_id`, `event_scope`, `occurred_timestamp`, `activity_event_id`),
     KEY `activity_event_session_time_idx`
-        (`client_session_guid`, `occurred_at`, `activity_event_id`),
+        (`client_session_guid`, `occurred_timestamp`, `activity_event_id`),
     KEY `activity_event_session_sequence_idx`
         (`client_session_guid`, `client_sequence`, `activity_event_id`),
     KEY `activity_event_request_idx` (`request_id`, `activity_event_id`),
@@ -464,12 +465,12 @@ CREATE TABLE `activity_event_target`
     `target_guid`       varchar(100) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT 'The optional stable public identifier of the affected resource.',
     `target_name`       varchar(240) NULL COMMENT 'The display-name snapshot of the resource at event time.',
     `target_role`       varchar(16) NOT NULL DEFAULT 'PRIMARY' COMMENT 'The application-validated relationship of the resource to the event: PRIMARY, AFFECTED, or CONTEXT.',
-    `occurred_at`       datetime(6) NOT NULL COMMENT 'The denormalized UTC event timestamp used by resource-history indexes.',
+    `occurred_timestamp` datetime(6) NOT NULL COMMENT 'The denormalized UTC event timestamp used by resource-history indexes.',
     PRIMARY KEY (`activity_event_id`, `target_ordinal`),
     KEY `activity_target_guid_time_idx`
-        (`target_type`, `target_guid`, `occurred_at`, `activity_event_id`),
+        (`target_type`, `target_guid`, `occurred_timestamp`, `activity_event_id`),
     KEY `activity_target_id_time_idx`
-        (`target_type`, `target_id`, `occurred_at`, `activity_event_id`),
+        (`target_type`, `target_id`, `occurred_timestamp`, `activity_event_id`),
     CONSTRAINT `activity_target_event_fk`
         FOREIGN KEY (`activity_event_id`) REFERENCES `activity_event` (`activity_event_id`)
             ON DELETE RESTRICT ON UPDATE RESTRICT

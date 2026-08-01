@@ -78,7 +78,7 @@ public class JooqAiChangeConfirmationQueryRepository extends JooqBaseRepository
                         .and(AI_CHAT_CHANGE_CONFIRMATION.TOOL_NAME.eq(toolName))
                         .and(AI_CHAT_CHANGE_CONFIRMATION.ARGUMENTS_DIGEST.eq(argumentsDigest))
                         .and(AI_CHAT_CHANGE_CONFIRMATION.STATUS.in("REQUESTED", "APPROVED"))
-                        .and(AI_CHAT_CHANGE_CONFIRMATION.EXPIRES_AT.gt(localDateTime(now))))
+                        .and(AI_CHAT_CHANGE_CONFIRMATION.EXPIRATION_TIMESTAMP.gt(localDateTime(now))))
                 .orderBy(AI_CHAT_CHANGE_CONFIRMATION.AI_CHAT_CHANGE_CONFIRMATION_ID.desc())
                 .limit(1)
                 .forUpdate()
@@ -93,11 +93,11 @@ public class JooqAiChangeConfirmationQueryRepository extends JooqBaseRepository
                         AI_CHAT_CHANGE_CONFIRMATION.STATUS,
                         AI_CHAT_CHANGE_CONFIRMATION.TOOL_NAME,
                         AI_CHAT_CHANGE_CONFIRMATION.ARGUMENTS_DIGEST,
-                        AI_CHAT_CHANGE_CONFIRMATION.EXPIRES_AT,
-                        AI_CHAT_CHANGE_CONFIRMATION.APPROVED_AT,
-                        AI_CHAT_CHANGE_CONFIRMATION.DENIED_AT,
-                        AI_CHAT_CHANGE_CONFIRMATION.EXPIRED_AT,
-                        AI_CHAT_CHANGE_CONFIRMATION.CONSUMED_AT,
+                        AI_CHAT_CHANGE_CONFIRMATION.EXPIRATION_TIMESTAMP,
+                        AI_CHAT_CHANGE_CONFIRMATION.APPROVED_TIMESTAMP,
+                        AI_CHAT_CHANGE_CONFIRMATION.DENIED_TIMESTAMP,
+                        AI_CHAT_CHANGE_CONFIRMATION.EXPIRED_TIMESTAMP,
+                        AI_CHAT_CHANGE_CONFIRMATION.CONSUMED_TIMESTAMP,
                         AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST)
                 .from(AI_CHAT_CHANGE_CONFIRMATION)
                 .join(AI_CHAT_CONVERSATION)
@@ -114,11 +114,11 @@ public class JooqAiChangeConfirmationQueryRepository extends JooqBaseRepository
                 record.get(AI_CHAT_CHANGE_CONFIRMATION.STATUS),
                 record.get(AI_CHAT_CHANGE_CONFIRMATION.TOOL_NAME),
                 record.get(AI_CHAT_CHANGE_CONFIRMATION.ARGUMENTS_DIGEST),
-                instant(record.get(AI_CHAT_CHANGE_CONFIRMATION.EXPIRES_AT)),
-                instant(record.get(AI_CHAT_CHANGE_CONFIRMATION.APPROVED_AT)),
-                instant(record.get(AI_CHAT_CHANGE_CONFIRMATION.DENIED_AT)),
-                instant(record.get(AI_CHAT_CHANGE_CONFIRMATION.EXPIRED_AT)),
-                instant(record.get(AI_CHAT_CHANGE_CONFIRMATION.CONSUMED_AT)),
+                instant(record.get(AI_CHAT_CHANGE_CONFIRMATION.EXPIRATION_TIMESTAMP)),
+                instant(record.get(AI_CHAT_CHANGE_CONFIRMATION.APPROVED_TIMESTAMP)),
+                instant(record.get(AI_CHAT_CHANGE_CONFIRMATION.DENIED_TIMESTAMP)),
+                instant(record.get(AI_CHAT_CHANGE_CONFIRMATION.EXPIRED_TIMESTAMP)),
+                instant(record.get(AI_CHAT_CHANGE_CONFIRMATION.CONSUMED_TIMESTAMP)),
                 record.get(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST));
     }
 

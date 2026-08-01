@@ -173,34 +173,34 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.created_at</code>. The
+     * Setter for <code>oagi.ai_chat_conversation.creation_timestamp</code>. The
      * timestamp when the conversation was created.
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.created_at</code>. The
+     * Getter for <code>oagi.ai_chat_conversation.creation_timestamp</code>. The
      * timestamp when the conversation was created.
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(9);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.updated_at</code>. The
-     * timestamp of the most recent activity in the conversation.
+     * Setter for <code>oagi.ai_chat_conversation.last_update_timestamp</code>.
+     * The timestamp of the most recent activity in the conversation.
      */
-    public void setUpdatedAt(LocalDateTime value) {
+    public void setLastUpdateTimestamp(LocalDateTime value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.updated_at</code>. The
-     * timestamp of the most recent activity in the conversation.
+     * Getter for <code>oagi.ai_chat_conversation.last_update_timestamp</code>.
+     * The timestamp of the most recent activity in the conversation.
      */
-    public LocalDateTime getUpdatedAt() {
+    public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(10);
     }
 
@@ -227,7 +227,7 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     /**
      * Create a detached, initialised AiChatConversationRecord
      */
-    public AiChatConversationRecord(ULong aiChatConversationId, String guid, ULong appUserId, ULong parentAiChatConversationId, String conversationKind, String agentId, String parentRequestId, String title, Byte compacted, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public AiChatConversationRecord(ULong aiChatConversationId, String guid, ULong appUserId, ULong parentAiChatConversationId, String conversationKind, String agentId, String parentRequestId, String title, Byte compacted, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
         super(AiChatConversation.AI_CHAT_CONVERSATION);
 
         setAiChatConversationId(aiChatConversationId);
@@ -239,8 +239,8 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
         setParentRequestId(parentRequestId);
         setTitle(title);
         setCompacted(compacted);
-        setCreatedAt(createdAt);
-        setUpdatedAt(updatedAt);
+        setCreationTimestamp(creationTimestamp);
+        setLastUpdateTimestamp(lastUpdateTimestamp);
         resetTouchedOnNotNull();
     }
 }

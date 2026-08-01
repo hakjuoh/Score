@@ -136,18 +136,18 @@ public class ActivityEventTargetRecord extends UpdatableRecordImpl<ActivityEvent
     }
 
     /**
-     * Setter for <code>oagi.activity_event_target.occurred_at</code>. The
-     * denormalized UTC event timestamp used by resource-history indexes.
+     * Setter for <code>oagi.activity_event_target.occurred_timestamp</code>.
+     * The denormalized UTC event timestamp used by resource-history indexes.
      */
-    public void setOccurredAt(LocalDateTime value) {
+    public void setOccurredTimestamp(LocalDateTime value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.activity_event_target.occurred_at</code>. The
-     * denormalized UTC event timestamp used by resource-history indexes.
+     * Getter for <code>oagi.activity_event_target.occurred_timestamp</code>.
+     * The denormalized UTC event timestamp used by resource-history indexes.
      */
-    public LocalDateTime getOccurredAt() {
+    public LocalDateTime getOccurredTimestamp() {
         return (LocalDateTime) get(7);
     }
 
@@ -174,7 +174,7 @@ public class ActivityEventTargetRecord extends UpdatableRecordImpl<ActivityEvent
     /**
      * Create a detached, initialised ActivityEventTargetRecord
      */
-    public ActivityEventTargetRecord(ULong activityEventId, UShort targetOrdinal, String targetType, ULong targetId, String targetGuid, String targetName, String targetRole, LocalDateTime occurredAt) {
+    public ActivityEventTargetRecord(ULong activityEventId, UShort targetOrdinal, String targetType, ULong targetId, String targetGuid, String targetName, String targetRole, LocalDateTime occurredTimestamp) {
         super(ActivityEventTarget.ACTIVITY_EVENT_TARGET);
 
         setActivityEventId(activityEventId);
@@ -184,7 +184,7 @@ public class ActivityEventTargetRecord extends UpdatableRecordImpl<ActivityEvent
         setTargetGuid(targetGuid);
         setTargetName(targetName);
         setTargetRole(targetRole);
-        setOccurredAt(occurredAt);
+        setOccurredTimestamp(occurredTimestamp);
         resetTouchedOnNotNull();
     }
 }

@@ -167,34 +167,38 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.quota_period_start</code>.
+     * Setter for
+     * <code>oagi.ai_token_usage_ledger.quota_period_start_timestamp</code>.
      * Exact inclusive quota window start reserved by this call
      */
-    public void setQuotaPeriodStart(LocalDateTime value) {
+    public void setQuotaPeriodStartTimestamp(LocalDateTime value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.quota_period_start</code>.
+     * Getter for
+     * <code>oagi.ai_token_usage_ledger.quota_period_start_timestamp</code>.
      * Exact inclusive quota window start reserved by this call
      */
-    public LocalDateTime getQuotaPeriodStart() {
+    public LocalDateTime getQuotaPeriodStartTimestamp() {
         return (LocalDateTime) get(9);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.quota_period_end</code>.
-     * Exact exclusive quota window end reserved by this call
+     * Setter for
+     * <code>oagi.ai_token_usage_ledger.quota_period_end_timestamp</code>. Exact
+     * exclusive quota window end reserved by this call
      */
-    public void setQuotaPeriodEnd(LocalDateTime value) {
+    public void setQuotaPeriodEndTimestamp(LocalDateTime value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.quota_period_end</code>.
-     * Exact exclusive quota window end reserved by this call
+     * Getter for
+     * <code>oagi.ai_token_usage_ledger.quota_period_end_timestamp</code>. Exact
+     * exclusive quota window end reserved by this call
      */
-    public LocalDateTime getQuotaPeriodEnd() {
+    public LocalDateTime getQuotaPeriodEndTimestamp() {
         return (LocalDateTime) get(10);
     }
 
@@ -311,34 +315,34 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.reserved_at</code>. Date and
-     * time when the tokens were reserved
+     * Setter for <code>oagi.ai_token_usage_ledger.reserved_timestamp</code>.
+     * Date and time when the tokens were reserved
      */
-    public void setReservedAt(LocalDateTime value) {
+    public void setReservedTimestamp(LocalDateTime value) {
         set(18, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.reserved_at</code>. Date and
-     * time when the tokens were reserved
+     * Getter for <code>oagi.ai_token_usage_ledger.reserved_timestamp</code>.
+     * Date and time when the tokens were reserved
      */
-    public LocalDateTime getReservedAt() {
+    public LocalDateTime getReservedTimestamp() {
         return (LocalDateTime) get(18);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.settled_at</code>. Date and
-     * time when the usage was settled or released
+     * Setter for <code>oagi.ai_token_usage_ledger.settled_timestamp</code>.
+     * Date and time when the usage was settled or released
      */
-    public void setSettledAt(LocalDateTime value) {
+    public void setSettledTimestamp(LocalDateTime value) {
         set(19, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.settled_at</code>. Date and
-     * time when the usage was settled or released
+     * Getter for <code>oagi.ai_token_usage_ledger.settled_timestamp</code>.
+     * Date and time when the usage was settled or released
      */
-    public LocalDateTime getSettledAt() {
+    public LocalDateTime getSettledTimestamp() {
         return (LocalDateTime) get(19);
     }
 
@@ -365,7 +369,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
     /**
      * Create a detached, initialised AiTokenUsageLedgerRecord
      */
-    public AiTokenUsageLedgerRecord(ULong aiTokenUsageLedgerId, String callId, String requestId, String conversationGuid, ULong appUserId, ULong aiModelId, String executionKind, String agentId, ULong reservedTokens, LocalDateTime quotaPeriodStart, LocalDateTime quotaPeriodEnd, ULong promptTokens, ULong completionTokens, ULong cachedTokens, ULong chargedTokens, Byte usageComplete, String status, String failureType, LocalDateTime reservedAt, LocalDateTime settledAt) {
+    public AiTokenUsageLedgerRecord(ULong aiTokenUsageLedgerId, String callId, String requestId, String conversationGuid, ULong appUserId, ULong aiModelId, String executionKind, String agentId, ULong reservedTokens, LocalDateTime quotaPeriodStartTimestamp, LocalDateTime quotaPeriodEndTimestamp, ULong promptTokens, ULong completionTokens, ULong cachedTokens, ULong chargedTokens, Byte usageComplete, String status, String failureType, LocalDateTime reservedTimestamp, LocalDateTime settledTimestamp) {
         super(AiTokenUsageLedger.AI_TOKEN_USAGE_LEDGER);
 
         setAiTokenUsageLedgerId(aiTokenUsageLedgerId);
@@ -377,8 +381,8 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
         setExecutionKind(executionKind);
         setAgentId(agentId);
         setReservedTokens(reservedTokens);
-        setQuotaPeriodStart(quotaPeriodStart);
-        setQuotaPeriodEnd(quotaPeriodEnd);
+        setQuotaPeriodStartTimestamp(quotaPeriodStartTimestamp);
+        setQuotaPeriodEndTimestamp(quotaPeriodEndTimestamp);
         setPromptTokens(promptTokens);
         setCompletionTokens(completionTokens);
         setCachedTokens(cachedTokens);
@@ -386,8 +390,8 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
         setUsageComplete(usageComplete);
         setStatus(status);
         setFailureType(failureType);
-        setReservedAt(reservedAt);
-        setSettledAt(settledAt);
+        setReservedTimestamp(reservedTimestamp);
+        setSettledTimestamp(settledTimestamp);
         resetTouchedOnNotNull();
     }
 }

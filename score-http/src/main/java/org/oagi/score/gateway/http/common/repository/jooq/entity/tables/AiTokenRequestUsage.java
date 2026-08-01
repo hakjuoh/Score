@@ -84,16 +84,17 @@ public class AiTokenRequestUsage extends TableImpl<AiTokenRequestUsageRecord> {
     public final TableField<AiTokenRequestUsageRecord, ULong> RESERVED_TOKENS = createField(DSL.name("reserved_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of tokens reserved by in-progress calls for the request");
 
     /**
-     * The column <code>oagi.ai_token_request_usage.created_at</code>. Date and
-     * time when the request usage counter was created
+     * The column <code>oagi.ai_token_request_usage.creation_timestamp</code>.
+     * Date and time when the request usage counter was created
      */
-    public final TableField<AiTokenRequestUsageRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the request usage counter was created");
+    public final TableField<AiTokenRequestUsageRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the request usage counter was created");
 
     /**
-     * The column <code>oagi.ai_token_request_usage.updated_at</code>. Date and
+     * The column
+     * <code>oagi.ai_token_request_usage.last_update_timestamp</code>. Date and
      * time when the request usage counter was last updated
      */
-    public final TableField<AiTokenRequestUsageRecord, LocalDateTime> UPDATED_AT = createField(DSL.name("updated_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the request usage counter was last updated");
+    public final TableField<AiTokenRequestUsageRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the request usage counter was last updated");
 
     private AiTokenRequestUsage(Name alias, Table<AiTokenRequestUsageRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
