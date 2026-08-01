@@ -62,10 +62,10 @@ public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
     public final TableField<AiChatFileObjectRecord, byte[]> CONTENT = createField(DSL.name("content"), SQLDataType.BLOB.nullable(false), this, "File bytes for the database storage provider.");
 
     /**
-     * The column <code>oagi.ai_chat_file_object.created_at</code>. Object
-     * creation timestamp.
+     * The column <code>oagi.ai_chat_file_object.creation_timestamp</code>.
+     * Object creation timestamp.
      */
-    public final TableField<AiChatFileObjectRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Object creation timestamp.");
+    public final TableField<AiChatFileObjectRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Object creation timestamp.");
 
     private AiChatFileObject(Name alias, Table<AiChatFileObjectRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

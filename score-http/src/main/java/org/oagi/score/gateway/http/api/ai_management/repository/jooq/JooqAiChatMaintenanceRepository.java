@@ -29,7 +29,7 @@ public class JooqAiChatMaintenanceRepository extends JooqBaseRepository
     public List<String> findExpiredConversationGuids(Instant cutoff) {
         return dslContext().select(AI_CHAT_CONVERSATION.GUID)
                 .from(AI_CHAT_CONVERSATION)
-                .where(AI_CHAT_CONVERSATION.UPDATED_AT.lt(localDateTime(cutoff))
+                .where(AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP.lt(localDateTime(cutoff))
                         .and(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID.isNull()))
                 .orderBy(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID)
                 .forUpdate()
@@ -39,7 +39,7 @@ public class JooqAiChatMaintenanceRepository extends JooqBaseRepository
     @Override
     public int deleteExpiredConversations(Instant cutoff) {
         return dslContext().deleteFrom(AI_CHAT_CONVERSATION)
-                .where(AI_CHAT_CONVERSATION.UPDATED_AT.lt(localDateTime(cutoff))
+                .where(AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP.lt(localDateTime(cutoff))
                         .and(AI_CHAT_CONVERSATION.PARENT_AI_CHAT_CONVERSATION_ID.isNull()))
                 .execute();
     }
@@ -48,11 +48,11 @@ public class JooqAiChatMaintenanceRepository extends JooqBaseRepository
     public int expireChangeConfirmations(Instant now) {
         return dslContext().update(AI_CHAT_CHANGE_CONFIRMATION)
                 .set(AI_CHAT_CHANGE_CONFIRMATION.STATUS, "EXPIRED")
-                .set(AI_CHAT_CHANGE_CONFIRMATION.EXPIRED_AT,
-                        AI_CHAT_CHANGE_CONFIRMATION.EXPIRES_AT)
+                .set(AI_CHAT_CHANGE_CONFIRMATION.EXPIRED_TIMESTAMP,
+                        AI_CHAT_CHANGE_CONFIRMATION.EXPIRATION_TIMESTAMP)
                 .setNull(AI_CHAT_CHANGE_CONFIRMATION.GRANT_DIGEST)
                 .where(AI_CHAT_CHANGE_CONFIRMATION.STATUS.in("REQUESTED", "APPROVED")
-                        .and(AI_CHAT_CHANGE_CONFIRMATION.EXPIRES_AT.le(localDateTime(now))))
+                        .and(AI_CHAT_CHANGE_CONFIRMATION.EXPIRATION_TIMESTAMP.le(localDateTime(now))))
                 .execute();
     }
 

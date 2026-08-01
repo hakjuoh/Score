@@ -179,7 +179,8 @@ class JooqAiChatConversationRepositoryTest {
         assertThat(provider.sql).anyMatch(sql -> sql.contains("insert into")
                 && sql.contains("ai_chat_step"));
         assertThat(provider.sql).anyMatch(sql -> sql.contains("update")
-                && sql.contains("ai_chat_conversation") && sql.contains("updated_at"));
+                && sql.contains("ai_chat_conversation")
+                && sql.contains("last_update_timestamp"));
     }
 
     @Test
@@ -329,7 +330,7 @@ class JooqAiChatConversationRepositoryTest {
         assertThat(provider.sql.stream()
                 .filter(sql -> sql.contains("from `oagi`.`ai_chat_step`"))
                 .toList()).singleElement().satisfies(sql ->
-                assertThat(sql).contains("order by `oagi`.`ai_chat_step`.`created_at` desc",
+                assertThat(sql).contains("order by `oagi`.`ai_chat_step`.`creation_timestamp` desc",
                         "`oagi`.`ai_chat_step`.`ai_chat_step_id` desc"));
     }
 
@@ -503,7 +504,7 @@ class JooqAiChatConversationRepositoryTest {
                     AI_CHAT_STEP.REASONING_EFFORT, AI_CHAT_STEP.TOOL_CALLS_JSON,
                     AI_CHAT_STEP.OBSERVATION_JSON, AI_CHAT_STEP.METRICS_JSON,
                     AI_CHAT_STEP.EXTRA_JSON, AI_CHAT_STEP.LLM_CALL_COUNT,
-                    AI_CHAT_STEP.IS_COPIED_CONTEXT, AI_CHAT_STEP.CREATED_AT
+                    AI_CHAT_STEP.IS_COPIED_CONTEXT, AI_CHAT_STEP.CREATION_TIMESTAMP
             };
             Result<Record> result = create.newResult(fields);
             addStep(create, result, ULong.valueOf(42), 1L, "agent", "model_call",
@@ -530,8 +531,8 @@ class JooqAiChatConversationRepositoryTest {
             addStep(create, result, ULong.valueOf(43), 4L, "agent", "assistant",
                     "visible", "Research complete", null, "{\"ui_projection\":true}", 0, null,
                     LocalDateTime.parse("2026-07-20T17:43:23"));
-            result.sort((left, right) -> right.get(AI_CHAT_STEP.CREATED_AT)
-                    .compareTo(left.get(AI_CHAT_STEP.CREATED_AT)));
+            result.sort((left, right) -> right.get(AI_CHAT_STEP.CREATION_TIMESTAMP)
+                    .compareTo(left.get(AI_CHAT_STEP.CREATION_TIMESTAMP)));
             return result;
         }
 
@@ -554,7 +555,7 @@ class JooqAiChatConversationRepositoryTest {
             record.set(AI_CHAT_STEP.EXTRA_JSON, extra);
             record.set(AI_CHAT_STEP.LLM_CALL_COUNT, llmCalls);
             record.set(AI_CHAT_STEP.IS_COPIED_CONTEXT, copied);
-            record.set(AI_CHAT_STEP.CREATED_AT, createdAt);
+            record.set(AI_CHAT_STEP.CREATION_TIMESTAMP, createdAt);
             result.add(record);
         }
     }

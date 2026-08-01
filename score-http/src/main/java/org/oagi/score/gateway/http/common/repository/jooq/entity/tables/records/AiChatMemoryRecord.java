@@ -121,18 +121,18 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_memory.created_at</code>. The timestamp
-     * when the memory record was created.
+     * Setter for <code>oagi.ai_chat_memory.creation_timestamp</code>. The
+     * timestamp when the memory record was created.
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_memory.created_at</code>. The timestamp
-     * when the memory record was created.
+     * Getter for <code>oagi.ai_chat_memory.creation_timestamp</code>. The
+     * timestamp when the memory record was created.
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(6);
     }
 
@@ -159,7 +159,7 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     /**
      * Create a detached, initialised AiChatMemoryRecord
      */
-    public AiChatMemoryRecord(ULong aiChatMemoryId, ULong aiChatConversationId, Long memorySequence, String messageType, String content, String metadataJson, LocalDateTime createdAt) {
+    public AiChatMemoryRecord(ULong aiChatMemoryId, ULong aiChatConversationId, Long memorySequence, String messageType, String content, String metadataJson, LocalDateTime creationTimestamp) {
         super(AiChatMemory.AI_CHAT_MEMORY);
 
         setAiChatMemoryId(aiChatMemoryId);
@@ -168,7 +168,7 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
         setMessageType(messageType);
         setContent(content);
         setMetadataJson(metadataJson);
-        setCreatedAt(createdAt);
+        setCreationTimestamp(creationTimestamp);
         resetTouchedOnNotNull();
     }
 }

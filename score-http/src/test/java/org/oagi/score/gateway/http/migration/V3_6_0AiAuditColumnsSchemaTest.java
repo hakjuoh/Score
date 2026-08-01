@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -15,6 +16,10 @@ class V3_6_0AiAuditColumnsSchemaTest {
     private static final String MIGRATION = "/db/migration/V3_6_0__upgrade_from_3_5_2.sql";
     private static final List<String> AUDITED_TABLES =
             List.of("app_secret", "ai_provider", "ai_model", "ai_user_policy");
+    private static final List<String> MUTABLE_TIMESTAMP_TABLES =
+            List.of("app_secret", "ai_provider", "ai_model", "ai_user_policy",
+                    "ai_chat_conversation", "ai_token_usage_period",
+                    "ai_token_request_usage");
 
     @Test
     void mutableAiConfigurationTablesUseRequiredConventionalAuditColumns() throws IOException {
@@ -29,6 +34,30 @@ class V3_6_0AiAuditColumnsSchemaTest {
     void canonicalDdlTemplatesMatchTheMigrationAuditContract() throws IOException {
         for (String table : AUDITED_TABLES) {
             assertAuditContract(readResource("/schemas/" + table + ".ddl"), table);
+        }
+    }
+
+    @Test
+    void everyV360DatetimeColumnUsesTheTimestampNamingConvention() throws IOException {
+        String migration = readMigration();
+        Matcher matcher = Pattern.compile("`([^`]+)`\\s+datetime\\(6\\)",
+                Pattern.CASE_INSENSITIVE).matcher(migration);
+        int timestampColumnCount = 0;
+        while (matcher.find()) {
+            timestampColumnCount++;
+            assertTrue(matcher.group(1).endsWith("_timestamp"),
+                    matcher.group(1) + " must use the *_timestamp convention");
+        }
+        assertTrue(timestampColumnCount > 0, "The migration must declare timestamp columns");
+    }
+
+    @Test
+    void mutableTablesRequireCreationAndLastUpdateTimestamps() throws IOException {
+        String migration = readMigration();
+        for (String table : MUTABLE_TIMESTAMP_TABLES) {
+            String definition = tableDefinition(migration, table);
+            assertRequiredColumn(definition, table, "creation_timestamp", "datetime\\(6\\)");
+            assertRequiredColumn(definition, table, "last_update_timestamp", "datetime\\(6\\)");
         }
     }
 
@@ -68,7 +97,9 @@ class V3_6_0AiAuditColumnsSchemaTest {
         String marker = "CREATE TABLE `" + table + "`";
         int start = migration.indexOf(marker);
         assertTrue(start >= 0, "Missing table " + table);
-        int end = migration.indexOf(";", start);
+        int tableOptions = migration.indexOf("\n) ENGINE", start);
+        assertTrue(tableOptions > start, "Missing table options for " + table);
+        int end = migration.indexOf(";", tableOptions);
         assertTrue(end > start, "Unterminated table " + table);
         return migration.substring(start, end + 1);
     }

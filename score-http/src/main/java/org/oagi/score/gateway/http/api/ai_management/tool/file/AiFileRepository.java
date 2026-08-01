@@ -40,8 +40,10 @@ public class AiFileRepository {
     private static final Field<String> SHA256 = fileField("sha256", String.class);
     private static final Field<String> STORAGE_PROVIDER = fileField("storage_provider", String.class);
     private static final Field<String> STORAGE_LOCATION = fileField("storage_location", String.class);
-    private static final Field<LocalDateTime> CREATED_AT = fileField("created_at", LocalDateTime.class);
-    private static final Field<LocalDateTime> EXPIRES_AT = fileField("expires_at", LocalDateTime.class);
+    private static final Field<LocalDateTime> CREATION_TIMESTAMP =
+            fileField("creation_timestamp", LocalDateTime.class);
+    private static final Field<LocalDateTime> EXPIRATION_TIMESTAMP =
+            fileField("expiration_timestamp", LocalDateTime.class);
 
     private final DSLContext dsl;
 
@@ -52,7 +54,8 @@ public class AiFileRepository {
         try {
             dsl.insertInto(FILE)
                     .columns(GUID, CONVERSATION_ID, REQUEST_ID, FORMAT, FILENAME, MEDIA_TYPE,
-                            BYTE_SIZE, SHA256, STORAGE_PROVIDER, STORAGE_LOCATION, CREATED_AT, EXPIRES_AT)
+                            BYTE_SIZE, SHA256, STORAGE_PROVIDER, STORAGE_LOCATION,
+                            CREATION_TIMESTAMP, EXPIRATION_TIMESTAMP)
                     .values(value.fileId(), conversationId, value.requestId(), value.format(),
                             value.filename(), value.mediaType(), ULong.valueOf(value.size()), value.sha256(),
                             value.storageProvider(), value.storageLocation(), local(value.createdAt()),
@@ -69,7 +72,7 @@ public class AiFileRepository {
                                                 String requestId) {
         ULong conversationId = ownedConversationId(requester, conversationGuid);
         return selectRecords().where(CONVERSATION_ID.eq(conversationId).and(REQUEST_ID.eq(requestId)))
-                .orderBy(CREATED_AT, ID).fetch(record -> map(record, conversationGuid));
+                .orderBy(CREATION_TIMESTAMP, ID).fetch(record -> map(record, conversationGuid));
     }
 
     public Optional<AiFileRecord> findOwned(ScoreUser requester, String conversationGuid,
@@ -100,14 +103,14 @@ public class AiFileRepository {
 
     public List<AiFileRecord> findExpired(Instant cutoff, int limit,
                                               Set<String> excludedFileIds) {
-        org.jooq.Condition condition = EXPIRES_AT.le(local(cutoff));
+        org.jooq.Condition condition = EXPIRATION_TIMESTAMP.le(local(cutoff));
         if (excludedFileIds != null && !excludedFileIds.isEmpty()) {
             condition = condition.and(GUID.notIn(excludedFileIds));
         }
         return selectRecords()
                 .join(AI_CHAT_CONVERSATION).on(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID.eq(CONVERSATION_ID))
                 .where(condition)
-                .orderBy(EXPIRES_AT, ID).limit(Math.max(1, limit))
+                .orderBy(EXPIRATION_TIMESTAMP, ID).limit(Math.max(1, limit))
                 .fetch(record -> map(record, record.get(AI_CHAT_CONVERSATION.GUID)));
     }
 
@@ -146,13 +149,14 @@ public class AiFileRepository {
         }
         if (conversations.isEmpty()) return List.of();
         return selectRecords().where(CONVERSATION_ID.in(conversations.keySet()))
-                .orderBy(CREATED_AT, ID)
+                .orderBy(CREATION_TIMESTAMP, ID)
                 .fetch(record -> map(record, conversations.get(record.get(CONVERSATION_ID))));
     }
 
     private org.jooq.SelectJoinStep<? extends Record> selectRecords() {
         return dsl.select(ID, GUID, CONVERSATION_ID, REQUEST_ID, FORMAT, FILENAME, MEDIA_TYPE,
-                BYTE_SIZE, SHA256, STORAGE_PROVIDER, STORAGE_LOCATION, CREATED_AT, EXPIRES_AT)
+                BYTE_SIZE, SHA256, STORAGE_PROVIDER, STORAGE_LOCATION,
+                CREATION_TIMESTAMP, EXPIRATION_TIMESTAMP)
                 .from(FILE);
     }
 
@@ -162,7 +166,8 @@ public class AiFileRepository {
                 record.get(FORMAT), record.get(FILENAME), record.get(MEDIA_TYPE),
                 size != null ? size.longValue() : 0L, record.get(SHA256),
                 record.get(STORAGE_PROVIDER), record.get(STORAGE_LOCATION),
-                instant(record.get(CREATED_AT)), instant(record.get(EXPIRES_AT)));
+                instant(record.get(CREATION_TIMESTAMP)),
+                instant(record.get(EXPIRATION_TIMESTAMP)));
     }
 
     private ULong ownedConversationId(ScoreUser requester, String conversationGuid) {

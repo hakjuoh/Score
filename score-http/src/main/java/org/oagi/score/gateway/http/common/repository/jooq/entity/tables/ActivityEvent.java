@@ -116,16 +116,16 @@ public class ActivityEvent extends TableImpl<ActivityEventRecord> {
     public final TableField<ActivityEventRecord, String> OUTCOME = createField(DSL.name("outcome"), SQLDataType.VARCHAR(16).nullable(false), this, "The application-validated event outcome such as OBSERVED, STARTED, SUCCEEDED, FAILED, or CANCELED.");
 
     /**
-     * The column <code>oagi.activity_event.occurred_at</code>. The UTC
+     * The column <code>oagi.activity_event.occurred_timestamp</code>. The UTC
      * timestamp when the represented activity occurred.
      */
-    public final TableField<ActivityEventRecord, LocalDateTime> OCCURRED_AT = createField(DSL.name("occurred_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The UTC timestamp when the represented activity occurred.");
+    public final TableField<ActivityEventRecord, LocalDateTime> OCCURRED_TIMESTAMP = createField(DSL.name("occurred_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The UTC timestamp when the represented activity occurred.");
 
     /**
-     * The column <code>oagi.activity_event.recorded_at</code>. The UTC
+     * The column <code>oagi.activity_event.recorded_timestamp</code>. The UTC
      * timestamp when the server persisted the activity event.
      */
-    public final TableField<ActivityEventRecord, LocalDateTime> RECORDED_AT = createField(DSL.name("recorded_at"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("utc_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "The UTC timestamp when the server persisted the activity event.");
+    public final TableField<ActivityEventRecord, LocalDateTime> RECORDED_TIMESTAMP = createField(DSL.name("recorded_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false).defaultValue(DSL.field(DSL.raw("utc_timestamp(6)"), SQLDataType.LOCALDATETIME)), this, "The UTC timestamp when the server persisted the activity event.");
 
     /**
      * The column <code>oagi.activity_event.client_sequence</code>. The

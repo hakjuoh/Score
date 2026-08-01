@@ -167,10 +167,10 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
     public final TableField<AiChatStepRecord, Byte> IS_COPIED_CONTEXT = createField(DSL.name("is_copied_context"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Indicates whether the step was copied into the model context (0 = False, 1 = True).");
 
     /**
-     * The column <code>oagi.ai_chat_step.created_at</code>. The timestamp when
-     * the trajectory step was created.
+     * The column <code>oagi.ai_chat_step.creation_timestamp</code>. The
+     * timestamp when the trajectory step was created.
      */
-    public final TableField<AiChatStepRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the trajectory step was created.");
+    public final TableField<AiChatStepRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the trajectory step was created.");
 
     private AiChatStep(Name alias, Table<AiChatStepRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

@@ -163,100 +163,112 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.expires_at</code>. The
+     * Setter for
+     * <code>oagi.ai_chat_change_confirmation.expiration_timestamp</code>. The
      * timestamp after which the confirmation request or approval grant is
      * invalid.
      */
-    public void setExpiresAt(LocalDateTime value) {
+    public void setExpirationTimestamp(LocalDateTime value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.expires_at</code>. The
+     * Getter for
+     * <code>oagi.ai_chat_change_confirmation.expiration_timestamp</code>. The
      * timestamp after which the confirmation request or approval grant is
      * invalid.
      */
-    public LocalDateTime getExpiresAt() {
+    public LocalDateTime getExpirationTimestamp() {
         return (LocalDateTime) get(8);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.approved_at</code>. The
+     * Setter for
+     * <code>oagi.ai_chat_change_confirmation.approved_timestamp</code>. The
      * timestamp when the change request was approved.
      */
-    public void setApprovedAt(LocalDateTime value) {
+    public void setApprovedTimestamp(LocalDateTime value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.approved_at</code>. The
+     * Getter for
+     * <code>oagi.ai_chat_change_confirmation.approved_timestamp</code>. The
      * timestamp when the change request was approved.
      */
-    public LocalDateTime getApprovedAt() {
+    public LocalDateTime getApprovedTimestamp() {
         return (LocalDateTime) get(9);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.denied_at</code>. The
+     * Setter for
+     * <code>oagi.ai_chat_change_confirmation.denied_timestamp</code>. The
      * timestamp when the change request was denied.
      */
-    public void setDeniedAt(LocalDateTime value) {
+    public void setDeniedTimestamp(LocalDateTime value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.denied_at</code>. The
+     * Getter for
+     * <code>oagi.ai_chat_change_confirmation.denied_timestamp</code>. The
      * timestamp when the change request was denied.
      */
-    public LocalDateTime getDeniedAt() {
+    public LocalDateTime getDeniedTimestamp() {
         return (LocalDateTime) get(10);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.consumed_at</code>. The
+     * Setter for
+     * <code>oagi.ai_chat_change_confirmation.consumed_timestamp</code>. The
      * timestamp when the one-time approval grant was consumed.
      */
-    public void setConsumedAt(LocalDateTime value) {
+    public void setConsumedTimestamp(LocalDateTime value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.consumed_at</code>. The
+     * Getter for
+     * <code>oagi.ai_chat_change_confirmation.consumed_timestamp</code>. The
      * timestamp when the one-time approval grant was consumed.
      */
-    public LocalDateTime getConsumedAt() {
+    public LocalDateTime getConsumedTimestamp() {
         return (LocalDateTime) get(11);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.expired_at</code>. The
+     * Setter for
+     * <code>oagi.ai_chat_change_confirmation.expired_timestamp</code>. The
      * timestamp when the confirmation request or approval grant expired.
      */
-    public void setExpiredAt(LocalDateTime value) {
+    public void setExpiredTimestamp(LocalDateTime value) {
         set(12, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.expired_at</code>. The
+     * Getter for
+     * <code>oagi.ai_chat_change_confirmation.expired_timestamp</code>. The
      * timestamp when the confirmation request or approval grant expired.
      */
-    public LocalDateTime getExpiredAt() {
+    public LocalDateTime getExpiredTimestamp() {
         return (LocalDateTime) get(12);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.created_at</code>. The
+     * Setter for
+     * <code>oagi.ai_chat_change_confirmation.creation_timestamp</code>. The
      * timestamp when the change confirmation request was created.
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(13, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.created_at</code>. The
+     * Getter for
+     * <code>oagi.ai_chat_change_confirmation.creation_timestamp</code>. The
      * timestamp when the change confirmation request was created.
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(13);
     }
 
@@ -283,7 +295,7 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     /**
      * Create a detached, initialised AiChatChangeConfirmationRecord
      */
-    public AiChatChangeConfirmationRecord(ULong aiChatChangeConfirmationId, String guid, ULong aiChatConversationId, String requestId, String toolName, String argumentsDigest, String status, String grantDigest, LocalDateTime expiresAt, LocalDateTime approvedAt, LocalDateTime deniedAt, LocalDateTime consumedAt, LocalDateTime expiredAt, LocalDateTime createdAt) {
+    public AiChatChangeConfirmationRecord(ULong aiChatChangeConfirmationId, String guid, ULong aiChatConversationId, String requestId, String toolName, String argumentsDigest, String status, String grantDigest, LocalDateTime expirationTimestamp, LocalDateTime approvedTimestamp, LocalDateTime deniedTimestamp, LocalDateTime consumedTimestamp, LocalDateTime expiredTimestamp, LocalDateTime creationTimestamp) {
         super(AiChatChangeConfirmation.AI_CHAT_CHANGE_CONFIRMATION);
 
         setAiChatChangeConfirmationId(aiChatChangeConfirmationId);
@@ -294,12 +306,12 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
         setArgumentsDigest(argumentsDigest);
         setStatus(status);
         setGrantDigest(grantDigest);
-        setExpiresAt(expiresAt);
-        setApprovedAt(approvedAt);
-        setDeniedAt(deniedAt);
-        setConsumedAt(consumedAt);
-        setExpiredAt(expiredAt);
-        setCreatedAt(createdAt);
+        setExpirationTimestamp(expirationTimestamp);
+        setApprovedTimestamp(approvedTimestamp);
+        setDeniedTimestamp(deniedTimestamp);
+        setConsumedTimestamp(consumedTimestamp);
+        setExpiredTimestamp(expiredTimestamp);
+        setCreationTimestamp(creationTimestamp);
         resetTouchedOnNotNull();
     }
 }

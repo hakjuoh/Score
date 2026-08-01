@@ -124,16 +124,16 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
     public final TableField<AiChatConversationRecord, Byte> COMPACTED = createField(DSL.name("compacted"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicates whether the conversation model context has been compacted (0 = False, 1 = True).");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.created_at</code>. The
+     * The column <code>oagi.ai_chat_conversation.creation_timestamp</code>. The
      * timestamp when the conversation was created.
      */
-    public final TableField<AiChatConversationRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the conversation was created.");
+    public final TableField<AiChatConversationRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the conversation was created.");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.updated_at</code>. The
-     * timestamp of the most recent activity in the conversation.
+     * The column <code>oagi.ai_chat_conversation.last_update_timestamp</code>.
+     * The timestamp of the most recent activity in the conversation.
      */
-    public final TableField<AiChatConversationRecord, LocalDateTime> UPDATED_AT = createField(DSL.name("updated_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp of the most recent activity in the conversation.");
+    public final TableField<AiChatConversationRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp of the most recent activity in the conversation.");
 
     private AiChatConversation(Name alias, Table<AiChatConversationRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

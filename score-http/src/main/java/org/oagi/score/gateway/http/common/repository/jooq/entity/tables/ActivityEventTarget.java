@@ -104,10 +104,10 @@ public class ActivityEventTarget extends TableImpl<ActivityEventTargetRecord> {
     public final TableField<ActivityEventTargetRecord, String> TARGET_ROLE = createField(DSL.name("target_role"), SQLDataType.VARCHAR(16).nullable(false).defaultValue(DSL.field(DSL.raw("'PRIMARY'"), SQLDataType.VARCHAR)), this, "The application-validated relationship of the resource to the event: PRIMARY, AFFECTED, or CONTEXT.");
 
     /**
-     * The column <code>oagi.activity_event_target.occurred_at</code>. The
-     * denormalized UTC event timestamp used by resource-history indexes.
+     * The column <code>oagi.activity_event_target.occurred_timestamp</code>.
+     * The denormalized UTC event timestamp used by resource-history indexes.
      */
-    public final TableField<ActivityEventTargetRecord, LocalDateTime> OCCURRED_AT = createField(DSL.name("occurred_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The denormalized UTC event timestamp used by resource-history indexes.");
+    public final TableField<ActivityEventTargetRecord, LocalDateTime> OCCURRED_TIMESTAMP = createField(DSL.name("occurred_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The denormalized UTC event timestamp used by resource-history indexes.");
 
     private ActivityEventTarget(Name alias, Table<ActivityEventTargetRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

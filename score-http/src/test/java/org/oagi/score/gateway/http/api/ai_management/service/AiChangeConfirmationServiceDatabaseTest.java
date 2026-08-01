@@ -87,12 +87,12 @@ class AiChangeConfirmationServiceDatabaseTest {
                     arguments_digest CHAR(64) NOT NULL,
                     status VARCHAR(16) NOT NULL,
                     grant_digest CHAR(64),
-                    expires_at TIMESTAMP(6) NOT NULL,
-                    approved_at TIMESTAMP(6),
-                    denied_at TIMESTAMP(6),
-                    consumed_at TIMESTAMP(6),
-                    expired_at TIMESTAMP(6),
-                    created_at TIMESTAMP(6) NOT NULL)
+                    expiration_timestamp TIMESTAMP(6) NOT NULL,
+                    approved_timestamp TIMESTAMP(6),
+                    denied_timestamp TIMESTAMP(6),
+                    consumed_timestamp TIMESTAMP(6),
+                    expired_timestamp TIMESTAMP(6),
+                    creation_timestamp TIMESTAMP(6) NOT NULL)
                 """);
         jdbc.update("INSERT INTO ai_chat_conversation (guid, app_user_id) VALUES (?, ?)",
                 "conversation-1", BigInteger.ONE);
@@ -210,7 +210,7 @@ class AiChangeConfirmationServiceDatabaseTest {
         String confirmationId = session.pendingApprovals().getFirst()
                 .notice().confirmationRequestId();
         Instant requestExpiresAt = Instant.now().plusMillis(250);
-        jdbc.update("UPDATE ai_chat_change_confirmation SET expires_at = ? WHERE guid = ?",
+        jdbc.update("UPDATE ai_chat_change_confirmation SET expiration_timestamp = ? WHERE guid = ?",
                 Timestamp.from(requestExpiresAt), confirmationId);
 
         AiChangeDecision approved = inTransaction(() -> service.decide(

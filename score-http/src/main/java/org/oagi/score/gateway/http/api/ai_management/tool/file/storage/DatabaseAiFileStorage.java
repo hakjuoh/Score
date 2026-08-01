@@ -17,7 +17,8 @@ public final class DatabaseAiFileStorage implements AiFileStorage {
     private static final Table<?> OBJECT = table(name("ai_chat_file_object"));
     private static final Field<String> LOCATION = field(name("storage_location"), String.class);
     private static final Field<byte[]> CONTENT = field(name("content"), byte[].class);
-    private static final Field<LocalDateTime> CREATED_AT = field(name("created_at"), LocalDateTime.class);
+    private static final Field<LocalDateTime> CREATION_TIMESTAMP =
+            field(name("creation_timestamp"), LocalDateTime.class);
     private final DSLContext dsl;
 
     public DatabaseAiFileStorage(DSLContext dsl) { this.dsl = dsl; }
@@ -26,7 +27,7 @@ public final class DatabaseAiFileStorage implements AiFileStorage {
 
     @Override
     public String store(String objectKey, String filename, String mediaType, byte[] content) {
-        dsl.insertInto(OBJECT).columns(LOCATION, CONTENT, CREATED_AT)
+        dsl.insertInto(OBJECT).columns(LOCATION, CONTENT, CREATION_TIMESTAMP)
                 .values(objectKey, content, LocalDateTime.now()).execute();
         return objectKey;
     }

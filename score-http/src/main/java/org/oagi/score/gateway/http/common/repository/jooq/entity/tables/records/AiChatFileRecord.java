@@ -193,34 +193,34 @@ public class AiChatFileRecord extends UpdatableRecordImpl<AiChatFileRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file.created_at</code>. File creation
-     * timestamp.
+     * Setter for <code>oagi.ai_chat_file.creation_timestamp</code>. File
+     * creation timestamp.
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file.created_at</code>. File creation
-     * timestamp.
+     * Getter for <code>oagi.ai_chat_file.creation_timestamp</code>. File
+     * creation timestamp.
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(11);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file.expires_at</code>. File retention
-     * deadline.
+     * Setter for <code>oagi.ai_chat_file.expiration_timestamp</code>. File
+     * retention deadline.
      */
-    public void setExpiresAt(LocalDateTime value) {
+    public void setExpirationTimestamp(LocalDateTime value) {
         set(12, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file.expires_at</code>. File retention
-     * deadline.
+     * Getter for <code>oagi.ai_chat_file.expiration_timestamp</code>. File
+     * retention deadline.
      */
-    public LocalDateTime getExpiresAt() {
+    public LocalDateTime getExpirationTimestamp() {
         return (LocalDateTime) get(12);
     }
 
@@ -247,7 +247,7 @@ public class AiChatFileRecord extends UpdatableRecordImpl<AiChatFileRecord> {
     /**
      * Create a detached, initialised AiChatFileRecord
      */
-    public AiChatFileRecord(ULong aiChatFileId, String guid, ULong aiChatConversationId, String requestId, String format, String filename, String mediaType, ULong byteSize, String sha256, String storageProvider, String storageLocation, LocalDateTime createdAt, LocalDateTime expiresAt) {
+    public AiChatFileRecord(ULong aiChatFileId, String guid, ULong aiChatConversationId, String requestId, String format, String filename, String mediaType, ULong byteSize, String sha256, String storageProvider, String storageLocation, LocalDateTime creationTimestamp, LocalDateTime expirationTimestamp) {
         super(AiChatFile.AI_CHAT_FILE);
 
         setAiChatFileId(aiChatFileId);
@@ -261,8 +261,8 @@ public class AiChatFileRecord extends UpdatableRecordImpl<AiChatFileRecord> {
         setSha256(sha256);
         setStorageProvider(storageProvider);
         setStorageLocation(storageLocation);
-        setCreatedAt(createdAt);
-        setExpiresAt(expiresAt);
+        setCreationTimestamp(creationTimestamp);
+        setExpirationTimestamp(expirationTimestamp);
         resetTouchedOnNotNull();
     }
 }

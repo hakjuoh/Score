@@ -106,10 +106,10 @@ public class AiUserPolicyAudit extends TableImpl<AiUserPolicyAuditRecord> {
     public final TableField<AiUserPolicyAuditRecord, String> REASON = createField(DSL.name("reason"), SQLDataType.VARCHAR(500).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Reason or administrator comment for the policy change");
 
     /**
-     * The column <code>oagi.ai_user_policy_audit.created_at</code>. Date and
-     * time when the policy was changed
+     * The column <code>oagi.ai_user_policy_audit.creation_timestamp</code>.
+     * Date and time when the policy was changed
      */
-    public final TableField<AiUserPolicyAuditRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the policy was changed");
+    public final TableField<AiUserPolicyAuditRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the policy was changed");
 
     private AiUserPolicyAudit(Name alias, Table<AiUserPolicyAuditRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
