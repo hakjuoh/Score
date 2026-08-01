@@ -297,18 +297,18 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.created_at</code>. The timestamp when
-     * the trajectory step was created.
+     * Setter for <code>oagi.ai_chat_step.creation_timestamp</code>. The
+     * timestamp when the trajectory step was created.
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(17, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.created_at</code>. The timestamp when
-     * the trajectory step was created.
+     * Getter for <code>oagi.ai_chat_step.creation_timestamp</code>. The
+     * timestamp when the trajectory step was created.
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(17);
     }
 
@@ -335,7 +335,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     /**
      * Create a detached, initialised AiChatStepRecord
      */
-    public AiChatStepRecord(ULong aiChatStepId, ULong aiChatConversationId, Long stepSequence, String requestId, String source, String messageKind, String visibility, String message, String reasoningContent, String modelName, String reasoningEffort, String toolCallsJson, String observationJson, String metricsJson, String extraJson, Integer llmCallCount, Byte isCopiedContext, LocalDateTime createdAt) {
+    public AiChatStepRecord(ULong aiChatStepId, ULong aiChatConversationId, Long stepSequence, String requestId, String source, String messageKind, String visibility, String message, String reasoningContent, String modelName, String reasoningEffort, String toolCallsJson, String observationJson, String metricsJson, String extraJson, Integer llmCallCount, Byte isCopiedContext, LocalDateTime creationTimestamp) {
         super(AiChatStep.AI_CHAT_STEP);
 
         setAiChatStepId(aiChatStepId);
@@ -355,7 +355,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
         setExtraJson(extraJson);
         setLlmCallCount(llmCallCount);
         setIsCopiedContext(isCopiedContext);
-        setCreatedAt(createdAt);
+        setCreationTimestamp(creationTimestamp);
         resetTouchedOnNotNull();
     }
 }

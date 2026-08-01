@@ -7,9 +7,9 @@ CREATE TABLE `ai_user_policy_audit`
     `before_json`             JSON NULL COMMENT 'Canonical policy snapshot before the change',
     `after_json`              JSON NULL COMMENT 'Canonical policy snapshot after the change',
     `reason`                  varchar(500) NULL COMMENT 'Reason or administrator comment for the policy change',
-    `created_at`              datetime(6) NOT NULL COMMENT 'Date and time when the policy was changed',
+    `creation_timestamp`     datetime(6) NOT NULL COMMENT 'Date and time when the policy was changed',
     PRIMARY KEY (`ai_user_policy_audit_id`),
-    KEY `ai_user_policy_audit_target_time_idx` (`target_app_user_id`, `created_at`),
+    KEY `ai_user_policy_audit_target_time_idx` (`target_app_user_id`, `creation_timestamp`),
     CONSTRAINT `ai_user_policy_audit_actor_fk`
         FOREIGN KEY (`actor_app_user_id`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci

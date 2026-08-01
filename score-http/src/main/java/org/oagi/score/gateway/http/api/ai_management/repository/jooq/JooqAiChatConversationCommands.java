@@ -42,7 +42,7 @@ final class JooqAiChatConversationCommands {
         if (StringUtils.hasText(requestedConversationId)) {
             AiChatConversationId internalConversationId = access.lockOwned(requestedConversationId);
             dslContext.update(AI_CHAT_CONVERSATION)
-                    .set(AI_CHAT_CONVERSATION.UPDATED_AT, LocalDateTime.now())
+                    .set(AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP, LocalDateTime.now())
                     .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
                             .eq(access.valueOf(internalConversationId)))
                     .execute();
@@ -55,8 +55,8 @@ final class JooqAiChatConversationCommands {
         record.setAppUserId(access.valueOf(access.userId()));
         record.setTitle(title(firstPrompt));
         record.setCompacted((byte) 0);
-        record.setCreatedAt(now);
-        record.setUpdatedAt(now);
+        record.setCreationTimestamp(now);
+        record.setLastUpdateTimestamp(now);
         dslContext.insertInto(AI_CHAT_CONVERSATION).set(record).execute();
         return conversationId;
     }
@@ -80,8 +80,8 @@ final class JooqAiChatConversationCommands {
                 .set(AI_CHAT_CONVERSATION.PARENT_REQUEST_ID, parentRequestId.strip())
                 .set(AI_CHAT_CONVERSATION.TITLE, title(firstPrompt))
                 .set(AI_CHAT_CONVERSATION.COMPACTED, (byte) 0)
-                .set(AI_CHAT_CONVERSATION.CREATED_AT, now)
-                .set(AI_CHAT_CONVERSATION.UPDATED_AT, now)
+                .set(AI_CHAT_CONVERSATION.CREATION_TIMESTAMP, now)
+                .set(AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP, now)
                 .execute();
         return conversationId;
     }
@@ -113,13 +113,13 @@ final class JooqAiChatConversationCommands {
         stepRecord.setExtraJson(serializer.serialize(step.extra()));
         stepRecord.setLlmCallCount(step.llmCallCount());
         stepRecord.setIsCopiedContext(byteValue(step.isCopiedContext()));
-        stepRecord.setCreatedAt(localDateTime(createdAt));
+        stepRecord.setCreationTimestamp(localDateTime(createdAt));
         AiChatStepId id = new AiChatStepId(dslContext.insertInto(AI_CHAT_STEP)
                 .set(stepRecord)
                 .returningResult(AI_CHAT_STEP.AI_CHAT_STEP_ID)
                 .fetchSingle(AI_CHAT_STEP.AI_CHAT_STEP_ID).toBigInteger());
         dslContext.update(AI_CHAT_CONVERSATION)
-                .set(AI_CHAT_CONVERSATION.UPDATED_AT, localDateTime(createdAt))
+                .set(AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP, localDateTime(createdAt))
                 .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
                         .eq(access.valueOf(internalConversationId)))
                 .execute();
@@ -163,7 +163,7 @@ final class JooqAiChatConversationCommands {
         AiChatConversationId internalConversationId = access.lockOwned(conversationId);
         dslContext.update(AI_CHAT_CONVERSATION)
                 .set(AI_CHAT_CONVERSATION.COMPACTED, byteValue(compacted))
-                .set(AI_CHAT_CONVERSATION.UPDATED_AT, LocalDateTime.now())
+                .set(AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP, LocalDateTime.now())
                 .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
                         .eq(access.valueOf(internalConversationId)))
                 .execute();

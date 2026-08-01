@@ -99,10 +99,10 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
     public final TableField<AiChatMemoryRecord, String> METADATA_JSON = createField(DSL.name("metadata_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Optional JSON metadata associated with the model-context message.");
 
     /**
-     * The column <code>oagi.ai_chat_memory.created_at</code>. The timestamp
-     * when the memory record was created.
+     * The column <code>oagi.ai_chat_memory.creation_timestamp</code>. The
+     * timestamp when the memory record was created.
      */
-    public final TableField<AiChatMemoryRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the memory record was created.");
+    public final TableField<AiChatMemoryRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the memory record was created.");
 
     private AiChatMemory(Name alias, Table<AiChatMemoryRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

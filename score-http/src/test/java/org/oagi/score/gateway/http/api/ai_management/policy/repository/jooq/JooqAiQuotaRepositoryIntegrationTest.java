@@ -61,19 +61,49 @@ class JooqAiQuotaRepositoryIntegrationTest {
         try {
             quotas.reserve(dailyCall, dailyRequest, owner, catalogModelId, null,
                     "ROOT", "assistant", 10L, 20, true, null, daily);
+            var createdRequestUsage = dsl.selectFrom(AI_TOKEN_REQUEST_USAGE)
+                    .where(AI_TOKEN_REQUEST_USAGE.REQUEST_ID.eq(dailyRequest)).fetchOne();
+            var createdDailyPeriod = dsl.selectFrom(AI_TOKEN_USAGE_PERIOD)
+                    .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(userId))
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(
+                            LocalDateTime.ofInstant(start, ZoneOffset.UTC)))
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP.eq(
+                            LocalDateTime.ofInstant(daily.end(), ZoneOffset.UTC)))
+                    .fetchOne();
+            assertThat(createdRequestUsage.getCreationTimestamp())
+                    .isEqualTo(createdRequestUsage.getLastUpdateTimestamp());
+            assertThat(createdDailyPeriod.getCreationTimestamp())
+                    .isEqualTo(createdDailyPeriod.getLastUpdateTimestamp());
             quotas.settle(dailyCall, new AiUsageSettlement(11L, 5L, 0L, true));
+            var settledRequestUsage = dsl.selectFrom(AI_TOKEN_REQUEST_USAGE)
+                    .where(AI_TOKEN_REQUEST_USAGE.REQUEST_ID.eq(dailyRequest)).fetchOne();
+            var settledDailyPeriod = dsl.selectFrom(AI_TOKEN_USAGE_PERIOD)
+                    .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(userId))
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(
+                            LocalDateTime.ofInstant(start, ZoneOffset.UTC)))
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP.eq(
+                            LocalDateTime.ofInstant(daily.end(), ZoneOffset.UTC)))
+                    .fetchOne();
+            assertThat(settledRequestUsage.getCreationTimestamp())
+                    .isEqualTo(createdRequestUsage.getCreationTimestamp());
+            assertThat(settledRequestUsage.getLastUpdateTimestamp())
+                    .isAfterOrEqualTo(createdRequestUsage.getLastUpdateTimestamp());
+            assertThat(settledDailyPeriod.getCreationTimestamp())
+                    .isEqualTo(createdDailyPeriod.getCreationTimestamp());
+            assertThat(settledDailyPeriod.getLastUpdateTimestamp())
+                    .isAfterOrEqualTo(createdDailyPeriod.getLastUpdateTimestamp());
             quotas.reserve(monthlyCall, monthlyRequest, owner, catalogModelId, null,
                     "ROOT", "assistant", 10L, 20, true, null, monthly);
             quotas.settle(monthlyCall, new AiUsageSettlement(12L, 6L, 0L, true));
 
             LocalDateTime localStart = LocalDateTime.ofInstant(start, ZoneOffset.UTC);
-            var rows = dsl.select(AI_TOKEN_USAGE_PERIOD.PERIOD_END,
+            var rows = dsl.select(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP,
                             AI_TOKEN_USAGE_PERIOD.CONSUMED_TOKENS,
                             AI_TOKEN_USAGE_PERIOD.RESERVED_TOKENS)
                     .from(AI_TOKEN_USAGE_PERIOD)
                     .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(userId))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(localStart))
-                    .orderBy(AI_TOKEN_USAGE_PERIOD.PERIOD_END)
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(localStart))
+                    .orderBy(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP)
                     .fetch();
 
             assertThat(rows).hasSize(2);
@@ -92,7 +122,7 @@ class JooqAiQuotaRepositoryIntegrationTest {
                     .execute();
             dsl.deleteFrom(AI_TOKEN_USAGE_PERIOD)
                     .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(userId))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(
                             LocalDateTime.ofInstant(start, ZoneOffset.UTC)))
                     .execute();
         }
@@ -136,10 +166,24 @@ class JooqAiQuotaRepositoryIntegrationTest {
             startRace.countDown();
             for (var future : futures) future.get(20, TimeUnit.SECONDS);
             assertThat(admitted).hasValue(2);
+            assertThat(dsl.select(AI_TOKEN_REQUEST_USAGE.CREATION_TIMESTAMP,
+                            AI_TOKEN_REQUEST_USAGE.LAST_UPDATE_TIMESTAMP)
+                    .from(AI_TOKEN_REQUEST_USAGE)
+                    .where(AI_TOKEN_REQUEST_USAGE.REQUEST_ID.like(prefix + "%"))
+                    .fetch()).allSatisfy(row -> assertThat(
+                            row.get(AI_TOKEN_REQUEST_USAGE.LAST_UPDATE_TIMESTAMP))
+                            .isEqualTo(row.get(AI_TOKEN_REQUEST_USAGE.CREATION_TIMESTAMP)));
+            var concurrentPeriod = dsl.selectFrom(AI_TOKEN_USAGE_PERIOD)
+                    .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(userId))
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(
+                            LocalDateTime.ofInstant(start, ZoneOffset.UTC)))
+                    .fetchOne();
+            assertThat(concurrentPeriod.getLastUpdateTimestamp())
+                    .isAfterOrEqualTo(concurrentPeriod.getCreationTimestamp());
             assertThat(dsl.select(AI_TOKEN_USAGE_PERIOD.RESERVED_TOKENS)
                     .from(AI_TOKEN_USAGE_PERIOD)
                     .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(userId))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(
                             LocalDateTime.ofInstant(start, ZoneOffset.UTC)))
                     .fetchOne(AI_TOKEN_USAGE_PERIOD.RESERVED_TOKENS).longValue())
                     .isEqualTo(100L);
@@ -160,7 +204,7 @@ class JooqAiQuotaRepositoryIntegrationTest {
             assertThat(dsl.select(AI_TOKEN_USAGE_PERIOD.CONSUMED_TOKENS)
                     .from(AI_TOKEN_USAGE_PERIOD)
                     .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(userId))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(
                             LocalDateTime.ofInstant(start, ZoneOffset.UTC)))
                     .fetchOne(AI_TOKEN_USAGE_PERIOD.CONSUMED_TOKENS).longValue())
                     .isEqualTo(20L);
@@ -172,7 +216,7 @@ class JooqAiQuotaRepositoryIntegrationTest {
                     .where(AI_TOKEN_REQUEST_USAGE.REQUEST_ID.like(prefix + "%")).execute();
             dsl.deleteFrom(AI_TOKEN_USAGE_PERIOD)
                     .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(userId))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(
                             LocalDateTime.ofInstant(start, ZoneOffset.UTC))).execute();
         }
     }
@@ -195,7 +239,7 @@ class JooqAiQuotaRepositoryIntegrationTest {
                         owner, catalogModelId, null, "ROOT", "assistant",
                         1L, 1, true, null, null);
                 dsl.update(AI_TOKEN_USAGE_LEDGER)
-                        .set(AI_TOKEN_USAGE_LEDGER.RESERVED_AT,
+                        .set(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP,
                                 LocalDateTime.now(ZoneOffset.UTC).minusHours(3).plusSeconds(index))
                         .where(AI_TOKEN_USAGE_LEDGER.CALL_ID.eq(reservation.callId().toString()))
                         .execute();

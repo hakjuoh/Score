@@ -73,18 +73,20 @@ public class AiTokenQuotaAdjustmentRecord extends UpdatableRecordImpl<AiTokenQuo
     }
 
     /**
-     * Setter for <code>oagi.ai_token_quota_adjustment.period_start</code>.
-     * Start of the adjusted quota period in UTC
+     * Setter for
+     * <code>oagi.ai_token_quota_adjustment.period_start_timestamp</code>. Start
+     * of the adjusted quota period in UTC
      */
-    public void setPeriodStart(LocalDateTime value) {
+    public void setPeriodStartTimestamp(LocalDateTime value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_quota_adjustment.period_start</code>.
-     * Start of the adjusted quota period in UTC
+     * Getter for
+     * <code>oagi.ai_token_quota_adjustment.period_start_timestamp</code>. Start
+     * of the adjusted quota period in UTC
      */
-    public LocalDateTime getPeriodStart() {
+    public LocalDateTime getPeriodStartTimestamp() {
         return (LocalDateTime) get(3);
     }
 
@@ -121,18 +123,20 @@ public class AiTokenQuotaAdjustmentRecord extends UpdatableRecordImpl<AiTokenQuo
     }
 
     /**
-     * Setter for <code>oagi.ai_token_quota_adjustment.created_at</code>. Date
-     * and time when the quota was adjusted
+     * Setter for
+     * <code>oagi.ai_token_quota_adjustment.creation_timestamp</code>. Date and
+     * time when the quota was adjusted
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_quota_adjustment.created_at</code>. Date
-     * and time when the quota was adjusted
+     * Getter for
+     * <code>oagi.ai_token_quota_adjustment.creation_timestamp</code>. Date and
+     * time when the quota was adjusted
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(6);
     }
 
@@ -159,16 +163,16 @@ public class AiTokenQuotaAdjustmentRecord extends UpdatableRecordImpl<AiTokenQuo
     /**
      * Create a detached, initialised AiTokenQuotaAdjustmentRecord
      */
-    public AiTokenQuotaAdjustmentRecord(ULong aiTokenQuotaAdjustmentId, ULong targetAppUserId, ULong actorAppUserId, LocalDateTime periodStart, Long deltaTokens, String reason, LocalDateTime createdAt) {
+    public AiTokenQuotaAdjustmentRecord(ULong aiTokenQuotaAdjustmentId, ULong targetAppUserId, ULong actorAppUserId, LocalDateTime periodStartTimestamp, Long deltaTokens, String reason, LocalDateTime creationTimestamp) {
         super(AiTokenQuotaAdjustment.AI_TOKEN_QUOTA_ADJUSTMENT);
 
         setAiTokenQuotaAdjustmentId(aiTokenQuotaAdjustmentId);
         setTargetAppUserId(targetAppUserId);
         setActorAppUserId(actorAppUserId);
-        setPeriodStart(periodStart);
+        setPeriodStartTimestamp(periodStartTimestamp);
         setDeltaTokens(deltaTokens);
         setReason(reason);
-        setCreatedAt(createdAt);
+        setCreationTimestamp(creationTimestamp);
         resetTouchedOnNotNull();
     }
 }

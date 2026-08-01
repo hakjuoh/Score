@@ -158,34 +158,34 @@ public class ActivityEventRecord extends UpdatableRecordImpl<ActivityEventRecord
     }
 
     /**
-     * Setter for <code>oagi.activity_event.occurred_at</code>. The UTC
+     * Setter for <code>oagi.activity_event.occurred_timestamp</code>. The UTC
      * timestamp when the represented activity occurred.
      */
-    public void setOccurredAt(LocalDateTime value) {
+    public void setOccurredTimestamp(LocalDateTime value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.activity_event.occurred_at</code>. The UTC
+     * Getter for <code>oagi.activity_event.occurred_timestamp</code>. The UTC
      * timestamp when the represented activity occurred.
      */
-    public LocalDateTime getOccurredAt() {
+    public LocalDateTime getOccurredTimestamp() {
         return (LocalDateTime) get(8);
     }
 
     /**
-     * Setter for <code>oagi.activity_event.recorded_at</code>. The UTC
+     * Setter for <code>oagi.activity_event.recorded_timestamp</code>. The UTC
      * timestamp when the server persisted the activity event.
      */
-    public void setRecordedAt(LocalDateTime value) {
+    public void setRecordedTimestamp(LocalDateTime value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.activity_event.recorded_at</code>. The UTC
+     * Getter for <code>oagi.activity_event.recorded_timestamp</code>. The UTC
      * timestamp when the server persisted the activity event.
      */
-    public LocalDateTime getRecordedAt() {
+    public LocalDateTime getRecordedTimestamp() {
         return (LocalDateTime) get(9);
     }
 
@@ -410,7 +410,7 @@ public class ActivityEventRecord extends UpdatableRecordImpl<ActivityEventRecord
     /**
      * Create a detached, initialised ActivityEventRecord
      */
-    public ActivityEventRecord(ULong activityEventId, String eventGuid, ULong actorAppUserId, String actorLoginId, String eventScope, String eventName, String source, String outcome, LocalDateTime occurredAt, LocalDateTime recordedAt, ULong clientSequence, String clientSessionGuid, String correlationId, String requestId, String traceId, String conversationGuid, String routeKey, String canonicalPath, String summary, String propertiesJson, ULong legacyLogId, UShort schemaVersion) {
+    public ActivityEventRecord(ULong activityEventId, String eventGuid, ULong actorAppUserId, String actorLoginId, String eventScope, String eventName, String source, String outcome, LocalDateTime occurredTimestamp, LocalDateTime recordedTimestamp, ULong clientSequence, String clientSessionGuid, String correlationId, String requestId, String traceId, String conversationGuid, String routeKey, String canonicalPath, String summary, String propertiesJson, ULong legacyLogId, UShort schemaVersion) {
         super(ActivityEvent.ACTIVITY_EVENT);
 
         setActivityEventId(activityEventId);
@@ -421,8 +421,8 @@ public class ActivityEventRecord extends UpdatableRecordImpl<ActivityEventRecord
         setEventName(eventName);
         setSource(source);
         setOutcome(outcome);
-        setOccurredAt(occurredAt);
-        setRecordedAt(recordedAt);
+        setOccurredTimestamp(occurredTimestamp);
+        setRecordedTimestamp(recordedTimestamp);
         setClientSequence(clientSequence);
         setClientSessionGuid(clientSessionGuid);
         setCorrelationId(correlationId);

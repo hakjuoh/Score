@@ -125,16 +125,16 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
     public final TableField<AiChatFileRecord, String> STORAGE_LOCATION = createField(DSL.name("storage_location"), SQLDataType.VARCHAR(1024).nullable(false), this, "Provider-owned opaque object location.");
 
     /**
-     * The column <code>oagi.ai_chat_file.created_at</code>. File creation
-     * timestamp.
+     * The column <code>oagi.ai_chat_file.creation_timestamp</code>. File
+     * creation timestamp.
      */
-    public final TableField<AiChatFileRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "File creation timestamp.");
+    public final TableField<AiChatFileRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "File creation timestamp.");
 
     /**
-     * The column <code>oagi.ai_chat_file.expires_at</code>. File retention
-     * deadline.
+     * The column <code>oagi.ai_chat_file.expiration_timestamp</code>. File
+     * retention deadline.
      */
-    public final TableField<AiChatFileRecord, LocalDateTime> EXPIRES_AT = createField(DSL.name("expires_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "File retention deadline.");
+    public final TableField<AiChatFileRecord, LocalDateTime> EXPIRATION_TIMESTAMP = createField(DSL.name("expiration_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "File retention deadline.");
 
     private AiChatFile(Name alias, Table<AiChatFileRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

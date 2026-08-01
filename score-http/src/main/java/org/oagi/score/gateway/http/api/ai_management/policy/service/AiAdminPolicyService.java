@@ -375,13 +375,14 @@ public class AiAdminPolicyService {
                         AI_TOKEN_USAGE_LEDGER.RESERVED_TOKENS,
                         AI_TOKEN_USAGE_LEDGER.CHARGED_TOKENS,
                         AI_TOKEN_USAGE_LEDGER.USAGE_COMPLETE, AI_TOKEN_USAGE_LEDGER.STATUS,
-                        AI_TOKEN_USAGE_LEDGER.FAILURE_TYPE, AI_TOKEN_USAGE_LEDGER.RESERVED_AT,
-                        AI_TOKEN_USAGE_LEDGER.SETTLED_AT)
+                        AI_TOKEN_USAGE_LEDGER.FAILURE_TYPE,
+                        AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP,
+                        AI_TOKEN_USAGE_LEDGER.SETTLED_TIMESTAMP)
                 .from(AI_TOKEN_USAGE_LEDGER)
                 .join(AI_MODEL).on(AI_MODEL.AI_MODEL_ID.eq(AI_TOKEN_USAGE_LEDGER.AI_MODEL_ID))
                 .where(AI_TOKEN_USAGE_LEDGER.APP_USER_ID.eq(
                         ULong.valueOf(targetUserId.value())))
-                .orderBy(AI_TOKEN_USAGE_LEDGER.RESERVED_AT.desc()).limit(100)
+                .orderBy(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP.desc()).limit(100)
                 .fetch(row -> new AiAdminUsageView.LedgerEntry(
                         row.get(AI_TOKEN_USAGE_LEDGER.CALL_ID), row.get(AI_MODEL.MODEL_KEY),
                         row.get(AI_TOKEN_USAGE_LEDGER.EXECUTION_KIND),
@@ -391,8 +392,8 @@ public class AiAdminPolicyService {
                         row.get(AI_TOKEN_USAGE_LEDGER.USAGE_COMPLETE) == 1,
                         row.get(AI_TOKEN_USAGE_LEDGER.STATUS),
                         row.get(AI_TOKEN_USAGE_LEDGER.FAILURE_TYPE),
-                        utc(row.get(AI_TOKEN_USAGE_LEDGER.RESERVED_AT)),
-                        utc(row.get(AI_TOKEN_USAGE_LEDGER.SETTLED_AT))));
+                        utc(row.get(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP)),
+                        utc(row.get(AI_TOKEN_USAGE_LEDGER.SETTLED_TIMESTAMP))));
         return new AiAdminUsageView(quotaView(policy), requests.activeCountByUser(targetUserId), calls);
     }
 
@@ -412,16 +413,17 @@ public class AiAdminPolicyService {
             var start = window.start().atZone(ZoneOffset.UTC).toLocalDateTime();
             var end = window.end().atZone(ZoneOffset.UTC).toLocalDateTime();
             var now = java.time.LocalDateTime.now(ZoneOffset.UTC);
-            tx.insertInto(AI_TOKEN_USAGE_PERIOD)
+            int periodInserted = tx.insertInto(AI_TOKEN_USAGE_PERIOD)
                     .set(AI_TOKEN_USAGE_PERIOD.APP_USER_ID, target)
-                    .set(AI_TOKEN_USAGE_PERIOD.PERIOD_START, start)
-                    .set(AI_TOKEN_USAGE_PERIOD.PERIOD_END, end)
-                    .set(AI_TOKEN_USAGE_PERIOD.UPDATED_AT, now)
+                    .set(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP, start)
+                    .set(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP, end)
+                    .set(AI_TOKEN_USAGE_PERIOD.CREATION_TIMESTAMP, now)
+                    .set(AI_TOKEN_USAGE_PERIOD.LAST_UPDATE_TIMESTAMP, now)
                     .onDuplicateKeyIgnore().execute();
             var period = tx.selectFrom(AI_TOKEN_USAGE_PERIOD)
                     .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(target))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(start))
-                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END.eq(end)).forUpdate().fetchOne();
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(start))
+                    .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP.eq(end)).forUpdate().fetchOne();
             long consumed = period.getConsumedTokens().longValue();
             long adjusted = Math.addExact(consumed, input.deltaTokens());
             if (adjusted < 0) {
@@ -429,16 +431,17 @@ public class AiAdminPolicyService {
                         "The quota adjustment cannot make consumed usage negative.");
             }
             period.setConsumedTokens(ULong.valueOf(adjusted));
-            period.setUpdatedAt(now);
+            period.setLastUpdateTimestamp(periodInserted == 1
+                    ? now : java.time.LocalDateTime.now(ZoneOffset.UTC));
             period.update();
             tx.insertInto(AI_TOKEN_QUOTA_ADJUSTMENT)
                     .set(AI_TOKEN_QUOTA_ADJUSTMENT.TARGET_APP_USER_ID, target)
                     .set(AI_TOKEN_QUOTA_ADJUSTMENT.ACTOR_APP_USER_ID,
                             ULong.valueOf(actor.userId().value()))
-                    .set(AI_TOKEN_QUOTA_ADJUSTMENT.PERIOD_START, start)
+                    .set(AI_TOKEN_QUOTA_ADJUSTMENT.PERIOD_START_TIMESTAMP, start)
                     .set(AI_TOKEN_QUOTA_ADJUSTMENT.DELTA_TOKENS, input.deltaTokens())
                     .set(AI_TOKEN_QUOTA_ADJUSTMENT.REASON, "Manual quota adjustment")
-                    .set(AI_TOKEN_QUOTA_ADJUSTMENT.CREATED_AT, now).execute();
+                    .set(AI_TOKEN_QUOTA_ADJUSTMENT.CREATION_TIMESTAMP, now).execute();
         });
         return usage(actor, targetUserId);
     }
@@ -483,9 +486,9 @@ public class AiAdminPolicyService {
                 .from(AI_TOKEN_USAGE_PERIOD)
                 .where(AI_TOKEN_USAGE_PERIOD.APP_USER_ID.eq(
                         ULong.valueOf(policy.userId().value())))
-                .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START.eq(
+                .and(AI_TOKEN_USAGE_PERIOD.PERIOD_START_TIMESTAMP.eq(
                         window.start().atZone(ZoneOffset.UTC).toLocalDateTime()))
-                .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END.eq(
+                .and(AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP.eq(
                         window.end().atZone(ZoneOffset.UTC).toLocalDateTime()))
                 .fetchOne();
         long consumed = row != null
