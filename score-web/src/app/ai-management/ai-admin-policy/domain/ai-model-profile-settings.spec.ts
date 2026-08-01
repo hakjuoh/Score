@@ -1,5 +1,6 @@
 import {AiModelProfile, AiModelUpdate} from './ai-admin-policy';
-import {applyModelProfile, modelProfileValidationErrors} from './ai-model-profile-settings';
+import {applyModelProfile, constrainModelToProfile,
+  modelCommand, modelProfileValidationErrors} from './ai-model-profile-settings';
 
 describe('AI model profile settings', () => {
   it('uses constraint and capability defaults instead of legacy duplicate fields', () => {
@@ -24,6 +25,53 @@ describe('AI model profile settings', () => {
     else expect(errors).toEqual([]);
   });
 
+  it('restores and requires provider-enforced adaptive thinking', () => {
+    const enforcedProfile = {...profile(), thinkingModes: ['adaptive'],
+      defaultThinking: 'adaptive', adaptiveThinking: true,
+      capabilityConstraints: {...profile().capabilityConstraints,
+        adaptiveThinking: {supported: true, defaultEnabled: true}}};
+    const disabled = {...form(), adaptiveThinking: false, thinkingModes: [],
+      defaultThinking: null};
+
+    expect(modelProfileValidationErrors(disabled, enforcedProfile))
+      .toContain('Provider-enforced Thinking Modes cannot be disabled.');
+    expect(constrainModelToProfile(disabled, enforcedProfile)).toMatchObject({
+      adaptiveThinking: true, thinkingModes: ['adaptive'], defaultThinking: 'adaptive'});
+  });
+
+  it('restores fixed-thinking defaults for legacy rows without persisted modes', () => {
+    const fixedProfile = {...profile(), thinkingModes: ['enabled', 'disabled'],
+      defaultThinking: 'disabled', thinkingBudgetTokens: 50,
+      configurationConstraints: {...profile().configurationConstraints,
+        thinkingBudgetTokens: {defaultValue: 50, minimum: 10, maximum: 99, optional: true}}};
+    const legacy = {...form(), thinkingModes: [], defaultThinking: null,
+      thinkingBudgetTokens: 50};
+
+    const constrained = constrainModelToProfile(legacy, fixedProfile);
+
+    expect(constrained.thinkingModes).toEqual(['enabled', 'disabled']);
+    expect(constrained.defaultThinking).toBe('disabled');
+    expect(modelProfileValidationErrors(constrained, fixedProfile))
+      .not.toContain('Fixed Thinking requires at least one enabled mode and a default mode.');
+  });
+
+  it('removes implicit unset reasoning efforts from defaults, normalized state, and commands', () => {
+    const none = {name: 'none', displayName: 'None', description: 'Unset.',
+      defaultEffort: true, sortOrder: 0};
+    const medium = {name: 'medium', displayName: 'Medium', description: 'Balanced.',
+      defaultEffort: false, sortOrder: 1};
+    const reasoningProfile = {...profile(), reasoningEfforts: [none, medium]};
+
+    const defaults = applyModelProfile(form(), reasoningProfile);
+    expect(defaults.reasoningEfforts.map(effort => effort.name)).toEqual(['medium']);
+
+    const normalized = constrainModelToProfile({...form(), reasoningEfforts: [none, medium]},
+      reasoningProfile);
+    expect(normalized.reasoningEfforts.map(effort => effort.name)).toEqual(['medium']);
+    expect(modelCommand({...normalized, reasoningEfforts: [none, medium]}).reasoningEfforts)
+      .toEqual([{name: 'medium', defaultEffort: false, sortOrder: 1}]);
+  });
+
   function profile(): AiModelProfile {
     const optional = (defaultValue: number | null, minimum: number | null,
                       maximum: number | null) => ({defaultValue, minimum, maximum, optional: true});
@@ -39,7 +87,8 @@ describe('AI model profile settings', () => {
       minThinkingBudgetTokens: null, maxThinkingBudgetTokens: null, adaptiveThinking: false,
       outputEffort: null, cacheStrategy: null, reasoningModelSupported: false,
       outputEffortSupported: true, verbositySupported: false, temperatureSupported: false,
-      thinkingModes: [], defaultThinking: null, reasoningEfforts: [],
+      thinkingModes: [], defaultThinking: null, reasoningEfforts: [], options: [],
+      chatCompletionsCompatible: true,
       configurationConstraints: {contextWindow: required(1000, 1, 1000),
         maxOutputTokens: optional(100, 1, 100),
         outputReserveTokens: optional(100, 1, 999),

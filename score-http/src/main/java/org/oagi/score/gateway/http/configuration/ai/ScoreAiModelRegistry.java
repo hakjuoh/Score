@@ -195,6 +195,7 @@ public class ScoreAiModelRegistry {
         return new ModelConfiguration(model.getCatalogId(), resolvedModelName, configuredModel, providerType(provider),
                 model.getMaxTokens(), model.getTemperature(), model.getThinkingBudgetTokens(),
                 model.isAdaptiveThinking(), model.getOutputEffort(), model.getCacheStrategy(),
+                model.getModelOptions(),
                 reasoningEfforts(model), defaultReasoningEffort(model),
                 capabilities.getReasoningModel(),
                 capabilities.getOutputEffort(), capabilities.getVerbosity(),
@@ -317,6 +318,7 @@ public class ScoreAiModelRegistry {
                                Integer maxTokens, Double temperature,
                                Integer thinkingBudgetTokens, boolean adaptiveThinking,
                                String outputEffort, String cacheStrategy,
+                               Map<String, Object> modelOptions,
                                List<ReasoningEffortDescriptor> reasoningEfforts,
                                String defaultReasoningEffort,
                                Boolean configuredReasoningModel,
@@ -326,6 +328,10 @@ public class ScoreAiModelRegistry {
                                List<String> thinkingModes,
                                String defaultThinking,
                                ContextBudgetDescriptor contextBudget) {
+
+        public ModelConfiguration {
+            modelOptions = modelOptions != null ? Map.copyOf(modelOptions) : Map.of();
+        }
 
         public ModelConfiguration(String name, String model, String providerType,
                             Integer maxTokens, Double temperature,
@@ -339,7 +345,28 @@ public class ScoreAiModelRegistry {
                             List<String> thinkingModes,
                             String defaultThinking) {
             this(null, name, model, providerType, maxTokens, temperature, thinkingBudgetTokens,
-                    adaptiveThinking, outputEffort, cacheStrategy, reasoningEfforts,
+                    adaptiveThinking, outputEffort, cacheStrategy, Map.of(), reasoningEfforts,
+                    reasoningEfforts != null && !reasoningEfforts.isEmpty()
+                            ? reasoningEfforts.getFirst().name() : null,
+                    configuredReasoningModel, configuredOutputEffort, configuredVerbosity,
+                    configuredTemperature, thinkingModes, defaultThinking,
+                    new ContextBudgetDescriptor(null, null, null, null, null, false));
+        }
+
+        public ModelConfiguration(String name, String model, String providerType,
+                                  Integer maxTokens, Double temperature,
+                                  Integer thinkingBudgetTokens, boolean adaptiveThinking,
+                                  String outputEffort, String cacheStrategy,
+                                  Map<String, Object> modelOptions,
+                                  List<ReasoningEffortDescriptor> reasoningEfforts,
+                                  Boolean configuredReasoningModel,
+                                  Boolean configuredOutputEffort,
+                                  Boolean configuredVerbosity,
+                                  Boolean configuredTemperature,
+                                  List<String> thinkingModes,
+                                  String defaultThinking) {
+            this(null, name, model, providerType, maxTokens, temperature, thinkingBudgetTokens,
+                    adaptiveThinking, outputEffort, cacheStrategy, modelOptions, reasoningEfforts,
                     reasoningEfforts != null && !reasoningEfforts.isEmpty()
                             ? reasoningEfforts.getFirst().name() : null,
                     configuredReasoningModel, configuredOutputEffort, configuredVerbosity,

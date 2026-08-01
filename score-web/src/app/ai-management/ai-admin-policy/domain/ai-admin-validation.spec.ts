@@ -29,7 +29,9 @@ describe('AI admin validation', () => {
   it('matches context budget, uniqueness, integer, and effort invariants', () => {
     expect(validModelUpdate(model())).toBe(true);
     expect(validModelUpdate({...model(), maxTokens: 1.5})).toBe(false);
-    expect(validModelUpdate({...model(), toolOutputTokenLimit: 125000})).toBe(false);
+    expect(validModelUpdate({...model(), autoCompactThresholdTokens: 128000})).toBe(false);
+    expect(validModelUpdate({...model(), toolOutputTokenLimit: 119808})).toBe(true);
+    expect(validModelUpdate({...model(), toolOutputTokenLimit: 119809})).toBe(false);
     expect(validModelUpdate({...model(), thinkingModes: ['enabled', 'enabled']})).toBe(false);
     expect(validModelUpdate({...model(), reasoningEfforts: [
       ...model().reasoningEfforts, {...model().reasoningEfforts[0], name: 'HIGH', defaultEffort: false}

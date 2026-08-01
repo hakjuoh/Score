@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.controller;
 
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderApiKeyView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderConnectionTestResult;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
@@ -7,6 +8,9 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderUpd
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.service.AiProviderCatalogService;
 import org.oagi.score.gateway.http.configuration.security.SessionService;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.AuthenticatedPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,6 +52,20 @@ public class AiProviderCatalogController {
         return providers.get(sessions.asScoreUser(principal), providerId);
     }
 
+    @GetMapping("/{providerId}/api-key")
+    public ResponseEntity<AiProviderApiKeyView> maskedApiKey(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable AiProviderId providerId) {
+        return sensitive(providers.maskedApiKey(sessions.asScoreUser(principal), providerId));
+    }
+
+    @PostMapping("/{providerId}/api-key/reveal")
+    public ResponseEntity<AiProviderApiKeyView> revealApiKey(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable AiProviderId providerId) {
+        return sensitive(providers.revealApiKey(sessions.asScoreUser(principal), providerId));
+    }
+
     @GetMapping("/{providerId}/model-profiles")
     public List<AiModelProfileView> modelProfiles(
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
@@ -68,6 +86,13 @@ public class AiProviderCatalogController {
             @PathVariable AiProviderId providerId,
             @RequestBody AiProviderUpdate input) {
         return providers.testConnection(sessions.asScoreUser(principal), providerId, input);
+    }
+
+    private static ResponseEntity<AiProviderApiKeyView> sensitive(AiProviderApiKeyView body) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .body(body);
     }
 
 }
