@@ -13,7 +13,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiProvid
 
 
 /**
- * AI provider catalog and encrypted API key reference
+ * Configured AI providers and encrypted API key references
  */
 @SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
@@ -54,7 +54,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
 
     /**
      * Setter for <code>oagi.ai_provider.provider_type</code>. Provider adapter
-     * type such as anthropic or azure-openai
+     * type: anthropic or openai
      */
     public void setProviderType(String value) {
         set(2, value);
@@ -62,7 +62,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
 
     /**
      * Getter for <code>oagi.ai_provider.provider_type</code>. Provider adapter
-     * type such as anthropic or azure-openai
+     * type: anthropic or openai
      */
     public String getProviderType() {
         return (String) get(2);
@@ -101,35 +101,19 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.anthropic_version</code>. Anthropic API
-     * version sent to the provider
+     * Setter for <code>oagi.ai_provider.api_version</code>. Provider API
+     * version sent using the provider-specific mechanism
      */
-    public void setAnthropicVersion(String value) {
+    public void setApiVersion(String value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.anthropic_version</code>. Anthropic API
-     * version sent to the provider
-     */
-    public String getAnthropicVersion() {
-        return (String) get(5);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_provider.api_version</code>. Provider API
-     * version such as the Azure OpenAI API version
-     */
-    public void setApiVersion(String value) {
-        set(6, value);
-    }
-
-    /**
      * Getter for <code>oagi.ai_provider.api_version</code>. Provider API
-     * version such as the Azure OpenAI API version
+     * version sent using the provider-specific mechanism
      */
     public String getApiVersion() {
-        return (String) get(6);
+        return (String) get(5);
     }
 
     /**
@@ -137,7 +121,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * key referenced from app_secret
      */
     public void setApiKeySecretId(ULong value) {
-        set(7, value);
+        set(6, value);
     }
 
     /**
@@ -145,7 +129,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * key referenced from app_secret
      */
     public ULong getApiKeySecretId() {
-        return (ULong) get(7);
+        return (ULong) get(6);
     }
 
     /**
@@ -153,7 +137,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * provider can serve model requests
      */
     public void setEnabled(Byte value) {
-        set(8, value);
+        set(7, value);
     }
 
     /**
@@ -161,23 +145,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * provider can serve model requests
      */
     public Byte getEnabled() {
-        return (Byte) get(8);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_provider.catalog_version</code>. Optimistic
-     * locking and cache invalidation version
-     */
-    public void setCatalogVersion(ULong value) {
-        set(9, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_provider.catalog_version</code>. Optimistic
-     * locking and cache invalidation version
-     */
-    public ULong getCatalogVersion() {
-        return (ULong) get(9);
+        return (Byte) get(7);
     }
 
     /**
@@ -185,7 +153,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * administrator who created the provider
      */
     public void setCreatedBy(ULong value) {
-        set(10, value);
+        set(8, value);
     }
 
     /**
@@ -193,7 +161,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * administrator who created the provider
      */
     public ULong getCreatedBy() {
-        return (ULong) get(10);
+        return (ULong) get(8);
     }
 
     /**
@@ -201,7 +169,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * the administrator who last updated the provider
      */
     public void setLastUpdatedBy(ULong value) {
-        set(11, value);
+        set(9, value);
     }
 
     /**
@@ -209,7 +177,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * the administrator who last updated the provider
      */
     public ULong getLastUpdatedBy() {
-        return (ULong) get(11);
+        return (ULong) get(9);
     }
 
     /**
@@ -217,7 +185,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * the provider was created
      */
     public void setCreatedAt(LocalDateTime value) {
-        set(12, value);
+        set(10, value);
     }
 
     /**
@@ -225,7 +193,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * the provider was created
      */
     public LocalDateTime getCreatedAt() {
-        return (LocalDateTime) get(12);
+        return (LocalDateTime) get(10);
     }
 
     /**
@@ -233,7 +201,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * when the provider was last updated
      */
     public void setLastUpdatedAt(LocalDateTime value) {
-        set(13, value);
+        set(11, value);
     }
 
     /**
@@ -241,7 +209,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
      * when the provider was last updated
      */
     public LocalDateTime getLastUpdatedAt() {
-        return (LocalDateTime) get(13);
+        return (LocalDateTime) get(11);
     }
 
     // -------------------------------------------------------------------------
@@ -267,7 +235,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     /**
      * Create a detached, initialised AiProviderRecord
      */
-    public AiProviderRecord(ULong aiProviderId, String providerName, String providerType, String baseUrl, String messagesUrl, String anthropicVersion, String apiVersion, ULong apiKeySecretId, Byte enabled, ULong catalogVersion, ULong createdBy, ULong lastUpdatedBy, LocalDateTime createdAt, LocalDateTime lastUpdatedAt) {
+    public AiProviderRecord(ULong aiProviderId, String providerName, String providerType, String baseUrl, String messagesUrl, String apiVersion, ULong apiKeySecretId, Byte enabled, ULong createdBy, ULong lastUpdatedBy, LocalDateTime createdAt, LocalDateTime lastUpdatedAt) {
         super(AiProvider.AI_PROVIDER);
 
         setAiProviderId(aiProviderId);
@@ -275,11 +243,9 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
         setProviderType(providerType);
         setBaseUrl(baseUrl);
         setMessagesUrl(messagesUrl);
-        setAnthropicVersion(anthropicVersion);
         setApiVersion(apiVersion);
         setApiKeySecretId(apiKeySecretId);
         setEnabled(enabled);
-        setCatalogVersion(catalogVersion);
         setCreatedBy(createdBy);
         setLastUpdatedBy(lastUpdatedBy);
         setCreatedAt(createdAt);

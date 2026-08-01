@@ -253,7 +253,6 @@ public class ScoreAiProperties {
         private String baseUrl;
         private String messagesUrl;
         private String key;
-        private String anthropicVersion;
         private String apiVersion;
 
         public String getType() { return type; }
@@ -264,8 +263,6 @@ public class ScoreAiProperties {
         public void setMessagesUrl(String messagesUrl) { this.messagesUrl = messagesUrl; }
         public String getKey() { return key; }
         public void setKey(String key) { this.key = key; }
-        public String getAnthropicVersion() { return anthropicVersion; }
-        public void setAnthropicVersion(String anthropicVersion) { this.anthropicVersion = anthropicVersion; }
         public String getApiVersion() { return apiVersion; }
         public void setApiVersion(String apiVersion) { this.apiVersion = apiVersion; }
     }

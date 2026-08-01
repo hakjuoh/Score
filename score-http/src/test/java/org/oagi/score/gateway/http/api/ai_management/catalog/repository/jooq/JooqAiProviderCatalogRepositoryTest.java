@@ -3,21 +3,29 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.Condition;
 import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.Record;
+import org.jooq.Result;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
 import org.jooq.tools.jdbc.MockConnection;
 import org.jooq.tools.jdbc.MockResult;
 import org.jooq.types.ULong;
 import org.junit.jupiter.api.Test;
-import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
+import org.oagi.score.gateway.http.common.model.PageRequest;
+import org.oagi.score.gateway.http.common.model.Sort;
+import org.oagi.score.gateway.http.common.model.SortDirection;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.security.secret.AppSecretId;
 import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
 
-import java.math.BigInteger;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,15 +37,68 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_PROVIDER;
 
 class JooqAiProviderCatalogRepositoryTest {
+
+    @Test
+    void searchesUpdaterDateRangeWithStableUpdatedOnPagination() {
+        List<String> statements = new ArrayList<>();
+        DSLContext create = DSL.using(SQLDialect.MARIADB);
+        Field<String> updaterLoginId = DSL.field(
+                DSL.name("updater_login_id"), String.class);
+        DSLContext dsl = DSL.using(new MockConnection(context -> {
+            statements.add(context.sql());
+            if (context.sql().contains("count(*)")) {
+                Field<Integer> count = DSL.field("count", Integer.class);
+                var result = create.newResult(count);
+                var record = create.newRecord(count);
+                record.set(count, 1);
+                result.add(record);
+                return new MockResult[]{new MockResult(1, result)};
+            }
+            Field<?>[] fields = Stream.concat(Arrays.stream(AI_PROVIDER.fields()),
+                    Stream.of(updaterLoginId)).toArray(Field<?>[]::new);
+            Result<Record> result = create.newResult(fields);
+            Record record = create.newRecord(fields);
+            record.set(AI_PROVIDER.AI_PROVIDER_ID, ULong.valueOf(7));
+            record.set(AI_PROVIDER.PROVIDER_NAME, "Anthropic");
+            record.set(AI_PROVIDER.PROVIDER_TYPE, "anthropic");
+            record.set(AI_PROVIDER.ENABLED, (byte) 1);
+            record.set(AI_PROVIDER.LAST_UPDATED_AT,
+                    LocalDateTime.of(2026, 7, 15, 12, 0));
+            record.set(updaterLoginId, "admin");
+            result.add(record);
+            return new MockResult[]{new MockResult(1, result)};
+        }), SQLDialect.MARIADB);
+        var repository = new JooqAiProviderCatalogRepository(
+                dsl, mock(RepositoryFactory.class), mock(ApplicationSecretService.class));
+
+        var response = repository.search("anth", "anthropic", "messages", true,
+                List.of("admin", "!reviewer"), Instant.parse("2026-07-01T00:00:00Z"),
+                Instant.parse("2026-08-01T00:00:00Z"), new PageRequest(0, 25,
+                        List.of(new Sort("updatedOn", SortDirection.DESC))));
+
+        assertThat(response.getList()).singleElement().satisfies(provider -> {
+            assertThat(provider.providerName()).isEqualTo("Anthropic");
+            assertThat(provider.updaterLoginId()).isEqualTo("admin");
+        });
+        assertThat(response.getLength()).isEqualTo(1);
+        String sql = String.join("\n", statements);
+        assertThat(sql).contains("`updater`.`login_id` in (?)")
+                .contains("`updater`.`login_id` not in (?)")
+                .contains("`ai_provider`.`last_updated_at` >= ?")
+                .contains("`ai_provider`.`last_updated_at` < ?")
+                .contains("order by `oagi`.`ai_provider`.`last_updated_at` desc")
+                .contains("offset ? rows fetch next ? rows only");
+    }
 
     @Test
     void providerUpdateKeepsReplacesAndClearsTheWriteOnlyKeyByPayloadState() {
         DSLContext dsl = mock(DSLContext.class);
         ApplicationSecretService secrets = mock(ApplicationSecretService.class);
         var repository = new JooqAiProviderCatalogRepository(
-                dsl, mock(RepositoryFactory.class), secrets, new ObjectMapper());
+                dsl, mock(RepositoryFactory.class), secrets);
         AppSecretId oldSecretId = AppSecretId.from(9L);
         ULong storedOldSecretId = ULong.valueOf(9);
         ULong newSecretId = ULong.valueOf(10);
@@ -58,25 +119,11 @@ class JooqAiProviderCatalogRepositoryTest {
     }
 
     @Test
-    void providerUpdateAuditsCredentialChangesThroughTheUnifiedUpdateAction() {
-        assertThat(JooqAiProviderCatalogRepository.auditAction(null, true, true))
-                .isEqualTo("UPDATE");
-        assertThat(JooqAiProviderCatalogRepository.auditAction(null, false, false))
-                .isEqualTo("DISABLE");
-        assertThat(JooqAiProviderCatalogRepository.auditAction("replacement", true, true))
-                .isEqualTo("ROTATE_KEY");
-        assertThat(JooqAiProviderCatalogRepository.auditAction("", true, true))
-                .isEqualTo("DELETE_KEY");
-        assertThat(JooqAiProviderCatalogRepository.auditAction("", false, true))
-                .isEqualTo("UPDATE");
-    }
-
-    @Test
     void connectionTestUsesADraftKeyOrDecryptsTheStoredKeyWithoutPersistingIt() {
         DSLContext dsl = mock(DSLContext.class);
         ApplicationSecretService secrets = mock(ApplicationSecretService.class);
         var repository = new JooqAiProviderCatalogRepository(
-                dsl, mock(RepositoryFactory.class), secrets, new ObjectMapper());
+                dsl, mock(RepositoryFactory.class), secrets);
         ULong storedSecretId = ULong.valueOf(9);
         when(secrets.isEncryptionConfigured()).thenReturn(true);
         when(secrets.decrypt(dsl, storedSecretId)).thenReturn("stored-key".toCharArray());
@@ -93,27 +140,6 @@ class JooqAiProviderCatalogRepositoryTest {
     }
 
     @Test
-    void recordsCredentialRevealWithoutIncludingCredentialMaterial() {
-        AtomicReference<String> sql = new AtomicReference<>();
-        AtomicReference<Object[]> bindings = new AtomicReference<>();
-        DSLContext dsl = DSL.using(new MockConnection(context -> {
-            sql.set(context.sql());
-            bindings.set(context.bindings());
-            return new MockResult[]{new MockResult(1, null)};
-        }), SQLDialect.MARIADB);
-        var repository = new JooqAiProviderCatalogRepository(
-                dsl, mock(RepositoryFactory.class), mock(ApplicationSecretService.class),
-                new ObjectMapper());
-
-        repository.recordApiKeyReveal(AiProviderId.from(7L),
-                new UserId(BigInteger.valueOf(42)));
-
-        assertThat(sql.get()).contains("insert into", "ai_catalog_audit");
-        assertThat(Arrays.asList(bindings.get())).contains("PROVIDER", "REVEAL_KEY")
-                .doesNotContain("secret-value");
-    }
-
-    @Test
     void rejectsProviderFamilyChangesWhileModelsRemainLinked() {
         DSLContext dsl = mock(DSLContext.class);
         AiProviderId providerId = AiProviderId.from(7L);
@@ -127,12 +153,14 @@ class JooqAiProviderCatalogRepositoryTest {
     }
 
     @Test
-    void permitsProviderAliasesAndEmptyFamilyChanges() {
+    void permitsEmptyFamilyChangesAndRejectsRemovedProviderTypes() {
         DSLContext dsl = mock(DSLContext.class);
         AiProviderId providerId = AiProviderId.from(7L);
 
-        JooqAiProviderCatalogRepository.requireCompatibleProviderFamily(
-                dsl, providerId, "azure-openai", "openai");
+        assertThatThrownBy(() -> JooqAiProviderCatalogRepository.requireCompatibleProviderFamily(
+                dsl, providerId, "azure-openai", "openai"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsupported AI provider type");
         verify(dsl, never()).fetchCount(eq(AI_MODEL), any(Condition.class));
 
         when(dsl.fetchCount(eq(AI_MODEL), any(Condition.class))).thenReturn(0);

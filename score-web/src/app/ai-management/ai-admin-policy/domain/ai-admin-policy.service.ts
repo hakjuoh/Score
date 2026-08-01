@@ -1,5 +1,5 @@
 import {inject, Injectable} from '@angular/core';
-import {HttpClient} from '@angular/common/http';
+import {HttpClient, HttpParams} from '@angular/common/http';
 import {Observable} from 'rxjs';
 import {
   AiAdminModel,
@@ -10,10 +10,14 @@ import {
   AiProviderApiKeyView,
   AiProviderUpdate,
   AiProviderView,
+  AiModelListRequest,
+  AiPolicyUserListRequest,
   AiPolicyUpdate,
   AiPolicyUserSummary,
-  AiPolicyView
+  AiPolicyView,
+  AiProviderListRequest
 } from './ai-admin-policy';
+import {PageRequest, PageResponse} from '../../../basis/basis';
 
 @Injectable()
 export class AiAdminPolicyService {
@@ -23,8 +27,39 @@ export class AiAdminPolicyService {
     return this.http.get<AiPolicyUserSummary[]>('/api/admin/ai/users');
   }
 
+  searchUsers(request: AiPolicyUserListRequest): Observable<PageResponse<AiPolicyUserSummary>> {
+    let params = this.pageParams(request.page);
+    params = this.text(params, 'loginId', request.filters.loginId);
+    params = this.text(params, 'name', request.filters.name);
+    params = this.text(params, 'organization', request.filters.organization);
+    params = this.value(params, 'enabled', this.singleBoolean(request.filters.enabled));
+    params = this.value(params, 'modelCount', request.filters.modelCount);
+    params = this.value(params, 'multiAgentEnabled',
+      this.singleBoolean(request.filters.multiAgentEnabled));
+    params = this.text(params, 'quota', request.filters.quota);
+    params = this.value(params, 'activeRequests', request.filters.activeRequests);
+    params = this.list(params, 'updaterLoginIdList', request.filters.updaterLoginIdList);
+    params = this.date(params, 'updatedAfter', request.filters.updatedAfter);
+    params = this.date(params, 'updatedBefore', request.filters.updatedBefore, true);
+    return this.http.get<PageResponse<AiPolicyUserSummary>>('/api/admin/ai/users/search', {params});
+  }
+
   models(): Observable<AiAdminModel[]> {
     return this.http.get<AiAdminModel[]>('/api/admin/ai/models');
+  }
+
+  searchModels(request: AiModelListRequest): Observable<PageResponse<AiAdminModel>> {
+    let params = this.pageParams(request.page);
+    params = this.text(params, 'model', request.filters.model);
+    params = this.text(params, 'provider', request.filters.provider);
+    params = this.value(params, 'enabled', this.singleBoolean(request.filters.enabled));
+    params = this.value(params, 'defaultModel', this.singleBoolean(request.filters.defaultModel));
+    params = this.text(params, 'defaultEffort', request.filters.defaultEffort);
+    params = this.text(params, 'effort', request.filters.effort);
+    params = this.list(params, 'updaterLoginIdList', request.filters.updaterLoginIdList);
+    params = this.date(params, 'updatedAfter', request.filters.updatedAfter);
+    params = this.date(params, 'updatedBefore', request.filters.updatedBefore, true);
+    return this.http.get<PageResponse<AiAdminModel>>('/api/admin/ai/models/search', {params});
   }
 
   model(modelId: number): Observable<AiAdminModel> {
@@ -76,6 +111,18 @@ export class AiAdminPolicyService {
     return this.http.get<AiProviderView[]>('/api/admin/ai/providers');
   }
 
+  searchProviders(request: AiProviderListRequest): Observable<PageResponse<AiProviderView>> {
+    let params = this.pageParams(request.page);
+    params = this.text(params, 'name', request.filters.name);
+    params = this.text(params, 'type', request.filters.type);
+    params = this.text(params, 'endpoint', request.filters.endpoint);
+    params = this.value(params, 'enabled', this.singleBoolean(request.filters.enabled));
+    params = this.list(params, 'updaterLoginIdList', request.filters.updaterLoginIdList);
+    params = this.date(params, 'updatedAfter', request.filters.updatedAfter);
+    params = this.date(params, 'updatedBefore', request.filters.updatedBefore, true);
+    return this.http.get<PageResponse<AiProviderView>>('/api/admin/ai/providers/search', {params});
+  }
+
   provider(providerId: number): Observable<AiProviderView> {
     return this.http.get<AiProviderView>(`/api/admin/ai/providers/${providerId}`);
   }
@@ -102,6 +149,41 @@ export class AiAdminPolicyService {
                          update: AiProviderUpdate): Observable<AiProviderConnectionTestResult> {
     return this.http.post<AiProviderConnectionTestResult>(
       `/api/admin/ai/providers/${providerId}/connection-tests`, update);
+  }
+
+  private pageParams(page: PageRequest): HttpParams {
+    let params = new HttpParams()
+      .set('pageIndex', page.pageIndex)
+      .set('pageSize', page.pageSize);
+    if (page.sortActive && page.sortDirection) {
+      params = params.set('orderBy', `${page.sortDirection === 'desc' ? '-' : '+'}${page.sortActive}`);
+    }
+    return params;
+  }
+
+  private text(params: HttpParams, name: string, value: string): HttpParams {
+    return value?.trim() ? params.set(name, value.trim()) : params;
+  }
+
+  private list(params: HttpParams, name: string, values: string[]): HttpParams {
+    return values?.length ? params.set(name, values.join(',')) : params;
+  }
+
+  private singleBoolean(values: boolean[]): boolean | null {
+    return values?.length === 1 ? values[0] : null;
+  }
+
+  private value(params: HttpParams, name: string,
+                value: boolean | number | null): HttpParams {
+    return value == null ? params : params.set(name, value);
+  }
+
+  private date(params: HttpParams, name: string, value: Date | null,
+               nextDay = false): HttpParams {
+    if (!value) return params;
+    const boundary = new Date(value);
+    if (nextDay) boundary.setDate(boundary.getDate() + 1);
+    return params.set(name, boundary.toISOString());
   }
 
 }

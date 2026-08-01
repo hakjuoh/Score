@@ -30,7 +30,6 @@ export class AiProviderDetailComponent implements OnInit, OnDestroy {
   apiKeyLoading = false;
   apiKeyVisible = false;
   private baselineHash = '';
-  private persistedProviderType = 'openai';
   private apiKeyValue = '';
   private maskedApiKey = '';
   private apiKeyEdited = false;
@@ -42,8 +41,8 @@ export class AiProviderDetailComponent implements OnInit, OnDestroy {
   readonly visibilityIcon = faEye;
   readonly visibilityOffIcon = faEyeSlash;
   loadError = '';
-  form: AiProviderUpdate = {expectedVersion: null, providerName: '', providerType: 'openai',
-    baseUrl: null, messagesUrl: null, anthropicVersion: null, apiVersion: null,
+  form: AiProviderUpdate = {providerName: '', providerType: 'openai',
+    baseUrl: null, messagesUrl: null, apiVersion: null,
     enabled: false};
 
   get invalid(): boolean {
@@ -86,8 +85,6 @@ export class AiProviderDetailComponent implements OnInit, OnDestroy {
   setProviderType(providerType: 'anthropic' | 'openai'): void {
     if (this.form.providerType === providerType) return;
     this.form.providerType = providerType;
-    if (this.isAnthropicProvider) this.form.apiVersion = null;
-    else this.form.anthropicVersion = null;
   }
 
   ngOnInit(): void {
@@ -194,15 +191,14 @@ export class AiProviderDetailComponent implements OnInit, OnDestroy {
 
   private apply(provider: AiProviderView): void {
     this.provider = provider; this.isNew = false;
-    this.persistedProviderType = provider.providerType;
     this.apiKeyVisible = false;
     this.apiKeyEdited = false;
     this.apiKeyValue = '';
     this.maskedApiKey = '';
-    this.form = {expectedVersion: provider.catalogVersion, providerName: provider.providerName,
-      providerType: provider.providerType === 'azure-openai' ? 'openai' : provider.providerType,
+    this.form = {providerName: provider.providerName,
+      providerType: provider.providerType,
       baseUrl: provider.baseUrl, messagesUrl: provider.messagesUrl,
-      anthropicVersion: provider.anthropicVersion, apiVersion: provider.apiVersion,
+      apiVersion: provider.apiVersion,
       enabled: provider.enabled};
     this.baselineHash = hashCode(this.editableState());
     if (provider.apiKeyConfigured) this.loadMaskedApiKey(provider.aiProviderId);
@@ -233,15 +229,12 @@ export class AiProviderDetailComponent implements OnInit, OnDestroy {
   }
 
   private editableState(): object {
-    const {expectedVersion: _expectedVersion, ...properties} = this.form;
-    return properties;
+    return this.form;
   }
 
   private requestPayload(): AiProviderUpdate {
     const unchangedKey = !this.isNew && !this.apiKeyEdited;
     const apiKey = unchangedKey ? undefined : this.apiKeyValue;
-    const providerType = this.persistedProviderType === 'azure-openai'
-      && this.form.providerType === 'openai' ? this.persistedProviderType : this.form.providerType;
-    return {...this.form, providerType, apiKey};
+    return {...this.form, apiKey};
   }
 }

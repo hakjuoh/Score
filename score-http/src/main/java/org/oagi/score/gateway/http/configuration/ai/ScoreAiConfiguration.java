@@ -90,9 +90,9 @@ public class ScoreAiConfiguration {
         return switch (providerType(provider)) {
             case "anthropic" -> anthropicModel(configuredName, model, provider,
                     anthropicProperties);
-            case "azure-openai" -> azureOpenAiModel(configuredName, model, provider,
-                    openAiProperties);
-            case "openai" -> openAiModel(configuredName, model, provider, openAiProperties);
+            case "openai" -> StringUtils.hasText(provider.getApiVersion())
+                    ? azureOpenAiModel(configuredName, model, provider, openAiProperties)
+                    : openAiModel(configuredName, model, provider, openAiProperties);
             default -> throw new IllegalArgumentException("Unsupported AI provider type '"
                     + provider.getType() + "' for model '" + configuredName + "'");
         };
@@ -156,8 +156,8 @@ public class ScoreAiConfiguration {
                     .cacheToolResults(true)
                     .build());
         }
-        if (StringUtils.hasText(provider.getAnthropicVersion())) {
-            options.customHeaders(Map.of("anthropic-version", provider.getAnthropicVersion()));
+        if (StringUtils.hasText(provider.getApiVersion())) {
+            options.customHeaders(Map.of("anthropic-version", provider.getApiVersion()));
         }
         // The application-level provider retry loop owns backoff and narrates every
         // attempt to the user; silent SDK-internal retries would multiply it.

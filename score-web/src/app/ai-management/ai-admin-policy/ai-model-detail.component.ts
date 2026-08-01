@@ -61,7 +61,6 @@ export class AiModelDetailComponent implements OnInit {
   private providerRequestId = 0;
   private baselineHash = '';
   form: AiModelUpdate = {
-    expectedVersion: null,
     providerId: 0,
     modelKey: '',
     providerModelName: '',
@@ -420,7 +419,6 @@ export class AiModelDetailComponent implements OnInit {
     this.model = model;
     this.isNew = false;
     this.form = {
-      expectedVersion: model.catalogVersion,
       providerId: model.providerId,
       modelKey: model.modelKey,
       providerModelName: model.providerModelName,

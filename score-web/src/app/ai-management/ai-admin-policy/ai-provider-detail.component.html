@@ -51,17 +51,13 @@
                   <mat-label>Messages URL</mat-label>
                   <input matInput maxlength="1000" [(ngModel)]="form.messagesUrl">
                 </mat-form-field>
-                @if (isAnthropicProvider) {
-                  <mat-form-field>
-                    <mat-label>Anthropic Version</mat-label>
-                    <input matInput maxlength="64" [(ngModel)]="form.anthropicVersion">
-                  </mat-form-field>
-                } @else {
-                  <mat-form-field>
-                    <mat-label>API Version</mat-label>
-                    <input matInput maxlength="64" [(ngModel)]="form.apiVersion">
-                  </mat-form-field>
-                }
+                <mat-form-field>
+                  <mat-label>API Version</mat-label>
+                  <input matInput maxlength="64" [(ngModel)]="form.apiVersion">
+                  @if (isAnthropicProvider) {
+                    <mat-hint>Sent as the anthropic-version header.</mat-hint>
+                  }
+                </mat-form-field>
                 <div class="detail-span-2 api-key-field">
                   <mat-form-field class="w-100">
                     <mat-label>API Key{{isNew ? ' (optional)' : ''}}</mat-label>
