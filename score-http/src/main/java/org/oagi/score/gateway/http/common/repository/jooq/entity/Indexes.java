@@ -21,7 +21,6 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenQ
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenRequestUsage;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsageLedger;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsagePeriod;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicyAudit;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbie;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbiep;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Ascc;
@@ -85,7 +84,6 @@ public class Indexes {
     public static final Index AI_TOKEN_USAGE_LEDGER_AI_TOKEN_USAGE_LEDGER_STALE_RESERVATION_IDX = Internal.createIndex(DSL.name("ai_token_usage_ledger_stale_reservation_idx"), AiTokenUsageLedger.AI_TOKEN_USAGE_LEDGER, new OrderField[] { AiTokenUsageLedger.AI_TOKEN_USAGE_LEDGER.STATUS, AiTokenUsageLedger.AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP }, false);
     public static final Index AI_TOKEN_USAGE_LEDGER_AI_TOKEN_USAGE_LEDGER_USER_TIME_IDX = Internal.createIndex(DSL.name("ai_token_usage_ledger_user_time_idx"), AiTokenUsageLedger.AI_TOKEN_USAGE_LEDGER, new OrderField[] { AiTokenUsageLedger.AI_TOKEN_USAGE_LEDGER.APP_USER_ID, AiTokenUsageLedger.AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP }, false);
     public static final Index AI_TOKEN_USAGE_PERIOD_AI_TOKEN_USAGE_PERIOD_END_IDX = Internal.createIndex(DSL.name("ai_token_usage_period_end_idx"), AiTokenUsagePeriod.AI_TOKEN_USAGE_PERIOD, new OrderField[] { AiTokenUsagePeriod.AI_TOKEN_USAGE_PERIOD.PERIOD_END_TIMESTAMP }, false);
-    public static final Index AI_USER_POLICY_AUDIT_AI_USER_POLICY_AUDIT_TARGET_TIME_IDX = Internal.createIndex(DSL.name("ai_user_policy_audit_target_time_idx"), AiUserPolicyAudit.AI_USER_POLICY_AUDIT, new OrderField[] { AiUserPolicyAudit.AI_USER_POLICY_AUDIT.TARGET_APP_USER_ID, AiUserPolicyAudit.AI_USER_POLICY_AUDIT.CREATION_TIMESTAMP }, false);
     public static final Index BBIE_BIZTERM_ASBIE_BIZTERM_ASBIE_FK = Internal.createIndex(DSL.name("asbie_bizterm_asbie_fk"), BbieBizterm.BBIE_BIZTERM, new OrderField[] { BbieBizterm.BBIE_BIZTERM.BBIE_ID }, false);
     public static final Index ASBIE_ASBIE_HASH_PATH_K = Internal.createIndex(DSL.name("asbie_hash_path_k"), Asbie.ASBIE, new OrderField[] { Asbie.ASBIE.HASH_PATH }, false);
     public static final Index ASBIE_ASBIE_PATH_K = Internal.createIndex(DSL.name("asbie_path_k"), Asbie.ASBIE, new OrderField[] { Asbie.ASBIE.PATH }, false);

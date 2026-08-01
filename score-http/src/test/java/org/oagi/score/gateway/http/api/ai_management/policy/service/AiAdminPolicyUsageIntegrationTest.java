@@ -23,7 +23,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_TOKEN_USAGE_LEDGER;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_POLICY;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_POLICY_AUDIT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.APP_USER;
 
 @SpringBootTest
@@ -39,8 +38,10 @@ class AiAdminPolicyUsageIntegrationTest {
     private AiUsageReportService usageReports;
 
     @Test
-    void policySearchUsesAuditHistorySupportsEffectiveFiltersAndExcludesSystemUser() {
-        String loginId = "policy-it-" + UUID.randomUUID().toString().substring(0, 8);
+    void policySearchUsesPolicyMetadataSupportsEffectiveFiltersAndExcludesSystemUser() {
+        String loginPrefix = "policy-it-" + UUID.randomUUID().toString().substring(0, 8);
+        String loginId = loginPrefix + "-direct";
+        String inheritedLoginId = loginPrefix + "-inherited";
         ULong actorId = dsl.select(APP_USER.APP_USER_ID).from(APP_USER)
                 .where(APP_USER.LOGIN_ID.ne(ScoreUser.SYSTEM_USER_LOGIN_ID))
                 .orderBy(APP_USER.APP_USER_ID).limit(1).fetchOne(APP_USER.APP_USER_ID);
@@ -50,11 +51,15 @@ class AiAdminPolicyUsageIntegrationTest {
         dsl.insertInto(APP_USER).set(APP_USER.LOGIN_ID, loginId).set(APP_USER.NAME, "Policy IT")
                 .set(APP_USER.ORGANIZATION, "Integration").set(APP_USER.IS_ENABLED, (byte) 1)
                 .execute();
+        dsl.insertInto(APP_USER).set(APP_USER.LOGIN_ID, inheritedLoginId)
+                .set(APP_USER.NAME, "Inherited Policy IT")
+                .set(APP_USER.ORGANIZATION, "Integration").set(APP_USER.IS_ENABLED, (byte) 1)
+                .execute();
         ULong targetId = dsl.select(APP_USER.APP_USER_ID).from(APP_USER)
                 .where(APP_USER.LOGIN_ID.eq(loginId)).fetchOne(APP_USER.APP_USER_ID);
-        LocalDateTime legacyTime = LocalDateTime.of(2096, 1, 1, 0, 0);
-        LocalDateTime createdTime = LocalDateTime.of(2097, 1, 1, 0, 0);
-        LocalDateTime deletedTime = LocalDateTime.of(2097, 2, 1, 0, 0);
+        ULong inheritedTargetId = dsl.select(APP_USER.APP_USER_ID).from(APP_USER)
+                .where(APP_USER.LOGIN_ID.eq(inheritedLoginId)).fetchOne(APP_USER.APP_USER_ID);
+        LocalDateTime lastUpdatedTime = LocalDateTime.of(2096, 1, 1, 0, 0);
         ScoreUser administrator = new ScoreUser(new UserId(actorId.toBigInteger()), actorLoginId,
                 actorLoginId, null, true, List.of(ScoreRole.ADMINISTRATOR));
         try {
@@ -70,32 +75,43 @@ class AiAdminPolicyUsageIntegrationTest {
                     .set(AI_USER_POLICY.POLICY_VERSION, ULong.valueOf(1))
                     .set(AI_USER_POLICY.CREATED_BY, actorId)
                     .set(AI_USER_POLICY.LAST_UPDATED_BY, actorId)
-                    .set(AI_USER_POLICY.CREATION_TIMESTAMP, legacyTime)
-                    .set(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP, legacyTime).execute();
+                    .set(AI_USER_POLICY.CREATION_TIMESTAMP, lastUpdatedTime)
+                    .set(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP, lastUpdatedTime).execute();
 
-            var legacy = search(administrator, loginId, null, null).getList().getFirst();
-            assertThat(legacy.lastUpdatedAt()).isEqualTo(legacyTime.toInstant(ZoneOffset.UTC));
-            assertThat(legacy.updaterLoginId()).isEqualTo(actorLoginId);
+            var policy = search(administrator, loginId, null, null).getList().getFirst();
+            assertThat(policy.lastUpdatedAt())
+                    .isEqualTo(lastUpdatedTime.toInstant(ZoneOffset.UTC));
+            assertThat(policy.updaterLoginId()).isEqualTo(actorLoginId);
             assertThat(search(administrator, loginId, null, 777L).getList()).hasSize(1);
-            assertThat(legacy.availableModels()).isNotEmpty();
+            assertThat(policy.availableModels()).isNotEmpty();
             assertThat(search(administrator, loginId,
-                    legacy.availableModels().getFirst(), null).getList()).hasSize(1);
-
-            insertAudit(targetId, actorId, "CREATE", createdTime);
-            insertAudit(targetId, actorId, "DELETE", deletedTime);
-            dsl.deleteFrom(AI_USER_POLICY).where(AI_USER_POLICY.APP_USER_ID.eq(targetId)).execute();
-
-            var deleted = search(administrator, loginId, null, null).getList().getFirst();
-            assertThat(deleted.inherited()).isTrue();
-            assertThat(deleted.lastUpdatedAt()).isEqualTo(deletedTime.toInstant(ZoneOffset.UTC));
-            assertThat(deleted.updaterLoginId()).isEqualTo(actorLoginId);
+                    policy.availableModels().getFirst(), null).getList()).hasSize(1);
             assertThat(search(administrator, ScoreUser.SYSTEM_USER_LOGIN_ID, null, null).getList())
                     .isEmpty();
+
+            Instant lastUpdatedAt = lastUpdatedTime.toInstant(ZoneOffset.UTC);
+            var included = searchByMetadata(administrator, loginPrefix, List.of(actorLoginId),
+                    lastUpdatedAt.minusSeconds(1), lastUpdatedAt.plusSeconds(1),
+                    new PageRequest(0, 1,
+                            List.of(new Sort("updatedOn", SortDirection.DESC))));
+            assertThat(included.getLength()).isEqualTo(1);
+            assertThat(included.getList()).extracting(item -> item.loginId())
+                    .containsExactly(loginId);
+
+            var excluded = searchByMetadata(administrator, loginPrefix,
+                    List.of("!" + actorLoginId), null, null,
+                    new PageRequest(0, 1, List.of(new Sort("loginId", SortDirection.ASC))));
+            assertThat(excluded.getLength()).isEqualTo(1);
+            assertThat(excluded.getList()).singleElement().satisfies(item -> {
+                assertThat(item.loginId()).isEqualTo(inheritedLoginId);
+                assertThat(item.inherited()).isTrue();
+                assertThat(item.updaterLoginId()).isNull();
+                assertThat(item.lastUpdatedAt()).isNull();
+            });
         } finally {
-            dsl.deleteFrom(AI_USER_POLICY_AUDIT)
-                    .where(AI_USER_POLICY_AUDIT.TARGET_APP_USER_ID.eq(targetId)).execute();
             dsl.deleteFrom(AI_USER_POLICY).where(AI_USER_POLICY.APP_USER_ID.eq(targetId)).execute();
-            dsl.deleteFrom(APP_USER).where(APP_USER.APP_USER_ID.eq(targetId)).execute();
+            dsl.deleteFrom(APP_USER).where(APP_USER.APP_USER_ID.in(targetId, inheritedTargetId))
+                    .execute();
         }
     }
 
@@ -153,13 +169,12 @@ class AiAdminPolicyUsageIntegrationTest {
                 null, List.of(), null, null, new PageRequest(0, 10, List.of()));
     }
 
-    private void insertAudit(ULong targetId, ULong actorId, String action,
-                             LocalDateTime timestamp) {
-        dsl.insertInto(AI_USER_POLICY_AUDIT)
-                .set(AI_USER_POLICY_AUDIT.TARGET_APP_USER_ID, targetId)
-                .set(AI_USER_POLICY_AUDIT.ACTOR_APP_USER_ID, actorId)
-                .set(AI_USER_POLICY_AUDIT.ACTION, action)
-                .set(AI_USER_POLICY_AUDIT.CREATION_TIMESTAMP, timestamp).execute();
+    private org.oagi.score.gateway.http.common.model.PageResponse<
+            org.oagi.score.gateway.http.api.ai_management.policy.model.AiPolicyUserSummary>
+    searchByMetadata(ScoreUser actor, String loginId, List<String> updaterLoginIds,
+                     Instant updatedAfter, Instant updatedBefore, PageRequest pageRequest) {
+        return policies.searchUsers(actor, loginId, null, null, null, null, null, null,
+                null, updaterLoginIds, updatedAfter, updatedBefore, pageRequest);
     }
 
     private void insertCall(String requestId, ULong userId, ULong modelId, Instant timestamp,
