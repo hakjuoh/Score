@@ -12,15 +12,6 @@
     </mat-toolbar>
   </div>
 
-  @if (loadError) {
-    <div class="p-3">
-      <div class="detail-message" role="alert">
-        {{loadError}}
-        <button mat-stroked-button (click)="load()">Retry</button>
-      </div>
-    </div>
-  }
-
   <fieldset [disabled]="loading || saving || testing || !!loadError" class="admin-fieldset">
     <div class="p-3 container-fluid">
       <div class="row g-3">

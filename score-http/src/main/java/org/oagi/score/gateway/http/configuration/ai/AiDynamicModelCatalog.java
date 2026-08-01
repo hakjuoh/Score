@@ -62,10 +62,10 @@ public class AiDynamicModelCatalog {
 
     private String fingerprint() {
         var providers = dsl.select(org.jooq.impl.DSL.count(),
-                        org.jooq.impl.DSL.max(AI_PROVIDER.LAST_UPDATED_AT))
+                        org.jooq.impl.DSL.max(AI_PROVIDER.LAST_UPDATE_TIMESTAMP))
                 .from(AI_PROVIDER).fetchOne();
         var models = dsl.select(org.jooq.impl.DSL.count(),
-                        org.jooq.impl.DSL.max(AI_MODEL.LAST_UPDATED_AT))
+                        org.jooq.impl.DSL.max(AI_MODEL.LAST_UPDATE_TIMESTAMP))
                 .from(AI_MODEL).fetchOne();
         return providers.value1() + ":" + providers.value2() + ":"
                 + models.value1() + ":" + models.value2();

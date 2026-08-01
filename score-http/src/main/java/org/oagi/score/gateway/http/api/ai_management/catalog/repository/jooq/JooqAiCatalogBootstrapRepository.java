@@ -21,6 +21,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.oagi.score.gateway.http.common.model.ScoreUser.SYSTEM_USER_ID;
+
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL_REASONING_EFFORT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_PROVIDER;
@@ -28,6 +30,8 @@ import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.A
 /** jOOQ transaction boundary for the one-time legacy AI catalog import. */
 public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
         implements AiCatalogBootstrapRepository {
+
+    private static final ULong SYSTEM_USER = ULong.valueOf(SYSTEM_USER_ID);
 
     private final ApplicationSecretService secrets;
 
@@ -49,17 +53,17 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
             return;
         }
 
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        Map<String, AiProviderId> providerIds = insertProviders(tx, properties, now);
-        Map<String, AiModelId> modelIds = insertModels(tx, properties, providerIds, now);
-        insertDefaultModel(tx, properties, modelIds, now);
+        BootstrapAudit audit = systemAuditAt(LocalDateTime.now(ZoneOffset.UTC));
+        Map<String, AiProviderId> providerIds = insertProviders(tx, properties, audit);
+        Map<String, AiModelId> modelIds = insertModels(tx, properties, providerIds, audit);
+        insertDefaultModel(tx, properties, modelIds, audit);
     }
 
     private Map<String, AiProviderId> insertProviders(
-            DSLContext tx, ScoreAiProperties properties, LocalDateTime now) {
+            DSLContext tx, ScoreAiProperties properties, BootstrapAudit audit) {
         Map<String, AiProviderId> providerIds = new LinkedHashMap<>();
         properties.getProviders().forEach((name, provider) -> {
-            AppSecretId secretId = createSecret(tx, name, provider.getKey());
+            AppSecretId secretId = createSecret(tx, name, provider.getKey(), audit.createdBy());
             AiProviderId id = new AiProviderId(tx.insertInto(AI_PROVIDER)
                     .set(AI_PROVIDER.PROVIDER_NAME, name)
                     .set(AI_PROVIDER.PROVIDER_TYPE, AiProviderType.from(
@@ -69,8 +73,10 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
                     .set(AI_PROVIDER.API_VERSION, blankToNull(provider.getApiVersion()))
                     .set(AI_PROVIDER.API_KEY_SECRET_ID, valueOf(secretId))
                     .set(AI_PROVIDER.ENABLED, (byte) 1)
-                    .set(AI_PROVIDER.CREATED_AT, now)
-                    .set(AI_PROVIDER.LAST_UPDATED_AT, now)
+                    .set(AI_PROVIDER.CREATED_BY, audit.createdBy())
+                    .set(AI_PROVIDER.LAST_UPDATED_BY, audit.lastUpdatedBy())
+                    .set(AI_PROVIDER.CREATION_TIMESTAMP, audit.creationTimestamp())
+                    .set(AI_PROVIDER.LAST_UPDATE_TIMESTAMP, audit.lastUpdateTimestamp())
                     .returning(AI_PROVIDER.AI_PROVIDER_ID)
                     .fetchOne(AI_PROVIDER.AI_PROVIDER_ID).toBigInteger());
             providerIds.put(name, id);
@@ -78,12 +84,14 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
         return providerIds;
     }
 
-    private AppSecretId createSecret(DSLContext tx, String providerName, String plaintext) {
+    private AppSecretId createSecret(DSLContext tx, String providerName, String plaintext,
+                                     ULong actorId) {
         if (!StringUtils.hasText(plaintext)) return null;
         char[] value = plaintext.toCharArray();
         try {
             return new AppSecretId(secrets.create(
-                    tx, "ai-provider/" + providerName + "/api-key", value, null).toBigInteger());
+                    tx, "ai-provider/" + providerName + "/api-key", value,
+                    actorId).toBigInteger());
         } finally {
             ApplicationSecretService.clear(value);
         }
@@ -91,7 +99,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
 
     private Map<String, AiModelId> insertModels(
             DSLContext tx, ScoreAiProperties properties,
-            Map<String, AiProviderId> providerIds, LocalDateTime now) {
+            Map<String, AiProviderId> providerIds, BootstrapAudit audit) {
         Map<String, AiModelId> modelIds = new LinkedHashMap<>();
         int order = 0;
         for (Map.Entry<String, ScoreAiProperties.Model> entry : properties.getModels().entrySet()) {
@@ -121,8 +129,10 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
                                     ? budget.getToolOutputTokenLimit() : 32000L))
                     .set(AI_MODEL.MODEL_OPTIONS_JSON,
                             AiChatJsonSerializer.getInstance().serialize(modelOptions(model)))
-                    .set(AI_MODEL.CREATED_AT, now)
-                    .set(AI_MODEL.LAST_UPDATED_AT, now)
+                    .set(AI_MODEL.CREATED_BY, audit.createdBy())
+                    .set(AI_MODEL.LAST_UPDATED_BY, audit.lastUpdatedBy())
+                    .set(AI_MODEL.CREATION_TIMESTAMP, audit.creationTimestamp())
+                    .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, audit.lastUpdateTimestamp())
                     .returning(AI_MODEL.AI_MODEL_ID)
                     .fetchOne(AI_MODEL.AI_MODEL_ID).toBigInteger());
             modelIds.put(key, id);
@@ -196,7 +206,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
     }
 
     private void insertDefaultModel(DSLContext tx, ScoreAiProperties properties,
-                                    Map<String, AiModelId> modelIds, LocalDateTime now) {
+                                    Map<String, AiModelId> modelIds, BootstrapAudit audit) {
         AiModelId defaultModelId = modelIds.get(properties.getModelName());
         if (defaultModelId == null) {
             defaultModelId = modelIds.values().stream().findFirst().orElse(null);
@@ -204,7 +214,8 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
         if (defaultModelId == null) return;
         tx.update(AI_MODEL)
                 .set(AI_MODEL.DEFAULT_MODEL, (byte) 1)
-                .set(AI_MODEL.LAST_UPDATED_AT, now)
+                .set(AI_MODEL.LAST_UPDATED_BY, audit.lastUpdatedBy())
+                .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, audit.lastUpdateTimestamp())
                 .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(defaultModelId))).execute();
     }
 
@@ -223,5 +234,13 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
     private static ULong unsigned(Long value) {
         return value != null ? ULong.valueOf(value) : null;
     }
+
+    static BootstrapAudit systemAuditAt(LocalDateTime timestamp) {
+        return new BootstrapAudit(SYSTEM_USER, SYSTEM_USER, timestamp, timestamp);
+    }
+
+    record BootstrapAudit(ULong createdBy, ULong lastUpdatedBy,
+                          LocalDateTime creationTimestamp,
+                          LocalDateTime lastUpdateTimestamp) {}
 
 }

@@ -27,7 +27,6 @@ export class AiModelListComponent implements OnInit {
 
   request = new AiModelListRequest(this.navigation.queryParamMap);
   loading = false;
-  loadFailed = false;
   private loadSequence = 0;
   preferencesInfo: PreferencesInfo;
   loginIdList: string[] = [];
@@ -82,7 +81,6 @@ export class AiModelListComponent implements OnInit {
     if (this.invalidDateRange) return;
     const sequence = ++this.loadSequence;
     this.loading = true;
-    this.loadFailed = false;
     this.request.page = new PageRequest(this.sort.active, this.sort.direction,
       this.paginator.pageIndex, this.paginator.pageSize);
     this.service.searchModels(this.request).pipe(finalize(() => {
@@ -97,7 +95,6 @@ export class AiModelListComponent implements OnInit {
         if (sequence !== this.loadSequence) return;
         this.dataSource.data = [];
         this.paginator.length = 0;
-        this.loadFailed = true;
       }});
   }
   onSearch(): void { this.paginator.pageIndex = 0; this.load(); }

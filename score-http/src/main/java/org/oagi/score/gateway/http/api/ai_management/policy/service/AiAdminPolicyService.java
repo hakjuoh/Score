@@ -93,7 +93,7 @@ public class AiAdminPolicyService {
         return dsl.select(APP_USER.APP_USER_ID, APP_USER.LOGIN_ID, APP_USER.NAME,
                         APP_USER.ORGANIZATION, AI_USER_POLICY.AI_ENABLED,
                         AI_USER_POLICY.MULTI_AGENT_ENABLED,
-                        AI_USER_POLICY.LAST_UPDATED_AT, UPDATER_LOGIN_ID)
+                        AI_USER_POLICY.LAST_UPDATE_TIMESTAMP, UPDATER_LOGIN_ID)
                 .from(APP_USER)
                 .leftJoin(AI_USER_POLICY)
                 .on(AI_USER_POLICY.APP_USER_ID.eq(APP_USER.APP_USER_ID))
@@ -204,17 +204,17 @@ public class AiAdminPolicyService {
                 case "name" -> APP_USER.NAME;
                 case "organization" -> APP_USER.ORGANIZATION;
                 case "updater" -> UPDATER.LOGIN_ID;
-                case "updatedOn" -> AI_USER_POLICY.LAST_UPDATED_AT;
+                case "updatedOn" -> AI_USER_POLICY.LAST_UPDATE_TIMESTAMP;
                 default -> null;
             };
             if (field != null) order.add(sort.direction() == SortDirection.DESC
                     ? field.desc() : field.asc());
         });
-        if (order.isEmpty()) order.add(AI_USER_POLICY.LAST_UPDATED_AT.desc());
+        if (order.isEmpty()) order.add(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP.desc());
         order.add(APP_USER.APP_USER_ID.asc());
         List<AiPolicyUserSummary> page = dsl.select(APP_USER.APP_USER_ID, APP_USER.LOGIN_ID,
                         APP_USER.NAME, APP_USER.ORGANIZATION, AI_USER_POLICY.AI_ENABLED,
-                        AI_USER_POLICY.MULTI_AGENT_ENABLED, AI_USER_POLICY.LAST_UPDATED_AT,
+                        AI_USER_POLICY.MULTI_AGENT_ENABLED, AI_USER_POLICY.LAST_UPDATE_TIMESTAMP,
                         UPDATER_LOGIN_ID)
                 .from(APP_USER).leftJoin(AI_USER_POLICY)
                 .on(AI_USER_POLICY.APP_USER_ID.eq(APP_USER.APP_USER_ID))
@@ -242,11 +242,11 @@ public class AiAdminPolicyService {
         condition = condition.and(AiAdminPage.loginIdSelection(
                 UPDATER.LOGIN_ID, updaterLoginIdList));
         if (updatedAfter != null) {
-            condition = condition.and(AI_USER_POLICY.LAST_UPDATED_AT.ge(
+            condition = condition.and(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP.ge(
                     updatedAfter.atZone(ZoneOffset.UTC).toLocalDateTime()));
         }
         if (updatedBefore != null) {
-            condition = condition.and(AI_USER_POLICY.LAST_UPDATED_AT.lt(
+            condition = condition.and(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP.lt(
                     updatedBefore.atZone(ZoneOffset.UTC).toLocalDateTime()));
         }
         return condition;
@@ -262,7 +262,7 @@ public class AiAdminPolicyService {
                 effective.multiAgentEnabled(), effective.availableModels().size(),
                 quota.limitTokens(), quota.consumedTokens(), quota.reservedTokens(),
                 quota.remainingTokens(), requests.activeCountByUser(effective.userId()),
-                record.get(UPDATER_LOGIN_ID), utc(record.get(AI_USER_POLICY.LAST_UPDATED_AT)));
+                record.get(UPDATER_LOGIN_ID), utc(record.get(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP)));
     }
 
     private boolean matchesQuota(AiPolicyUserSummary user, String quota) {

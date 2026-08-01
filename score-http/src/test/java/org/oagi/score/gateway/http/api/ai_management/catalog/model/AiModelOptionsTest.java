@@ -1,11 +1,11 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.model;
 
 import org.junit.jupiter.api.Test;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeHaiku45Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeOpus47Profile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.Gpt54Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeFable5Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeFable5Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeHaiku45Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeOpus47Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai.Gpt54Profile;
 
 import java.util.Map;
 import java.util.List;

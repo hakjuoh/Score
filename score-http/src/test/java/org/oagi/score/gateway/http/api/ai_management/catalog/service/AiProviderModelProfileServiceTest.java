@@ -41,7 +41,7 @@ class AiProviderModelProfileServiceTest {
         assertThat(service("openai").modelProfiles(actor(), AiProviderId.from(1L)))
                 .extracting(profile -> profile.modelKey())
                 .containsExactly("gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna",
-                        "gpt-5_5", "gpt-5_5-pro", "gpt-5_4", "gpt-5_4-pro",
+                        "gpt-5_5", "gpt-5_4", "gpt-5_4-pro",
                         "gpt-5_4-mini", "gpt-5_4-nano");
     }
 

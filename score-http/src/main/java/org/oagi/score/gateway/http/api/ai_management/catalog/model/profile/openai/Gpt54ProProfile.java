@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai;
 
 public final class Gpt54ProProfile extends AbstractGpt5Profile {
     public Gpt54ProProfile() {

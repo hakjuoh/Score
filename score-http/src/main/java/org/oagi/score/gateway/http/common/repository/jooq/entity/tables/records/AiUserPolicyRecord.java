@@ -246,34 +246,34 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.created_at</code>. Date and time
-     * when the policy was created
+     * Setter for <code>oagi.ai_user_policy.creation_timestamp</code>. Date and
+     * time when the policy was created
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(14, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.created_at</code>. Date and time
-     * when the policy was created
+     * Getter for <code>oagi.ai_user_policy.creation_timestamp</code>. Date and
+     * time when the policy was created
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(14);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.last_updated_at</code>. Date and
-     * time when the policy was last updated
+     * Setter for <code>oagi.ai_user_policy.last_update_timestamp</code>. Date
+     * and time when the policy was last updated
      */
-    public void setLastUpdatedAt(LocalDateTime value) {
+    public void setLastUpdateTimestamp(LocalDateTime value) {
         set(15, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.last_updated_at</code>. Date and
-     * time when the policy was last updated
+     * Getter for <code>oagi.ai_user_policy.last_update_timestamp</code>. Date
+     * and time when the policy was last updated
      */
-    public LocalDateTime getLastUpdatedAt() {
+    public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(15);
     }
 
@@ -300,7 +300,7 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     /**
      * Create a detached, initialised AiUserPolicyRecord
      */
-    public AiUserPolicyRecord(ULong appUserId, Byte aiEnabled, String modelAccessMode, ULong defaultAiModelId, Byte multiAgentEnabled, UByte maxAgentsPerRequest, UByte maxActiveRequests, ULong maxOutputTokensPerCall, ULong maxTotalTokensPerRequest, String quotaPeriod, ULong quotaTokens, ULong policyVersion, ULong createdBy, ULong lastUpdatedBy, LocalDateTime createdAt, LocalDateTime lastUpdatedAt) {
+    public AiUserPolicyRecord(ULong appUserId, Byte aiEnabled, String modelAccessMode, ULong defaultAiModelId, Byte multiAgentEnabled, UByte maxAgentsPerRequest, UByte maxActiveRequests, ULong maxOutputTokensPerCall, ULong maxTotalTokensPerRequest, String quotaPeriod, ULong quotaTokens, ULong policyVersion, ULong createdBy, ULong lastUpdatedBy, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
         super(AiUserPolicy.AI_USER_POLICY);
 
         setAppUserId(appUserId);
@@ -317,8 +317,8 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
         setPolicyVersion(policyVersion);
         setCreatedBy(createdBy);
         setLastUpdatedBy(lastUpdatedBy);
-        setCreatedAt(createdAt);
-        setLastUpdatedAt(lastUpdatedAt);
+        setCreationTimestamp(creationTimestamp);
+        setLastUpdateTimestamp(lastUpdateTimestamp);
         resetTouchedOnNotNull();
     }
 }

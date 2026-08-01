@@ -48,8 +48,8 @@ public class ApplicationSecretService {
                 .set(APP_SECRET.ENCRYPTION_VERSION, UShort.valueOf(encrypted.version()))
                 .set(APP_SECRET.CREATED_BY, actorId)
                 .set(APP_SECRET.LAST_UPDATED_BY, actorId)
-                .set(APP_SECRET.CREATED_AT, now)
-                .set(APP_SECRET.LAST_UPDATED_AT, now)
+                .set(APP_SECRET.CREATION_TIMESTAMP, now)
+                .set(APP_SECRET.LAST_UPDATE_TIMESTAMP, now)
                 .returning(APP_SECRET.APP_SECRET_ID)
                 .fetchOne(APP_SECRET.APP_SECRET_ID);
     }
@@ -70,7 +70,7 @@ public class ApplicationSecretService {
                 .set(APP_SECRET.ENCRYPTION_KEY_ID, encrypted.keyId())
                 .set(APP_SECRET.ENCRYPTION_VERSION, UShort.valueOf(encrypted.version()))
                 .set(APP_SECRET.LAST_UPDATED_BY, actorId)
-                .set(APP_SECRET.LAST_UPDATED_AT, LocalDateTime.now(ZoneOffset.UTC))
+                .set(APP_SECRET.LAST_UPDATE_TIMESTAMP, LocalDateTime.now(ZoneOffset.UTC))
                 .where(APP_SECRET.APP_SECRET_ID.eq(secretId)).execute();
     }
 

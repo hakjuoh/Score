@@ -181,34 +181,34 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.created_at</code>. Date and time when
-     * the provider was created
+     * Setter for <code>oagi.ai_provider.creation_timestamp</code>. Date and
+     * time when the provider was created
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.created_at</code>. Date and time when
-     * the provider was created
+     * Getter for <code>oagi.ai_provider.creation_timestamp</code>. Date and
+     * time when the provider was created
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(10);
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.last_updated_at</code>. Date and time
-     * when the provider was last updated
+     * Setter for <code>oagi.ai_provider.last_update_timestamp</code>. Date and
+     * time when the provider was last updated
      */
-    public void setLastUpdatedAt(LocalDateTime value) {
+    public void setLastUpdateTimestamp(LocalDateTime value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.last_updated_at</code>. Date and time
-     * when the provider was last updated
+     * Getter for <code>oagi.ai_provider.last_update_timestamp</code>. Date and
+     * time when the provider was last updated
      */
-    public LocalDateTime getLastUpdatedAt() {
+    public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(11);
     }
 
@@ -235,7 +235,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     /**
      * Create a detached, initialised AiProviderRecord
      */
-    public AiProviderRecord(ULong aiProviderId, String providerName, String providerType, String baseUrl, String messagesUrl, String apiVersion, ULong apiKeySecretId, Byte enabled, ULong createdBy, ULong lastUpdatedBy, LocalDateTime createdAt, LocalDateTime lastUpdatedAt) {
+    public AiProviderRecord(ULong aiProviderId, String providerName, String providerType, String baseUrl, String messagesUrl, String apiVersion, ULong apiKeySecretId, Byte enabled, ULong createdBy, ULong lastUpdatedBy, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
         super(AiProvider.AI_PROVIDER);
 
         setAiProviderId(aiProviderId);
@@ -248,8 +248,8 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
         setEnabled(enabled);
         setCreatedBy(createdBy);
         setLastUpdatedBy(lastUpdatedBy);
-        setCreatedAt(createdAt);
-        setLastUpdatedAt(lastUpdatedAt);
+        setCreationTimestamp(creationTimestamp);
+        setLastUpdateTimestamp(lastUpdateTimestamp);
         resetTouchedOnNotNull();
     }
 }
