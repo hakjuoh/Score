@@ -103,7 +103,6 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
             AiProviderId providerId = providerIds.get(model.getProvider());
             validateModel(key, model, providerId);
             var budget = model.getContextBudget();
-            var capabilities = model.getModelCapabilities();
             AiModelId id = new AiModelId(tx.insertInto(AI_MODEL)
                     .set(AI_MODEL.PROVIDER_ID, valueOf(providerId))
                     .set(AI_MODEL.MODEL_KEY, key)
@@ -123,27 +122,8 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
                     .set(AI_MODEL.TOOL_OUTPUT_TOKEN_LIMIT,
                             ULong.valueOf(budget.getToolOutputTokenLimit() != null
                                     ? budget.getToolOutputTokenLimit() : 32000L))
-                    .set(AI_MODEL.PROVIDER_COMPACTION_ENABLED,
-                            (byte) (budget.isProviderCompactionEnabled() ? 1 : 0))
-                    .set(AI_MODEL.TEMPERATURE, model.getTemperature() != null
-                            ? java.math.BigDecimal.valueOf(model.getTemperature()) : null)
-                    .set(AI_MODEL.THINKING_BUDGET_TOKENS, unsigned(model.getThinkingBudgetTokens()))
-                    .set(AI_MODEL.ADAPTIVE_THINKING, (byte) (model.isAdaptiveThinking() ? 1 : 0))
-                    .set(AI_MODEL.OUTPUT_EFFORT, blankToNull(model.getOutputEffort()))
-                    .set(AI_MODEL.CACHE_STRATEGY, blankToNull(model.getCacheStrategy()))
-                    .set(AI_MODEL.REASONING_MODEL_SUPPORTED,
-                            nullableFlag(capabilities.getReasoningModel()))
-                    .set(AI_MODEL.OUTPUT_EFFORT_SUPPORTED,
-                            nullableFlag(capabilities.getOutputEffort()))
-                    .set(AI_MODEL.VERBOSITY_SUPPORTED,
-                            nullableFlag(capabilities.getVerbosity()))
-                    .set(AI_MODEL.TEMPERATURE_SUPPORTED,
-                            nullableFlag(capabilities.getTemperature()))
-                    .set(AI_MODEL.THINKING_MODES_JSON,
-                            AiChatJsonSerializer.getInstance().serialize(
-                                    capabilities.getThinkingModes()))
-                    .set(AI_MODEL.DEFAULT_THINKING,
-                            blankToNull(capabilities.getDefaultThinking()))
+                    .set(AI_MODEL.MODEL_OPTIONS_JSON,
+                            AiChatJsonSerializer.getInstance().serialize(modelOptions(model)))
                     .set(AI_MODEL.CREATED_AT, now)
                     .set(AI_MODEL.LAST_UPDATED_AT, now)
                     .returning(AI_MODEL.AI_MODEL_ID)
@@ -152,6 +132,33 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
             insertReasoningEfforts(tx, id, model);
         }
         return modelIds;
+    }
+
+    /** Builds the self-contained model-options document used when the catalog is reloaded. */
+    static Map<String, Object> modelOptions(ScoreAiProperties.Model model) {
+        Map<String, Object> options = new LinkedHashMap<>(model.getModelOptions());
+        var budget = model.getContextBudget();
+        var capabilities = model.getModelCapabilities();
+        put(options, "providerCompactionEnabled", budget.isProviderCompactionEnabled());
+        put(options, "temperature", model.getTemperature());
+        put(options, "thinkingBudgetTokens", model.getThinkingBudgetTokens());
+        put(options, "adaptiveThinking", model.isAdaptiveThinking());
+        put(options, "outputEffort", blankToNull(model.getOutputEffort()));
+        if (!options.containsKey("cacheStrategy")) {
+            put(options, "cacheStrategy", blankToNull(model.getCacheStrategy()));
+        }
+        put(options, "reasoningModelSupported", capabilities.getReasoningModel());
+        put(options, "outputEffortSupported", capabilities.getOutputEffort());
+        put(options, "verbositySupported", capabilities.getVerbosity());
+        put(options, "temperatureSupported", capabilities.getTemperature());
+        put(options, "thinkingModes", capabilities.getThinkingModes());
+        put(options, "defaultThinking", blankToNull(capabilities.getDefaultThinking()));
+        return Map.copyOf(options);
+    }
+
+    private static void put(Map<String, Object> target, String key, Object value) {
+        if (value == null) target.remove(key);
+        else target.put(key, value);
     }
 
     private static void validateModel(String key, ScoreAiProperties.Model model,
@@ -222,7 +229,4 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
         return value != null ? ULong.valueOf(value) : null;
     }
 
-    private static Byte nullableFlag(Boolean value) {
-        return value != null ? (byte) (value ? 1 : 0) : null;
-    }
 }

@@ -57,17 +57,17 @@ class ScoreAiConfigurationTest {
 
         assertThat(properties.getModels()).isEmpty();
         AiModelProfileCatalog.install(properties);
-        assertThat(properties.getModels()).hasSize(7).containsKey("claude-opus-5");
+        assertThat(properties.getModels()).hasSize(20).containsKey("claude-opus-5");
         assertThat(properties.getModels().get("claude-haiku-4_5").getReasoningEfforts())
                 .isEmpty();
         assertThat(properties.getModels().get("claude-haiku-4_5").getThinkingBudgetTokens())
                 .isEqualTo(4096);
         assertThat(properties.getModels().get("claude-opus-5").getReasoningEfforts())
                 .extracting(ScoreAiProperties.ReasoningEffort::getName)
-                .containsExactly("low", "medium", "high", "xhigh", "max");
+                .containsExactly("low", "medium", "high", "max");
         assertThat(properties.getModels().get("gpt-5_6-sol").getReasoningEfforts())
                 .extracting(ScoreAiProperties.ReasoningEffort::getName)
-                .containsExactly("disabled", "low", "medium", "high", "xhigh", "max");
+                .containsExactly("low", "medium", "high", "xhigh", "max");
         assertThat(properties.getModels().get("gpt-5_6-sol").getContextWindow())
                 .isEqualTo(1_050_000L);
         assertThat(properties.getTools().getToolSearch().isEnabled()).isTrue();
@@ -323,8 +323,13 @@ class ScoreAiConfigurationTest {
 
         AiModelProfileCatalog.install(properties);
         assertEquals(Set.of(
-                        "claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-4_5",
-                        "gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna"),
+                        "claude-haiku-4_5", "claude-sonnet-4_5", "claude-sonnet-4_6",
+                        "claude-sonnet-5", "claude-opus-4_5", "claude-opus-4_6",
+                        "claude-opus-4_7", "claude-opus-4_8", "claude-opus-5",
+                        "claude-fable-5", "claude-mythos-5",
+                        "gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna",
+                        "gpt-5_5", "gpt-5_5-pro", "gpt-5_4", "gpt-5_4-pro",
+                        "gpt-5_4-mini", "gpt-5_4-nano"),
                 properties.getModels().keySet());
         assertEquals("claude-opus-5", properties.getModels().get("claude-opus-5").getModel());
         assertEquals("claude-haiku-4-5", properties.getModels().get("claude-haiku-4_5").getModel());
@@ -357,9 +362,6 @@ class ScoreAiConfigurationTest {
         assertNull(environment.getProperty("score.ai.mcp.connection-name"));
         assertNull(environment.getProperty("score.ai.gateway.model-name"));
         Map.of(
-                "claude-fable-5", "xhigh",
-                "claude-opus-5", "xhigh",
-                "claude-sonnet-5", "xhigh",
                 "gpt-5_6-sol", "xhigh",
                 "gpt-5_6-terra", "xhigh",
                 "gpt-5_6-luna", "xhigh"

@@ -17,8 +17,11 @@ import com.openai.models.responses.ResponseInputImage;
 import com.openai.models.responses.ResponseInputItem;
 import com.openai.models.responses.ResponseInputText;
 import com.openai.models.responses.ResponseReasoningItem;
+import com.openai.models.responses.ResponseFormatTextJsonSchemaConfig;
 import com.openai.models.responses.ResponseTextConfig;
 import com.openai.models.responses.ToolChoiceOptions;
+import com.openai.models.responses.ToolChoiceFunction;
+import com.openai.models.ResponseFormatJsonObject;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
@@ -27,6 +30,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.content.Media;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -42,6 +46,13 @@ import java.util.Map;
 final class OpenAiResponsesRequestMapper {
 
     static final String REASONING_ITEMS_METADATA_KEY = "openai.responses.reasoning_items";
+    static final String SAFETY_IDENTIFIER_OPTION = "_score_safety_identifier";
+    static final String RESPONSE_FORMAT_NAME_OPTION = "_score_response_format_name";
+    static final String RESPONSE_FORMAT_STRICT_OPTION = "_score_response_format_strict";
+
+    private static final List<String> INTERNAL_EXTRA_BODY_OPTIONS = List.of(
+            SAFETY_IDENTIFIER_OPTION, RESPONSE_FORMAT_NAME_OPTION,
+            RESPONSE_FORMAT_STRICT_OPTION);
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
@@ -58,6 +69,8 @@ final class OpenAiResponsesRequestMapper {
     }
 
     ResponseCreateParams create(List<Message> messages, OpenAiChatOptions options) {
+        Map<String, Object> extraBody = options.getExtraBody() != null
+                ? options.getExtraBody() : Map.of();
         ResponseCreateParams.Builder builder = ResponseCreateParams.builder()
                 .model(StringUtils.hasText(options.getDeploymentName())
                         ? options.getDeploymentName() : options.getModel())
@@ -92,22 +105,99 @@ final class OpenAiResponsesRequestMapper {
                     .build());
             builder.addInclude(ResponseIncludable.REASONING_ENCRYPTED_CONTENT);
         }
-        if (StringUtils.hasText(options.getVerbosity())) {
-            builder.text(ResponseTextConfig.builder()
-                    .verbosity(ResponseTextConfig.Verbosity.of(
-                            options.getVerbosity().strip().toLowerCase()))
-                    .build());
+        Object safetyIdentifier = extraBody.get(SAFETY_IDENTIFIER_OPTION);
+        if (safetyIdentifier instanceof String value && StringUtils.hasText(value)) {
+            builder.safetyIdentifier(value);
         }
+        addResponseText(builder, options, extraBody);
+        addStreamOptions(builder, options);
         addTools(builder, options);
         addToolChoice(builder, options.getToolChoice());
-        if (!CollectionUtils.isEmpty(options.getExtraBody())) {
-            options.getExtraBody().forEach((key, value) ->
-                    builder.putAdditionalBodyProperty(key, JsonValue.from(value)));
+        if (!extraBody.isEmpty()) {
+            extraBody.forEach((key, value) -> {
+                if (!INTERNAL_EXTRA_BODY_OPTIONS.contains(key)) {
+                    builder.putAdditionalBodyProperty(key, JsonValue.from(value));
+                }
+            });
         }
         if (!CollectionUtils.isEmpty(options.getCustomHeaders())) {
             options.getCustomHeaders().forEach(builder::putAdditionalHeader);
         }
         return builder.build();
+    }
+
+    private void addResponseText(ResponseCreateParams.Builder builder,
+                                 OpenAiChatOptions options,
+                                 Map<String, Object> extraBody) {
+        ResponseTextConfig.Builder text = ResponseTextConfig.builder();
+        boolean configured = false;
+        if (StringUtils.hasText(options.getVerbosity())) {
+            text.verbosity(ResponseTextConfig.Verbosity.of(
+                    options.getVerbosity().strip().toLowerCase()));
+            configured = true;
+        }
+        OpenAiChatModel.ResponseFormat responseFormat = options.getResponseFormat();
+        if (responseFormat != null) {
+            switch (responseFormat.getType()) {
+                case JSON_OBJECT -> {
+                    text.format(ResponseFormatJsonObject.builder().build());
+                    configured = true;
+                }
+                case JSON_SCHEMA -> {
+                    text.format(jsonSchemaFormat(responseFormat, extraBody));
+                    configured = true;
+                }
+                case TEXT -> { }
+            }
+        }
+        if (configured) builder.text(text.build());
+    }
+
+    private ResponseFormatTextJsonSchemaConfig jsonSchemaFormat(
+            OpenAiChatModel.ResponseFormat responseFormat,
+            Map<String, Object> extraBody) {
+        if (!StringUtils.hasText(responseFormat.getJsonSchema())) {
+            throw new IllegalArgumentException("A JSON_SCHEMA response format requires a schema.");
+        }
+        try {
+            Map<String, Object> values = objectMapper.readValue(
+                    responseFormat.getJsonSchema(), MAP_TYPE);
+            Map<String, JsonValue> schemaValues = new LinkedHashMap<>();
+            values.forEach((key, value) -> schemaValues.put(key, JsonValue.from(value)));
+            Object configuredName = extraBody.get(RESPONSE_FORMAT_NAME_OPTION);
+            String name = configuredName instanceof String value && StringUtils.hasText(value)
+                    ? value : "custom_schema";
+            ResponseFormatTextJsonSchemaConfig.Builder format =
+                    ResponseFormatTextJsonSchemaConfig.builder()
+                            .name(name)
+                            .schema(ResponseFormatTextJsonSchemaConfig.Schema.builder()
+                                    .putAllAdditionalProperties(schemaValues)
+                                    .build());
+            Object strict = extraBody.get(RESPONSE_FORMAT_STRICT_OPTION);
+            if (strict instanceof Boolean value) format.strict(value);
+            return format.build();
+        } catch (JsonProcessingException failure) {
+            throw new IllegalArgumentException("Invalid OpenAI response-format schema.", failure);
+        }
+    }
+
+    private void addStreamOptions(ResponseCreateParams.Builder builder,
+                                  OpenAiChatOptions options) {
+        OpenAiChatOptions.StreamOptions configured = options.getStreamOptions();
+        if (configured == null) return;
+        ResponseCreateParams.StreamOptions.Builder stream =
+                ResponseCreateParams.StreamOptions.builder();
+        boolean present = false;
+        if (configured.includeObfuscation() != null) {
+            stream.includeObfuscation(configured.includeObfuscation());
+            present = true;
+        }
+        if (!CollectionUtils.isEmpty(configured.additionalProperties())) {
+            configured.additionalProperties().forEach((key, value) ->
+                    stream.putAdditionalProperty(key, JsonValue.from(value)));
+            present = true;
+        }
+        if (present) builder.streamOptions(stream.build());
     }
 
     private List<ResponseInputItem> toInput(List<Message> messages) {
@@ -270,12 +360,38 @@ final class OpenAiResponsesRequestMapper {
 
     private void addToolChoice(ResponseCreateParams.Builder builder, Object toolChoice) {
         if (toolChoice == null) return;
-        if (toolChoice instanceof String value
-                && List.of("auto", "none", "required").contains(value.toLowerCase())) {
-            builder.toolChoice(ToolChoiceOptions.of(value.toLowerCase()));
+        if (toolChoice instanceof String value) {
+            String normalized = value.strip();
+            if (List.of("auto", "none", "required").contains(normalized.toLowerCase())) {
+                builder.toolChoice(ToolChoiceOptions.of(normalized.toLowerCase()));
+                return;
+            }
+            if (normalized.startsWith("{")) {
+                try {
+                    addNamedToolChoice(builder, objectMapper.readValue(normalized, MAP_TYPE));
+                    return;
+                } catch (JsonProcessingException failure) {
+                    throw new IllegalArgumentException(
+                            "Invalid Responses API tool choice JSON.", failure);
+                }
+            }
+        }
+        if (toolChoice instanceof Map<?, ?> value) {
+            addNamedToolChoice(builder, value);
             return;
         }
         throw new IllegalArgumentException(
                 "Unsupported Responses API tool choice: " + toolChoice);
+    }
+
+    private void addNamedToolChoice(ResponseCreateParams.Builder builder, Map<?, ?> value) {
+        Object function = value.get("function");
+        Object name = function instanceof Map<?, ?> map ? map.get("name") : null;
+        if (!"function".equals(value.get("type"))
+                || !(name instanceof String text) || !StringUtils.hasText(text)) {
+            throw new IllegalArgumentException(
+                    "A named Responses API tool choice requires function.name.");
+        }
+        builder.toolChoice(ToolChoiceFunction.builder().name(text).build());
     }
 }

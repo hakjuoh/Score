@@ -1,5 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
 
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelOptions;
+
 import java.util.List;
 
 /** Flattened API/read-model projection assembled from the capabilities a profile implements. */
@@ -15,6 +17,8 @@ public record AiModelProfileView(
         Boolean verbositySupported, Boolean temperatureSupported,
         List<String> thinkingModes, String defaultThinking,
         List<ReasoningEffort> reasoningEfforts,
+        List<AiModelOption> options,
+        boolean chatCompletionsCompatible,
         ModelConfigurationConstraints configurationConstraints,
         ModelCapabilityConstraints capabilityConstraints) {
 
@@ -91,6 +95,8 @@ public record AiModelProfileView(
                 thinking != null ? thinking.getDefaultThinking() : null,
                 efforts != null ? List.copyOf(efforts.getReasoningEfforts())
                         : output != null ? List.copyOf(output.getOutputEfforts()) : List.of(),
+                AiModelOptions.editableOptions(profile),
+                profile.isChatCompletionsCompatible(),
                 configuration, capabilities);
     }
 

@@ -286,6 +286,7 @@ public class ScoreAiProperties {
         private boolean adaptiveThinking;
         private String outputEffort;
         private String cacheStrategy;
+        private Map<String, Object> modelOptions = new LinkedHashMap<>();
         private ModelCapabilities modelCapabilities = new ModelCapabilities();
 
         public AiModelId getCatalogId() { return catalogId; }
@@ -322,6 +323,11 @@ public class ScoreAiProperties {
         public void setOutputEffort(String outputEffort) { this.outputEffort = outputEffort; }
         public String getCacheStrategy() { return cacheStrategy; }
         public void setCacheStrategy(String cacheStrategy) { this.cacheStrategy = cacheStrategy; }
+        public Map<String, Object> getModelOptions() { return modelOptions; }
+        public void setModelOptions(Map<String, Object> modelOptions) {
+            this.modelOptions = modelOptions != null
+                    ? new LinkedHashMap<>(modelOptions) : new LinkedHashMap<>();
+        }
         public ModelCapabilities getModelCapabilities() { return modelCapabilities; }
         public void setModelCapabilities(ModelCapabilities modelCapabilities) {
             this.modelCapabilities = modelCapabilities != null

@@ -1,0 +1,68 @@
+:host {
+  display: block;
+}
+
+.json-editor {
+  background: #fafafa;
+  border: 1px solid rgba(0, 0, 0, .38);
+  border-radius: 4px;
+  min-height: 9rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.json-editor:focus-within {
+  border-color: #3f51b5;
+  box-shadow: inset 0 0 0 1px #3f51b5;
+}
+
+.json-editor-invalid {
+  border-color: #f44336;
+}
+
+.json-editor-highlight,
+.json-editor-input {
+  border: 0;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .875rem;
+  inset: 0;
+  line-height: 1.5;
+  margin: 0;
+  min-height: 9rem;
+  overflow: auto;
+  padding: .75rem;
+  tab-size: 2;
+  white-space: pre;
+  width: 100%;
+}
+
+.json-editor-highlight {
+  pointer-events: none;
+  position: absolute;
+}
+
+.json-editor-input {
+  background: transparent;
+  caret-color: #202124;
+  color: transparent;
+  position: relative;
+  resize: vertical;
+  -webkit-text-fill-color: transparent;
+}
+
+.json-editor-input::selection {
+  background: rgba(63, 81, 181, .25);
+}
+
+:host ::ng-deep .json-key { color: #7b1fa2; }
+:host ::ng-deep .json-string { color: #2e7d32; }
+:host ::ng-deep .json-number { color: #1565c0; }
+:host ::ng-deep .json-boolean { color: #c62828; }
+:host ::ng-deep .json-null { color: #6d4c41; }
+
+.json-editor-error {
+  display: block;
+  font-size: .75rem;
+  margin-top: .35rem;
+}

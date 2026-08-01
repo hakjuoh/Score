@@ -25,9 +25,11 @@
     <div class="p-3 container-fluid">
       <div class="row g-3">
         <div class="col-xl-6 col-12">
-          <mat-card class="h-100">
-            <mat-card-header><mat-card-title>Model Identity</mat-card-title></mat-card-header>
-            <mat-card-content class="mat-card-container">
+          <mat-expansion-panel class="h-100 static-detail-panel" expanded disabled hideToggle>
+            <mat-expansion-panel-header>
+              <mat-panel-title>Model Identity</mat-panel-title>
+            </mat-expansion-panel-header>
+            <div class="mat-card-container">
               <div class="detail-form-grid">
                 <mat-form-field>
                   <mat-label>Provider</mat-label>
@@ -70,157 +72,141 @@
                   <input matInput type="number" min="0" [(ngModel)]="form.sortOrder">
                 </mat-form-field>
               </div>
-            </mat-card-content>
-          </mat-card>
+            </div>
+          </mat-expansion-panel>
         </div>
 
         <div class="col-xl-6 col-12">
-          <mat-card class="h-100">
-            <mat-card-header><mat-card-title>Context and Token Limits</mat-card-title></mat-card-header>
-            <mat-card-content class="mat-card-container">
+          <mat-expansion-panel class="h-100 static-detail-panel" expanded disabled hideToggle>
+            <mat-expansion-panel-header>
+              <mat-panel-title>Context and Token Limits</mat-panel-title>
+            </mat-expansion-panel-header>
+            <div class="mat-card-container">
               <div class="detail-form-grid">
-                <mat-form-field>
-                  <mat-label>Context Window</mat-label>
-                  <input matInput type="number"
-                    aria-describedby="model-validation-summary"
-                    [min]="selectedModelProfile?.configurationConstraints?.contextWindow?.minimum"
-                    [max]="selectedModelProfile?.configurationConstraints?.contextWindow?.maximum"
-                    [(ngModel)]="form.contextWindow">
-                  <mat-hint>Maximum {{selectedModelProfile?.configurationConstraints?.contextWindow?.maximum | number}}</mat-hint>
-                </mat-form-field>
-                <mat-form-field>
-                  <mat-label>Max Output Tokens</mat-label>
-                  <input matInput type="number"
-                    aria-describedby="model-validation-summary"
-                    [min]="selectedModelProfile?.configurationConstraints?.maxOutputTokens?.minimum"
-                    [max]="selectedModelProfile?.configurationConstraints?.maxOutputTokens?.maximum"
-                    [(ngModel)]="form.maxTokens">
-                  <mat-hint>Maximum {{selectedModelProfile?.configurationConstraints?.maxOutputTokens?.maximum | number}}</mat-hint>
-                </mat-form-field>
-                <mat-form-field><mat-label>Output Reserve Tokens</mat-label><input matInput type="number" aria-describedby="model-validation-summary" [min]="selectedModelProfile?.configurationConstraints?.outputReserveTokens?.minimum" [max]="selectedModelProfile?.configurationConstraints?.outputReserveTokens?.maximum" [(ngModel)]="form.outputReserveTokens"></mat-form-field>
-                <mat-form-field><mat-label>Auto-compact Threshold</mat-label><input matInput type="number" aria-describedby="model-validation-summary" [min]="selectedModelProfile?.configurationConstraints?.autoCompactThresholdTokens?.minimum" [max]="selectedModelProfile?.configurationConstraints?.autoCompactThresholdTokens?.maximum" [(ngModel)]="form.autoCompactThresholdTokens"></mat-form-field>
-                <mat-form-field><mat-label>Emergency Headroom</mat-label><input matInput type="number" aria-describedby="model-validation-summary" [min]="selectedModelProfile?.configurationConstraints?.emergencyHeadroomTokens?.minimum" [max]="selectedModelProfile?.configurationConstraints?.emergencyHeadroomTokens?.maximum" [(ngModel)]="form.emergencyHeadroomTokens"></mat-form-field>
-                <mat-form-field><mat-label>Tool Output Token Limit</mat-label><input matInput type="number" aria-describedby="model-validation-summary" [min]="selectedModelProfile?.configurationConstraints?.toolOutputTokenLimit?.minimum" [max]="selectedModelProfile?.configurationConstraints?.toolOutputTokenLimit?.maximum" [(ngModel)]="form.toolOutputTokenLimit"></mat-form-field>
+                <div class="token-limit-field">
+                  <mat-form-field>
+                    <mat-label>Context Window</mat-label>
+                    <input matInput type="number" [min]="tokenMinimum('contextWindow')"
+                      [max]="tokenMaximum('contextWindow')" [ngModel]="form.contextWindow"
+                      [attr.aria-describedby]="validationError('contextWindow') ? validationErrorId('contextWindow') : null"
+                      (ngModelChange)="setTokenInputValue('contextWindow', $event)">
+                  </mat-form-field>
+                  @if (validationError('contextWindow')) {
+                    <mat-error class="inline-model-error" role="alert" [id]="validationErrorId('contextWindow')">
+                      {{validationError('contextWindow')}}
+                    </mat-error>
+                  }
+                </div>
+                <div class="token-limit-field">
+                  <mat-form-field>
+                    <mat-label>Max Output Tokens</mat-label>
+                    <input matInput type="number" [min]="tokenMinimum('maxTokens')"
+                      [max]="tokenMaximum('maxTokens')" [ngModel]="form.maxTokens"
+                      [attr.aria-describedby]="validationError('maxTokens') ? validationErrorId('maxTokens') : null"
+                      (ngModelChange)="setTokenInputValue('maxTokens', $event)">
+                  </mat-form-field>
+                  @if (validationError('maxTokens')) {
+                    <mat-error class="inline-model-error" role="alert" [id]="validationErrorId('maxTokens')">
+                      {{validationError('maxTokens')}}
+                    </mat-error>
+                  }
+                </div>
+                <div class="token-limit-field">
+                  <mat-form-field>
+                    <mat-label>Output Reserve Tokens</mat-label>
+                    <input matInput type="number" [min]="tokenMinimum('outputReserveTokens')"
+                      [max]="tokenMaximum('outputReserveTokens')"
+                      [ngModel]="form.outputReserveTokens"
+                      [attr.aria-describedby]="validationError('outputReserveTokens') ? validationErrorId('outputReserveTokens') : null"
+                      (ngModelChange)="setTokenInputValue('outputReserveTokens', $event)">
+                  </mat-form-field>
+                  @if (validationError('outputReserveTokens')) {
+                    <mat-error class="inline-model-error" role="alert" [id]="validationErrorId('outputReserveTokens')">
+                      {{validationError('outputReserveTokens')}}
+                    </mat-error>
+                  }
+                </div>
+                <div class="token-limit-field">
+                  <mat-form-field>
+                    <mat-label>Auto-compact Threshold</mat-label>
+                    <input matInput type="number" [min]="tokenMinimum('autoCompactThresholdTokens')"
+                      [max]="tokenMaximum('autoCompactThresholdTokens')"
+                      [ngModel]="form.autoCompactThresholdTokens"
+                      [attr.aria-describedby]="validationError('autoCompactThresholdTokens') ? validationErrorId('autoCompactThresholdTokens') : null"
+                      (ngModelChange)="setTokenInputValue('autoCompactThresholdTokens', $event)">
+                  </mat-form-field>
+                  @if (validationError('autoCompactThresholdTokens')) {
+                    <mat-error class="inline-model-error" role="alert" [id]="validationErrorId('autoCompactThresholdTokens')">
+                      {{validationError('autoCompactThresholdTokens')}}
+                    </mat-error>
+                  }
+                </div>
+                <div class="token-limit-field">
+                  <mat-form-field>
+                    <mat-label>Emergency Headroom</mat-label>
+                    <input matInput type="number" [min]="tokenMinimum('emergencyHeadroomTokens')"
+                      [max]="tokenMaximum('emergencyHeadroomTokens')"
+                      [ngModel]="form.emergencyHeadroomTokens"
+                      [attr.aria-describedby]="validationError('emergencyHeadroomTokens') ? validationErrorId('emergencyHeadroomTokens') : null"
+                      (ngModelChange)="setTokenInputValue('emergencyHeadroomTokens', $event)">
+                  </mat-form-field>
+                  @if (validationError('emergencyHeadroomTokens')) {
+                    <mat-error class="inline-model-error" role="alert" [id]="validationErrorId('emergencyHeadroomTokens')">
+                      {{validationError('emergencyHeadroomTokens')}}
+                    </mat-error>
+                  }
+                </div>
                 @if (selectedModelProfile?.configurationConstraints?.thinkingBudgetTokens?.maximum !== null
                   && selectedModelProfile?.configurationConstraints?.thinkingBudgetTokens?.maximum !== undefined) {
-                  <mat-form-field>
-                    <mat-label>Thinking Token Budget</mat-label>
-                    <input matInput type="number"
-                      aria-describedby="model-validation-summary"
-                      [min]="selectedModelProfile?.configurationConstraints?.thinkingBudgetTokens?.minimum"
-                      [max]="selectedModelProfile?.configurationConstraints?.thinkingBudgetTokens?.maximum"
-                      [(ngModel)]="form.thinkingBudgetTokens">
-                    <mat-hint>{{selectedModelProfile?.configurationConstraints?.thinkingBudgetTokens?.minimum | number}}–{{selectedModelProfile?.configurationConstraints?.thinkingBudgetTokens?.maximum | number}}</mat-hint>
-                  </mat-form-field>
+                  <div class="token-limit-field">
+                    <mat-form-field>
+                      <mat-label>Thinking Token Budget</mat-label>
+                      <input matInput type="number" [min]="tokenMinimum('thinkingBudgetTokens')"
+                        [max]="tokenMaximum('thinkingBudgetTokens')"
+                        [ngModel]="form.thinkingBudgetTokens"
+                        [attr.aria-describedby]="validationError('thinkingBudgetTokens') ? validationErrorId('thinkingBudgetTokens') : null"
+                        (ngModelChange)="setTokenInputValue('thinkingBudgetTokens', $event)">
+                    </mat-form-field>
+                    @if (validationError('thinkingBudgetTokens')) {
+                      <mat-error class="inline-model-error" role="alert" [id]="validationErrorId('thinkingBudgetTokens')">
+                        {{validationError('thinkingBudgetTokens')}}
+                      </mat-error>
+                    }
+                  </div>
                 }
                 @if (selectedModelProfile?.capabilityConstraints?.temperature?.supported) {
-                  <mat-form-field><mat-label>Temperature</mat-label><input matInput type="number" aria-describedby="model-validation-summary" [min]="selectedModelProfile?.configurationConstraints?.temperature?.minimum" [max]="selectedModelProfile?.configurationConstraints?.temperature?.maximum" step="0.1" [(ngModel)]="form.temperature"></mat-form-field>
+                  <div class="token-limit-field">
+                    <mat-form-field>
+                      <mat-label>Temperature</mat-label>
+                      <input matInput type="number"
+                        [min]="selectedModelProfile?.configurationConstraints?.temperature?.minimum"
+                        [max]="selectedModelProfile?.configurationConstraints?.temperature?.maximum"
+                        [attr.aria-describedby]="validationError('temperature') ? validationErrorId('temperature') : null"
+                        step="0.1" [(ngModel)]="form.temperature">
+                    </mat-form-field>
+                    @if (validationError('temperature')) {
+                      <mat-error class="inline-model-error" role="alert" [id]="validationErrorId('temperature')">
+                        {{validationError('temperature')}}
+                      </mat-error>
+                    }
+                  </div>
                 }
               </div>
-            </mat-card-content>
-          </mat-card>
+            </div>
+          </mat-expansion-panel>
         </div>
       </div>
 
-      <mat-card class="mt-3">
-        <mat-card-header>
-          <mat-card-title>Model Capabilities</mat-card-title>
-          <mat-card-subtitle>{{selectedModelProfile?.displayName || 'Select a model'}}</mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content class="mat-card-container">
-          @if (selectedModelProfile) {
-            <div class="capability-editor-grid">
-              @if (selectedModelProfile.capabilityConstraints.reasoningOptions.supported) {
-                <mat-checkbox [ngModel]="capabilityEnabled(form.reasoningModelSupported)"
-                  (ngModelChange)="setReasoningModelEnabled($event)">
-                  Reasoning Options
-                </mat-checkbox>
-              }
-              @if (selectedModelProfile.capabilityConstraints.outputEffort.supported) {
-                <mat-checkbox [ngModel]="capabilityEnabled(form.outputEffortSupported)"
-                  (ngModelChange)="setOutputEffortEnabled($event)">
-                  Output Effort
-                </mat-checkbox>
-              }
-              @if (selectedModelProfile.capabilityConstraints.verbosity.supported) {
-                <mat-checkbox [ngModel]="capabilityEnabled(form.verbositySupported)"
-                  (ngModelChange)="form.verbositySupported = $event">Verbosity</mat-checkbox>
-              }
-              @if (selectedModelProfile.capabilityConstraints.temperature.supported) {
-                <mat-checkbox [ngModel]="capabilityEnabled(form.temperatureSupported)"
-                  (ngModelChange)="setTemperatureEnabled($event)">
-                  Temperature
-                </mat-checkbox>
-              }
-              @if (selectedModelProfile.capabilityConstraints.providerCompaction.supported) {
-                <mat-checkbox [(ngModel)]="form.providerCompactionEnabled">Provider Compaction</mat-checkbox>
-              }
-            </div>
-
-            @if (unsupportedCapabilities.length > 0) {
-              <p class="unsupported-capabilities">
-                Not supported: {{unsupportedCapabilities.join(', ')}}
-              </p>
-            }
-
-            <div class="detail-form-grid capability-select-grid">
-              @if (selectedModelProfile.capabilityConstraints.outputEffort.supported
-                && capabilityEnabled(form.outputEffortSupported)) {
-                <mat-form-field>
-                  <mat-label>Output Effort</mat-label>
-                  <mat-select [(ngModel)]="form.outputEffort">
-                    <mat-option [value]="null">Provider Default</mat-option>
-                    @for (effort of selectedModelProfile.reasoningEfforts; track effort.name) {
-                      <mat-option [value]="effort.name">{{effort.displayName}}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-              }
-              @if (selectedModelProfile.cacheStrategy) {
-                <mat-form-field>
-                  <mat-label>Cache Strategy</mat-label>
-                  <mat-select [(ngModel)]="form.cacheStrategy">
-                    <mat-option [value]="null">Disabled</mat-option>
-                    <mat-option [value]="selectedModelProfile.cacheStrategy">
-                      {{selectedModelProfile.cacheStrategy}}
-                    </mat-option>
-                  </mat-select>
-                </mat-form-field>
-              }
-              @if (selectedModelProfile.thinkingModes.length > 0) {
-                <fieldset class="thinking-mode-control">
-                  <legend class="field-label">Thinking Modes</legend>
-                  @for (mode of selectedModelProfile.thinkingModes; track mode) {
-                    <mat-checkbox [ngModel]="isThinkingModeEnabled(mode)"
-                      (ngModelChange)="setThinkingModeEnabled(mode, $event)">{{mode}}</mat-checkbox>
-                  }
-                </fieldset>
-                <mat-form-field>
-                  <mat-label>Default Thinking Mode</mat-label>
-                  <mat-select [(ngModel)]="form.defaultThinking">
-                    <mat-option [value]="null">None</mat-option>
-                    @for (mode of form.thinkingModes; track mode) {
-                      <mat-option [value]="mode">{{mode}}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-              }
-            </div>
-          } @else {
-            <p class="hint">Select a provider and model to view its capabilities.</p>
-          }
-        </mat-card-content>
-      </mat-card>
-
-      @if ((selectedModelProfile?.reasoningEfforts?.length || 0) > 0) {
-        <mat-card class="mt-3">
-          <mat-card-header>
-            <mat-card-title>Reasoning Efforts</mat-card-title>
-          </mat-card-header>
-          <mat-card-content class="mat-card-container">
+      @if (availableReasoningEfforts.length > 0) {
+        <mat-expansion-panel class="mt-3 reasoning-efforts-card static-detail-panel"
+          expanded disabled hideToggle>
+          <mat-expansion-panel-header>
+            <mat-panel-title>Reasoning Efforts</mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="mat-card-container">
             <mat-radio-group aria-label="Default reasoning effort"
               [ngModel]="defaultEffortName" (ngModelChange)="setDefaultEffort($event)">
-              @for (effort of selectedModelProfile?.reasoningEfforts || []; track effort.name) {
+              @for (effort of availableReasoningEfforts; track effort.name) {
                 <div class="reasoning-effort-row">
                   <mat-checkbox [ngModel]="isEffortEnabled(effort.name)"
                     (ngModelChange)="setEffortEnabled(effort, $event)">
@@ -233,18 +219,108 @@
                 </div>
               }
             </mat-radio-group>
-          </mat-card-content>
-        </mat-card>
+            @if (validationError('reasoningEfforts')) {
+              <mat-error class="reasoning-effort-error">{{validationError('reasoningEfforts')}}</mat-error>
+            }
+          </div>
+        </mat-expansion-panel>
       }
 
-      @if (selectedModelProfile && validationErrors.length > 0) {
-        <div id="model-validation-summary" class="detail-message model-validation-summary mt-3"
-          role="alert">
-          <span>Correct the following model settings:</span>
-          <ul>
-            @for (error of validationErrors; track error) { <li>{{error}}</li> }
-          </ul>
-        </div>
+      @if (modelOptions.length > 0) {
+        <mat-expansion-panel #modelOptionsPanel class="mt-3 model-options-panel"
+          [expanded]="modelOptionsExpanded"
+          (opened)="modelOptionsExpanded = true" (closed)="modelOptionsExpanded = false">
+          <mat-expansion-panel-header class="model-options-panel-header">
+            <mat-panel-title>Model Options</mat-panel-title>
+            <mat-panel-description class="model-options-header-description">
+              @if (modelOptionsExpanded) {
+                <mat-form-field class="model-option-search" subscriptSizing="dynamic"
+                  (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+                  <mat-label>Search</mat-label>
+                  <mat-icon matPrefix>search</mat-icon>
+                  <input matInput type="search" data-testid="model-option-search"
+                    [(ngModel)]="modelOptionQuery" autocomplete="off">
+                </mat-form-field>
+              }
+              <span class="model-options-count">{{modelOptions.length}} options</span>
+            </mat-panel-description>
+          </mat-expansion-panel-header>
+
+          @if (selectedModelProfile?.chatCompletionsCompatible === false) {
+            <p class="profile-compatibility-warning" role="note">
+              OpenAI exposes this model through the Responses API, so Spring AI
+              OpenAiChatModel cannot execute it through Chat Completions.
+            </p>
+          }
+
+          <div class="profile-option-grid">
+            @for (option of filteredModelOptions; track option.key) {
+              <div class="profile-option" [attr.data-option-type]="option.type"
+                [attr.data-option-key]="option.key">
+                <div class="profile-option-label">
+                  <label [attr.for]="optionControlId(option.key)">{{optionLabel(option.key)}}</label>
+                  <span class="profile-option-type" aria-label="Option type">{{option.type}}</span>
+                </div>
+                <div class="profile-option-value">
+                  @if (option.type === 'boolean') {
+                    <mat-form-field subscriptSizing="dynamic">
+                      <select matNativeControl [ngModel]="booleanOptionValue(option)"
+                        (ngModelChange)="setOptionValue(option, $event)"
+                        [id]="optionControlId(option.key)"
+                        [attr.aria-describedby]="optionDescriptionId(option.key)">
+                        <option value=""></option>
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                      </select>
+                    </mat-form-field>
+                  } @else if (option.type === 'json') {
+                    <score-json-option-editor
+                      [value]="jsonOptionText(option)"
+                      (valueChange)="setJsonOptionValue(option, $event)"
+                      [controlId]="optionControlId(option.key)"
+                      [describedBy]="optionAriaDescribedBy(option)"
+                      [errorId]="optionErrorId(option.key)"
+                      [error]="jsonOptionError(option.key)"/>
+                  } @else {
+                    <mat-form-field subscriptSizing="dynamic">
+                      @if (option.type === 'enum') {
+                        <select matNativeControl [ngModel]="optionInputValue(option) ?? ''"
+                          (ngModelChange)="setOptionValue(option, $event)"
+                          [id]="optionControlId(option.key)"
+                          [attr.aria-describedby]="optionDescriptionId(option.key)">
+                          <option value=""></option>
+                          @for (allowedValue of option.allowedValues; track allowedValue) {
+                            <option [value]="allowedValue">{{allowedValue}}</option>
+                          }
+                        </select>
+                      } @else if (option.type === 'integer' || option.type === 'decimal') {
+                        <input matInput type="number" [step]="option.type === 'integer' ? 1 : 'any'"
+                          [id]="optionControlId(option.key)"
+                          [ngModel]="optionInputValue(option)"
+                          (ngModelChange)="setOptionValue(option, $event)"
+                          [attr.aria-describedby]="optionDescriptionId(option.key)">
+                      } @else {
+                        <input matInput [id]="optionControlId(option.key)"
+                          [ngModel]="optionInputValue(option) ?? ''"
+                          (ngModelChange)="setOptionValue(option, $event)"
+                          [attr.aria-describedby]="optionDescriptionId(option.key)">
+                      }
+                    </mat-form-field>
+                  }
+                  <span class="profile-option-description"
+                    [id]="optionDescriptionId(option.key)">
+                    {{option.description}}
+                    @if (option.type === 'enum') {
+                      Allowed: {{option.allowedValues.join(', ')}}.
+                    }
+                  </span>
+                </div>
+              </div>
+            } @empty {
+              <p class="model-option-empty" role="status">No model options match your search.</p>
+            }
+          </div>
+        </mat-expansion-panel>
       }
 
     </div>

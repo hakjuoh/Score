@@ -4,7 +4,6 @@
 package org.oagi.score.gateway.http.common.repository.jooq.entity.tables;
 
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collection;
@@ -155,76 +154,10 @@ public class AiModel extends TableImpl<AiModelRecord> {
     public final TableField<AiModelRecord, ULong> TOOL_OUTPUT_TOKEN_LIMIT = createField(DSL.name("tool_output_token_limit"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("32000"), SQLDataType.BIGINTUNSIGNED)), this, "Maximum tool output tokens retained in context");
 
     /**
-     * The column <code>oagi.ai_model.provider_compaction_enabled</code>.
-     * Indicates whether provider-native compaction is enabled
+     * The column <code>oagi.ai_model.model_options_json</code>. Configured
+     * Spring AI model options as a JSON object
      */
-    public final TableField<AiModelRecord, Byte> PROVIDER_COMPACTION_ENABLED = createField(DSL.name("provider_compaction_enabled"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.TINYINT)), this, "Indicates whether provider-native compaction is enabled");
-
-    /**
-     * The column <code>oagi.ai_model.temperature</code>. Optional default model
-     * sampling temperature
-     */
-    public final TableField<AiModelRecord, BigDecimal> TEMPERATURE = createField(DSL.name("temperature"), SQLDataType.DECIMAL(6, 5).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.DECIMAL)), this, "Optional default model sampling temperature");
-
-    /**
-     * The column <code>oagi.ai_model.thinking_budget_tokens</code>. Optional
-     * explicit thinking-token budget
-     */
-    public final TableField<AiModelRecord, UInteger> THINKING_BUDGET_TOKENS = createField(DSL.name("thinking_budget_tokens"), SQLDataType.INTEGERUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.INTEGERUNSIGNED)), this, "Optional explicit thinking-token budget");
-
-    /**
-     * The column <code>oagi.ai_model.adaptive_thinking</code>. Indicates
-     * whether adaptive thinking is enabled
-     */
-    public final TableField<AiModelRecord, Byte> ADAPTIVE_THINKING = createField(DSL.name("adaptive_thinking"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicates whether adaptive thinking is enabled");
-
-    /**
-     * The column <code>oagi.ai_model.output_effort</code>. Optional provider
-     * output effort value
-     */
-    public final TableField<AiModelRecord, String> OUTPUT_EFFORT = createField(DSL.name("output_effort"), SQLDataType.VARCHAR(32).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Optional provider output effort value");
-
-    /**
-     * The column <code>oagi.ai_model.cache_strategy</code>. Provider prompt
-     * cache strategy
-     */
-    public final TableField<AiModelRecord, String> CACHE_STRATEGY = createField(DSL.name("cache_strategy"), SQLDataType.VARCHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Provider prompt cache strategy");
-
-    /**
-     * The column <code>oagi.ai_model.reasoning_model_supported</code>.
-     * Configured support for OpenAI-style reasoning options
-     */
-    public final TableField<AiModelRecord, Byte> REASONING_MODEL_SUPPORTED = createField(DSL.name("reasoning_model_supported"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Configured support for OpenAI-style reasoning options");
-
-    /**
-     * The column <code>oagi.ai_model.output_effort_supported</code>. Configured
-     * support for output effort options
-     */
-    public final TableField<AiModelRecord, Byte> OUTPUT_EFFORT_SUPPORTED = createField(DSL.name("output_effort_supported"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Configured support for output effort options");
-
-    /**
-     * The column <code>oagi.ai_model.verbosity_supported</code>. Configured
-     * support for verbosity options
-     */
-    public final TableField<AiModelRecord, Byte> VERBOSITY_SUPPORTED = createField(DSL.name("verbosity_supported"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Configured support for verbosity options");
-
-    /**
-     * The column <code>oagi.ai_model.temperature_supported</code>. Configured
-     * support for temperature options
-     */
-    public final TableField<AiModelRecord, Byte> TEMPERATURE_SUPPORTED = createField(DSL.name("temperature_supported"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Configured support for temperature options");
-
-    /**
-     * The column <code>oagi.ai_model.thinking_modes_json</code>. Configured
-     * provider thinking modes as a JSON array
-     */
-    public final TableField<AiModelRecord, String> THINKING_MODES_JSON = createField(DSL.name("thinking_modes_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Configured provider thinking modes as a JSON array");
-
-    /**
-     * The column <code>oagi.ai_model.default_thinking</code>. Default provider
-     * thinking mode
-     */
-    public final TableField<AiModelRecord, String> DEFAULT_THINKING = createField(DSL.name("default_thinking"), SQLDataType.VARCHAR(32).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Default provider thinking mode");
+    public final TableField<AiModelRecord, String> MODEL_OPTIONS_JSON = createField(DSL.name("model_options_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Configured Spring AI model options as a JSON object");
 
     /**
      * The column <code>oagi.ai_model.catalog_version</code>. Optimistic locking
@@ -454,7 +387,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
     @Override
     public List<Check<AiModelRecord>> getChecks() {
         return Arrays.asList(
-            Internal.createCheck(this, DSL.name("thinking_modes_json"), "json_valid(`thinking_modes_json`)", true)
+            Internal.createCheck(this, DSL.name("model_options_json"), "json_valid(`model_options_json`)", true)
         );
     }
 

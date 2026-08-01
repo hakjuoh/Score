@@ -7,6 +7,7 @@ import {
   AiModelProfile,
   AiAdminUsage,
   AiProviderConnectionTestResult,
+  AiProviderApiKeyView,
   AiProviderUpdate,
   AiProviderView,
   AiPolicyUpdate,
@@ -77,6 +78,16 @@ export class AiAdminPolicyService {
 
   provider(providerId: number): Observable<AiProviderView> {
     return this.http.get<AiProviderView>(`/api/admin/ai/providers/${providerId}`);
+  }
+
+  maskedProviderApiKey(providerId: number): Observable<AiProviderApiKeyView> {
+    return this.http.get<AiProviderApiKeyView>(
+      `/api/admin/ai/providers/${providerId}/api-key`);
+  }
+
+  revealProviderApiKey(providerId: number): Observable<AiProviderApiKeyView> {
+    return this.http.post<AiProviderApiKeyView>(
+      `/api/admin/ai/providers/${providerId}/api-key/reveal`, {});
   }
 
   createProvider(update: AiProviderUpdate): Observable<AiProviderView> {

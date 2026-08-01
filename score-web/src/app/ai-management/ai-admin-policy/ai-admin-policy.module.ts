@@ -13,6 +13,8 @@ import {AiProviderDetailComponent} from './ai-provider-detail.component';
 import {AiModelDetailComponent} from './ai-model-detail.component';
 import {SearchBarModule} from '../../common/search-bar/search-bar.module';
 import {ColumnSelectorModule} from '../../common/column-selector/column-selector.module';
+import {JsonOptionEditorComponent} from './json-option-editor.component';
+import {FontAwesomeModule} from '@fortawesome/angular-fontawesome';
 
 export const AI_ADMIN_ROUTES: Routes = [
   {path: 'ai-admin/users', component: AiPolicyUserListComponent,
@@ -31,9 +33,10 @@ export const AI_ADMIN_ROUTES: Routes = [
 
 @NgModule({
   imports: [CommonModule, FormsModule, MaterialModule, SearchBarModule, ColumnSelectorModule,
-    RouterModule.forChild(AI_ADMIN_ROUTES)],
+    FontAwesomeModule, RouterModule.forChild(AI_ADMIN_ROUTES)],
   declarations: [AiPolicyUserListComponent, AiPolicyUserDetailComponent, AiModelListComponent,
-    AiProviderListComponent, AiProviderDetailComponent, AiModelDetailComponent],
+    AiProviderListComponent, AiProviderDetailComponent, AiModelDetailComponent,
+    JsonOptionEditorComponent],
   providers: [AiAdminPolicyService]
 })
 export class AiAdminPolicyModule {}

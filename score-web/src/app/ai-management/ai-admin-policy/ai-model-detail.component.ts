@@ -1,15 +1,33 @@
-import {Component, OnInit, inject} from '@angular/core';
+import {Component, OnInit, ViewChild, inject} from '@angular/core';
+import {MatExpansionPanel} from '@angular/material/expansion';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {ActivatedRoute, Router} from '@angular/router';
 import {hashCode} from '../../common/utility';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
-import {AiAdminModel, AiModelProfile, AiModelUpdate,
+import {AiAdminModel, AiModelOption, AiModelOptionValue, AiModelProfile, AiModelUpdate,
+  AiNumericConstraint,
   AiProviderView} from './domain/ai-admin-policy';
 import {applyModelProfile, clearModelProfile, constrainModelToProfile, editableModelState,
-  modelCommand, modelProfileValidationErrors} from './domain/ai-model-profile-settings';
+  AiModelValidationField, modelCommand, modelProfileValidationErrors,
+  modelProfileValidationIssues, isImplicitUnsetEffort} from './domain/ai-model-profile-settings';
 import {notifyAiAdminConflict, notifyAiAdminError,
   notifyAiAdminSuccess} from './domain/ai-admin-notifications';
 import {httpErrorMessage, validModelUpdate} from './domain/ai-admin-validation';
+
+// Defensive compatibility for profile responses produced before the server-side ownership filter.
+const NON_EDITABLE_OPTION_KEYS = new Set([
+  'model', 'deploymentName', 'maxTokens', 'maxCompletionTokens', 'temperature',
+  'thinkingBudgetTokens', 'reasoningEffort', 'outputEffort',
+  'apiKey', 'baseUrl', 'credential', 'microsoftFoundryServiceVersion',
+  'organizationId', 'projectId', 'microsoftFoundry', 'gitHubModels', 'timeout',
+  'maxRetries', 'proxy', 'customHeaders', 'httpHeaders', 'toolCallbacks', 'toolContext',
+  'tools', 'contentLengthFunction', 'toolChoice', 'toolChoiceName',
+  'disableParallelToolUse', 'parallelToolCalls', 'cacheToolResults', 'webSearchTool',
+  'maxUses', 'allowedDomains', 'blockedDomains', 'userLocation'
+]);
+
+type TokenLimitField = 'contextWindow' | 'maxTokens' | 'outputReserveTokens' |
+  'autoCompactThresholdTokens' | 'emergencyHeadroomTokens' | 'thinkingBudgetTokens';
 
 @Component({
   standalone: false,
@@ -18,6 +36,7 @@ import {httpErrorMessage, validModelUpdate} from './domain/ai-admin-validation';
   styleUrls: ['./ai-admin-policy.component.css']
 })
 export class AiModelDetailComponent implements OnInit {
+  @ViewChild('modelOptionsPanel') private modelOptionsPanel?: MatExpansionPanel;
   private readonly service = inject(AiAdminPolicyService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -33,6 +52,10 @@ export class AiModelDetailComponent implements OnInit {
   providerLoadError = '';
   modelLoadError = '';
   modelProfileLoadError = '';
+  modelOptionQuery = '';
+  modelOptionsExpanded = false;
+  private readonly jsonOptionDrafts = new Map<string, string>();
+  private readonly jsonOptionErrors = new Map<string, string>();
   private modelProfileRequestId = 0;
   private modelRequestId = 0;
   private providerRequestId = 0;
@@ -65,7 +88,8 @@ export class AiModelDetailComponent implements OnInit {
     temperatureSupported: null,
     thinkingModes: [],
     defaultThinking: null,
-    reasoningEfforts: []
+    reasoningEfforts: [],
+    modelOptions: {}
   };
 
   get loadError(): string {
@@ -80,6 +104,21 @@ export class AiModelDetailComponent implements OnInit {
     return this.providers.find(provider => provider.aiProviderId === this.form.providerId);
   }
 
+  get modelOptions(): AiModelOption[] {
+    return (this.selectedModelProfile?.options ?? [])
+      .filter(option => !NON_EDITABLE_OPTION_KEYS.has(option.key))
+      .sort((left, right) => this.optionLabel(left.key).localeCompare(
+        this.optionLabel(right.key), 'en', {sensitivity: 'base'}));
+  }
+
+  get filteredModelOptions(): AiModelOption[] {
+    const query = this.modelOptionQuery.trim().toLowerCase();
+    if (!query) return this.modelOptions;
+    return this.modelOptions.filter(option => [option.key, this.optionLabel(option.key),
+      option.type, option.description, ...option.allowedValues]
+      .some(value => value.toLowerCase().includes(query)));
+  }
+
   get selectableProviders(): AiProviderView[] {
     return this.providers.filter(provider => provider.enabled ||
       !this.isNew && provider.aiProviderId === this.form.providerId);
@@ -89,7 +128,7 @@ export class AiModelDetailComponent implements OnInit {
     const enabledProviderSelected = this.providers.some(provider => provider.enabled &&
       provider.aiProviderId === this.form.providerId);
     return !this.selectedModelProfile || !validModelUpdate(this.form)
-      || !this.validForProfile || !enabledProviderSelected;
+      || !this.validForProfile || this.jsonOptionErrors.size > 0 || !enabledProviderSelected;
   }
 
   get isChanged(): boolean {
@@ -106,6 +145,11 @@ export class AiModelDetailComponent implements OnInit {
     return profile ? modelProfileValidationErrors(this.form, profile) : [];
   }
 
+  get availableReasoningEfforts(): AiModelProfile['reasoningEfforts'] {
+    return (this.selectedModelProfile?.reasoningEfforts ?? [])
+      .filter(effort => !isImplicitUnsetEffort(effort));
+  }
+
   get defaultEffortName(): string | null {
     return this.form.reasoningEfforts.find(effort => effort.defaultEffort)?.name ?? null;
   }
@@ -119,6 +163,7 @@ export class AiModelDetailComponent implements OnInit {
 
   setProvider(providerId: number): void {
     if (this.form.providerId === providerId) return;
+    this.resetModelOptionEditor();
     this.form.providerId = providerId;
     this.form = clearModelProfile(this.form);
     this.modelProfiles = [];
@@ -128,7 +173,9 @@ export class AiModelDetailComponent implements OnInit {
   selectModel(modelKey: string): void {
     const profile = this.modelProfiles.find(candidate => candidate.modelKey === modelKey);
     if (!profile) return;
-    this.form = this.applyProfile(this.form, profile);
+    this.resetModelOptionEditor();
+    this.form = {...this.applyProfile(this.form, profile),
+      modelOptions: this.defaultModelOptionValues(profile)};
   }
 
   isEffortEnabled(name: string): boolean {
@@ -169,54 +216,127 @@ export class AiModelDetailComponent implements OnInit {
     this.form.reasoningEfforts.forEach(effort => effort.defaultEffort = effort.name === name);
   }
 
-  setReasoningModelEnabled(enabled: boolean): void {
-    this.form.reasoningModelSupported = enabled;
-    if (!enabled) this.form.reasoningEfforts = [];
+  optionLabel(key: string): string {
+    const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+    const label = spaced.charAt(0).toUpperCase() + spaced.slice(1);
+    return label.replace(/\b(?:Ttl|Pdf|Id|Api|Url|Http|Json)\b/g, acronym => ({
+      Ttl: 'TTL', Pdf: 'PDF', Id: 'ID', Api: 'API', Url: 'URL', Http: 'HTTP', Json: 'JSON'
+    })[acronym] ?? acronym);
   }
 
-  setOutputEffortEnabled(enabled: boolean): void {
-    this.form.outputEffortSupported = enabled;
-    if (!enabled) this.form.outputEffort = null;
-  }
-
-  setTemperatureEnabled(enabled: boolean): void {
-    this.form.temperatureSupported = enabled;
-    if (!enabled) this.form.temperature = null;
-  }
-
-  isThinkingModeEnabled(mode: string): boolean {
-    return this.form.thinkingModes.includes(mode);
-  }
-
-  setThinkingModeEnabled(mode: string, enabled: boolean): void {
-    if (enabled && !this.form.thinkingModes.includes(mode)) {
-      this.form.thinkingModes = [...this.form.thinkingModes, mode];
-      if (!this.form.defaultThinking) this.form.defaultThinking = mode;
-    } else if (!enabled) {
-      this.form.thinkingModes = this.form.thinkingModes.filter(value => value !== mode);
-      if (this.form.defaultThinking === mode) {
-        this.form.defaultThinking = this.form.thinkingModes[0] ?? null;
-      }
-    }
-    if (mode === 'adaptive') this.form.adaptiveThinking = enabled;
-  }
-
-  capabilityEnabled(value: boolean | null): boolean {
-    return value === true;
-  }
-
-  get unsupportedCapabilities(): string[] {
+  validationError(field: AiModelValidationField): string {
     const profile = this.selectedModelProfile;
-    if (!profile) return [];
-    const unsupported: string[] = [];
-    if (profile.reasoningEfforts.length === 0) unsupported.push('Reasoning Effort');
-    if (!profile.capabilityConstraints.outputEffort.supported) unsupported.push('Output Effort');
-    if (!profile.capabilityConstraints.verbosity.supported) unsupported.push('Verbosity');
-    if (!profile.capabilityConstraints.temperature.supported) unsupported.push('Temperature');
-    if (!profile.capabilityConstraints.providerCompaction.supported) {
-      unsupported.push('Provider Compaction');
+    return profile ? modelProfileValidationIssues(this.form, profile)
+      .find(issue => issue.field === field)?.message ?? '' : '';
+  }
+
+  validationErrorId(field: AiModelValidationField): string {
+    return `model-${field.replace(/([A-Z])/g, '-$1').toLowerCase()}-error`;
+  }
+
+  tokenMinimum(field: TokenLimitField): number {
+    return this.tokenConstraint(field)?.minimum ?? 0;
+  }
+
+  tokenMaximum(field: TokenLimitField): number {
+    const constraint = this.tokenConstraint(field);
+    const profileMaximum = constraint?.maximum ?? this.tokenMinimum(field);
+    const constraints = this.selectedModelProfile?.configurationConstraints;
+    const reserve = this.form.outputReserveTokens
+      ?? constraints?.outputReserveTokens.defaultValue ?? 0;
+    const safeInput = this.form.contextWindow - reserve - this.form.emergencyHeadroomTokens;
+    const dependentMaximum = switchTokenMaximum(field, this.form.contextWindow,
+      this.form.maxTokens ?? constraints?.maxOutputTokens.defaultValue, reserve,
+      this.form.emergencyHeadroomTokens, safeInput);
+    return Math.max(this.tokenMinimum(field), Math.min(profileMaximum, dependentMaximum));
+  }
+
+  setTokenInputValue(field: TokenLimitField, value: number | null): void {
+    switch (field) {
+      case 'contextWindow': this.form.contextWindow = value ?? 0; break;
+      case 'maxTokens': this.form.maxTokens = value; break;
+      case 'outputReserveTokens': this.form.outputReserveTokens = value; break;
+      case 'autoCompactThresholdTokens': this.form.autoCompactThresholdTokens = value; break;
+      case 'emergencyHeadroomTokens': this.form.emergencyHeadroomTokens = value ?? 0; break;
+      case 'thinkingBudgetTokens': this.form.thinkingBudgetTokens = value; break;
     }
-    return unsupported;
+    this.normalizeManagedToolLimit();
+  }
+
+  optionInputValue(option: AiModelOption): boolean | number | string | null {
+    const value = this.form.modelOptions[option.key];
+    return typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string'
+      ? value : null;
+  }
+
+  booleanOptionValue(option: AiModelOption): string {
+    const value = this.form.modelOptions[option.key];
+    if (typeof value !== 'boolean') return '';
+    return value ? 'true' : 'false';
+  }
+
+  setOptionValue(option: AiModelOption, value: boolean | number | string | null): void {
+    if (value === '' || value === null) {
+      this.updateModelOption(option.key, null);
+      return;
+    }
+    if (option.type === 'boolean') {
+      this.updateModelOption(option.key, value === true || value === 'true');
+      return;
+    }
+    if (option.type === 'integer' || option.type === 'decimal') {
+      const numericValue = typeof value === 'number' ? value : Number(value);
+      const valid = Number.isFinite(numericValue)
+        && (option.type !== 'integer' || Number.isSafeInteger(numericValue));
+      this.updateModelOption(option.key, valid ? numericValue : null);
+      return;
+    }
+    this.updateModelOption(option.key, value);
+  }
+
+  jsonOptionText(option: AiModelOption): string {
+    const draft = this.jsonOptionDrafts.get(option.key);
+    if (draft !== undefined) return draft;
+    const value = this.form.modelOptions[option.key];
+    return value !== undefined && value !== null ? JSON.stringify(value, null, 2) : '';
+  }
+
+  setJsonOptionValue(option: AiModelOption, value: string): void {
+    this.jsonOptionDrafts.set(option.key, value);
+    if (!value.trim()) {
+      this.updateModelOption(option.key, null);
+      this.jsonOptionErrors.delete(option.key);
+      return;
+    }
+    try {
+      const parsed: unknown = JSON.parse(value);
+      this.updateModelOption(option.key, parsed as AiModelOptionValue);
+      this.jsonOptionErrors.delete(option.key);
+    } catch {
+      this.jsonOptionErrors.set(option.key, 'Enter valid JSON.');
+    }
+  }
+
+  jsonOptionError(key: string): string {
+    return this.jsonOptionErrors.get(key) ?? '';
+  }
+
+  optionDescriptionId(key: string): string {
+    return `profile-option-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}-description`;
+  }
+
+  optionControlId(key: string): string {
+    return `profile-option-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}-control`;
+  }
+
+  optionErrorId(key: string): string {
+    return `profile-option-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}-error`;
+  }
+
+  optionAriaDescribedBy(option: AiModelOption): string {
+    const descriptionId = this.optionDescriptionId(option.key);
+    return this.jsonOptionError(option.key)
+      ? `${descriptionId} ${this.optionErrorId(option.key)}` : descriptionId;
   }
 
   retryLoad(): void {
@@ -296,6 +416,7 @@ export class AiModelDetailComponent implements OnInit {
   }
 
   private apply(model: AiAdminModel): void {
+    this.resetModelOptionEditor();
     this.model = model;
     this.isNew = false;
     this.form = {
@@ -326,7 +447,8 @@ export class AiModelDetailComponent implements OnInit {
       temperatureSupported: model.temperatureSupported,
       thinkingModes: [...model.thinkingModes],
       defaultThinking: model.defaultThinking,
-      reasoningEfforts: model.reasoningEfforts.map(effort => ({...effort}))
+      reasoningEfforts: model.reasoningEfforts.map(effort => ({...effort})),
+      modelOptions: structuredClone(model.modelOptions ?? {})
     };
     this.baselineHash = hashCode(this.editableState());
     if (this.providers.some(provider => provider.aiProviderId === model.providerId)) {
@@ -375,5 +497,63 @@ export class AiModelDetailComponent implements OnInit {
 
   private get validForProfile(): boolean {
     return this.validationErrors.length === 0;
+  }
+
+  private defaultModelOptionValues(profile: AiModelProfile): Record<string, AiModelOptionValue> {
+    return Object.fromEntries(profile.options
+      .filter(option => !NON_EDITABLE_OPTION_KEYS.has(option.key)
+        && option.value !== null && option.value !== '')
+      .map(option => [option.key, structuredClone(option.value)]));
+  }
+
+  private updateModelOption(key: string, value: AiModelOptionValue): void {
+    const modelOptions = {...this.form.modelOptions};
+    if (value === null || value === '') delete modelOptions[key];
+    else modelOptions[key] = value;
+    const cacheStrategy = key === 'cacheStrategy'
+      ? typeof value === 'string' && value.toUpperCase() !== 'NONE'
+        ? value.toLowerCase().replaceAll('_', '-') : null
+      : this.form.cacheStrategy;
+    const thinkingChanged = key === 'thinking' && typeof value === 'string';
+    const thinking = thinkingChanged ? value as string : null;
+    this.form = {...this.form, modelOptions, cacheStrategy,
+      defaultThinking: thinkingChanged ? thinking : this.form.defaultThinking};
+  }
+
+  private tokenConstraint(field: TokenLimitField): AiNumericConstraint | undefined {
+    const constraints = this.selectedModelProfile?.configurationConstraints;
+    if (!constraints) return undefined;
+    return field === 'maxTokens' ? constraints.maxOutputTokens : constraints[field];
+  }
+
+  private normalizeManagedToolLimit(): void {
+    const reserve = this.form.outputReserveTokens
+      ?? this.selectedModelProfile?.configurationConstraints.outputReserveTokens.defaultValue ?? 0;
+    const safeInput = this.form.contextWindow - reserve - this.form.emergencyHeadroomTokens;
+    const configuredDefault =
+      this.selectedModelProfile?.configurationConstraints.toolOutputTokenLimit.defaultValue ?? 0;
+    this.form.toolOutputTokenLimit = Math.max(1, Math.min(configuredDefault, safeInput));
+  }
+
+  private resetModelOptionEditor(): void {
+    this.modelOptionsPanel?.close();
+    this.modelOptionQuery = '';
+    this.modelOptionsExpanded = false;
+    this.jsonOptionDrafts.clear();
+    this.jsonOptionErrors.clear();
+  }
+}
+
+function switchTokenMaximum(field: TokenLimitField, contextWindow: number,
+                            maxTokens: number | null, reserve: number,
+                            headroom: number, safeInput: number): number {
+  switch (field) {
+    case 'contextWindow': return Number.MAX_SAFE_INTEGER;
+    case 'maxTokens': return Math.max(0, contextWindow - 1);
+    case 'outputReserveTokens': return Math.max(0, contextWindow - headroom - 1);
+    case 'autoCompactThresholdTokens': return Math.max(0,
+      Math.min(safeInput, contextWindow - 1));
+    case 'emergencyHeadroomTokens': return Math.max(0, contextWindow - reserve - 1);
+    case 'thinkingBudgetTokens': return Math.max(0, (maxTokens ?? 0) - 1);
   }
 }

@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.service;
 
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelProfileSettingsResolver;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelOptions;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.CapabilityConstraint;
@@ -25,6 +26,7 @@ final class AiModelProfileSettingsValidator {
         AiModelProfileView view = AiModelProfileView.from(profile);
         AiModelProfileSettingsResolver.ResolvedSettings settings =
                 AiModelProfileSettingsResolver.resolve(profile, input);
+        AiModelOptions.validated(profile, input.modelOptions());
         validateTokenLimits(view, input, settings);
         AiModelProfileView.ModelCapabilityConstraints capabilities = view.capabilityConstraints();
         requireSupported(input.adaptiveThinking(), capabilities.adaptiveThinking().supported(),
@@ -96,13 +98,16 @@ final class AiModelProfileSettingsValidator {
                 && settings.thinkingBudgetTokens() >= settings.maxTokens()) {
             throw invalid("Thinking token budget must be smaller than configured max output tokens.");
         }
+        if (settings.maxTokens() != null && settings.maxTokens() >= input.contextWindow()) {
+            throw invalid("Max output tokens must be smaller than the configured context window.");
+        }
         long reserve = required(settings.outputReserveTokens());
         long safeInput = input.contextWindow() - reserve - input.emergencyHeadroomTokens();
         long threshold = required(settings.autoCompactThresholdTokens());
         if (reserve >= input.contextWindow()
                 || input.emergencyHeadroomTokens() >= input.contextWindow() - reserve
-                || safeInput <= 0 || threshold > safeInput
-                || input.toolOutputTokenLimit() > safeInput) {
+                || safeInput <= 0 || threshold >= input.contextWindow()
+                || threshold > safeInput || input.toolOutputTokenLimit() > safeInput) {
             throw invalid("Context reserve, headroom, compaction threshold, and tool limit "
                     + "must fit the configured context window.");
         }
@@ -139,6 +144,9 @@ final class AiModelProfileSettingsValidator {
         }
         if (input.adaptiveThinking() != modes.contains("adaptive")) {
             throw invalid("Adaptive thinking and the adaptive thinking mode must be enabled together.");
+        }
+        if (!allowed.contains("disabled") && !modes.containsAll(allowed)) {
+            throw invalid("Provider-enforced thinking modes cannot be disabled.");
         }
         NumericConstraint fixedThinking = profile.configurationConstraints().thinkingBudgetTokens();
         if (fixedThinking.maximum() != null

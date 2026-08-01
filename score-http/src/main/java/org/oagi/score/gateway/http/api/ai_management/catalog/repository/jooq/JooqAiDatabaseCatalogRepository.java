@@ -6,6 +6,7 @@ import org.jooq.DSLContext;
 import org.jooq.Record;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogConfigId;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelOptions;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfile;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
@@ -91,6 +92,9 @@ public class JooqAiDatabaseCatalogRepository extends JooqBaseRepository
                     ? view.configurationConstraints() : null;
             AiModelProfileView.ModelCapabilityConstraints profileCapabilities = view != null
                     ? view.capabilityConstraints() : null;
+            Map<String, Object> storedOptions = jsonObject(row.get(AI_MODEL.MODEL_OPTIONS_JSON));
+            Map<String, Object> options = profile != null
+                    ? AiModelOptions.runtimeOptions(profile, storedOptions) : Map.of();
             ScoreAiProperties.Model model = new ScoreAiProperties.Model();
             model.setCatalogId(new AiModelId(
                     row.get(AI_MODEL.AI_MODEL_ID).toBigInteger()));
@@ -102,14 +106,15 @@ public class JooqAiDatabaseCatalogRepository extends JooqBaseRepository
                     limits != null ? limits.maxOutputTokens().defaultValue() : null,
                     Integer.class));
             model.setContextWindow(number(row.get(AI_MODEL.CONTEXT_WINDOW), Long.class));
-            model.setTemperature(decimal(row.get(AI_MODEL.TEMPERATURE),
+            model.setTemperature(decimal(options.get("temperature"),
                     limits != null ? limits.temperature().defaultValue() : null));
-            model.setThinkingBudgetTokens(number(row.get(AI_MODEL.THINKING_BUDGET_TOKENS),
+            model.setThinkingBudgetTokens(number(numberValue(options.get("thinkingBudgetTokens")),
                     limits != null ? limits.thinkingBudgetTokens().defaultValue() : null,
                     Integer.class));
-            model.setAdaptiveThinking(row.get(AI_MODEL.ADAPTIVE_THINKING) == 1);
-            model.setOutputEffort(row.get(AI_MODEL.OUTPUT_EFFORT));
-            model.setCacheStrategy(row.get(AI_MODEL.CACHE_STRATEGY));
+            model.setAdaptiveThinking(flag(options.get("adaptiveThinking"), false));
+            model.setOutputEffort(stringValue(options.get("outputEffort")));
+            model.setCacheStrategy(cacheStrategy(options.get("cacheStrategy")));
+            model.setModelOptions(options);
 
             ScoreAiProperties.ContextBudget budget = new ScoreAiProperties.ContextBudget();
             budget.setOutputReserveTokens(number(row.get(AI_MODEL.OUTPUT_RESERVE_TOKENS),
@@ -124,25 +129,27 @@ public class JooqAiDatabaseCatalogRepository extends JooqBaseRepository
             budget.setToolOutputTokenLimit(number(
                     row.get(AI_MODEL.TOOL_OUTPUT_TOKEN_LIMIT), Long.class));
             budget.setProviderCompactionEnabled(
-                    row.get(AI_MODEL.PROVIDER_COMPACTION_ENABLED) == 1);
+                    flag(options.get("providerCompactionEnabled"),
+                            profileCapabilities != null
+                                    && profileCapabilities.providerCompaction().defaultEnabled()));
             model.setContextBudget(budget);
 
             ScoreAiProperties.ModelCapabilities capabilities =
                     new ScoreAiProperties.ModelCapabilities();
-            capabilities.setReasoningModel(flag(row.get(AI_MODEL.REASONING_MODEL_SUPPORTED),
+            capabilities.setReasoningModel(flag(options.get("reasoningModelSupported"),
                     profileCapabilities != null
                             && profileCapabilities.reasoningOptions().defaultEnabled()));
-            capabilities.setOutputEffort(flag(row.get(AI_MODEL.OUTPUT_EFFORT_SUPPORTED),
+            capabilities.setOutputEffort(flag(options.get("outputEffortSupported"),
                     profileCapabilities != null
                             && profileCapabilities.outputEffort().defaultEnabled()));
-            capabilities.setVerbosity(flag(row.get(AI_MODEL.VERBOSITY_SUPPORTED),
+            capabilities.setVerbosity(flag(options.get("verbositySupported"),
                     profileCapabilities != null
                             && profileCapabilities.verbosity().defaultEnabled()));
-            capabilities.setTemperature(flag(row.get(AI_MODEL.TEMPERATURE_SUPPORTED),
+            capabilities.setTemperature(flag(options.get("temperatureSupported"),
                     profileCapabilities != null
                             && profileCapabilities.temperature().defaultEnabled()));
-            capabilities.setThinkingModes(jsonList(row.get(AI_MODEL.THINKING_MODES_JSON)));
-            capabilities.setDefaultThinking(row.get(AI_MODEL.DEFAULT_THINKING));
+            capabilities.setThinkingModes(stringList(options.get("thinkingModes")));
+            capabilities.setDefaultThinking(stringValue(options.get("defaultThinking")));
             model.setModelCapabilities(capabilities);
 
             AiModelId modelId = new AiModelId(row.get(AI_MODEL.AI_MODEL_ID).toBigInteger());
@@ -179,18 +186,37 @@ public class JooqAiDatabaseCatalogRepository extends JooqBaseRepository
         properties.setModelName(defaultKey);
     }
 
-    private List<String> jsonList(String json) {
-        if (json == null || json.isBlank()) return List.of();
+    private Map<String, Object> jsonObject(String json) {
+        if (json == null || json.isBlank()) return Map.of();
         try {
             return objectMapper.readValue(json, new TypeReference<>() {});
         } catch (Exception exception) {
             throw new IllegalStateException(
-                    "Invalid AI model thinking mode catalog JSON.", exception);
+                    "Invalid AI model options catalog JSON.", exception);
         }
     }
 
-    private static Boolean flag(Byte value, boolean defaultValue) {
-        return value != null ? value == 1 : defaultValue;
+    private static Boolean flag(Object value, boolean defaultValue) {
+        return value instanceof Boolean configured ? configured : defaultValue;
+    }
+
+    private static Number numberValue(Object value) {
+        return value instanceof Number number ? number : null;
+    }
+
+    private static String stringValue(Object value) {
+        return value instanceof String text ? text : null;
+    }
+
+    private static String cacheStrategy(Object value) {
+        String strategy = stringValue(value);
+        return strategy != null && !"NONE".equalsIgnoreCase(strategy)
+                ? strategy.toLowerCase(java.util.Locale.ROOT).replace('_', '-') : null;
+    }
+
+    private static List<String> stringList(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        return list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
     }
 
     @SuppressWarnings("unchecked")
@@ -204,8 +230,8 @@ public class JooqAiDatabaseCatalogRepository extends JooqBaseRepository
         return number(value != null ? value : fallback, type);
     }
 
-    static Double decimal(Number value, Double fallback) {
-        if (value != null) return value.doubleValue();
+    static Double decimal(Object value, Double fallback) {
+        if (value instanceof Number number) return number.doubleValue();
         return fallback;
     }
 }

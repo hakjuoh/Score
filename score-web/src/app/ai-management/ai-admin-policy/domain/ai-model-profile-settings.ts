@@ -1,5 +1,22 @@
 import {AiModelCommand, AiModelProfile, AiModelUpdate, AiNumericConstraint} from './ai-admin-policy';
 
+export type AiModelValidationField =
+  'contextWindow' | 'maxTokens' | 'outputReserveTokens' | 'autoCompactThresholdTokens' |
+  'emergencyHeadroomTokens' | 'toolOutputTokenLimit' | 'thinkingBudgetTokens' |
+  'temperature' | 'thinkingModes' | 'reasoningEfforts' | 'capabilities' |
+  'outputEffort' | 'cacheStrategy';
+
+export interface AiModelValidationIssue {
+  field: AiModelValidationField;
+  message: string;
+}
+
+export function isImplicitUnsetEffort(
+  effort: Pick<AiModelProfile['reasoningEfforts'][number], 'name' | 'displayName'>): boolean {
+  return ['none', 'disabled'].includes(effort.name.toLowerCase())
+    || effort.displayName.toLowerCase() === 'none';
+}
+
 export function modelCommand(form: AiModelUpdate): AiModelCommand {
   return {expectedVersion: form.expectedVersion, providerId: form.providerId,
     modelKey: form.modelKey, enabled: form.enabled, defaultModel: form.defaultModel,
@@ -16,7 +33,9 @@ export function modelCommand(form: AiModelUpdate): AiModelCommand {
     verbositySupported: form.verbositySupported,
     temperatureSupported: form.temperatureSupported,
     thinkingModes: [...form.thinkingModes], defaultThinking: form.defaultThinking,
-    reasoningEfforts: form.reasoningEfforts.map(effort => ({name: effort.name,
+    modelOptions: structuredClone(form.modelOptions),
+    reasoningEfforts: form.reasoningEfforts.filter(effort => !isImplicitUnsetEffort(effort))
+      .map(effort => ({name: effort.name,
       defaultEffort: effort.defaultEffort, sortOrder: effort.sortOrder}))};
 }
 
@@ -40,13 +59,14 @@ export function clearModelProfile(form: AiModelUpdate): AiModelUpdate {
     thinkingBudgetTokens: null, adaptiveThinking: false, outputEffort: null,
     cacheStrategy: null, reasoningModelSupported: null, outputEffortSupported: null,
     verbositySupported: null, temperatureSupported: null, thinkingModes: [],
-    defaultThinking: null, reasoningEfforts: []};
+    defaultThinking: null, reasoningEfforts: [], modelOptions: {}};
 }
 
 export function constrainModelToProfile(form: AiModelUpdate,
                                         profile: AiModelProfile): AiModelUpdate {
-  const allowedEfforts = new Set(profile.reasoningEfforts.map(effort => effort.name));
-  const definitions = new Map(profile.reasoningEfforts.map(effort => [effort.name, effort]));
+  const explicitEfforts = profile.reasoningEfforts.filter(effort => !isImplicitUnsetEffort(effort));
+  const allowedEfforts = new Set(explicitEfforts.map(effort => effort.name));
+  const definitions = new Map(explicitEfforts.map(effort => [effort.name, effort]));
   const efforts = form.reasoningEfforts.filter(effort => allowedEfforts.has(effort.name))
     .map((effort, index) => ({...definitions.get(effort.name)!,
       defaultEffort: effort.defaultEffort, sortOrder: index}));
@@ -54,13 +74,32 @@ export function constrainModelToProfile(form: AiModelUpdate,
     efforts[0].defaultEffort = true;
   }
   const thinkingModes = form.thinkingModes.filter(mode => profile.thinkingModes.includes(mode));
+  const providerEnforcedThinking = profile.thinkingModes.length > 0
+    && !profile.thinkingModes.includes('disabled');
   const adaptiveThinking = profile.capabilityConstraints.adaptiveThinking.supported
-    && form.adaptiveThinking;
-  const normalizedModes = adaptiveThinking
-    ? thinkingModes.includes('adaptive') ? thinkingModes : [...thinkingModes, 'adaptive']
-    : thinkingModes.filter(mode => mode !== 'adaptive');
+    && (providerEnforcedThinking || form.adaptiveThinking);
+  let normalizedModes = providerEnforcedThinking
+    ? [...profile.thinkingModes]
+    : adaptiveThinking
+      ? thinkingModes.includes('adaptive') ? thinkingModes : [...thinkingModes, 'adaptive']
+      : thinkingModes.filter(mode => mode !== 'adaptive');
+  // Older catalog rows can predate persisted thinking modes. A fixed-thinking profile must
+  // recover its profile-owned defaults instead of surfacing an error the user cannot repair.
+  if (profile.configurationConstraints.thinkingBudgetTokens.maximum !== null
+    && normalizedModes.length === 0) {
+    normalizedModes = [...profile.thinkingModes];
+  }
+  const allowedOptionKeys = new Set((profile.options ?? []).map(option => option.key));
+  const modelOptions = Object.fromEntries(Object.entries(form.modelOptions ?? {})
+    .filter(([key]) => allowedOptionKeys.has(key)));
+  const reserve = form.outputReserveTokens
+    ?? profile.configurationConstraints.outputReserveTokens.defaultValue ?? 0;
+  const safeInput = form.contextWindow - reserve - form.emergencyHeadroomTokens;
+  const managedToolLimit = Math.max(1, Math.min(
+    profile.configurationConstraints.toolOutputTokenLimit.defaultValue ?? 0, safeInput));
   return {...form, providerModelName: profile.providerModelName,
     displayName: profile.displayName, description: profile.description,
+    toolOutputTokenLimit: managedToolLimit,
     adaptiveThinking,
     providerCompactionEnabled: profile.capabilityConstraints.providerCompaction.supported
       && form.providerCompactionEnabled,
@@ -80,83 +119,119 @@ export function constrainModelToProfile(form: AiModelUpdate,
     cacheStrategy: form.cacheStrategy === profile.cacheStrategy ? form.cacheStrategy : null,
     thinkingModes: normalizedModes,
     defaultThinking: normalizedModes.includes(form.defaultThinking ?? '')
-      ? form.defaultThinking : normalizedModes[0] ?? null,
-    reasoningEfforts: efforts};
+      ? form.defaultThinking : normalizedModes.includes(profile.defaultThinking ?? '')
+        ? profile.defaultThinking : normalizedModes[0] ?? null,
+    reasoningEfforts: efforts, modelOptions};
 }
 
 export function modelProfileValidationErrors(form: AiModelUpdate,
                                              profile: AiModelProfile): string[] {
-  const errors: string[] = [];
+  return modelProfileValidationIssues(form, profile).map(issue => issue.message);
+}
+
+export function modelProfileValidationIssues(form: AiModelUpdate,
+                                              profile: AiModelProfile): AiModelValidationIssue[] {
+  const errors: AiModelValidationIssue[] = [];
   const constraints = profile.configurationConstraints;
-  addNumberError(errors, 'Context Window', form.contextWindow, constraints.contextWindow, true);
-  addNumberError(errors, 'Max Output Tokens', form.maxTokens,
+  addNumberError(errors, 'contextWindow', 'Context Window', form.contextWindow,
+    constraints.contextWindow, true);
+  addNumberError(errors, 'maxTokens', 'Max Output Tokens', form.maxTokens,
     constraints.maxOutputTokens, true);
-  addNumberError(errors, 'Output Reserve Tokens', form.outputReserveTokens,
+  addNumberError(errors, 'outputReserveTokens', 'Output Reserve Tokens', form.outputReserveTokens,
     constraints.outputReserveTokens, true);
-  addNumberError(errors, 'Auto-compact Threshold', form.autoCompactThresholdTokens,
+  addNumberError(errors, 'autoCompactThresholdTokens', 'Auto-compact Threshold',
+    form.autoCompactThresholdTokens,
     constraints.autoCompactThresholdTokens, true);
-  addNumberError(errors, 'Emergency Headroom', form.emergencyHeadroomTokens,
+  addNumberError(errors, 'emergencyHeadroomTokens', 'Emergency Headroom',
+    form.emergencyHeadroomTokens,
     constraints.emergencyHeadroomTokens, true);
-  addNumberError(errors, 'Tool Output Token Limit', form.toolOutputTokenLimit,
-    constraints.toolOutputTokenLimit, true);
-  addNumberError(errors, 'Thinking Token Budget', form.thinkingBudgetTokens,
+  addNumberError(errors, 'toolOutputTokenLimit', 'Tool Output Token Limit',
+    form.toolOutputTokenLimit, constraints.toolOutputTokenLimit, true);
+  addNumberError(errors, 'thinkingBudgetTokens', 'Thinking Token Budget',
+    form.thinkingBudgetTokens,
     constraints.thinkingBudgetTokens, true);
-  addNumberError(errors, 'Temperature', form.temperature, constraints.temperature, false);
+  addNumberError(errors, 'temperature', 'Temperature', form.temperature,
+    constraints.temperature, false);
 
   const effectiveMaxTokens = form.maxTokens ?? constraints.maxOutputTokens.defaultValue;
   const effectiveThinkingBudget = form.thinkingBudgetTokens
     ?? constraints.thinkingBudgetTokens.defaultValue;
+  if (effectiveMaxTokens !== null && effectiveMaxTokens >= form.contextWindow) {
+    addIssue(errors, 'maxTokens',
+      'Max Output Tokens must be smaller than the Context Window.');
+  }
   if (effectiveThinkingBudget !== null && effectiveMaxTokens !== null
     && effectiveThinkingBudget >= effectiveMaxTokens) {
-    errors.push('Thinking Token Budget must be smaller than Max Output Tokens.');
+    addIssue(errors, 'thinkingBudgetTokens',
+      'Thinking Token Budget must be smaller than Max Output Tokens.');
   }
   const reserve = form.outputReserveTokens
     ?? constraints.outputReserveTokens.defaultValue ?? 0;
   const safeInput = form.contextWindow - reserve - form.emergencyHeadroomTokens;
   const threshold = form.autoCompactThresholdTokens
     ?? constraints.autoCompactThresholdTokens.defaultValue ?? 0;
-  if (reserve >= form.contextWindow || form.emergencyHeadroomTokens >= form.contextWindow - reserve
-    || safeInput <= 0 || threshold > safeInput || form.toolOutputTokenLimit > safeInput) {
-    errors.push('Reserve, headroom, compaction threshold, and tool output limit must fit the Context Window.');
+  if (reserve >= form.contextWindow) addIssue(errors, 'outputReserveTokens',
+    'Output Reserve Tokens must be smaller than the Context Window.');
+  if (form.emergencyHeadroomTokens >= form.contextWindow - reserve || safeInput <= 0) {
+    addIssue(errors, 'emergencyHeadroomTokens',
+      'Emergency Headroom must leave usable space in the Context Window.');
   }
+  if (threshold >= form.contextWindow || threshold > safeInput) {
+    addIssue(errors, 'autoCompactThresholdTokens',
+    'Auto-compact Threshold must fit within the usable Context Window.');
+  }
+  if (form.toolOutputTokenLimit > safeInput) addIssue(errors, 'contextWindow',
+    'Context Window must leave enough usable space for managed tool output.');
 
   addUnsupportedCapabilityErrors(errors, form, profile);
   const allowedModes = new Set(profile.thinkingModes);
   if (form.thinkingModes.some(mode => !allowedModes.has(mode))) {
-    errors.push('Thinking Modes contain a value that this model does not support.');
+    addIssue(errors, 'thinkingModes',
+      'Thinking Modes contain a value that this model does not support.');
   }
   if (form.adaptiveThinking !== form.thinkingModes.includes('adaptive')) {
-    errors.push('Adaptive Thinking and the adaptive Thinking Mode must be enabled together.');
+    addIssue(errors, 'thinkingModes',
+      'Adaptive Thinking and the adaptive Thinking Mode must be enabled together.');
+  }
+  if (!allowedModes.has('disabled')
+    && profile.thinkingModes.some(mode => !form.thinkingModes.includes(mode))) {
+    addIssue(errors, 'thinkingModes', 'Provider-enforced Thinking Modes cannot be disabled.');
   }
   if (constraints.thinkingBudgetTokens.maximum !== null
     && (form.thinkingModes.length === 0 || !form.defaultThinking)) {
-    errors.push('Fixed Thinking requires at least one enabled mode and a default mode.');
+    addIssue(errors, 'thinkingModes',
+      'Fixed Thinking requires at least one enabled mode and a default mode.');
   }
   if (form.defaultThinking && !form.thinkingModes.includes(form.defaultThinking)) {
-    errors.push('Default Thinking Mode must be one of the enabled modes.');
+    addIssue(errors, 'thinkingModes',
+      'Default Thinking Mode must be one of the enabled modes.');
   }
-  const allowedEfforts = new Set(profile.reasoningEfforts.map(effort => effort.name));
+  const allowedEfforts = new Set(profile.reasoningEfforts
+    .filter(effort => !isImplicitUnsetEffort(effort)).map(effort => effort.name));
   if (form.reasoningEfforts.some(effort => !allowedEfforts.has(effort.name))) {
-    errors.push('Reasoning Efforts contain a value that this model does not support.');
+    addIssue(errors, 'reasoningEfforts',
+      'Reasoning Efforts contain a value that this model does not support.');
   }
   if (form.reasoningEfforts.length > 0
     && form.reasoningEfforts.filter(effort => effort.defaultEffort).length !== 1) {
-    errors.push('Select exactly one default Reasoning Effort.');
+    addIssue(errors, 'reasoningEfforts', 'Select exactly one default Reasoning Effort.');
   }
   if (profile.capabilityConstraints.reasoningOptions.supported
     && form.reasoningModelSupported !== true
     && form.reasoningEfforts.length > 0) {
-    errors.push('Enable Reasoning Options before selecting Reasoning Efforts.');
+    addIssue(errors, 'reasoningEfforts',
+      'Enable Reasoning Options before selecting Reasoning Efforts.');
   }
   if (form.outputEffort && !(profile.capabilityConstraints.outputEffort.supported
     && form.outputEffortSupported
     && allowedEfforts.has(form.outputEffort))) {
-    errors.push('Output Effort is not enabled or supported.');
+    addIssue(errors, 'outputEffort', 'Output Effort is not enabled or supported.');
   }
   if (form.cacheStrategy && form.cacheStrategy !== profile.cacheStrategy) {
-    errors.push('Cache Strategy is not supported by this model.');
+    addIssue(errors, 'cacheStrategy', 'Cache Strategy is not supported by this model.');
   }
-  return [...new Set(errors)];
+  return errors.filter((issue, index) => errors.findIndex(candidate =>
+    candidate.field === issue.field && candidate.message === issue.message) === index);
 }
 
 function profileDefaults(profile: AiModelProfile) {
@@ -181,7 +256,8 @@ function profileDefaults(profile: AiModelProfile) {
     verbositySupported: capabilities.verbosity.defaultEnabled,
     temperatureSupported: capabilities.temperature.defaultEnabled,
     thinkingModes: [...profile.thinkingModes], defaultThinking: profile.defaultThinking,
-    reasoningEfforts: profile.reasoningEfforts.map(effort => ({...effort}))};
+    reasoningEfforts: profile.reasoningEfforts.filter(effort => !isImplicitUnsetEffort(effort))
+      .map(effort => ({...effort}))};
 }
 
 function supportedSetting(configured: boolean | null,
@@ -190,20 +266,22 @@ function supportedSetting(configured: boolean | null,
   return configured ?? capability.defaultEnabled;
 }
 
-function addNumberError(errors: string[], label: string, value: number | null,
+function addNumberError(errors: AiModelValidationIssue[], field: AiModelValidationField,
+                        label: string, value: number | null,
                         constraint: AiNumericConstraint, integer: boolean): void {
   if (value === null) {
-    if (!constraint.optional) errors.push(`${label} is required.`);
+    if (!constraint.optional) addIssue(errors, field, `${label} is required.`);
     return;
   }
   if (!Number.isFinite(value) || integer && !Number.isSafeInteger(value)
     || constraint.minimum === null || constraint.maximum === null
     || value < constraint.minimum || value > constraint.maximum) {
-    errors.push(`${label} must be between ${constraint.minimum ?? '—'} and ${constraint.maximum ?? '—'}.`);
+    addIssue(errors, field,
+      `${label} must be between ${constraint.minimum ?? '—'} and ${constraint.maximum ?? '—'}.`);
   }
 }
 
-function addUnsupportedCapabilityErrors(errors: string[], form: AiModelUpdate,
+function addUnsupportedCapabilityErrors(errors: AiModelValidationIssue[], form: AiModelUpdate,
                                         profile: AiModelProfile): void {
   const capabilities: Array<[boolean, boolean | null, string]> = [
     [form.adaptiveThinking, profile.capabilityConstraints.adaptiveThinking.supported,
@@ -220,5 +298,11 @@ function addUnsupportedCapabilityErrors(errors: string[], form: AiModelUpdate,
       'Temperature']
   ];
   capabilities.filter(([enabled, supported]) => enabled && supported !== true)
-    .forEach(([, , label]) => errors.push(`${label} is not supported by this model.`));
+    .forEach(([, , label]) => addIssue(errors, 'capabilities',
+      `${label} is not supported by this model.`));
+}
+
+function addIssue(errors: AiModelValidationIssue[], field: AiModelValidationField,
+                  message: string): void {
+  errors.push({field, message});
 }

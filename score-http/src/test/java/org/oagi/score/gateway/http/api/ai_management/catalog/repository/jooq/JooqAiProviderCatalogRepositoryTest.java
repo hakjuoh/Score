@@ -3,12 +3,21 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.Condition;
 import org.jooq.DSLContext;
+import org.jooq.SQLDialect;
+import org.jooq.impl.DSL;
+import org.jooq.tools.jdbc.MockConnection;
+import org.jooq.tools.jdbc.MockResult;
 import org.jooq.types.ULong;
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.security.secret.AppSecretId;
 import org.oagi.score.gateway.http.security.secret.ApplicationSecretService;
+
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -81,6 +90,27 @@ class JooqAiProviderCatalogRepositoryTest {
         assertThat(repository.loadConnectionTestKey(secretId, "   ")).isNull();
 
         verify(secrets).decrypt(dsl, storedSecretId);
+    }
+
+    @Test
+    void recordsCredentialRevealWithoutIncludingCredentialMaterial() {
+        AtomicReference<String> sql = new AtomicReference<>();
+        AtomicReference<Object[]> bindings = new AtomicReference<>();
+        DSLContext dsl = DSL.using(new MockConnection(context -> {
+            sql.set(context.sql());
+            bindings.set(context.bindings());
+            return new MockResult[]{new MockResult(1, null)};
+        }), SQLDialect.MARIADB);
+        var repository = new JooqAiProviderCatalogRepository(
+                dsl, mock(RepositoryFactory.class), mock(ApplicationSecretService.class),
+                new ObjectMapper());
+
+        repository.recordApiKeyReveal(AiProviderId.from(7L),
+                new UserId(BigInteger.valueOf(42)));
+
+        assertThat(sql.get()).contains("insert into", "ai_catalog_audit");
+        assertThat(Arrays.asList(bindings.get())).contains("PROVIDER", "REVEAL_KEY")
+                .doesNotContain("secret-value");
     }
 
     @Test

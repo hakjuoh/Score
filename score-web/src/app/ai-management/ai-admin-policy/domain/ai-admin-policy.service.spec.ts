@@ -44,6 +44,19 @@ describe('AiAdminPolicyService REST contract', () => {
     request.flush({});
   });
 
+  it('loads a full-length mask and reveals a provider API key through separate endpoints', () => {
+    service.maskedProviderApiKey(2).subscribe();
+    const maskedRequest = http.expectOne('/api/admin/ai/providers/2/api-key');
+    expect(maskedRequest.request.method).toBe('GET');
+    maskedRequest.flush({value: '••••••••••', revealed: false});
+
+    service.revealProviderApiKey(2).subscribe();
+    const revealRequest = http.expectOne('/api/admin/ai/providers/2/api-key/reveal');
+    expect(revealRequest.request.method).toBe('POST');
+    expect(revealRequest.request.body).toEqual({});
+    revealRequest.flush({value: 'secret-key', revealed: true});
+  });
+
   it('tests draft provider settings without using the write endpoint', () => {
     const update = {expectedVersion: 4, providerName: 'Anthropic', providerType: 'anthropic',
       baseUrl: 'https://api.anthropic.com', messagesUrl: null,

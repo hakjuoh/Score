@@ -41,8 +41,10 @@ export function validModelUpdate(form: AiModelUpdate): boolean {
   const safeInput = form.contextWindow - reserve - form.emergencyHeadroomTokens;
   const threshold = form.autoCompactThresholdTokens
     ?? Math.max(1, safeInput - Math.floor(safeInput / 5));
-  if (reserve >= form.contextWindow || form.emergencyHeadroomTokens >= form.contextWindow - reserve
-    || safeInput <= 0 || threshold > safeInput || form.toolOutputTokenLimit > safeInput) return false;
+  if ((form.maxTokens !== null && form.maxTokens >= form.contextWindow)
+    || reserve >= form.contextWindow || form.emergencyHeadroomTokens >= form.contextWindow - reserve
+    || safeInput <= 0 || threshold >= form.contextWindow || threshold > safeInput
+    || form.toolOutputTokenLimit > safeInput) return false;
 
   if (new Set(form.thinkingModes).size !== form.thinkingModes.length
     || form.thinkingModes.some(mode => !mode.trim())

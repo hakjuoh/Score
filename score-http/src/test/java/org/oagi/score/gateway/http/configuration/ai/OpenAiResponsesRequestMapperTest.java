@@ -10,6 +10,7 @@ import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.definition.ToolDefinition;
 
 import java.util.List;
@@ -20,6 +21,57 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class OpenAiResponsesRequestMapperTest {
+
+    @Test
+    void mapsStructuredOutputSafetyStreamingAndNamedToolChoice() {
+        ToolCallingManager tools = mock(ToolCallingManager.class);
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .model("gpt-5.6-sol")
+                .topP(0.8)
+                .topLogprobs(4)
+                .verbosity("high")
+                .toolChoice("""
+                        {"type":"function","function":{"name":"lookup"}}
+                        """)
+                .responseFormat(OpenAiChatModel.ResponseFormat.builder()
+                        .type(OpenAiChatModel.ResponseFormat.Type.JSON_SCHEMA)
+                        .jsonSchema("""
+                                {"type":"object","properties":{"answer":{"type":"string"}}}
+                                """)
+                        .build())
+                .streamOptions(OpenAiChatOptions.StreamOptions.builder()
+                        .includeObfuscation(true)
+                        .additionalProperties(Map.of("trace", "enabled"))
+                        .build())
+                .extraBody(Map.of(
+                        OpenAiResponsesRequestMapper.SAFETY_IDENTIFIER_OPTION, "hashed-user",
+                        OpenAiResponsesRequestMapper.RESPONSE_FORMAT_NAME_OPTION, "answer_schema",
+                        OpenAiResponsesRequestMapper.RESPONSE_FORMAT_STRICT_OPTION, true,
+                        "custom", "forwarded"))
+                .build();
+        when(tools.resolveToolDefinitions(options)).thenReturn(List.of());
+
+        ResponseCreateParams request = new OpenAiResponsesRequestMapper(
+                tools, new ObjectMapper()).create(List.of(new UserMessage("Answer.")), options);
+
+        assertThat(request.topP()).contains(0.8);
+        assertThat(request.topLogprobs()).contains(4L);
+        assertThat(request.safetyIdentifier()).contains("hashed-user");
+        assertThat(request.toolChoice().orElseThrow().asFunction().name()).isEqualTo("lookup");
+        assertThat(request.streamOptions().orElseThrow().includeObfuscation()).contains(true);
+        assertThat(request.streamOptions().orElseThrow()._additionalProperties())
+                .containsKey("trace");
+        var text = request.text().orElseThrow();
+        assertThat(text.verbosity().orElseThrow().asString()).isEqualTo("high");
+        var format = text.format().orElseThrow().asJsonSchema();
+        assertThat(format.name()).isEqualTo("answer_schema");
+        assertThat(format.strict()).contains(true);
+        assertThat(format.schema()._additionalProperties()).containsKeys("type", "properties");
+        assertThat(request._additionalBodyProperties()).containsKey("custom")
+                .doesNotContainKeys(OpenAiResponsesRequestMapper.SAFETY_IDENTIFIER_OPTION,
+                        OpenAiResponsesRequestMapper.RESPONSE_FORMAT_NAME_OPTION,
+                        OpenAiResponsesRequestMapper.RESPONSE_FORMAT_STRICT_OPTION);
+    }
 
     @Test
     void mapsReasoningToolsAndToolContinuationToResponsesApiFields() {

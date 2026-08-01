@@ -23,6 +23,14 @@ public interface AiProviderCatalogRepository {
 
     char[] loadConnectionTestKey(AppSecretId storedSecretId, String requestedKey);
 
+    /**
+     * Opens a stored credential for its immediate caller. The caller owns the returned buffer and
+     * must clear it with {@link org.oagi.score.gateway.http.security.secret.ApplicationSecretService#clear(char[])}.
+     */
+    char[] loadStoredApiKey(AppSecretId storedSecretId);
+
+    void recordApiKeyReveal(AiProviderId providerId, UserId actorUserId);
+
     String findConnectionTestModel(AiProviderId providerId);
 
     record ConnectionDetails(long catalogVersion, String providerType, String baseUrl,

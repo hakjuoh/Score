@@ -4,7 +4,6 @@
 package org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records;
 
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import org.jooq.Record1;
@@ -247,195 +246,19 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_model.provider_compaction_enabled</code>.
-     * Indicates whether provider-native compaction is enabled
+     * Setter for <code>oagi.ai_model.model_options_json</code>. Configured
+     * Spring AI model options as a JSON object
      */
-    public void setProviderCompactionEnabled(Byte value) {
+    public void setModelOptionsJson(String value) {
         set(14, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.provider_compaction_enabled</code>.
-     * Indicates whether provider-native compaction is enabled
+     * Getter for <code>oagi.ai_model.model_options_json</code>. Configured
+     * Spring AI model options as a JSON object
      */
-    public Byte getProviderCompactionEnabled() {
-        return (Byte) get(14);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.temperature</code>. Optional default model
-     * sampling temperature
-     */
-    public void setTemperature(BigDecimal value) {
-        set(15, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.temperature</code>. Optional default model
-     * sampling temperature
-     */
-    public BigDecimal getTemperature() {
-        return (BigDecimal) get(15);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.thinking_budget_tokens</code>. Optional
-     * explicit thinking-token budget
-     */
-    public void setThinkingBudgetTokens(UInteger value) {
-        set(16, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.thinking_budget_tokens</code>. Optional
-     * explicit thinking-token budget
-     */
-    public UInteger getThinkingBudgetTokens() {
-        return (UInteger) get(16);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.adaptive_thinking</code>. Indicates
-     * whether adaptive thinking is enabled
-     */
-    public void setAdaptiveThinking(Byte value) {
-        set(17, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.adaptive_thinking</code>. Indicates
-     * whether adaptive thinking is enabled
-     */
-    public Byte getAdaptiveThinking() {
-        return (Byte) get(17);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.output_effort</code>. Optional provider
-     * output effort value
-     */
-    public void setOutputEffort(String value) {
-        set(18, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.output_effort</code>. Optional provider
-     * output effort value
-     */
-    public String getOutputEffort() {
-        return (String) get(18);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.cache_strategy</code>. Provider prompt
-     * cache strategy
-     */
-    public void setCacheStrategy(String value) {
-        set(19, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.cache_strategy</code>. Provider prompt
-     * cache strategy
-     */
-    public String getCacheStrategy() {
-        return (String) get(19);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.reasoning_model_supported</code>.
-     * Configured support for OpenAI-style reasoning options
-     */
-    public void setReasoningModelSupported(Byte value) {
-        set(20, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.reasoning_model_supported</code>.
-     * Configured support for OpenAI-style reasoning options
-     */
-    public Byte getReasoningModelSupported() {
-        return (Byte) get(20);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.output_effort_supported</code>. Configured
-     * support for output effort options
-     */
-    public void setOutputEffortSupported(Byte value) {
-        set(21, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.output_effort_supported</code>. Configured
-     * support for output effort options
-     */
-    public Byte getOutputEffortSupported() {
-        return (Byte) get(21);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.verbosity_supported</code>. Configured
-     * support for verbosity options
-     */
-    public void setVerbositySupported(Byte value) {
-        set(22, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.verbosity_supported</code>. Configured
-     * support for verbosity options
-     */
-    public Byte getVerbositySupported() {
-        return (Byte) get(22);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.temperature_supported</code>. Configured
-     * support for temperature options
-     */
-    public void setTemperatureSupported(Byte value) {
-        set(23, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.temperature_supported</code>. Configured
-     * support for temperature options
-     */
-    public Byte getTemperatureSupported() {
-        return (Byte) get(23);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.thinking_modes_json</code>. Configured
-     * provider thinking modes as a JSON array
-     */
-    public void setThinkingModesJson(String value) {
-        set(24, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.thinking_modes_json</code>. Configured
-     * provider thinking modes as a JSON array
-     */
-    public String getThinkingModesJson() {
-        return (String) get(24);
-    }
-
-    /**
-     * Setter for <code>oagi.ai_model.default_thinking</code>. Default provider
-     * thinking mode
-     */
-    public void setDefaultThinking(String value) {
-        set(25, value);
-    }
-
-    /**
-     * Getter for <code>oagi.ai_model.default_thinking</code>. Default provider
-     * thinking mode
-     */
-    public String getDefaultThinking() {
-        return (String) get(25);
+    public String getModelOptionsJson() {
+        return (String) get(14);
     }
 
     /**
@@ -443,7 +266,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * and cache invalidation version
      */
     public void setCatalogVersion(ULong value) {
-        set(26, value);
+        set(15, value);
     }
 
     /**
@@ -451,7 +274,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * and cache invalidation version
      */
     public ULong getCatalogVersion() {
-        return (ULong) get(26);
+        return (ULong) get(15);
     }
 
     /**
@@ -459,7 +282,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * administrator who created the model
      */
     public void setCreatedBy(ULong value) {
-        set(27, value);
+        set(16, value);
     }
 
     /**
@@ -467,7 +290,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * administrator who created the model
      */
     public ULong getCreatedBy() {
-        return (ULong) get(27);
+        return (ULong) get(16);
     }
 
     /**
@@ -475,7 +298,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * administrator who last updated the model
      */
     public void setLastUpdatedBy(ULong value) {
-        set(28, value);
+        set(17, value);
     }
 
     /**
@@ -483,7 +306,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * administrator who last updated the model
      */
     public ULong getLastUpdatedBy() {
-        return (ULong) get(28);
+        return (ULong) get(17);
     }
 
     /**
@@ -491,7 +314,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * model was created
      */
     public void setCreatedAt(LocalDateTime value) {
-        set(29, value);
+        set(18, value);
     }
 
     /**
@@ -499,7 +322,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * model was created
      */
     public LocalDateTime getCreatedAt() {
-        return (LocalDateTime) get(29);
+        return (LocalDateTime) get(18);
     }
 
     /**
@@ -507,7 +330,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * the model was last updated
      */
     public void setLastUpdatedAt(LocalDateTime value) {
-        set(30, value);
+        set(19, value);
     }
 
     /**
@@ -515,7 +338,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * the model was last updated
      */
     public LocalDateTime getLastUpdatedAt() {
-        return (LocalDateTime) get(30);
+        return (LocalDateTime) get(19);
     }
 
     // -------------------------------------------------------------------------
@@ -541,7 +364,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     /**
      * Create a detached, initialised AiModelRecord
      */
-    public AiModelRecord(ULong aiModelId, ULong providerId, String modelKey, String providerModelName, String displayName, String description, Byte enabled, UInteger sortOrder, UInteger maxTokens, ULong contextWindow, ULong outputReserveTokens, ULong autoCompactThresholdTokens, ULong emergencyHeadroomTokens, ULong toolOutputTokenLimit, Byte providerCompactionEnabled, BigDecimal temperature, UInteger thinkingBudgetTokens, Byte adaptiveThinking, String outputEffort, String cacheStrategy, Byte reasoningModelSupported, Byte outputEffortSupported, Byte verbositySupported, Byte temperatureSupported, String thinkingModesJson, String defaultThinking, ULong catalogVersion, ULong createdBy, ULong lastUpdatedBy, LocalDateTime createdAt, LocalDateTime lastUpdatedAt) {
+    public AiModelRecord(ULong aiModelId, ULong providerId, String modelKey, String providerModelName, String displayName, String description, Byte enabled, UInteger sortOrder, UInteger maxTokens, ULong contextWindow, ULong outputReserveTokens, ULong autoCompactThresholdTokens, ULong emergencyHeadroomTokens, ULong toolOutputTokenLimit, String modelOptionsJson, ULong catalogVersion, ULong createdBy, ULong lastUpdatedBy, LocalDateTime createdAt, LocalDateTime lastUpdatedAt) {
         super(AiModel.AI_MODEL);
 
         setAiModelId(aiModelId);
@@ -558,18 +381,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
         setAutoCompactThresholdTokens(autoCompactThresholdTokens);
         setEmergencyHeadroomTokens(emergencyHeadroomTokens);
         setToolOutputTokenLimit(toolOutputTokenLimit);
-        setProviderCompactionEnabled(providerCompactionEnabled);
-        setTemperature(temperature);
-        setThinkingBudgetTokens(thinkingBudgetTokens);
-        setAdaptiveThinking(adaptiveThinking);
-        setOutputEffort(outputEffort);
-        setCacheStrategy(cacheStrategy);
-        setReasoningModelSupported(reasoningModelSupported);
-        setOutputEffortSupported(outputEffortSupported);
-        setVerbositySupported(verbositySupported);
-        setTemperatureSupported(temperatureSupported);
-        setThinkingModesJson(thinkingModesJson);
-        setDefaultThinking(defaultThinking);
+        setModelOptionsJson(modelOptionsJson);
         setCatalogVersion(catalogVersion);
         setCreatedBy(createdBy);
         setLastUpdatedBy(lastUpdatedBy);
