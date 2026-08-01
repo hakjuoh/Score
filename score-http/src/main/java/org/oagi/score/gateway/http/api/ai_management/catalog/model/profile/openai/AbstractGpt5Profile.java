@@ -1,6 +1,7 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai;
 
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.*;
 
 import java.util.List;
 

@@ -18,11 +18,12 @@ import static org.mockito.Mockito.when;
 
 class ChatPromptAssemblerTest {
 
+    private ScoreAiModelRegistry models;
     private ChatPromptAssembler prompts;
 
     @BeforeEach
     void setUp() {
-        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        models = mock(ScoreAiModelRegistry.class);
         when(models.isAvailable()).thenReturn(true);
         prompts = new ChatPromptAssembler(models, new ObjectMapper());
     }
@@ -57,6 +58,29 @@ class ChatPromptAssemblerTest {
     void requiresResolvedConversationSettingsBeforeExecution() {
         assertThatIllegalArgumentException().isThrownBy(() ->
                         prompts.requirePrepared(request("hello", List.of())))
+                .withMessage("The chat request must be prepared before execution.");
+    }
+
+    @Test
+    void acceptsPreparedRequestsForModelsWithoutReasoningEffortOptions() {
+        when(models.hasConfigurableReasoningEfforts(
+                "claude-haiku-4_5", "request-1")).thenReturn(false);
+        ChatRequest request = new ChatRequest("hello", "request-1", null,
+                "conversation-1", null, List.of(), null,
+                "claude-haiku-4_5", null, "ask");
+
+        assertThat(prompts.requirePrepared(request)).isSameAs(request);
+    }
+
+    @Test
+    void rejectsMissingEffortForTheSnapshottedEffortBearingModel() {
+        when(models.hasConfigurableReasoningEfforts(
+                "claude-opus-5", "request-1")).thenReturn(true);
+        ChatRequest request = new ChatRequest("hello", "request-1", null,
+                "conversation-1", null, List.of(), null,
+                "claude-opus-5", null, "ask");
+
+        assertThatIllegalArgumentException().isThrownBy(() -> prompts.requirePrepared(request))
                 .withMessage("The chat request must be prepared before execution.");
     }
 

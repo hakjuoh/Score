@@ -1,6 +1,7 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic;
 
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.*;
 
 import java.util.List;
 
@@ -10,6 +11,7 @@ abstract class AbstractClaude46PlusProfile extends AbstractAiModelProfile
     private final long contextWindow;
     private final long maxOutputTokens;
     private final List<String> thinkingModes;
+    private final List<String> outputEfforts;
 
     protected AbstractClaude46PlusProfile(String modelKey, String providerModelName,
                                           String displayName, String description,
@@ -31,6 +33,8 @@ abstract class AbstractClaude46PlusProfile extends AbstractAiModelProfile
         this.contextWindow = contextWindow;
         this.maxOutputTokens = maxOutputTokens;
         this.thinkingModes = List.copyOf(thinkingModes);
+        this.outputEfforts = legacySampling ? AnthropicOutputEfforts.THROUGH_MAX
+                : AnthropicOutputEfforts.THROUGH_XHIGH_AND_MAX;
     }
 
     @Override public final String getProviderType() { return AiProviderType.ANTHROPIC.value(); }
@@ -49,16 +53,7 @@ abstract class AbstractClaude46PlusProfile extends AbstractAiModelProfile
     @Override public List<String> getThinkingModes() { return thinkingModes; }
     @Override public final String getDefaultThinking() { return "adaptive"; }
     @Override public final List<ReasoningEffort> getOutputEfforts() {
-        return List.of(
-                effort("low", "Low", "Fast responses with lighter reasoning.", false, 0),
-                effort("medium", "Medium", "Balanced speed and reasoning depth.", false, 1),
-                effort("high", "High", "Greater reasoning depth for complex work.", true, 2),
-                effort("max", "Maximum", "Maximum effort for quality-first work.", false, 3));
-    }
-
-    private static ReasoningEffort effort(String name, String displayName, String description,
-                                           boolean defaultEffort, int sortOrder) {
-        return new ReasoningEffort(name, displayName, description, defaultEffort, sortOrder);
+        return AnthropicOutputEfforts.profiles(outputEfforts);
     }
 
     protected final long maxOutputTokens() { return maxOutputTokens; }

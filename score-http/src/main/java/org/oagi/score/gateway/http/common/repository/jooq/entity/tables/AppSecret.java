@@ -112,25 +112,25 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
      * The column <code>oagi.app_secret.created_by</code>. Identifier of the
      * administrator who created the secret
      */
-    public final TableField<AppSecretRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Identifier of the administrator who created the secret");
+    public final TableField<AppSecretRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who created the secret");
 
     /**
      * The column <code>oagi.app_secret.last_updated_by</code>. Identifier of
      * the administrator who last updated the secret
      */
-    public final TableField<AppSecretRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Identifier of the administrator who last updated the secret");
+    public final TableField<AppSecretRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who last updated the secret");
 
     /**
-     * The column <code>oagi.app_secret.created_at</code>. Date and time when
-     * the secret was created
+     * The column <code>oagi.app_secret.creation_timestamp</code>. Date and time
+     * when the secret was created
      */
-    public final TableField<AppSecretRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the secret was created");
+    public final TableField<AppSecretRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the secret was created");
 
     /**
-     * The column <code>oagi.app_secret.last_updated_at</code>. Date and time
-     * when the secret was last updated
+     * The column <code>oagi.app_secret.last_update_timestamp</code>. Date and
+     * time when the secret was last updated
      */
-    public final TableField<AppSecretRecord, LocalDateTime> LAST_UPDATED_AT = createField(DSL.name("last_updated_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the secret was last updated");
+    public final TableField<AppSecretRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the secret was last updated");
 
     private AppSecret(Name alias, Table<AppSecretRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

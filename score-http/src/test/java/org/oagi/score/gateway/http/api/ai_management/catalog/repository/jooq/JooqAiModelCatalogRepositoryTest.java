@@ -10,7 +10,7 @@ import org.jooq.tools.jdbc.MockResult;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeHaiku45Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeHaiku45Profile;
 import org.oagi.score.gateway.http.common.model.PageRequest;
 import org.oagi.score.gateway.http.common.model.Sort;
 import org.oagi.score.gateway.http.common.model.SortDirection;
@@ -57,8 +57,8 @@ class JooqAiModelCatalogRepositoryTest {
                 .contains("`effort_filter`.`default_effort` = ?")
                 .contains("`effort_filter`.`display_name`")
                 .contains("`updater`.`login_id` in (?)")
-                .contains("`ai_model`.`last_updated_at` >= ?")
-                .contains("`ai_model`.`last_updated_at` < ?");
+                .contains("`ai_model`.`last_update_timestamp` >= ?")
+                .contains("`ai_model`.`last_update_timestamp` < ?");
     }
 
     @Test

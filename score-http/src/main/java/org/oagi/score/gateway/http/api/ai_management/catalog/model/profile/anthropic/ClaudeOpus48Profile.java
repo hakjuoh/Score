@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic;
 
 public final class ClaudeOpus48Profile extends AbstractClaude46PlusProfile {
     public ClaudeOpus48Profile() {

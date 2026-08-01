@@ -1,4 +1,6 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic;
+
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelOption;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,13 +65,14 @@ final class AnthropicChatOptionProfiles {
         options.add(enumeration("thinkingDisplay", null,
                 "Controls whether returned thinking is summarized or omitted.",
                 "SUMMARIZED", "OMITTED"));
-        if (support.outputConfig()) {
+        if (!support.outputEfforts().isEmpty()) {
             options.add(json("outputConfig", null,
                     "JSON output configuration combining a structured-output schema and effort."));
             options.add(json("outputSchema", null,
                     "JSON Schema used for Anthropic structured output."));
             options.add(enumeration("outputEffort", "HIGH",
-                    "Effort level used by outputConfig.", "LOW", "MEDIUM", "HIGH", "MAX"));
+                    "Effort level used by outputConfig.", support.outputEfforts().stream()
+                            .map(String::toUpperCase).toArray(String[]::new)));
         }
         options.add(enumeration("inferenceGeo", null,
                 "Geographic region where inference is processed.", "us", "eu"));

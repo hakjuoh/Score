@@ -3,12 +3,25 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.configuration.ai.ScoreAiProperties;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class JooqAiCatalogBootstrapRepositoryTest {
+
+    @Test
+    void bootstrapsWithTheSystemActorAndIdenticalCreationAuditValues() {
+        LocalDateTime timestamp = LocalDateTime.of(2026, 8, 1, 0, 0);
+
+        var audit = JooqAiCatalogBootstrapRepository.systemAuditAt(timestamp);
+
+        assertThat(audit.createdBy().longValue()).isZero();
+        assertThat(audit.lastUpdatedBy()).isEqualTo(audit.createdBy());
+        assertThat(audit.creationTimestamp()).isSameAs(timestamp);
+        assertThat(audit.lastUpdateTimestamp()).isSameAs(timestamp);
+    }
 
     @Test
     void consolidatesLegacyModelSettingsAndGenericOptionsIntoOneJsonDocument() {

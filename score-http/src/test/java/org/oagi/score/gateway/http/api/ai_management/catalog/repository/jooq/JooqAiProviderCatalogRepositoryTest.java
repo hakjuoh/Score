@@ -65,7 +65,7 @@ class JooqAiProviderCatalogRepositoryTest {
             record.set(AI_PROVIDER.PROVIDER_NAME, "Anthropic");
             record.set(AI_PROVIDER.PROVIDER_TYPE, "anthropic");
             record.set(AI_PROVIDER.ENABLED, (byte) 1);
-            record.set(AI_PROVIDER.LAST_UPDATED_AT,
+            record.set(AI_PROVIDER.LAST_UPDATE_TIMESTAMP,
                     LocalDateTime.of(2026, 7, 15, 12, 0));
             record.set(updaterLoginId, "admin");
             result.add(record);
@@ -87,9 +87,9 @@ class JooqAiProviderCatalogRepositoryTest {
         String sql = String.join("\n", statements);
         assertThat(sql).contains("`updater`.`login_id` in (?)")
                 .contains("`updater`.`login_id` not in (?)")
-                .contains("`ai_provider`.`last_updated_at` >= ?")
-                .contains("`ai_provider`.`last_updated_at` < ?")
-                .contains("order by `oagi`.`ai_provider`.`last_updated_at` desc")
+                .contains("`ai_provider`.`last_update_timestamp` >= ?")
+                .contains("`ai_provider`.`last_update_timestamp` < ?")
+                .contains("order by `oagi`.`ai_provider`.`last_update_timestamp` desc")
                 .contains("offset ? rows fetch next ? rows only");
     }
 

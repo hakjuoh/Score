@@ -120,7 +120,7 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
                         .set(AI_USER_POLICY.POLICY_VERSION,
                                 ULong.valueOf(before.policyVersion() + 1))
                         .set(AI_USER_POLICY.LAST_UPDATED_BY, unsigned(actorUserId))
-                        .set(AI_USER_POLICY.LAST_UPDATED_AT, now())
+                        .set(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP, now())
                         .where(AI_USER_POLICY.APP_USER_ID.eq(target))
                         .and(AI_USER_POLICY.POLICY_VERSION.eq(
                                 ULong.valueOf(before.policyVersion())))
@@ -158,8 +158,8 @@ public class JooqAiPolicyRepository implements AiPolicyQueryRepository, AiPolicy
                 .set(AI_USER_POLICY.POLICY_VERSION, ULong.valueOf(1))
                 .set(AI_USER_POLICY.CREATED_BY, unsigned(actorUserId))
                 .set(AI_USER_POLICY.LAST_UPDATED_BY, unsigned(actorUserId))
-                .set(AI_USER_POLICY.CREATED_AT, now)
-                .set(AI_USER_POLICY.LAST_UPDATED_AT, now)
+                .set(AI_USER_POLICY.CREATION_TIMESTAMP, now)
+                .set(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP, now)
                     .execute();
         } catch (org.jooq.exception.IntegrityConstraintViolationException exception) {
             // A concurrent first save can pass the initial read on both nodes. The primary

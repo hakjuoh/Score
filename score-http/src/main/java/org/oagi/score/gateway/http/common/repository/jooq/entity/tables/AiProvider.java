@@ -114,25 +114,25 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
      * The column <code>oagi.ai_provider.created_by</code>. Identifier of the
      * administrator who created the provider
      */
-    public final TableField<AiProviderRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Identifier of the administrator who created the provider");
+    public final TableField<AiProviderRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who created the provider");
 
     /**
      * The column <code>oagi.ai_provider.last_updated_by</code>. Identifier of
      * the administrator who last updated the provider
      */
-    public final TableField<AiProviderRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Identifier of the administrator who last updated the provider");
+    public final TableField<AiProviderRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who last updated the provider");
 
     /**
-     * The column <code>oagi.ai_provider.created_at</code>. Date and time when
-     * the provider was created
+     * The column <code>oagi.ai_provider.creation_timestamp</code>. Date and
+     * time when the provider was created
      */
-    public final TableField<AiProviderRecord, LocalDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the provider was created");
+    public final TableField<AiProviderRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the provider was created");
 
     /**
-     * The column <code>oagi.ai_provider.last_updated_at</code>. Date and time
-     * when the provider was last updated
+     * The column <code>oagi.ai_provider.last_update_timestamp</code>. Date and
+     * time when the provider was last updated
      */
-    public final TableField<AiProviderRecord, LocalDateTime> LAST_UPDATED_AT = createField(DSL.name("last_updated_at"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the provider was last updated");
+    public final TableField<AiProviderRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the provider was last updated");
 
     private AiProvider(Name alias, Table<AiProviderRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

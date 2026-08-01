@@ -310,34 +310,34 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_model.created_at</code>. Date and time when the
-     * model was created
+     * Setter for <code>oagi.ai_model.creation_timestamp</code>. Date and time
+     * when the model was created
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(18, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.created_at</code>. Date and time when the
-     * model was created
+     * Getter for <code>oagi.ai_model.creation_timestamp</code>. Date and time
+     * when the model was created
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(18);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.last_updated_at</code>. Date and time when
-     * the model was last updated
+     * Setter for <code>oagi.ai_model.last_update_timestamp</code>. Date and
+     * time when the model was last updated
      */
-    public void setLastUpdatedAt(LocalDateTime value) {
+    public void setLastUpdateTimestamp(LocalDateTime value) {
         set(19, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.last_updated_at</code>. Date and time when
-     * the model was last updated
+     * Getter for <code>oagi.ai_model.last_update_timestamp</code>. Date and
+     * time when the model was last updated
      */
-    public LocalDateTime getLastUpdatedAt() {
+    public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(19);
     }
 
@@ -364,7 +364,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     /**
      * Create a detached, initialised AiModelRecord
      */
-    public AiModelRecord(ULong aiModelId, ULong providerId, String modelKey, String providerModelName, String displayName, String description, Byte enabled, Byte defaultModel, UInteger sortOrder, UInteger maxTokens, ULong contextWindow, ULong outputReserveTokens, ULong autoCompactThresholdTokens, ULong emergencyHeadroomTokens, ULong toolOutputTokenLimit, String modelOptionsJson, ULong createdBy, ULong lastUpdatedBy, LocalDateTime createdAt, LocalDateTime lastUpdatedAt) {
+    public AiModelRecord(ULong aiModelId, ULong providerId, String modelKey, String providerModelName, String displayName, String description, Byte enabled, Byte defaultModel, UInteger sortOrder, UInteger maxTokens, ULong contextWindow, ULong outputReserveTokens, ULong autoCompactThresholdTokens, ULong emergencyHeadroomTokens, ULong toolOutputTokenLimit, String modelOptionsJson, ULong createdBy, ULong lastUpdatedBy, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
         super(AiModel.AI_MODEL);
 
         setAiModelId(aiModelId);
@@ -385,8 +385,8 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
         setModelOptionsJson(modelOptionsJson);
         setCreatedBy(createdBy);
         setLastUpdatedBy(lastUpdatedBy);
-        setCreatedAt(createdAt);
-        setLastUpdatedAt(lastUpdatedAt);
+        setCreationTimestamp(creationTimestamp);
+        setLastUpdateTimestamp(lastUpdateTimestamp);
         resetTouchedOnNotNull();
     }
 }

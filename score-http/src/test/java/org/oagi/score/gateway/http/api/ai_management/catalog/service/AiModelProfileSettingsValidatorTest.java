@@ -3,9 +3,9 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.service;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeFable5Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.ClaudeHaiku45Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.Gpt56SolProfile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeFable5Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeHaiku45Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai.Gpt56SolProfile;
 
 import java.util.List;
 

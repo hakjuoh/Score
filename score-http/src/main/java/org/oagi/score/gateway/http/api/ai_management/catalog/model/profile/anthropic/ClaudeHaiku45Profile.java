@@ -1,4 +1,6 @@
-package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile;
+package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic;
+
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.*;
 
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderType;
 

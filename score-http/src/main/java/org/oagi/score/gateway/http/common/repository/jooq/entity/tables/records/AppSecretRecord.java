@@ -182,34 +182,34 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Setter for <code>oagi.app_secret.created_at</code>. Date and time when
-     * the secret was created
+     * Setter for <code>oagi.app_secret.creation_timestamp</code>. Date and time
+     * when the secret was created
      */
-    public void setCreatedAt(LocalDateTime value) {
+    public void setCreationTimestamp(LocalDateTime value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.app_secret.created_at</code>. Date and time when
-     * the secret was created
+     * Getter for <code>oagi.app_secret.creation_timestamp</code>. Date and time
+     * when the secret was created
      */
-    public LocalDateTime getCreatedAt() {
+    public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(10);
     }
 
     /**
-     * Setter for <code>oagi.app_secret.last_updated_at</code>. Date and time
-     * when the secret was last updated
+     * Setter for <code>oagi.app_secret.last_update_timestamp</code>. Date and
+     * time when the secret was last updated
      */
-    public void setLastUpdatedAt(LocalDateTime value) {
+    public void setLastUpdateTimestamp(LocalDateTime value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oagi.app_secret.last_updated_at</code>. Date and time
-     * when the secret was last updated
+     * Getter for <code>oagi.app_secret.last_update_timestamp</code>. Date and
+     * time when the secret was last updated
      */
-    public LocalDateTime getLastUpdatedAt() {
+    public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(11);
     }
 
@@ -236,7 +236,7 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     /**
      * Create a detached, initialised AppSecretRecord
      */
-    public AppSecretRecord(ULong appSecretId, String secretGuid, String secretName, String secretType, byte[] encryptedValue, byte[] nonce, String encryptionKeyId, UShort encryptionVersion, ULong createdBy, ULong lastUpdatedBy, LocalDateTime createdAt, LocalDateTime lastUpdatedAt) {
+    public AppSecretRecord(ULong appSecretId, String secretGuid, String secretName, String secretType, byte[] encryptedValue, byte[] nonce, String encryptionKeyId, UShort encryptionVersion, ULong createdBy, ULong lastUpdatedBy, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
         super(AppSecret.APP_SECRET);
 
         setAppSecretId(appSecretId);
@@ -249,8 +249,8 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
         setEncryptionVersion(encryptionVersion);
         setCreatedBy(createdBy);
         setLastUpdatedBy(lastUpdatedBy);
-        setCreatedAt(createdAt);
-        setLastUpdatedAt(lastUpdatedAt);
+        setCreationTimestamp(creationTimestamp);
+        setLastUpdateTimestamp(lastUpdateTimestamp);
         resetTouchedOnNotNull();
     }
 }

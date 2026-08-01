@@ -58,9 +58,13 @@ final class ChatPromptAssembler {
             prepared = prepared.withActiveWorkflow("assistant")
                     .withMultiAgent(AiMultiAgentOptions.single());
         }
+        boolean missingRequiredEffort = StringUtils.hasText(prepared.modelName())
+                && models.hasConfigurableReasoningEfforts(
+                        prepared.modelName(), prepared.requestId())
+                && !StringUtils.hasText(prepared.reasoningEffort());
         if (!StringUtils.hasText(prepared.conversationId())
                 || !StringUtils.hasText(prepared.modelName())
-                || !StringUtils.hasText(prepared.reasoningEffort())) {
+                || missingRequiredEffort) {
             throw new IllegalArgumentException("The chat request must be prepared before execution.");
         }
         return prepared;

@@ -112,11 +112,11 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
         condition = condition.and(AiAdminPage.loginIdSelection(
                 UPDATER.LOGIN_ID, updaterLoginIdList));
         if (updatedAfter != null) {
-            condition = condition.and(AI_MODEL.LAST_UPDATED_AT.ge(
+            condition = condition.and(AI_MODEL.LAST_UPDATE_TIMESTAMP.ge(
                     updatedAfter.atZone(ZoneOffset.UTC).toLocalDateTime()));
         }
         if (updatedBefore != null) {
-            condition = condition.and(AI_MODEL.LAST_UPDATED_AT.lt(
+            condition = condition.and(AI_MODEL.LAST_UPDATE_TIMESTAMP.lt(
                     updatedBefore.atZone(ZoneOffset.UTC).toLocalDateTime()));
         }
         var candidates = DSL.selectOne().from(AI_MODEL).join(AI_PROVIDER)
@@ -144,14 +144,14 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 case "defaultEffort" -> defaultEffortField;
                 case "efforts" -> effortsField;
                 case "updater" -> UPDATER.LOGIN_ID;
-                case "updatedOn" -> AI_MODEL.LAST_UPDATED_AT;
+                case "updatedOn" -> AI_MODEL.LAST_UPDATE_TIMESTAMP;
                 default -> null;
             };
             if (field != null) order.add(sort.direction() == SortDirection.DESC
                     ? field.desc() : field.asc());
         });
         if (order.isEmpty()) {
-            order.add(AI_MODEL.LAST_UPDATED_AT.desc());
+            order.add(AI_MODEL.LAST_UPDATE_TIMESTAMP.desc());
         }
         order.add(AI_MODEL.AI_MODEL_ID.asc());
         List<AiModelCatalogView> page = dslContext().select(AI_MODEL.fields())
@@ -199,8 +199,8 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                         .set(AI_MODEL.SORT_ORDER, UInteger.valueOf(input.sortOrder()))
                         .set(AI_MODEL.CREATED_BY, valueOf(actorUserId))
                         .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
-                        .set(AI_MODEL.CREATED_AT, now)
-                        .set(AI_MODEL.LAST_UPDATED_AT, now)
+                        .set(AI_MODEL.CREATION_TIMESTAMP, now)
+                        .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, now)
                         .returning(AI_MODEL.AI_MODEL_ID).fetchOne(
                                 AI_MODEL.AI_MODEL_ID).toBigInteger());
                 replaceEfforts(tx, id, reasoningEfforts);
@@ -245,7 +245,7 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                     .set(AI_MODEL.ENABLED, flag(input.enabled()))
                     .set(AI_MODEL.SORT_ORDER, UInteger.valueOf(input.sortOrder()))
                     .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
-                    .set(AI_MODEL.LAST_UPDATED_AT, now)
+                    .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, now)
                     .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(modelId)))
                     .execute();
             replaceEfforts(tx, modelId, reasoningEfforts);
@@ -360,13 +360,13 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
         tx.update(AI_MODEL)
                 .setNull(AI_MODEL.DEFAULT_MODEL)
                 .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
-                .set(AI_MODEL.LAST_UPDATED_AT, now)
+                .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, now)
                 .where(AI_MODEL.DEFAULT_MODEL.eq((byte) 1))
                 .and(AI_MODEL.AI_MODEL_ID.ne(valueOf(id))).execute();
         tx.update(AI_MODEL)
                 .set(AI_MODEL.DEFAULT_MODEL, (byte) 1)
                 .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
-                .set(AI_MODEL.LAST_UPDATED_AT, now)
+                .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, now)
                 .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(id))).execute();
     }
 
@@ -426,7 +426,7 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 nullableBoolean(options.get("temperatureSupported")),
                 stringList(options.get("thinkingModes")),
                 stringValue(options.get("defaultThinking")), editableOptions, efforts,
-                updaterLoginId(tx, row), utc(row.get(AI_MODEL.LAST_UPDATED_AT)));
+                updaterLoginId(tx, row), utc(row.get(AI_MODEL.LAST_UPDATE_TIMESTAMP)));
     }
 
     private String updaterLoginId(DSLContext tx, Record row) {

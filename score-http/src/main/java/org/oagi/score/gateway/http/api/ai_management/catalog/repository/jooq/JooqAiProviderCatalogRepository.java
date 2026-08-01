@@ -84,11 +84,11 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
         condition = condition.and(AiAdminPage.loginIdSelection(
                 UPDATER.LOGIN_ID, updaterLoginIdList));
         if (updatedAfter != null) {
-            condition = condition.and(AI_PROVIDER.LAST_UPDATED_AT.ge(
+            condition = condition.and(AI_PROVIDER.LAST_UPDATE_TIMESTAMP.ge(
                     updatedAfter.atZone(ZoneOffset.UTC).toLocalDateTime()));
         }
         if (updatedBefore != null) {
-            condition = condition.and(AI_PROVIDER.LAST_UPDATED_AT.lt(
+            condition = condition.and(AI_PROVIDER.LAST_UPDATE_TIMESTAMP.lt(
                     updatedBefore.atZone(ZoneOffset.UTC).toLocalDateTime()));
         }
         var candidates = DSL.selectOne().from(AI_PROVIDER).leftJoin(UPDATER)
@@ -109,13 +109,13 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
                 case "endpoint" -> endpointField;
                 case "status" -> AI_PROVIDER.ENABLED;
                 case "updater" -> UPDATER.LOGIN_ID;
-                case "updatedOn" -> AI_PROVIDER.LAST_UPDATED_AT;
+                case "updatedOn" -> AI_PROVIDER.LAST_UPDATE_TIMESTAMP;
                 default -> null;
             };
             if (field != null) order.add(sort.direction() == SortDirection.DESC
                     ? field.desc() : field.asc());
         });
-        if (order.isEmpty()) order.add(AI_PROVIDER.LAST_UPDATED_AT.desc());
+        if (order.isEmpty()) order.add(AI_PROVIDER.LAST_UPDATE_TIMESTAMP.desc());
         order.add(AI_PROVIDER.AI_PROVIDER_ID.asc());
         List<AiProviderView> page = dslContext().select(AI_PROVIDER.fields())
                 .select(UPDATER_LOGIN_ID).from(AI_PROVIDER).leftJoin(UPDATER)
@@ -153,8 +153,8 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
                         .set(AI_PROVIDER.ENABLED, flag(input.enabled()))
                         .set(AI_PROVIDER.CREATED_BY, valueOf(actorUserId))
                         .set(AI_PROVIDER.LAST_UPDATED_BY, valueOf(actorUserId))
-                        .set(AI_PROVIDER.CREATED_AT, now)
-                        .set(AI_PROVIDER.LAST_UPDATED_AT, now)
+                        .set(AI_PROVIDER.CREATION_TIMESTAMP, now)
+                        .set(AI_PROVIDER.LAST_UPDATE_TIMESTAMP, now)
                         .returning(AI_PROVIDER.AI_PROVIDER_ID)
                         .fetchOne(AI_PROVIDER.AI_PROVIDER_ID).toBigInteger());
                 return view(requireProvider(tx, id));
@@ -197,7 +197,7 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
                     .set(AI_PROVIDER.API_KEY_SECRET_ID, valueOf(nextSecretId))
                     .set(AI_PROVIDER.ENABLED, flag(input.enabled()))
                     .set(AI_PROVIDER.LAST_UPDATED_BY, valueOf(actorUserId))
-                    .set(AI_PROVIDER.LAST_UPDATED_AT, now())
+                    .set(AI_PROVIDER.LAST_UPDATE_TIMESTAMP, now())
                     .where(AI_PROVIDER.AI_PROVIDER_ID.eq(valueOf(providerId)))
                     .execute();
             if (changed != 1) throw new NotFoundException();
@@ -304,7 +304,7 @@ public class JooqAiProviderCatalogRepository extends JooqBaseRepository
                 row.get(AI_PROVIDER.API_VERSION),
                 row.get(AI_PROVIDER.ENABLED) == 1,
                 row.get(AI_PROVIDER.API_KEY_SECRET_ID) != null,
-                updaterLoginId(row), utc(row.get(AI_PROVIDER.LAST_UPDATED_AT)));
+                updaterLoginId(row), utc(row.get(AI_PROVIDER.LAST_UPDATE_TIMESTAMP)));
     }
 
     private String updaterLoginId(Record row) {

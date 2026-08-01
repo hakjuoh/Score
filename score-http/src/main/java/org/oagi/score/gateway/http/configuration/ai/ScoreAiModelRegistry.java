@@ -154,6 +154,11 @@ public class ScoreAiModelRegistry {
                 .toList();
     }
 
+    /** Whether the request's catalog snapshot exposes a selectable reasoning effort. */
+    public boolean hasConfigurableReasoningEfforts(String modelName, String requestId) {
+        return !modelConfiguration(modelName, requestId).reasoningEfforts().isEmpty();
+    }
+
     public ChatClient.Builder clientBuilder(String modelName) {
         refresh();
         ChatModel model = models.get(resolveModelName(modelName));
@@ -276,11 +281,10 @@ public class ScoreAiModelRegistry {
                         values -> List.copyOf(values.values())));
         List<ReasoningEffortDescriptor> efforts = new ArrayList<>(configuredEfforts);
         if (!configuredEfforts.isEmpty()
-                && (Boolean.TRUE.equals(model.getModelCapabilities().getReasoningModel())
-                || model.getModelCapabilities().getThinkingModes().stream()
+                && model.getModelCapabilities().getThinkingModes().stream()
                 .filter(StringUtils::hasText)
                 .map(value -> value.strip().toLowerCase())
-                .anyMatch("disabled"::equals))
+                .anyMatch("disabled"::equals)
                 && efforts.stream().noneMatch(effort -> "disabled".equals(effort.name()))) {
             efforts.addFirst(new ReasoningEffortDescriptor(
                     "disabled", "Disabled", "Disable additional reasoning."));

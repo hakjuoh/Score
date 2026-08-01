@@ -26,7 +26,6 @@ export class AiPolicyUserListComponent implements OnInit {
   private readonly navigation = inject(AiAdminListNavigationService);
   request = new AiPolicyUserListRequest(this.navigation.queryParamMap);
   loading = false;
-  loadFailed = false;
   private loadSequence = 0;
   preferencesInfo: PreferencesInfo;
   loginIdList: string[] = [];
@@ -85,7 +84,6 @@ export class AiPolicyUserListComponent implements OnInit {
     }
     const sequence = ++this.loadSequence;
     this.loading = true;
-    this.loadFailed = false;
     this.request.page = new PageRequest(this.sort.active, this.sort.direction,
       this.paginator.pageIndex, this.paginator.pageSize);
     this.service.searchUsers(this.request).pipe(finalize(() => {
@@ -100,7 +98,6 @@ export class AiPolicyUserListComponent implements OnInit {
         if (sequence !== this.loadSequence) return;
         this.dataSource.data = [];
         this.paginator.length = 0;
-        this.loadFailed = true;
       }});
   }
   onSearch(): void {

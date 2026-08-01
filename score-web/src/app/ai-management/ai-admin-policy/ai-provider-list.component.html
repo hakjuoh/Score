@@ -48,8 +48,6 @@
 
     <mat-card-content class="mat-card-container">
       @if (loading) { <div class="loading-container"><mat-spinner [diameter]="40"></mat-spinner></div> }
-      @if (loadFailed) { <div class="load-error" role="alert">Providers could not be loaded.
-        <button mat-stroked-button (click)="load()">Retry</button></div> }
       <div class="table-container">
         <div class="score-column-container align-items-center">
           <score-column-selector [columns]="columns" (columnsChange)="onColumnsChange($event)"

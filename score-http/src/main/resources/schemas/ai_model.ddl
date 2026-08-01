@@ -16,10 +16,10 @@ CREATE TABLE `ai_model`
     `emergency_headroom_tokens`    bigint unsigned NOT NULL DEFAULT 4096 COMMENT 'Emergency context headroom in tokens',
     `tool_output_token_limit`      bigint unsigned NOT NULL DEFAULT 32000 COMMENT 'Maximum tool output tokens retained in context',
     `model_options_json`           JSON NULL COMMENT 'Configured Spring AI model options as a JSON object',
-    `created_by`                   bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who created the model',
-    `last_updated_by`              bigint(20) unsigned NULL COMMENT 'Identifier of the administrator who last updated the model',
-    `created_at`                   datetime(6) NOT NULL COMMENT 'Date and time when the model was created',
-    `last_updated_at`              datetime(6) NOT NULL COMMENT 'Date and time when the model was last updated',
+    `created_by`                   bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who created the model',
+    `last_updated_by`              bigint(20) unsigned NOT NULL COMMENT 'Identifier of the administrator who last updated the model',
+    `creation_timestamp`           datetime(6) NOT NULL COMMENT 'Date and time when the model was created',
+    `last_update_timestamp`        datetime(6) NOT NULL COMMENT 'Date and time when the model was last updated',
     PRIMARY KEY (`ai_model_id`),
     UNIQUE KEY `ai_model_key_uk` (`model_key`),
     UNIQUE KEY `ai_model_default_model_uk` (`default_model`),
@@ -28,8 +28,8 @@ CREATE TABLE `ai_model`
     CONSTRAINT `ai_model_provider_fk`
         FOREIGN KEY (`provider_id`) REFERENCES `ai_provider` (`ai_provider_id`) ON DELETE RESTRICT,
     CONSTRAINT `ai_model_created_by_fk`
-        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL,
+        FOREIGN KEY (`created_by`) REFERENCES `app_user` (`app_user_id`),
     CONSTRAINT `ai_model_last_updated_by_fk`
-        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`) ON DELETE SET NULL
+        FOREIGN KEY (`last_updated_by`) REFERENCES `app_user` (`app_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Configured AI models and provider-specific runtime options';
