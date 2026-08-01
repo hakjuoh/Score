@@ -48,6 +48,10 @@ public class AiAdminPolicyController {
         return policies.users(sessions.asScoreUser(principal));
     }
 
+    /**
+     * Searches effective user policies. {@code model} matches an available model's display
+     * name or key, while {@code quotaTokens} is an exact configured quota-limit match.
+     */
     @GetMapping("/users/search")
     public PageResponse<AiPolicyUserSummary> searchUsers(
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
@@ -55,9 +59,9 @@ public class AiAdminPolicyController {
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String organization,
             @RequestParam(required = false) Boolean enabled,
-            @RequestParam(required = false) Integer modelCount,
+            @RequestParam(required = false) String model,
             @RequestParam(required = false) Boolean multiAgentEnabled,
-            @RequestParam(required = false) String quota,
+            @RequestParam(required = false) Long quotaTokens,
             @RequestParam(required = false) Integer activeRequests,
             @RequestParam(required = false) String updaterLoginIdList,
             @RequestParam(required = false) Instant updatedAfter,
@@ -66,7 +70,7 @@ public class AiAdminPolicyController {
             @RequestParam(required = false) Integer pageIndex,
             @RequestParam(required = false) Integer pageSize) {
         return policies.searchUsers(sessions.asScoreUser(principal), loginId, name,
-                organization, enabled, modelCount, multiAgentEnabled, quota, activeRequests,
+                organization, enabled, model, multiAgentEnabled, quotaTokens, activeRequests,
                 separate(updaterLoginIdList).toList(), updatedAfter, updatedBefore,
                 org.oagi.score.gateway.http.common.util.ControllerUtils.pageRequest(
                         pageIndex, pageSize, orderBy));
@@ -92,10 +96,21 @@ public class AiAdminPolicyController {
         policies.delete(sessions.asScoreUser(principal), userId, expectedVersion);
     }
 
+    /**
+     * Reports calls whose reservation time is within the half-open interval
+     * {@code [start, end)}. Omitted bounds leave that side of the interval open.
+     */
     @GetMapping("/users/{userId}/usage")
     public AiAdminUsageView usage(@AuthenticationPrincipal AuthenticatedPrincipal principal,
-                                  @PathVariable UserId userId) {
-        return policies.usage(sessions.asScoreUser(principal), userId);
+                                  @PathVariable UserId userId,
+                                  @RequestParam(required = false) Instant start,
+                                  @RequestParam(required = false) Instant end,
+                                  @RequestParam(required = false) String orderBy,
+                                  @RequestParam(required = false) Integer pageIndex,
+                                  @RequestParam(required = false) Integer pageSize) {
+        return policies.usage(sessions.asScoreUser(principal), userId, start, end,
+                org.oagi.score.gateway.http.common.util.ControllerUtils.pageRequest(
+                        pageIndex, pageSize, orderBy));
     }
 
     @org.springframework.web.bind.annotation.PostMapping(

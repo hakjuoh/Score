@@ -16,7 +16,8 @@ describe('AiPolicyUserListComponent', () => {
   const response = <T>(list: T[]) => ({list, page: 0, size: 10, length: list.length});
   const user = (id: string): AiPolicyUserSummary => ({userId: id, loginId: id, name: id,
     organization: 'Org', inherited: true, enabled: true, multiAgentEnabled: true,
-    allowedModelCount: 2, quotaLimitTokens: 100, quotaConsumedTokens: 80,
+    allowedModelCount: 2, availableModels: ['GPT-5', 'Claude'],
+    quotaLimitTokens: 100, quotaConsumedTokens: 80,
     quotaReservedTokens: 0, quotaRemainingTokens: 20, activeRequests: 0,
     updaterLoginId: null, lastUpdatedAt: null});
   const configure = (service: object): AiPolicyUserListComponent => {
@@ -26,7 +27,7 @@ describe('AiPolicyUserListComponent', () => {
         load: () => of(new PreferencesInfo()),
         updateTableColumnsForAiPolicyPage: () => of(undefined)
       }},
-      {provide: AccountListService, useValue: {getAccountNames: () => of(['admin'])}},
+      {provide: AccountListService, useValue: {getAccountNames: () => of(['admin', 'sysadm'])}},
       {provide: AiAdminListNavigationService, useValue: {
         queryParamMap: {get: () => null}, restoreAdvancedSearch: vi.fn(), replaceState: vi.fn()
       }},
@@ -71,11 +72,13 @@ describe('AiPolicyUserListComponent', () => {
     component.request.filters.organization = 'Org';
     component.request.filters.enabled = [true];
     component.request.filters.multiAgentEnabled = [true];
-    component.request.filters.quota = 'NEAR';
+    component.request.filters.model = 'GPT';
+    component.request.filters.quotaTokens = 100;
     component.onSearch();
     expect(searchUsers).toHaveBeenLastCalledWith(component.request);
     expect(component.dataSource.data.map(item => item.userId)).toEqual(['alice']);
     expect(component.paginator.length).toBe(1);
+    expect(component.loginIdList).toEqual(['admin']);
   });
 
   it('allows the user to load again after a failed request', () => {
@@ -94,10 +97,10 @@ describe('AiPolicyUserListComponent', () => {
     expect(element.textContent).not.toContain('Users could not be loaded.');
   });
 
-  it('renders an em dash instead of Inherited when no policy update exists', async () => {
+  it('states that policy was never changed when no audit entry exists', async () => {
     const element = await render(() => of(response([user('alice')])));
 
-    expect(element.textContent).toContain('—');
+    expect(element.textContent).toContain('Never changed');
     expect(element.textContent).not.toContain('Inherited');
   });
 

@@ -38,7 +38,8 @@ export class AiPolicyUserListComponent implements OnInit {
   tableColumnResizeDirectives: QueryList<ScoreTableColumnResizeDirective>;
 
   get columns(): TableColumnsProperty[] {
-    return this.preferencesInfo?.tableColumnsInfo.columnsOfAiPolicyPage || [];
+    return (this.preferencesInfo?.tableColumnsInfo.columnsOfAiPolicyPage || [])
+      .map(column => column.name === 'Models' ? {...column, name: 'Available Models'} : column);
   }
   set columns(columns: TableColumnsProperty[]) {
     if (!this.preferencesInfo) return;
@@ -48,7 +49,7 @@ export class AiPolicyUserListComponent implements OnInit {
   }
   get displayedColumns(): string[] {
     const names = new Map([['Login ID', 'loginId'], ['Name', 'name'], ['Organization', 'organization'],
-      ['AI Access', 'access'], ['Models', 'models'], ['Multi-agent', 'multiAgent'],
+      ['AI Access', 'access'], ['Available Models', 'models'], ['Multi-agent', 'multiAgent'],
       ['Quota', 'quota'], ['Active', 'active'], ['Updated On', 'updatedOn']]);
     return this.columns.filter(column => column.selected)
       .map(column => names.get(column.name)).filter((name): name is string => !!name);
@@ -71,7 +72,7 @@ export class AiPolicyUserListComponent implements OnInit {
       this.preferencesService.load(this.auth.getUserToken())
         .pipe(catchError(() => of(new PreferencesInfo())))
     ]).subscribe(([loginIds, preferences]) => {
-      this.loginIdList = loginIds;
+      this.loginIdList = loginIds.filter(loginId => loginId !== 'sysadm');
       this.preferencesInfo = preferences;
       this.load();
     });

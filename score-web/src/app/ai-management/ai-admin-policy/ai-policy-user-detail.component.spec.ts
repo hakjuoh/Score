@@ -8,8 +8,7 @@ import {Subject, of, throwError} from 'rxjs';
 import {MaterialModule} from '../../material.module';
 import {AiPolicyUserDetailComponent} from './ai-policy-user-detail.component';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
-import {AiAdminModel, AiPolicyView} from './domain/ai-admin-policy';
-import {MatSort} from '@angular/material/sort';
+import {AiAdminModel, AiAdminUsage, AiPolicyView} from './domain/ai-admin-policy';
 
 describe('AiPolicyUserDetailComponent', () => {
   let component: AiPolicyUserDetailComponent;
@@ -39,11 +38,19 @@ describe('AiPolicyUserDetailComponent', () => {
       remainingTokens: null, periodStart: null, periodEnd: null}
   });
 
+  const usage = (recentCalls: AiAdminUsage['recentCalls']['list'] = [],
+                 quota = policy().quota): AiAdminUsage => ({
+    quota, activeRequests: 0,
+    periodUsage: {chargedTokens: 0, reservedTokens: 0, modelCalls: recentCalls.length,
+      start: null, end: null},
+    recentCalls: {list: recentCalls, page: 0, size: 10, length: recentCalls.length}
+  });
+
   beforeEach(async () => {
     service = {
       models: vi.fn(() => of([model('active', true), model('disabled', false)])),
-      policy: vi.fn(() => of(policy())), usage: vi.fn(() => of({quota: policy().quota,
-        activeRequests: 0, recentCalls: []})), save: vi.fn(() => of(policy())),
+      policy: vi.fn(() => of(policy())), usage: vi.fn(() => of(usage())),
+      save: vi.fn(() => of(policy())),
       reset: vi.fn(), cancelActiveRequests: vi.fn(), adjustQuota: vi.fn()
     };
     snackBar = {open: vi.fn(() => ({onAction: () => new Subject<void>()}))};
@@ -65,7 +72,7 @@ describe('AiPolicyUserDetailComponent', () => {
     expect(component.models.map(item => item.modelKey)).toEqual(['active']);
   });
 
-  it('sorts recent calls by the values rendered in each usage column', () => {
+  it('requests usage sorting from the server and renders its page', () => {
     const recentCalls = [
       {callId: '2', modelKey: 'z-model', executionKind: 'SINGLE', agentId: null,
         reservedTokens: 10, chargedTokens: 20, usageComplete: true, status: 'SUCCEEDED',
@@ -74,14 +81,32 @@ describe('AiPolicyUserDetailComponent', () => {
         reservedTokens: 10, chargedTokens: 10, usageComplete: true, status: 'SUCCEEDED',
         failureType: null, reservedAt: '2026-07-31T11:00:00Z', settledAt: null}
     ];
-    service.usage = vi.fn(() => of({quota: policy().quota, activeRequests: 0, recentCalls}));
+    service.usage = vi.fn(() => of(usage(recentCalls)));
 
     component.ngOnInit();
-
-    const sorted = component.usageDataSource.sortData(recentCalls,
-      {active: 'time', direction: 'asc'} as MatSort);
-    expect(sorted.map(call => call.callId)).toEqual(['1', '2']);
     expect(component.usageDataSource.data).toEqual(recentCalls);
+
+    component.onUsageSort({active: 'model', direction: 'asc'});
+
+    expect(service.usage).toHaveBeenLastCalledWith('17',
+      expect.objectContaining({sortActive: 'model', sortDirection: 'asc', pageIndex: 0}),
+      null, null);
+  });
+
+  it('loads the selected usage period and requested table page', () => {
+    component.userId = '17';
+    component.usageStart = new Date('2026-07-01T04:00:00.000Z');
+    component.usageEnd = new Date('2026-07-31T04:00:00.000Z');
+
+    component.onUsagePeriodChange();
+    component.onUsagePage({pageIndex: 2, pageSize: 25} as never);
+
+    expect(service.usage).toHaveBeenNthCalledWith(1, '17',
+      expect.objectContaining({pageIndex: 0, pageSize: 10}),
+      component.usageStart, component.usageEnd);
+    expect(service.usage).toHaveBeenNthCalledWith(2, '17',
+      expect.objectContaining({pageIndex: 2, pageSize: 25}),
+      component.usageStart, component.usageEnd);
   });
 
   it('removes reasoning restrictions when an allow-listed model is deselected', () => {
@@ -205,7 +230,7 @@ describe('AiPolicyUserDetailComponent', () => {
   it('adjusts quota without requiring a reason', () => {
     component.userId = '17';
     component.apply(policy());
-    service.adjustQuota = vi.fn(() => of({quota: policy().quota, activeRequests: 0, recentCalls: []}));
+    service.adjustQuota = vi.fn(() => of(usage()));
     component.adjustment = -10;
     component.adjustQuota();
     expect(service.adjustQuota).toHaveBeenCalledWith('17', -10);
@@ -214,7 +239,7 @@ describe('AiPolicyUserDetailComponent', () => {
   it('keeps quota operations based on committed usage while the policy draft changes', () => {
     const committedQuota = {...policy().quota, period: 'MONTHLY' as const,
       limitTokens: 1000, remainingTokens: 1000};
-    component.usage = {quota: committedQuota, activeRequests: 0, recentCalls: []};
+    component.usage = usage([], committedQuota);
     component.apply(policy());
 
     expect(component.quotaAdjustmentAvailable).toBe(true);
@@ -227,8 +252,8 @@ describe('AiPolicyUserDetailComponent', () => {
     const draft = policy();
     draft.quota = {...draft.quota, period: 'MONTHLY', limitTokens: 2000};
     service.policy = vi.fn(() => of(draft));
-    service.usage = vi.fn(() => of({quota: {...policy().quota, period: 'MONTHLY', limitTokens: 1000},
-      activeRequests: 0, recentCalls: []}));
+    service.usage = vi.fn(() => of(usage([], {...policy().quota, period: 'MONTHLY',
+      limitTokens: 1000})));
     const fixture = TestBed.createComponent(AiPolicyUserDetailComponent);
     fixture.detectChanges(false);
     await fixture.whenStable();
@@ -264,14 +289,107 @@ describe('AiPolicyUserDetailComponent', () => {
     fixture.detectChanges(false);
     await fixture.whenStable();
     fixture.detectChanges(false);
-    const update = fixture.nativeElement.querySelector(
-      '[data-id="save-ai-policy"]') as HTMLButtonElement;
-    expect(update.disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('[data-id="save-ai-policy"]')).toBeNull();
 
     fixture.componentInstance.policy!.enabled = false;
     fixture.changeDetectorRef.detectChanges();
 
+    const update = fixture.nativeElement.querySelector(
+      '[data-id="save-ai-policy"]') as HTMLButtonElement;
     expect(update.disabled).toBe(false);
+  });
+
+  it('uses a flat detail layout and hides Update from the usage tab', async () => {
+    const fixture = TestBed.createComponent(AiPolicyUserDetailComponent);
+    fixture.detectChanges(false);
+    await fixture.whenStable();
+    fixture.componentInstance.policy!.enabled = false;
+    fixture.componentInstance.selectedTabIndex = 1;
+    fixture.changeDetectorRef.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-id="save-ai-policy"]')).toBeNull();
+  });
+
+  it('combines selected activity and finite quota into two equal overview charts', async () => {
+    const finiteQuota = {...policy().quota, period: 'MONTHLY' as const, limitTokens: 1000,
+      consumedTokens: 600, reservedTokens: 100, remainingTokens: 300,
+      periodStart: '2026-08-01T00:00:00Z', periodEnd: '2026-09-01T00:00:00Z'};
+    const finiteUsage: AiAdminUsage = {
+      ...usage([], finiteQuota), activeRequests: 2,
+      periodUsage: {chargedTokens: 800, reservedTokens: 200, modelCalls: 12,
+        start: '2026-07-01T04:00:00Z', end: '2026-08-01T04:00:00Z'}
+    };
+    service.usage = vi.fn(() => of(finiteUsage));
+    const fixture = TestBed.createComponent(AiPolicyUserDetailComponent);
+    fixture.detectChanges(false);
+    await fixture.whenStable();
+    fixture.componentInstance.selectedTabIndex = 1;
+    fixture.changeDetectorRef.detectChanges();
+
+    const charts = fixture.nativeElement.querySelectorAll('.usage-overview-grid > .usage-chart');
+    expect(charts).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('Usage Overview');
+    const activeRequests = fixture.nativeElement.querySelector('.active-requests-summary');
+    expect(activeRequests.querySelector('strong').textContent).toBe('2');
+    expect(activeRequests.textContent).toContain('requests running now');
+    expect(charts[0].querySelector('.usage-odometer strong').textContent).toBe('1,000');
+    expect(charts[0].textContent).toContain('tokens charged or pending');
+    expect(charts[0].textContent).toContain('12 model calls');
+    expect(charts[1].querySelector('.usage-odometer strong').textContent).toBe('700');
+    expect(charts[1].textContent).toContain('of 1,000 tokens committed');
+    expect(charts[1].textContent).toContain('Available');
+    expect(charts[1].textContent).toContain('300');
+    expect((charts[0].querySelector('.usage-meter-segment.charged') as HTMLElement).style.width)
+      .toBe('80%');
+    expect((charts[0].querySelector('.usage-meter-segment.reserved') as HTMLElement).style.width)
+      .toBe('20%');
+    expect((charts[1].querySelector('.usage-meter-segment.available') as HTMLElement).style.width)
+      .toBe('30%');
+  });
+
+  it('uses an honest non-proportional quota summary when no limit exists', async () => {
+    const unlimitedQuota = {...policy().quota, consumedTokens: 500, reservedTokens: 50};
+    service.usage = vi.fn(() => of(usage([], unlimitedQuota)));
+    const fixture = TestBed.createComponent(AiPolicyUserDetailComponent);
+    fixture.detectChanges(false);
+    await fixture.whenStable();
+    fixture.componentInstance.selectedTabIndex = 1;
+    fixture.changeDetectorRef.detectChanges();
+
+    const charts = fixture.nativeElement.querySelectorAll('.usage-overview-grid > .usage-chart');
+    expect(charts[1].textContent).toContain('No quota limit');
+    expect(charts[1].textContent).toContain('550 tokens currently committed');
+    expect(charts[1].querySelector('[role="progressbar"]')).toBeNull();
+  });
+
+  it('clamps quota meter segments when committed tokens exceed the limit', () => {
+    component.usage = usage([], {...policy().quota, period: 'MONTHLY', limitTokens: 1000,
+      consumedTokens: 1200, reservedTokens: 100, remainingTokens: 0});
+
+    expect(component.quotaUsedPercent).toBe(100);
+    expect(component.quotaReservedPercent).toBe(0);
+    expect(component.quotaAvailablePercent).toBe(0);
+    expect(component.quotaAvailableTokens).toBe(0);
+    expect(component.quotaProgressValue).toBe(1000);
+    expect(component.quotaProgressDescription)
+      .toBe('1300 of 1000 tokens committed; 300 tokens over the quota limit');
+  });
+
+  it('keeps over-limit progressbar ARIA values within the declared range', async () => {
+    service.usage = vi.fn(() => of(usage([], {...policy().quota, period: 'MONTHLY',
+      limitTokens: 1000, consumedTokens: 1200, reservedTokens: 100, remainingTokens: 0})));
+    const fixture = TestBed.createComponent(AiPolicyUserDetailComponent);
+    fixture.detectChanges(false);
+    await fixture.whenStable();
+    fixture.componentInstance.selectedTabIndex = 1;
+    fixture.changeDetectorRef.detectChanges();
+
+    const progressbar = fixture.nativeElement.querySelector('[role="progressbar"]');
+    expect(progressbar.getAttribute('aria-valuemax')).toBe('1000');
+    expect(progressbar.getAttribute('aria-valuenow')).toBe('1000');
+    expect(progressbar.getAttribute('aria-valuetext'))
+      .toBe('1300 of 1000 tokens committed; 300 tokens over the quota limit');
   });
 
   it('keeps Update available for an invalid policy change and explains why it cannot save', () => {
@@ -291,8 +409,8 @@ describe('AiPolicyUserDetailComponent', () => {
     component.apply(policy());
     component.setQuotaEnabled(true);
     component.policy!.quota.limitTokens = 2000;
-    service.adjustQuota = vi.fn(() => of({quota: {...policy().quota, period: 'MONTHLY',
-      limitTokens: 1000}, activeRequests: 0, recentCalls: []}));
+    service.adjustQuota = vi.fn(() => of(usage([], {...policy().quota, period: 'MONTHLY',
+      limitTokens: 1000})));
 
     component.adjustment = 10;
     component.adjustQuota();

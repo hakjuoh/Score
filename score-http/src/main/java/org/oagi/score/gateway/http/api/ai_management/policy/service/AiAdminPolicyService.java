@@ -34,6 +34,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -44,19 +45,43 @@ import java.util.Comparator;
 import java.util.ArrayList;
 
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_TOKEN_USAGE_PERIOD;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_TOKEN_USAGE_LEDGER;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_TOKEN_QUOTA_ADJUSTMENT;
-import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_MODEL;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_POLICY;
+import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_USER_POLICY_AUDIT;
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.APP_USER;
 
 @Service
 public class AiAdminPolicyService {
 
     private static final org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser
-            UPDATER = APP_USER.as("updater");
-    private static final Field<String> UPDATER_LOGIN_ID =
-            UPDATER.LOGIN_ID.as("updater_login_id");
+            POLICY_UPDATER = APP_USER.as("policy_updater");
+    private static final org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser
+            LEGACY_POLICY_UPDATER = APP_USER.as("legacy_policy_updater");
+    private static final Field<LocalDateTime> AUDIT_LAST_UPDATED_AT = DSL
+            .select(DSL.max(AI_USER_POLICY_AUDIT.CREATION_TIMESTAMP))
+            .from(AI_USER_POLICY_AUDIT)
+            .where(AI_USER_POLICY_AUDIT.TARGET_APP_USER_ID.eq(APP_USER.APP_USER_ID))
+            .asField();
+    private static final Field<LocalDateTime> POLICY_LAST_UPDATED_AT = DSL.coalesce(
+            AUDIT_LAST_UPDATED_AT, AI_USER_POLICY.LAST_UPDATE_TIMESTAMP)
+            .as("policy_last_updated_at");
+    private static final Field<String> AUDIT_UPDATER_LOGIN_ID = DSL
+            .select(POLICY_UPDATER.LOGIN_ID)
+            .from(AI_USER_POLICY_AUDIT)
+            .leftJoin(POLICY_UPDATER)
+            .on(POLICY_UPDATER.APP_USER_ID.eq(AI_USER_POLICY_AUDIT.ACTOR_APP_USER_ID))
+            .where(AI_USER_POLICY_AUDIT.TARGET_APP_USER_ID.eq(APP_USER.APP_USER_ID))
+            .orderBy(AI_USER_POLICY_AUDIT.CREATION_TIMESTAMP.desc(),
+                    AI_USER_POLICY_AUDIT.AI_USER_POLICY_AUDIT_ID.desc())
+            .limit(1).asField();
+    private static final Field<String> LEGACY_UPDATER_LOGIN_ID = DSL
+            .select(LEGACY_POLICY_UPDATER.LOGIN_ID)
+            .from(LEGACY_POLICY_UPDATER)
+            .where(LEGACY_POLICY_UPDATER.APP_USER_ID.eq(AI_USER_POLICY.LAST_UPDATED_BY))
+            .asField();
+    private static final Field<String> POLICY_UPDATER_LOGIN_ID = DSL.coalesce(
+            AUDIT_UPDATER_LOGIN_ID, LEGACY_UPDATER_LOGIN_ID)
+            .as("policy_updater_login_id");
 
     private final DSLContext dsl;
     private final AiPolicyQueryRepository queries;
@@ -64,18 +89,21 @@ public class AiAdminPolicyService {
     private final AiPolicyService policyService;
     private final AiModelCatalogService catalog;
     private final AiRequestRegistry requests;
+    private final AiUsageReportService usageReports;
 
     public AiAdminPolicyService(DSLContext dsl, AiPolicyQueryRepository queries,
                                 AiPolicyCommandRepository commands,
                                 AiPolicyService policyService,
                                 AiModelCatalogService catalog,
-                                AiRequestRegistry requests) {
+                                AiRequestRegistry requests,
+                                AiUsageReportService usageReports) {
         this.dsl = dsl;
         this.queries = queries;
         this.commands = commands;
         this.policyService = policyService;
         this.catalog = catalog;
         this.requests = requests;
+        this.usageReports = usageReports;
     }
 
     public List<AiPolicyUserSummary> users(ScoreUser actor) {
@@ -93,12 +121,10 @@ public class AiAdminPolicyService {
         return dsl.select(APP_USER.APP_USER_ID, APP_USER.LOGIN_ID, APP_USER.NAME,
                         APP_USER.ORGANIZATION, AI_USER_POLICY.AI_ENABLED,
                         AI_USER_POLICY.MULTI_AGENT_ENABLED,
-                        AI_USER_POLICY.LAST_UPDATE_TIMESTAMP, UPDATER_LOGIN_ID)
+                        POLICY_LAST_UPDATED_AT, POLICY_UPDATER_LOGIN_ID)
                 .from(APP_USER)
                 .leftJoin(AI_USER_POLICY)
                 .on(AI_USER_POLICY.APP_USER_ID.eq(APP_USER.APP_USER_ID))
-                .leftJoin(UPDATER)
-                .on(UPDATER.APP_USER_ID.eq(AI_USER_POLICY.LAST_UPDATED_BY))
                 .where(basicUserCondition(loginId, name, organization,
                         updaterLoginIdList, updatedAfter, updatedBefore))
                 .orderBy(APP_USER.LOGIN_ID)
@@ -107,11 +133,11 @@ public class AiAdminPolicyService {
 
     public PageResponse<AiPolicyUserSummary> searchUsers(
             ScoreUser actor, String loginId, String name, String organization,
-            Boolean enabled, Integer modelCount, Boolean multiAgentEnabled,
-            String quota, Integer activeRequests, List<String> updaterLoginIdList,
+            Boolean enabled, String model, Boolean multiAgentEnabled,
+            Long quotaTokens, Integer activeRequests, List<String> updaterLoginIdList,
             Instant updatedAfter, Instant updatedBefore, PageRequest pageRequest) {
         requireAdministrator(actor);
-        if (canPageInDatabase(enabled, modelCount, multiAgentEnabled, quota,
+        if (canPageInDatabase(enabled, model, multiAgentEnabled, quotaTokens,
                 activeRequests, pageRequest)) {
             return searchDatabasePage(loginId, name, organization, updaterLoginIdList,
                     updatedAfter, updatedBefore, pageRequest);
@@ -122,11 +148,11 @@ public class AiAdminPolicyService {
                         .filter(user -> AiAdminPage.contains(user.name(), name))
                         .filter(user -> AiAdminPage.contains(user.organization(), organization))
                         .filter(user -> enabled == null || user.enabled() == enabled)
-                        .filter(user -> modelCount == null
-                                || user.allowedModelCount() == modelCount)
+                        .filter(user -> matchesModel(user, model))
                         .filter(user -> multiAgentEnabled == null
                                 || user.multiAgentEnabled() == multiAgentEnabled)
-                        .filter(user -> matchesQuota(user, quota))
+                        .filter(user -> quotaTokens == null
+                                || java.util.Objects.equals(user.quotaLimitTokens(), quotaTokens))
                         .filter(user -> activeRequests == null
                                 || user.activeRequests() == activeRequests)
                         .filter(user -> updatedAfter == null || user.lastUpdatedAt() != null
@@ -170,12 +196,11 @@ public class AiAdminPolicyService {
      * Effective model, quota, and active-request fields require policy resolution first and
      * therefore use the calculated-result path above to preserve exact filter semantics.
      */
-    private boolean canPageInDatabase(Boolean enabled, Integer modelCount,
-                                      Boolean multiAgentEnabled, String quota,
+    private boolean canPageInDatabase(Boolean enabled, String model,
+                                      Boolean multiAgentEnabled, Long quotaTokens,
                                       Integer activeRequests, PageRequest request) {
-        if (enabled != null || modelCount != null || multiAgentEnabled != null
-                || activeRequests != null
-                || AiAdminPage.hasText(quota) && !"ALL".equalsIgnoreCase(quota)) return false;
+        if (enabled != null || AiAdminPage.hasText(model) || multiAgentEnabled != null
+                || quotaTokens != null || activeRequests != null) return false;
         return request.sorts().stream().allMatch(sort -> Set.of(
                 "loginId", "name", "organization", "updater", "updatedOn")
                 .contains(sort.field()));
@@ -189,9 +214,7 @@ public class AiAdminPolicyService {
         Condition condition = basicUserCondition(loginId, name, organization,
                 updaterLoginIdList, updatedAfter, updatedBefore);
         var candidates = DSL.selectOne().from(APP_USER).leftJoin(AI_USER_POLICY)
-                .on(AI_USER_POLICY.APP_USER_ID.eq(APP_USER.APP_USER_ID))
-                .leftJoin(UPDATER)
-                .on(UPDATER.APP_USER_ID.eq(AI_USER_POLICY.LAST_UPDATED_BY)).where(condition);
+                .on(AI_USER_POLICY.APP_USER_ID.eq(APP_USER.APP_USER_ID)).where(condition);
         int total = dsl.fetchCount(candidates);
         long offset = AiAdminPage.offset(request);
         if (offset >= total) {
@@ -203,23 +226,21 @@ public class AiAdminPolicyService {
                 case "loginId" -> APP_USER.LOGIN_ID;
                 case "name" -> APP_USER.NAME;
                 case "organization" -> APP_USER.ORGANIZATION;
-                case "updater" -> UPDATER.LOGIN_ID;
-                case "updatedOn" -> AI_USER_POLICY.LAST_UPDATE_TIMESTAMP;
+                case "updater" -> POLICY_UPDATER_LOGIN_ID;
+                case "updatedOn" -> POLICY_LAST_UPDATED_AT;
                 default -> null;
             };
             if (field != null) order.add(sort.direction() == SortDirection.DESC
                     ? field.desc() : field.asc());
         });
-        if (order.isEmpty()) order.add(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP.desc());
+        if (order.isEmpty()) order.add(POLICY_LAST_UPDATED_AT.desc());
         order.add(APP_USER.APP_USER_ID.asc());
         List<AiPolicyUserSummary> page = dsl.select(APP_USER.APP_USER_ID, APP_USER.LOGIN_ID,
                         APP_USER.NAME, APP_USER.ORGANIZATION, AI_USER_POLICY.AI_ENABLED,
-                        AI_USER_POLICY.MULTI_AGENT_ENABLED, AI_USER_POLICY.LAST_UPDATE_TIMESTAMP,
-                        UPDATER_LOGIN_ID)
+                        AI_USER_POLICY.MULTI_AGENT_ENABLED, POLICY_LAST_UPDATED_AT,
+                        POLICY_UPDATER_LOGIN_ID)
                 .from(APP_USER).leftJoin(AI_USER_POLICY)
                 .on(AI_USER_POLICY.APP_USER_ID.eq(APP_USER.APP_USER_ID))
-                .leftJoin(UPDATER)
-                .on(UPDATER.APP_USER_ID.eq(AI_USER_POLICY.LAST_UPDATED_BY))
                 .where(condition).orderBy(order).limit((int) offset, request.pageSize())
                 .fetch(this::summary);
         return new PageResponse<>(page, request.pageIndex(), request.pageSize(), total);
@@ -228,7 +249,8 @@ public class AiAdminPolicyService {
     private Condition basicUserCondition(
             String loginId, String name, String organization,
             List<String> updaterLoginIdList, Instant updatedAfter, Instant updatedBefore) {
-        Condition condition = APP_USER.IS_ENABLED.eq((byte) 1);
+        Condition condition = APP_USER.IS_ENABLED.eq((byte) 1)
+                .and(APP_USER.LOGIN_ID.ne(ScoreUser.SYSTEM_USER_LOGIN_ID));
         if (AiAdminPage.hasText(loginId)) {
             condition = condition.and(APP_USER.LOGIN_ID.containsIgnoreCase(loginId.strip()));
         }
@@ -240,13 +262,13 @@ public class AiAdminPolicyService {
                     APP_USER.ORGANIZATION.containsIgnoreCase(organization.strip()));
         }
         condition = condition.and(AiAdminPage.loginIdSelection(
-                UPDATER.LOGIN_ID, updaterLoginIdList));
+                POLICY_UPDATER_LOGIN_ID, updaterLoginIdList));
         if (updatedAfter != null) {
-            condition = condition.and(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP.ge(
+            condition = condition.and(POLICY_LAST_UPDATED_AT.ge(
                     updatedAfter.atZone(ZoneOffset.UTC).toLocalDateTime()));
         }
         if (updatedBefore != null) {
-            condition = condition.and(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP.lt(
+            condition = condition.and(POLICY_LAST_UPDATED_AT.lt(
                     updatedBefore.atZone(ZoneOffset.UTC).toLocalDateTime()));
         }
         return condition;
@@ -255,27 +277,25 @@ public class AiAdminPolicyService {
     private AiPolicyUserSummary summary(Record record) {
         boolean inherited = record.get(AI_USER_POLICY.AI_ENABLED) == null;
         EffectiveAiPolicy effective = resolveFor(record.get(APP_USER.APP_USER_ID));
+        List<String> availableModels = effective.availableModels().stream()
+                .map(model -> model.descriptor().displayName().equals(model.descriptor().name())
+                        ? model.descriptor().displayName()
+                        : model.descriptor().displayName() + " (" + model.descriptor().name() + ")")
+                .toList();
         AiPolicyView.AiQuotaView quota = quotaView(effective);
         return new AiPolicyUserSummary(record.get(APP_USER.APP_USER_ID).toString(),
                 record.get(APP_USER.LOGIN_ID), record.get(APP_USER.NAME),
                 record.get(APP_USER.ORGANIZATION), inherited, effective.aiEnabled(),
                 effective.multiAgentEnabled(), effective.availableModels().size(),
+                availableModels,
                 quota.limitTokens(), quota.consumedTokens(), quota.reservedTokens(),
                 quota.remainingTokens(), requests.activeCountByUser(effective.userId()),
-                record.get(UPDATER_LOGIN_ID), utc(record.get(AI_USER_POLICY.LAST_UPDATE_TIMESTAMP)));
+                record.get(POLICY_UPDATER_LOGIN_ID), utc(record.get(POLICY_LAST_UPDATED_AT)));
     }
 
-    private boolean matchesQuota(AiPolicyUserSummary user, String quota) {
-        if (!AiAdminPage.hasText(quota) || "ALL".equalsIgnoreCase(quota)) return true;
-        if ("UNLIMITED".equalsIgnoreCase(quota)) return user.quotaLimitTokens() == null;
-        if (user.quotaLimitTokens() == null) return false;
-        long used = quotaUsed(user);
-        if ("EXHAUSTED".equalsIgnoreCase(quota)) return used >= user.quotaLimitTokens();
-        if ("NEAR".equalsIgnoreCase(quota)) {
-            return used >= user.quotaLimitTokens() * 0.8 && used < user.quotaLimitTokens();
-        }
-        if ("AVAILABLE".equalsIgnoreCase(quota)) return used < user.quotaLimitTokens() * 0.8;
-        throw new IllegalArgumentException("Unsupported quota filter: " + quota);
+    static boolean matchesModel(AiPolicyUserSummary user, String model) {
+        return !AiAdminPage.hasText(model) || user.availableModels().stream()
+                .anyMatch(name -> AiAdminPage.contains(name, model));
     }
 
     private static long quotaUsed(AiPolicyUserSummary user) {
@@ -366,35 +386,14 @@ public class AiAdminPolicyService {
         commands.delete(targetUserId, actor.userId(), expectedVersion);
     }
 
-    public AiAdminUsageView usage(ScoreUser actor, UserId targetUserId) {
+    public AiAdminUsageView usage(ScoreUser actor, UserId targetUserId,
+                                  Instant start, Instant end, PageRequest pageRequest) {
         requireAdministrator(actor);
         requireUser(targetUserId);
         EffectiveAiPolicy policy = resolveFor(ULong.valueOf(targetUserId.value()));
-        var calls = dsl.select(AI_TOKEN_USAGE_LEDGER.CALL_ID, AI_MODEL.MODEL_KEY,
-                        AI_TOKEN_USAGE_LEDGER.EXECUTION_KIND, AI_TOKEN_USAGE_LEDGER.AGENT_ID,
-                        AI_TOKEN_USAGE_LEDGER.RESERVED_TOKENS,
-                        AI_TOKEN_USAGE_LEDGER.CHARGED_TOKENS,
-                        AI_TOKEN_USAGE_LEDGER.USAGE_COMPLETE, AI_TOKEN_USAGE_LEDGER.STATUS,
-                        AI_TOKEN_USAGE_LEDGER.FAILURE_TYPE,
-                        AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP,
-                        AI_TOKEN_USAGE_LEDGER.SETTLED_TIMESTAMP)
-                .from(AI_TOKEN_USAGE_LEDGER)
-                .join(AI_MODEL).on(AI_MODEL.AI_MODEL_ID.eq(AI_TOKEN_USAGE_LEDGER.AI_MODEL_ID))
-                .where(AI_TOKEN_USAGE_LEDGER.APP_USER_ID.eq(
-                        ULong.valueOf(targetUserId.value())))
-                .orderBy(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP.desc()).limit(100)
-                .fetch(row -> new AiAdminUsageView.LedgerEntry(
-                        row.get(AI_TOKEN_USAGE_LEDGER.CALL_ID), row.get(AI_MODEL.MODEL_KEY),
-                        row.get(AI_TOKEN_USAGE_LEDGER.EXECUTION_KIND),
-                        row.get(AI_TOKEN_USAGE_LEDGER.AGENT_ID),
-                        row.get(AI_TOKEN_USAGE_LEDGER.RESERVED_TOKENS).longValue(),
-                        row.get(AI_TOKEN_USAGE_LEDGER.CHARGED_TOKENS).longValue(),
-                        row.get(AI_TOKEN_USAGE_LEDGER.USAGE_COMPLETE) == 1,
-                        row.get(AI_TOKEN_USAGE_LEDGER.STATUS),
-                        row.get(AI_TOKEN_USAGE_LEDGER.FAILURE_TYPE),
-                        utc(row.get(AI_TOKEN_USAGE_LEDGER.RESERVED_TIMESTAMP)),
-                        utc(row.get(AI_TOKEN_USAGE_LEDGER.SETTLED_TIMESTAMP))));
-        return new AiAdminUsageView(quotaView(policy), requests.activeCountByUser(targetUserId), calls);
+        var report = usageReports.load(targetUserId, start, end, pageRequest);
+        return new AiAdminUsageView(quotaView(policy), requests.activeCountByUser(targetUserId),
+                report.usage(), report.calls());
     }
 
     public AiAdminUsageView adjustQuota(ScoreUser actor, UserId targetUserId,
@@ -443,7 +442,7 @@ public class AiAdminPolicyService {
                     .set(AI_TOKEN_QUOTA_ADJUSTMENT.REASON, "Manual quota adjustment")
                     .set(AI_TOKEN_QUOTA_ADJUSTMENT.CREATION_TIMESTAMP, now).execute();
         });
-        return usage(actor, targetUserId);
+        return usage(actor, targetUserId, null, null, new PageRequest());
     }
 
     public int cancelActiveRequests(ScoreUser actor, UserId targetUserId) {

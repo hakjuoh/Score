@@ -1,13 +1,15 @@
-import {Component, OnInit, ViewChild, inject} from '@angular/core';
+import {Component, OnInit, inject} from '@angular/core';
 import {ActivatedRoute} from '@angular/router';
 import {forkJoin} from 'rxjs';
 import {finalize} from 'rxjs/operators';
-import {MatSort} from '@angular/material/sort';
+import {Sort} from '@angular/material/sort';
+import {PageEvent} from '@angular/material/paginator';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {MatTableDataSource} from '@angular/material/table';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiAdminModel, AiAdminUsage, AiPolicyUpdate, AiPolicyView} from './domain/ai-admin-policy';
 import {hashCode} from '../../common/utility';
+import {PageRequest} from '../../basis/basis';
 import {notifyAiAdminConflict, notifyAiAdminError,
   notifyAiAdminSuccess} from './domain/ai-admin-notifications';
 
@@ -32,26 +34,15 @@ export class AiPolicyUserDetailComponent implements OnInit {
   usage?: AiAdminUsage;
   adjustment = 0;
   loadFailed = false;
+  usageLoading = false;
+  usageStart: Date | null = null;
+  usageEnd: Date | null = null;
+  selectedTabIndex = 0;
+  usagePage = new PageRequest('time', 'desc', 0, 10);
+  private usageLoadSequence = 0;
   private baselineHash = '';
   readonly usageColumns = ['time', 'model', 'kind', 'status', 'charged'];
-  readonly usageDataSource = new MatTableDataSource<AiAdminUsage['recentCalls'][number]>();
-
-  @ViewChild('usageSort') set usageSort(sort: MatSort | undefined) {
-    if (sort) this.usageDataSource.sort = sort;
-  }
-
-  constructor() {
-    this.usageDataSource.sortingDataAccessor = (call, column) => {
-      switch (column) {
-        case 'time': return Date.parse(call.reservedAt);
-        case 'model': return call.modelKey.toLowerCase();
-        case 'kind': return call.executionKind.toLowerCase();
-        case 'status': return call.status.toLowerCase();
-        case 'charged': return call.chargedTokens;
-        default: return '';
-      }
-    };
-  }
+  readonly usageDataSource = new MatTableDataSource<AiAdminUsage['recentCalls']['list'][number]>();
 
   ngOnInit(): void {
     this.userId = this.route.snapshot.paramMap.get('id') ?? '';
@@ -60,12 +51,13 @@ export class AiPolicyUserDetailComponent implements OnInit {
 
   private load(): void {
     this.loadFailed = false;
+    const usageSequence = ++this.usageLoadSequence;
     forkJoin({models: this.service.models(), policy: this.service.policy(this.userId),
-      usage: this.service.usage(this.userId)})
+      usage: this.service.usage(this.userId, this.usagePage, this.usageStart, this.usageEnd)})
       .subscribe({
         next: ({models, policy, usage}) => {
           this.models = models.filter(model => model.enabled);
-          this.applyUsage(usage);
+          if (usageSequence === this.usageLoadSequence) this.applyUsage(usage);
           this.apply(policy);
         },
         error: () => this.loadFailed = true
@@ -126,6 +118,72 @@ export class AiPolicyUserDetailComponent implements OnInit {
     return !!this.usage?.quota?.period;
   }
 
+  get selectedChargedTokens(): number {
+    return this.usage?.periodUsage?.chargedTokens ?? 0;
+  }
+
+  get selectedPendingTokens(): number {
+    return this.usage?.periodUsage?.reservedTokens ?? 0;
+  }
+
+  get selectedTokenActivity(): number {
+    return this.selectedChargedTokens + this.selectedPendingTokens;
+  }
+
+  get selectedChargedPercent(): number {
+    return this.percentOf(this.selectedChargedTokens, this.selectedTokenActivity);
+  }
+
+  get selectedPendingPercent(): number {
+    return this.percentOf(this.selectedPendingTokens, this.selectedTokenActivity);
+  }
+
+  get quotaUsedTokens(): number {
+    return this.usage?.quota?.consumedTokens ?? 0;
+  }
+
+  get quotaReservedTokens(): number {
+    return this.usage?.quota?.reservedTokens ?? 0;
+  }
+
+  get quotaCommittedTokens(): number {
+    return this.quotaUsedTokens + this.quotaReservedTokens;
+  }
+
+  get quotaLimitTokens(): number | null {
+    return this.usage?.quota?.limitTokens ?? null;
+  }
+
+  get quotaAvailableTokens(): number | null {
+    if (this.quotaLimitTokens === null) return null;
+    return Math.max(this.quotaLimitTokens - this.quotaCommittedTokens, 0);
+  }
+
+  get quotaUsedPercent(): number {
+    return this.percentOf(this.quotaUsedTokens, this.quotaLimitTokens ?? 0);
+  }
+
+  get quotaReservedPercent(): number {
+    const remaining = Math.max(100 - this.quotaUsedPercent, 0);
+    return Math.min(this.percentOf(this.quotaReservedTokens, this.quotaLimitTokens ?? 0), remaining);
+  }
+
+  get quotaAvailablePercent(): number {
+    return Math.max(100 - this.quotaUsedPercent - this.quotaReservedPercent, 0);
+  }
+
+  get quotaProgressValue(): number {
+    if (this.quotaLimitTokens === null) return 0;
+    return Math.min(this.quotaCommittedTokens, this.quotaLimitTokens);
+  }
+
+  get quotaProgressDescription(): string {
+    if (this.quotaLimitTokens === null) return 'No quota limit';
+    const overLimit = Math.max(this.quotaCommittedTokens - this.quotaLimitTokens, 0);
+    const description = `${this.quotaCommittedTokens} of ${this.quotaLimitTokens} tokens committed`;
+    return overLimit > 0 ? `${description}; ${overLimit} tokens over the quota limit` : description;
+  }
+
   get isChanged(): boolean {
     return !!this.policy && this.baselineHash !== hashCode(this.editableState());
   }
@@ -167,7 +225,7 @@ export class AiPolicyUserDetailComponent implements OnInit {
     this.saving = true;
     this.service.adjustQuota(this.userId, this.adjustment)
       .pipe(finalize(() => this.saving = false)).subscribe({next: usage => {
-        this.applyUsage(usage);
+        this.applyOperationalUsage(usage);
         this.adjustment = 0;
         notifyAiAdminSuccess(this.snackBar, 'Quota adjusted.');
       }, error: () => notifyAiAdminError(this.snackBar, 'Quota could not be adjusted.')});
@@ -245,6 +303,47 @@ export class AiPolicyUserDetailComponent implements OnInit {
     this.load();
   }
 
+  get invalidUsageDateRange(): boolean {
+    return !!this.usageStart && !!this.usageEnd &&
+      this.usageStart.getTime() > this.usageEnd.getTime();
+  }
+
+  onUsagePeriodChange(): void {
+    if (this.invalidUsageDateRange) return;
+    this.usagePage.pageIndex = 0;
+    this.loadUsage();
+  }
+
+  onUsageSort(sort: Sort): void {
+    this.usagePage = new PageRequest(sort.active, sort.direction || 'desc', 0,
+      this.usagePage.pageSize);
+    this.loadUsage();
+  }
+
+  onUsagePage(event: PageEvent): void {
+    this.usagePage = new PageRequest(this.usagePage.sortActive,
+      this.usagePage.sortDirection, event.pageIndex, event.pageSize);
+    this.loadUsage();
+  }
+
+  private loadUsage(): void {
+    if (this.invalidUsageDateRange) return;
+    const sequence = ++this.usageLoadSequence;
+    this.usageLoading = true;
+    this.service.usage(this.userId, this.usagePage, this.usageStart, this.usageEnd)
+      .pipe(finalize(() => {
+        if (sequence === this.usageLoadSequence) this.usageLoading = false;
+      })).subscribe({
+        next: usage => {
+          if (sequence === this.usageLoadSequence) this.applyUsage(usage);
+        },
+        error: () => {
+          if (sequence !== this.usageLoadSequence) return;
+          notifyAiAdminError(this.snackBar, 'Usage could not be loaded.');
+        }
+      });
+  }
+
   reset(): void {
     if (!this.policy || this.policy.inherited) return;
     this.saving = true;
@@ -266,7 +365,15 @@ export class AiPolicyUserDetailComponent implements OnInit {
 
   private applyUsage(usage: AiAdminUsage): void {
     this.usage = usage;
-    this.usageDataSource.data = usage.recentCalls;
+    this.usageDataSource.data = usage.recentCalls.list;
+  }
+
+  private applyOperationalUsage(usage: AiAdminUsage): void {
+    if (!this.usage) {
+      this.applyUsage(usage);
+      return;
+    }
+    this.usage = {...this.usage, quota: usage.quota, activeRequests: usage.activeRequests};
   }
 
   private editableState(): object {
@@ -292,5 +399,10 @@ export class AiPolicyUserDetailComponent implements OnInit {
       quotaPeriod: this.quotaEnabled ? this.policy.quota.period : null,
       quotaTokens: this.quotaEnabled ? this.policy.quota.limitTokens : null
     };
+  }
+
+  private percentOf(value: number, total: number): number {
+    if (value <= 0 || total <= 0) return 0;
+    return Math.min(value / total * 100, 100);
   }
 }

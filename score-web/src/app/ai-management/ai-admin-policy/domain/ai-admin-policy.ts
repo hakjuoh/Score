@@ -12,6 +12,7 @@ export interface AiPolicyUserSummary {
   enabled: boolean;
   multiAgentEnabled: boolean;
   allowedModelCount: number;
+  availableModels: string[];
   quotaLimitTokens: number | null;
   quotaConsumedTokens: number;
   quotaReservedTokens: number;
@@ -206,9 +207,12 @@ export interface AiModelCommand {
 export interface AiAdminUsage {
   quota: AiQuotaView;
   activeRequests: number;
-  recentCalls: Array<{callId: string; modelKey: string; executionKind: string; agentId: string | null;
+  periodUsage: {chargedTokens: number; reservedTokens: number; modelCalls: number;
+    start: string | null; end: string | null};
+  recentCalls: {list: Array<{callId: string; modelKey: string; executionKind: string; agentId: string | null;
     reservedTokens: number; chargedTokens: number; usageComplete: boolean; status: string;
     failureType: string | null; reservedAt: string; settledAt: string | null}>;
+    page: number; size: number; length: number};
 }
 
 export interface AiQuotaView {
@@ -356,8 +360,8 @@ export class AiModelListRequest {
 export class AiPolicyUserListRequest {
   filters = {
     loginId: '', name: '', organization: '', enabled: [] as boolean[],
-    modelCount: null as number | null, multiAgentEnabled: [] as boolean[],
-    quota: 'ALL', activeRequests: null as number | null,
+    model: '', multiAgentEnabled: [] as boolean[],
+    quotaTokens: null as number | null, activeRequests: null as number | null,
     updaterLoginIdList: [] as string[], updatedAfter: null as Date | null,
     updatedBefore: null as Date | null
   };
@@ -371,9 +375,9 @@ export class AiPolicyUserListRequest {
       name: params.get('name') || '',
       organization: params.get('organization') || '',
       enabled: booleanList(params, 'enabled'),
-      modelCount: numberValue(params, 'modelCount'),
+      model: params.get('model') || '',
       multiAgentEnabled: booleanList(params, 'multiAgentEnabled'),
-      quota: params.get('quota') || 'ALL',
+      quotaTokens: numberValue(params, 'quotaTokens'),
       activeRequests: numberValue(params, 'activeRequests'),
       updaterLoginIdList: stringList(params, 'updaterLoginIdList'),
       updatedAfter: dateValue(params, 'updatedAfter'),
@@ -387,9 +391,9 @@ export class AiPolicyUserListRequest {
     params = setText(params, 'name', this.filters.name);
     params = setText(params, 'organization', this.filters.organization);
     params = setList(params, 'enabled', this.filters.enabled);
-    params = setNumber(params, 'modelCount', this.filters.modelCount);
+    params = setText(params, 'model', this.filters.model);
     params = setList(params, 'multiAgentEnabled', this.filters.multiAgentEnabled);
-    params = setText(params, 'quota', this.filters.quota === 'ALL' ? '' : this.filters.quota);
+    params = setNumber(params, 'quotaTokens', this.filters.quotaTokens);
     params = setNumber(params, 'activeRequests', this.filters.activeRequests);
     params = setList(params, 'updaterLoginIdList', this.filters.updaterLoginIdList);
     params = setDate(params, 'updatedAfter', this.filters.updatedAfter);

@@ -14,8 +14,9 @@
 
   @if (policy) {
     <div class="p-3 container-fluid">
-      <mat-card class="p-0">
-        <mat-tab-group animationDuration="0ms">
+      <div class="detail-surface">
+        <mat-tab-group animationDuration="0ms" [selectedIndex]="selectedTabIndex"
+          (selectedIndexChange)="selectedTabIndex = $event">
           <mat-tab label="Policy Override">
             <div class="detail-tab-content">
               @if (policy.inherited && !editingOverride) {
@@ -168,30 +169,113 @@
 
           <mat-tab label="Usage and Operations">
             <div class="detail-tab-content">
-              <div class="usage-summary-grid">
-                <div class="usage-stat"><span>Active Requests</span><strong>{{usage?.activeRequests ?? 0}}</strong></div>
-                <div class="usage-stat"><span>Consumed Tokens</span><strong>{{usage?.quota?.consumedTokens ?? 0 | number}}</strong></div>
-                <div class="usage-stat"><span>Reserved Tokens</span><strong>{{usage?.quota?.reservedTokens ?? 0 | number}}</strong></div>
-                <div class="usage-stat"><span>Remaining Tokens</span><strong>{{usage?.quota?.remainingTokens == null ? 'Unlimited' : (usage?.quota?.remainingTokens | number)}}</strong></div>
+              <div class="usage-period-filter">
+                <div class="usage-date-field">
+                  <mat-form-field><mat-label>From</mat-label>
+                    <input matInput [matDatepicker]="usageStartPicker" [(ngModel)]="usageStart"
+                      [max]="usageEnd" (dateChange)="onUsagePeriodChange()">
+                    <mat-datepicker-toggle matSuffix [for]="usageStartPicker"/>
+                    <mat-datepicker #usageStartPicker/>
+                  </mat-form-field>
+                </div>
+                <div class="usage-date-field">
+                  <mat-form-field><mat-label>To</mat-label>
+                    <input matInput [matDatepicker]="usageEndPicker" [(ngModel)]="usageEnd"
+                      [min]="usageStart" (dateChange)="onUsagePeriodChange()">
+                    <mat-datepicker-toggle matSuffix [for]="usageEndPicker"/>
+                    <mat-datepicker #usageEndPicker/>
+                  </mat-form-field>
+                </div>
+                <span class="hint">Selected range · Local time</span>
               </div>
-
-              @if (usage?.quota?.limitTokens) {
-                <mat-card class="mt-3">
-                  <mat-card-content class="mat-card-container">
-                    <div class="d-flex justify-content-between">
-                      <strong>Current {{usage?.quota?.period | lowercase}} quota</strong>
-                      <span>{{usage?.quota?.consumedTokens ?? 0 | number}} / {{usage?.quota?.limitTokens | number}}</span>
-                    </div>
-                    <mat-progress-bar class="mt-2" mode="determinate"
-                      [value]="100 * ((usage?.quota?.consumedTokens ?? 0) + (usage?.quota?.reservedTokens ?? 0)) / usage!.quota.limitTokens!"/>
-                    <p class="hint mb-0 mt-2">UTC period: {{usage?.quota?.periodStart | date:'medium':'UTC'}} – {{usage?.quota?.periodEnd | date:'medium':'UTC'}}</p>
-                  </mat-card-content>
-                </mat-card>
+              @if (invalidUsageDateRange) {
+                <p class="text-danger" role="alert">Usage end date must be on or after the start date.</p>
               }
 
-              <mat-card class="mt-3">
-                <mat-card-header><mat-card-title>Operations</mat-card-title></mat-card-header>
-                <mat-card-content class="mat-card-container">
+              <section class="usage-overview" aria-labelledby="usage-overview-title">
+                <div class="usage-overview-header">
+                  <h3 id="usage-overview-title">Usage Overview</h3>
+                  <div class="active-requests-summary" aria-label="Requests running now">
+                    <span class="activity-dot" [class.active]="(usage?.activeRequests ?? 0) > 0"></span>
+                    <strong>{{usage?.activeRequests ?? 0}}</strong>
+                    <span>requests running now</span>
+                  </div>
+                </div>
+
+                <div class="usage-overview-grid">
+                  <div class="usage-chart" aria-label="Activity in the selected date range">
+                    <div class="usage-chart-header">
+                      <strong>Activity in selected range</strong>
+                      <span class="hint">{{usage?.periodUsage?.modelCalls ?? 0 | number}} model calls</span>
+                    </div>
+                    <div class="usage-odometer">
+                      <strong>{{selectedTokenActivity | number}}</strong>
+                      <span>tokens charged or pending</span>
+                    </div>
+                    <div class="usage-meter" role="img"
+                      [attr.aria-label]="(selectedChargedTokens | number) + ' charged tokens and '
+                        + (selectedPendingTokens | number) + ' tokens awaiting final charge'">
+                      <span class="usage-meter-segment charged"
+                        [style.width.%]="selectedChargedPercent"></span>
+                      <span class="usage-meter-segment reserved"
+                        [style.width.%]="selectedPendingPercent"></span>
+                    </div>
+                    <div class="usage-meter-legend">
+                      <span><i class="legend-swatch charged"></i>Charged
+                        <strong>{{selectedChargedTokens | number}}</strong></span>
+                      <span><i class="legend-swatch reserved"></i>Awaiting final charge
+                        <strong>{{selectedPendingTokens | number}}</strong></span>
+                    </div>
+                  </div>
+
+                  <div class="usage-chart" aria-label="Current quota period">
+                    <div class="usage-chart-header">
+                      <strong>Current quota period</strong>
+                      @if (usage?.quota?.periodEnd) {
+                        <span class="hint">Resets {{usage?.quota?.periodEnd | date:'MMM d':'UTC'}} UTC</span>
+                      }
+                    </div>
+                    @if (quotaLimitTokens !== null) {
+                      <div class="usage-odometer">
+                        <strong>{{quotaCommittedTokens | number}}</strong>
+                        <span>of {{quotaLimitTokens | number}} tokens committed</span>
+                      </div>
+                      <div class="usage-meter" role="progressbar" aria-label="Quota committed"
+                        aria-valuemin="0" [attr.aria-valuemax]="quotaLimitTokens"
+                        [attr.aria-valuenow]="quotaProgressValue"
+                        [attr.aria-valuetext]="quotaProgressDescription">
+                        <span class="usage-meter-segment charged" [style.width.%]="quotaUsedPercent"></span>
+                        <span class="usage-meter-segment reserved" [style.width.%]="quotaReservedPercent"></span>
+                        <span class="usage-meter-segment available" [style.width.%]="quotaAvailablePercent"></span>
+                      </div>
+                      <div class="usage-meter-legend quota-legend">
+                        <span><i class="legend-swatch charged"></i>Used
+                          <strong>{{quotaUsedTokens | number}}</strong></span>
+                        <span><i class="legend-swatch reserved"></i>Reserved for running requests
+                          <strong>{{quotaReservedTokens | number}}</strong></span>
+                        <span><i class="legend-swatch available"></i>Available
+                          <strong>{{quotaAvailableTokens | number}}</strong></span>
+                      </div>
+                    } @else {
+                      <div class="usage-odometer unlimited-quota">
+                        <strong>No quota limit</strong>
+                        <span>{{quotaCommittedTokens | number}} tokens currently committed</span>
+                      </div>
+                      <div class="usage-meter unlimited-meter" role="img"
+                        aria-label="No quota limit; usage has no proportional maximum"></div>
+                      <div class="usage-meter-legend quota-legend unlimited-legend">
+                        <span><i class="legend-swatch charged"></i>Used
+                          <strong>{{quotaUsedTokens | number}}</strong></span>
+                        <span><i class="legend-swatch reserved"></i>Reserved for running requests
+                          <strong>{{quotaReservedTokens | number}}</strong></span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              </section>
+
+              <section class="usage-section mt-3">
+                <h3>Operations</h3>
                   <div class="operation-grid">
                     <div>
                       <p>Cancel all active AI requests for this user.</p>
@@ -212,14 +296,16 @@
                       </div>
                     }
                   </div>
-                </mat-card-content>
-              </mat-card>
+              </section>
 
-              <mat-card class="mt-3">
-                <mat-card-header><mat-card-title>Recent Model Calls</mat-card-title></mat-card-header>
-                <mat-card-content class="mat-card-container">
-                  <div class="table-wrapper mat-elevation-z1">
-                    <table mat-table matSort #usageSort="matSort" matSortStart="desc"
+              <section class="usage-section mt-3">
+                <h3>Model Calls</h3>
+                  @if (usageLoading) { <mat-progress-bar mode="indeterminate"/> }
+                  <div class="table-wrapper usage-table-wrapper">
+                    <table mat-table matSort matSortStart="desc"
+                      [matSortActive]="usagePage.sortActive"
+                      [matSortDirection]="usagePage.sortDirection"
+                      (matSortChange)="onUsageSort($event)"
                       [dataSource]="usageDataSource">
                       <ng-container matColumnDef="time"><th mat-header-cell *matHeaderCellDef mat-sort-header>Time</th><td mat-cell *matCellDef="let call">{{call.reservedAt | date:'short':'UTC'}}</td></ng-container>
                       <ng-container matColumnDef="model"><th mat-header-cell *matHeaderCellDef mat-sort-header>Model</th><td mat-cell *matCellDef="let call">{{call.modelKey}}</td></ng-container>
@@ -229,28 +315,31 @@
                       <tr mat-header-row *matHeaderRowDef="usageColumns"></tr>
                       <tr mat-row *matRowDef="let row; columns: usageColumns;"></tr>
                     </table>
+                    <mat-paginator [length]="usage?.recentCalls?.length ?? 0"
+                      [pageIndex]="usagePage.pageIndex" [pageSize]="usagePage.pageSize"
+                      [pageSizeOptions]="[10, 25, 50]" (page)="onUsagePage($event)"
+                      showFirstLastButtons/>
                   </div>
-                </mat-card-content>
-              </mat-card>
+              </section>
             </div>
           </mat-tab>
         </mat-tab-group>
-      </mat-card>
+      </div>
     </div>
 
     <div class="row action-group m-0">
       <div class="col-12 actions-wrap">
         <div class="actions">
           <a mat-raised-button routerLink="/ai-admin/users">Back</a>
-          @if (editingOverride) {
+          @if (selectedTabIndex === 0 && editingOverride && isChanged) {
             <button mat-raised-button color="primary" (click)="save()"
               [disabled]="updateDisabled" data-id="save-ai-policy">Update</button>
-            @if (!policy.inherited) {
-              <button mat-stroked-button color="warn" (click)="reset()"
-                [disabled]="saving">
-                Restore Default Policy
-              </button>
-            }
+          }
+          @if (selectedTabIndex === 0 && editingOverride && !policy.inherited) {
+            <button mat-stroked-button color="warn" (click)="reset()"
+              [disabled]="saving">
+              Restore Default Policy
+            </button>
           }
         </div>
       </div>

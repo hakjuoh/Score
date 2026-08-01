@@ -3,6 +3,7 @@ import {provideHttpClient} from '@angular/common/http';
 import {HttpTestingController, provideHttpClientTesting} from '@angular/common/http/testing';
 import {AiAdminPolicyService} from './ai-admin-policy.service';
 import {AiModelListRequest, AiPolicyUserListRequest, AiProviderListRequest} from './ai-admin-policy';
+import {PageRequest} from '../../../basis/basis';
 
 describe('AiAdminPolicyService REST contract', () => {
   let service: AiAdminPolicyService;
@@ -51,12 +52,13 @@ describe('AiAdminPolicyService REST contract', () => {
     const users = new AiPolicyUserListRequest();
     const before = new Date(2026, 6, 31);
     users.filters = {...users.filters, loginId: 'alice', organization: 'OAGi',
-      multiAgentEnabled: [true], quota: 'NEAR', activeRequests: 1,
+      model: 'GPT-5', multiAgentEnabled: [true], quotaTokens: 1000, activeRequests: 1,
       updatedBefore: before};
     service.searchUsers(users).subscribe();
     request = http.expectOne(req => req.url === '/api/admin/ai/users/search');
     expect(request.request.params.get('loginId')).toBe('alice');
-    expect(request.request.params.get('quota')).toBe('NEAR');
+    expect(request.request.params.get('model')).toBe('GPT-5');
+    expect(request.request.params.get('quotaTokens')).toBe('1000');
     expect(request.request.params.get('activeRequests')).toBe('1');
     const expectedExclusiveBefore = new Date(before);
     expectedExclusiveBefore.setDate(expectedExclusiveBefore.getDate() + 1);
@@ -149,11 +151,30 @@ describe('AiAdminPolicyService REST contract', () => {
 
   it('loads usage and posts a quota adjustment without a reason', () => {
     service.usage('17').subscribe();
-    http.expectOne('/api/admin/ai/users/17/usage').flush({});
+    const usageRequest = http.expectOne(req => req.url === '/api/admin/ai/users/17/usage');
+    expect(usageRequest.request.params.get('orderBy')).toBe('-time');
+    expect(usageRequest.request.params.get('pageSize')).toBe('10');
+    usageRequest.flush({});
     service.adjustQuota('17', -1000).subscribe();
     const request = http.expectOne('/api/admin/ai/users/17/quota-adjustments');
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({deltaTokens: -1000});
+    request.flush({});
+  });
+
+  it('loads a paginated usage period with an inclusive end date', () => {
+    const start = new Date(2026, 6, 1);
+    const end = new Date(2026, 6, 31);
+    service.usage('17', new PageRequest('charged', 'asc', 2, 25), start, end).subscribe();
+
+    const request = http.expectOne(req => req.url === '/api/admin/ai/users/17/usage');
+    expect(request.request.params.get('orderBy')).toBe('+charged');
+    expect(request.request.params.get('pageIndex')).toBe('2');
+    expect(request.request.params.get('pageSize')).toBe('25');
+    expect(request.request.params.get('start')).toBe(start.toISOString());
+    const exclusiveEnd = new Date(end);
+    exclusiveEnd.setDate(exclusiveEnd.getDate() + 1);
+    expect(request.request.params.get('end')).toBe(exclusiveEnd.toISOString());
     request.flush({});
   });
 

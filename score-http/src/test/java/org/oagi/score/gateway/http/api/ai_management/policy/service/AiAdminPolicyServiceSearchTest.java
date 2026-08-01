@@ -45,9 +45,17 @@ class AiAdminPolicyServiceSearchTest {
                 .containsExactly("newer", "older", "inherited");
     }
 
+    @Test
+    void matchesAvailableModelsByDisplayNameIgnoringCase() {
+        var user = summary("user", null);
+
+        assertThat(AiAdminPolicyService.matchesModel(user, "gpt")).isTrue();
+        assertThat(AiAdminPolicyService.matchesModel(user, "claude")).isFalse();
+    }
+
     private AiPolicyUserSummary summary(String loginId, Instant updatedOn) {
         return new AiPolicyUserSummary(loginId, loginId, loginId, null,
-                updatedOn == null, true, true, 0, null, 0, 0,
-                null, 0, updatedOn != null ? "admin" : null, updatedOn);
+                updatedOn == null, true, true, 1, List.of("GPT-5"), null, 0, 0, null, 0,
+                updatedOn != null ? "admin" : null, updatedOn);
     }
 }
