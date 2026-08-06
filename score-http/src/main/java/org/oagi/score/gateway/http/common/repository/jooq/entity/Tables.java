@@ -8,8 +8,6 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Abie;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Acc;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifestTag;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.ActivityEvent;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.ActivityEventTarget;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdList;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue;
@@ -198,16 +196,6 @@ public class Tables {
      * rows, associating tags with a release-specific ACC.
      */
     public static final AccManifestTag ACC_MANIFEST_TAG = AccManifestTag.ACC_MANIFEST_TAG;
-
-    /**
-     * Append-only ledger of normalized user, service, and AI activity events.
-     */
-    public static final ActivityEvent ACTIVITY_EVENT = ActivityEvent.ACTIVITY_EVENT;
-
-    /**
-     * Append-only resource targets associated with normalized activity events.
-     */
-    public static final ActivityEventTarget ACTIVITY_EVENT_TARGET = ActivityEventTarget.ACTIVITY_EVENT_TARGET;
 
     /**
      * The AGENCY_ID_LIST table stores information about agency identification

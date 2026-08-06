@@ -14,8 +14,6 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Abie;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Acc;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifestTag;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.ActivityEvent;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.ActivityEventTarget;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdList;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue;
@@ -158,8 +156,6 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AccManifestRecord;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AccManifestTagRecord;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AccRecord;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.ActivityEventRecord;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.ActivityEventTargetRecord;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AgencyIdListManifestRecord;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AgencyIdListRecord;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AgencyIdListValueManifestRecord;
@@ -315,10 +311,6 @@ public class Keys {
     public static final UniqueKey<AccRecord> KEY_ACC_PRIMARY = Internal.createUniqueKey(Acc.ACC, DSL.name("KEY_acc_PRIMARY"), new TableField[] { Acc.ACC.ACC_ID }, true);
     public static final UniqueKey<AccManifestRecord> KEY_ACC_MANIFEST_PRIMARY = Internal.createUniqueKey(AccManifest.ACC_MANIFEST, DSL.name("KEY_acc_manifest_PRIMARY"), new TableField[] { AccManifest.ACC_MANIFEST.ACC_MANIFEST_ID }, true);
     public static final UniqueKey<AccManifestTagRecord> KEY_ACC_MANIFEST_TAG_PRIMARY = Internal.createUniqueKey(AccManifestTag.ACC_MANIFEST_TAG, DSL.name("KEY_acc_manifest_tag_PRIMARY"), new TableField[] { AccManifestTag.ACC_MANIFEST_TAG.ACC_MANIFEST_ID, AccManifestTag.ACC_MANIFEST_TAG.TAG_ID }, true);
-    public static final UniqueKey<ActivityEventRecord> KEY_ACTIVITY_EVENT_ACTIVITY_EVENT_GUID_UK = Internal.createUniqueKey(ActivityEvent.ACTIVITY_EVENT, DSL.name("KEY_activity_event_activity_event_guid_uk"), new TableField[] { ActivityEvent.ACTIVITY_EVENT.EVENT_GUID }, true);
-    public static final UniqueKey<ActivityEventRecord> KEY_ACTIVITY_EVENT_ACTIVITY_EVENT_LEGACY_LOG_UK = Internal.createUniqueKey(ActivityEvent.ACTIVITY_EVENT, DSL.name("KEY_activity_event_activity_event_legacy_log_uk"), new TableField[] { ActivityEvent.ACTIVITY_EVENT.LEGACY_LOG_ID }, true);
-    public static final UniqueKey<ActivityEventRecord> KEY_ACTIVITY_EVENT_PRIMARY = Internal.createUniqueKey(ActivityEvent.ACTIVITY_EVENT, DSL.name("KEY_activity_event_PRIMARY"), new TableField[] { ActivityEvent.ACTIVITY_EVENT.ACTIVITY_EVENT_ID }, true);
-    public static final UniqueKey<ActivityEventTargetRecord> KEY_ACTIVITY_EVENT_TARGET_PRIMARY = Internal.createUniqueKey(ActivityEventTarget.ACTIVITY_EVENT_TARGET, DSL.name("KEY_activity_event_target_PRIMARY"), new TableField[] { ActivityEventTarget.ACTIVITY_EVENT_TARGET.ACTIVITY_EVENT_ID, ActivityEventTarget.ACTIVITY_EVENT_TARGET.TARGET_ORDINAL }, true);
     public static final UniqueKey<AgencyIdListRecord> KEY_AGENCY_ID_LIST_PRIMARY = Internal.createUniqueKey(AgencyIdList.AGENCY_ID_LIST, DSL.name("KEY_agency_id_list_PRIMARY"), new TableField[] { AgencyIdList.AGENCY_ID_LIST.AGENCY_ID_LIST_ID }, true);
     public static final UniqueKey<AgencyIdListManifestRecord> KEY_AGENCY_ID_LIST_MANIFEST_PRIMARY = Internal.createUniqueKey(AgencyIdListManifest.AGENCY_ID_LIST_MANIFEST, DSL.name("KEY_agency_id_list_manifest_PRIMARY"), new TableField[] { AgencyIdListManifest.AGENCY_ID_LIST_MANIFEST.AGENCY_ID_LIST_MANIFEST_ID }, true);
     public static final UniqueKey<AgencyIdListValueRecord> KEY_AGENCY_ID_LIST_VALUE_PRIMARY = Internal.createUniqueKey(AgencyIdListValue.AGENCY_ID_LIST_VALUE, DSL.name("KEY_agency_id_list_value_PRIMARY"), new TableField[] { AgencyIdListValue.AGENCY_ID_LIST_VALUE.AGENCY_ID_LIST_VALUE_ID }, true);
@@ -529,7 +521,6 @@ public class Keys {
     public static final ForeignKey<AccManifestTagRecord, AccManifestRecord> ACC_MANIFEST_TAG_ACC_MANIFEST_ID_FK = ForeignKeys0.ACC_MANIFEST_TAG_ACC_MANIFEST_ID_FK;
     public static final ForeignKey<AccManifestTagRecord, AppUserRecord> ACC_MANIFEST_TAG_CREATED_BY_FK = ForeignKeys0.ACC_MANIFEST_TAG_CREATED_BY_FK;
     public static final ForeignKey<AccManifestTagRecord, TagRecord> ACC_MANIFEST_TAG_TAG_ID_FK = ForeignKeys0.ACC_MANIFEST_TAG_TAG_ID_FK;
-    public static final ForeignKey<ActivityEventTargetRecord, ActivityEventRecord> ACTIVITY_TARGET_EVENT_FK = ForeignKeys0.ACTIVITY_TARGET_EVENT_FK;
     public static final ForeignKey<AgencyIdListRecord, AgencyIdListValueRecord> AGENCY_ID_LIST_AGENCY_ID_LIST_VALUE_ID_FK = ForeignKeys0.AGENCY_ID_LIST_AGENCY_ID_LIST_VALUE_ID_FK;
     public static final ForeignKey<AgencyIdListRecord, AgencyIdListRecord> AGENCY_ID_LIST_BASED_AGENCY_ID_LIST_ID_FK = ForeignKeys0.AGENCY_ID_LIST_BASED_AGENCY_ID_LIST_ID_FK;
     public static final ForeignKey<AgencyIdListRecord, AppUserRecord> AGENCY_ID_LIST_CREATED_BY_FK = ForeignKeys0.AGENCY_ID_LIST_CREATED_BY_FK;
@@ -1006,7 +997,7 @@ public class Keys {
     public static final ForeignKey<OasServerVariableRecord, OasServerRecord> OAS_SERVER_VARIABLE_OAS_SERVER_ID_FK = ForeignKeys0.OAS_SERVER_VARIABLE_OAS_SERVER_ID_FK;
     public static final ForeignKey<OasTagRecord, AppUserRecord> OAS_TAG_CREATED_BY_FK = ForeignKeys0.OAS_TAG_CREATED_BY_FK;
     public static final ForeignKey<OasTagRecord, AppUserRecord> OAS_TAG_LAST_UPDATED_BY_FK = ForeignKeys0.OAS_TAG_LAST_UPDATED_BY_FK;
-    public static final ForeignKey<Oauth2AppScopeRecord, Oauth2AppRecord> OAUTH2_APP_SCOPE_OAUTH2_APP_ID_FK = ForeignKeys1.OAUTH2_APP_SCOPE_OAUTH2_APP_ID_FK;
+    public static final ForeignKey<Oauth2AppScopeRecord, Oauth2AppRecord> OAUTH2_APP_SCOPE_OAUTH2_APP_ID_FK = ForeignKeys0.OAUTH2_APP_SCOPE_OAUTH2_APP_ID_FK;
     public static final ForeignKey<ReleaseRecord, AppUserRecord> RELEASE_CREATED_BY_FK = ForeignKeys1.RELEASE_CREATED_BY_FK;
     public static final ForeignKey<ReleaseRecord, AppUserRecord> RELEASE_LAST_UPDATED_BY_FK = ForeignKeys1.RELEASE_LAST_UPDATED_BY_FK;
     public static final ForeignKey<ReleaseRecord, LibraryRecord> RELEASE_LIBRARY_ID_FK = ForeignKeys1.RELEASE_LIBRARY_ID_FK;
@@ -1071,7 +1062,6 @@ public class Keys {
         public static final ForeignKey<AccManifestTagRecord, AccManifestRecord> ACC_MANIFEST_TAG_ACC_MANIFEST_ID_FK = Internal.createForeignKey(AccManifestTag.ACC_MANIFEST_TAG, DSL.name("acc_manifest_tag_acc_manifest_id_fk"), new TableField[] { AccManifestTag.ACC_MANIFEST_TAG.ACC_MANIFEST_ID }, Keys.KEY_ACC_MANIFEST_PRIMARY, new TableField[] { AccManifest.ACC_MANIFEST.ACC_MANIFEST_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
         public static final ForeignKey<AccManifestTagRecord, AppUserRecord> ACC_MANIFEST_TAG_CREATED_BY_FK = Internal.createForeignKey(AccManifestTag.ACC_MANIFEST_TAG, DSL.name("acc_manifest_tag_created_by_fk"), new TableField[] { AccManifestTag.ACC_MANIFEST_TAG.CREATED_BY }, Keys.KEY_APP_USER_PRIMARY, new TableField[] { AppUser.APP_USER.APP_USER_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
         public static final ForeignKey<AccManifestTagRecord, TagRecord> ACC_MANIFEST_TAG_TAG_ID_FK = Internal.createForeignKey(AccManifestTag.ACC_MANIFEST_TAG, DSL.name("acc_manifest_tag_tag_id_fk"), new TableField[] { AccManifestTag.ACC_MANIFEST_TAG.TAG_ID }, Keys.KEY_TAG_PRIMARY, new TableField[] { Tag.TAG.TAG_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
-        public static final ForeignKey<ActivityEventTargetRecord, ActivityEventRecord> ACTIVITY_TARGET_EVENT_FK = Internal.createForeignKey(ActivityEventTarget.ACTIVITY_EVENT_TARGET, DSL.name("activity_target_event_fk"), new TableField[] { ActivityEventTarget.ACTIVITY_EVENT_TARGET.ACTIVITY_EVENT_ID }, Keys.KEY_ACTIVITY_EVENT_PRIMARY, new TableField[] { ActivityEvent.ACTIVITY_EVENT.ACTIVITY_EVENT_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
         public static final ForeignKey<AgencyIdListRecord, AgencyIdListValueRecord> AGENCY_ID_LIST_AGENCY_ID_LIST_VALUE_ID_FK = Internal.createForeignKey(AgencyIdList.AGENCY_ID_LIST, DSL.name("agency_id_list_agency_id_list_value_id_fk"), new TableField[] { AgencyIdList.AGENCY_ID_LIST.AGENCY_ID_LIST_VALUE_ID }, Keys.KEY_AGENCY_ID_LIST_VALUE_PRIMARY, new TableField[] { AgencyIdListValue.AGENCY_ID_LIST_VALUE.AGENCY_ID_LIST_VALUE_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
         public static final ForeignKey<AgencyIdListRecord, AgencyIdListRecord> AGENCY_ID_LIST_BASED_AGENCY_ID_LIST_ID_FK = Internal.createForeignKey(AgencyIdList.AGENCY_ID_LIST, DSL.name("agency_id_list_based_agency_id_list_id_fk"), new TableField[] { AgencyIdList.AGENCY_ID_LIST.BASED_AGENCY_ID_LIST_ID }, Keys.KEY_AGENCY_ID_LIST_PRIMARY, new TableField[] { AgencyIdList.AGENCY_ID_LIST.AGENCY_ID_LIST_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
         public static final ForeignKey<AgencyIdListRecord, AppUserRecord> AGENCY_ID_LIST_CREATED_BY_FK = Internal.createForeignKey(AgencyIdList.AGENCY_ID_LIST, DSL.name("agency_id_list_created_by_fk"), new TableField[] { AgencyIdList.AGENCY_ID_LIST.CREATED_BY }, Keys.KEY_APP_USER_PRIMARY, new TableField[] { AppUser.APP_USER.APP_USER_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
@@ -1548,10 +1538,10 @@ public class Keys {
         public static final ForeignKey<OasServerVariableRecord, OasServerRecord> OAS_SERVER_VARIABLE_OAS_SERVER_ID_FK = Internal.createForeignKey(OasServerVariable.OAS_SERVER_VARIABLE, DSL.name("oas_server_variable_oas_server_id_fk"), new TableField[] { OasServerVariable.OAS_SERVER_VARIABLE.OAS_SERVER_ID }, Keys.KEY_OAS_SERVER_PRIMARY, new TableField[] { OasServer.OAS_SERVER.OAS_SERVER_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
         public static final ForeignKey<OasTagRecord, AppUserRecord> OAS_TAG_CREATED_BY_FK = Internal.createForeignKey(OasTag.OAS_TAG, DSL.name("oas_tag_created_by_fk"), new TableField[] { OasTag.OAS_TAG.CREATED_BY }, Keys.KEY_APP_USER_PRIMARY, new TableField[] { AppUser.APP_USER.APP_USER_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
         public static final ForeignKey<OasTagRecord, AppUserRecord> OAS_TAG_LAST_UPDATED_BY_FK = Internal.createForeignKey(OasTag.OAS_TAG, DSL.name("oas_tag_last_updated_by_fk"), new TableField[] { OasTag.OAS_TAG.LAST_UPDATED_BY }, Keys.KEY_APP_USER_PRIMARY, new TableField[] { AppUser.APP_USER.APP_USER_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
+        public static final ForeignKey<Oauth2AppScopeRecord, Oauth2AppRecord> OAUTH2_APP_SCOPE_OAUTH2_APP_ID_FK = Internal.createForeignKey(Oauth2AppScope.OAUTH2_APP_SCOPE, DSL.name("oauth2_app_scope_oauth2_app_id_fk"), new TableField[] { Oauth2AppScope.OAUTH2_APP_SCOPE.OAUTH2_APP_ID }, Keys.KEY_OAUTH2_APP_PRIMARY, new TableField[] { Oauth2App.OAUTH2_APP.OAUTH2_APP_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
     }
 
     private static class ForeignKeys1 {
-        public static final ForeignKey<Oauth2AppScopeRecord, Oauth2AppRecord> OAUTH2_APP_SCOPE_OAUTH2_APP_ID_FK = Internal.createForeignKey(Oauth2AppScope.OAUTH2_APP_SCOPE, DSL.name("oauth2_app_scope_oauth2_app_id_fk"), new TableField[] { Oauth2AppScope.OAUTH2_APP_SCOPE.OAUTH2_APP_ID }, Keys.KEY_OAUTH2_APP_PRIMARY, new TableField[] { Oauth2App.OAUTH2_APP.OAUTH2_APP_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
         public static final ForeignKey<ReleaseRecord, AppUserRecord> RELEASE_CREATED_BY_FK = Internal.createForeignKey(Release.RELEASE, DSL.name("release_created_by_fk"), new TableField[] { Release.RELEASE.CREATED_BY }, Keys.KEY_APP_USER_PRIMARY, new TableField[] { AppUser.APP_USER.APP_USER_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
         public static final ForeignKey<ReleaseRecord, AppUserRecord> RELEASE_LAST_UPDATED_BY_FK = Internal.createForeignKey(Release.RELEASE, DSL.name("release_last_updated_by_fk"), new TableField[] { Release.RELEASE.LAST_UPDATED_BY }, Keys.KEY_APP_USER_PRIMARY, new TableField[] { AppUser.APP_USER.APP_USER_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
         public static final ForeignKey<ReleaseRecord, LibraryRecord> RELEASE_LIBRARY_ID_FK = Internal.createForeignKey(Release.RELEASE, DSL.name("release_library_id_fk"), new TableField[] { Release.RELEASE.LIBRARY_ID }, Keys.KEY_LIBRARY_PRIMARY, new TableField[] { Library.LIBRARY.LIBRARY_ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.RESTRICT);
