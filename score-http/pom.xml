@@ -63,7 +63,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <maven.compiler.release>21</maven.compiler.release>
-        <jOOQ.configuration.skip>false</jOOQ.configuration.skip>
+        <jOOQ.configuration.skip>true</jOOQ.configuration.skip>
 
         <db.url>jdbc:mariadb://localhost:3306/oagi</db.url>
         <db.user>oagi</db.user>
