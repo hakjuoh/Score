@@ -15,8 +15,6 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Abie;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Acc;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifestTag;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.ActivityEvent;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.ActivityEventTarget;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdList;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListManifest;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue;
@@ -212,16 +210,6 @@ public class Oagi extends SchemaImpl {
      * rows, associating tags with a release-specific ACC.
      */
     public final AccManifestTag ACC_MANIFEST_TAG = AccManifestTag.ACC_MANIFEST_TAG;
-
-    /**
-     * Append-only ledger of normalized user, service, and AI activity events.
-     */
-    public final ActivityEvent ACTIVITY_EVENT = ActivityEvent.ACTIVITY_EVENT;
-
-    /**
-     * Append-only resource targets associated with normalized activity events.
-     */
-    public final ActivityEventTarget ACTIVITY_EVENT_TARGET = ActivityEventTarget.ACTIVITY_EVENT_TARGET;
 
     /**
      * The AGENCY_ID_LIST table stores information about agency identification
@@ -1199,8 +1187,6 @@ public class Oagi extends SchemaImpl {
             Acc.ACC,
             AccManifest.ACC_MANIFEST,
             AccManifestTag.ACC_MANIFEST_TAG,
-            ActivityEvent.ACTIVITY_EVENT,
-            ActivityEventTarget.ACTIVITY_EVENT_TARGET,
             AgencyIdList.AGENCY_ID_LIST,
             AgencyIdListManifest.AGENCY_ID_LIST_MANIFEST,
             AgencyIdListValue.AGENCY_ID_LIST_VALUE,
