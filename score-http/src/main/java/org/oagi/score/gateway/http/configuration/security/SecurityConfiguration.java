@@ -120,6 +120,11 @@ public class SecurityConfiguration {
         );
         corsConfiguration.setAllowCredentials(true);
         corsConfiguration.setAllowedOriginPatterns(Arrays.asList("*"));
+        corsConfiguration.setExposedHeaders(Arrays.asList(
+                "X-Score-Request-Type", "X-Score-Request-Id",
+                "X-Score-Request-Timestamp", "X-Score-Trace-Id",
+                "X-Error-Message", "X-Error-Message-Id", "X-Error-Code",
+                "Retry-After"));
         source.registerCorsConfiguration("/**", corsConfiguration);
         return source;
     }

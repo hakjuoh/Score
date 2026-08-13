@@ -1,5 +1,7 @@
 package org.oagi.score.gateway.http.configuration.ai;
 
+import org.oagi.score.gateway.http.configuration.observability.ScoreOpenTelemetryManagementProperties;
+
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
@@ -62,8 +64,8 @@ class ScoreAiObservabilityConfigurationTest {
     void managementDefaultsPreserveThePrivateAiSdkExportPolicyWithoutAProfile() {
         context.withPropertyValues("score.ai.observability.enabled=false")
                 .run(application -> {
-                    ScoreAiObservabilityManagementProperties management = application.getBean(
-                            ScoreAiObservabilityManagementProperties.class);
+                    ScoreOpenTelemetryManagementProperties management = application.getBean(
+                            ScoreOpenTelemetryManagementProperties.class);
                     assertThat(management.getTracing().getSampling().getProbability()).isEqualTo(1.0);
                     assertThat(management.getTracing().getExport().isEnabled()).isTrue();
                     assertThat(management.getTracing().getExport().getOtlp().isEnabled()).isTrue();
@@ -71,7 +73,7 @@ class ScoreAiObservabilityConfigurationTest {
                             .containsEntry("service.namespace", "oagi.score")
                             .containsEntry("deployment.environment.name", "unknown");
                     assertThat(management.getOpentelemetry().getTracing().getSampler())
-                            .isEqualTo(ScoreAiObservabilityManagementProperties.Sampler
+                            .isEqualTo(ScoreOpenTelemetryManagementProperties.Sampler
                                     .PARENT_BASED_TRACE_ID_RATIO);
                     assertThat(management.getOpentelemetry().getTracing().getExport()
                             .getScheduleDelay()).hasSeconds(5);
@@ -95,10 +97,10 @@ class ScoreAiObservabilityConfigurationTest {
                         "score.ai.observability.enabled=false",
                         "management.opentelemetry.tracing.sampler=parentbased_traceidratio")
                 .run(application -> {
-                    ScoreAiObservabilityManagementProperties management = application.getBean(
-                            ScoreAiObservabilityManagementProperties.class);
+                    ScoreOpenTelemetryManagementProperties management = application.getBean(
+                            ScoreOpenTelemetryManagementProperties.class);
                     assertThat(management.getOpentelemetry().getTracing().getSampler())
-                            .isEqualTo(ScoreAiObservabilityManagementProperties.Sampler
+                            .isEqualTo(ScoreOpenTelemetryManagementProperties.Sampler
                                     .PARENT_BASED_TRACE_ID_RATIO);
                 });
     }
@@ -141,15 +143,15 @@ class ScoreAiObservabilityConfigurationTest {
                     ScoreAiObservabilityProperties properties = application.getBean(
                             ScoreAiObservabilityProperties.class);
                     assertThat(properties.getServiceName()).isEqualTo("custom-ai");
-                    ScoreAiObservabilityManagementProperties management = application.getBean(
-                            ScoreAiObservabilityManagementProperties.class);
+                    ScoreOpenTelemetryManagementProperties management = application.getBean(
+                            ScoreOpenTelemetryManagementProperties.class);
                     assertThat(management.getTracing().getSampling().getProbability()).isEqualTo(0.25);
                     assertThat(management.getTracing().getExport().isEnabled()).isFalse();
                     assertThat(management.getTracing().getExport().getOtlp().isEnabled()).isFalse();
                     assertThat(management.getOpentelemetry().getResourceAttributes())
                             .containsEntry("service.namespace", "test.namespace");
                     assertThat(management.getOpentelemetry().getTracing().getSampler())
-                            .isEqualTo(ScoreAiObservabilityManagementProperties.Sampler.ALWAYS_OFF);
+                            .isEqualTo(ScoreOpenTelemetryManagementProperties.Sampler.ALWAYS_OFF);
                     assertThat(management.getOpentelemetry().getTracing().getExport()
                             .getScheduleDelay()).hasSeconds(3);
                     assertThat(management.getOpentelemetry().getTracing().getExport()

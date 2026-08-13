@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.release_management.model.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListManifestId;
@@ -15,8 +16,10 @@ import org.oagi.score.gateway.http.common.model.event.Event;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Data
+@EqualsAndHashCode(exclude = "traceContext")
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReleaseCreateRequestEvent implements Event {
@@ -30,6 +33,24 @@ public class ReleaseCreateRequestEvent implements Event {
     private List<DtManifestId> dtManifestIds;
     private List<CodeListManifestId> codeListManifestIds;
     private List<AgencyIdListManifestId> agencyIdListManifestIds;
+    private Map<String, String> traceContext;
+
+    public ReleaseCreateRequestEvent(
+            UserId userId,
+            ReleaseId releaseId,
+            List<AccManifestId> accManifestIds,
+            List<AsccpManifestId> asccpManifestIds,
+            List<BccpManifestId> bccpManifestIds,
+            List<DtManifestId> dtManifestIds,
+            List<CodeListManifestId> codeListManifestIds,
+            List<AgencyIdListManifestId> agencyIdListManifestIds) {
+        this(userId, releaseId, accManifestIds, asccpManifestIds, bccpManifestIds,
+                dtManifestIds, codeListManifestIds, agencyIdListManifestIds, Map.of());
+    }
+
+    public Map<String, String> getTraceContext() {
+        return traceContext == null ? Map.of() : Map.copyOf(traceContext);
+    }
 
     public List<AccManifestId> getAccManifestIds() {
         if (accManifestIds == null) {

@@ -30,6 +30,7 @@ import {
 } from './core-component-node';
 import {base64Encode, nullObservable} from '../../common/utility';
 import {map} from 'rxjs/operators';
+import {scoreRequest} from '../../common/score-request';
 
 @Injectable()
 export class CcNodeService {
@@ -248,7 +249,7 @@ export class CcNodeService {
   createAcc(releaseId: number): Observable<CcCreateResponse> {
     return this.http.post<CcCreateResponse>('/api/core-components/acc', {
       releaseId
-    });
+    }, {context: scoreRequest('ACC_CREATE')});
   }
 
   createAsccp(releaseId: number, accManifestId: number, initialPropertyTerm: string, asccpType?: string): Observable<CcCreateResponse> {
@@ -257,34 +258,34 @@ export class CcNodeService {
       roleOfAccManifestId: accManifestId,
       asccpType: asccpType || 'Default',
       initialPropertyTerm
-    });
+    }, {context: scoreRequest('ASCCP_CREATE')});
   }
 
   createBccp(releaseId: number, basedDtManifestId: number): Observable<CcCreateResponse> {
     return this.http.post<CcCreateResponse>('/api/core-components/bccp', {
       releaseId,
       basedDtManifestId,
-    });
+    }, {context: scoreRequest('BCCP_CREATE')});
   }
 
   createDt(releaseId: number, basedDtManifestId: number): Observable<CcCreateResponse> {
     return this.http.post<CcCreateResponse>('/api/core-components/dt', {
       releaseId,
       basedDtManifestId
-    });
+    }, {context: scoreRequest('DT_CREATE')});
   }
 
   createBOD(verbManifestIdList: number[], nounManifestIdList: number[]): Observable<BodCreateResponse> {
     return this.http.post<BodCreateResponse>('/api/core-components/oagis/bod', {
       verbManifestIdList,
       nounManifestIdList
-    });
+    }, {context: scoreRequest('OAGIS_BOD_CREATE')});
   }
 
   createVerb(basedVerbAccManifestId: number): Observable<VerbCreateResponse> {
     return this.http.post<VerbCreateResponse>('/api/core-components/oagis/verb', {
       basedVerbAccManifestId
-    });
+    }, {context: scoreRequest('OAGIS_VERB_CREATE')});
   }
 
   getGraphNode(type: string, manifestId: number): Observable<CcGraph> {
@@ -373,7 +374,8 @@ export class CcNodeService {
              pos: number, attribute: boolean): Observable<any> {
 
     return this.http.post('/api/core-components/acc/' + accManifestId + '/ascc/' + asccpManifestId, {}, {
-      params: new HttpParams().set('pos', '' + pos).set('attribute', attribute)
+      params: new HttpParams().set('pos', '' + pos).set('attribute', attribute),
+      context: scoreRequest('ACC_APPEND_ASCC')
     });
   }
 
@@ -381,7 +383,8 @@ export class CcNodeService {
             pos: number, attribute: boolean): Observable<any> {
 
     return this.http.post('/api/core-components/acc/' + accManifestId + '/bcc/' + bccpManifestId, {}, {
-      params: new HttpParams().set('pos', '' + pos).set('attribute', attribute)
+      params: new HttpParams().set('pos', '' + pos).set('attribute', attribute),
+      context: scoreRequest('ACC_APPEND_BCC')
     });
   }
 
@@ -394,12 +397,12 @@ export class CcNodeService {
   setBasedAcc(accManifestId: number, basedAccManifestId: number): Observable<any> {
     const params = new HttpParams().set('basedAccManifestId', basedAccManifestId);
     const url = '/api/core-components/acc/' + accManifestId + '/base';
-    return this.http.patch<any>(url, {}, {params});
+    return this.http.patch<any>(url, {}, {params, context: scoreRequest('ACC_UPDATE_BASE')});
   }
 
   discardBasedAcc(accManifestId: number): Observable<any> {
     const url = '/api/core-components/acc/' + accManifestId + '/base';
-    return this.http.patch<any>(url, {}, {});
+    return this.http.patch<any>(url, {}, {context: scoreRequest('ACC_UPDATE_BASE')});
   }
 
   updateNodes(nodes: CcFlatNode[]): Observable<any> {
@@ -440,18 +443,20 @@ export class CcNodeService {
           break;
       }
     }
-    return this.http.put('/api/core-components', body);
+    return this.http.put('/api/core-components', body, {context: scoreRequest('CORE_COMPONENT_UPDATE')});
   }
 
   updateRoleOfAcc(manifestId: number, accManifestId: number): Observable<any> {
     return this.http.patch('/api/core-components/asccp/' + manifestId + '/role-of-acc', {}, {
-      params: new HttpParams().set('accManifestId', accManifestId)
+      params: new HttpParams().set('accManifestId', accManifestId),
+      context: scoreRequest('ASCCP_UPDATE_ROLE_ACC')
     });
   }
 
   updateBccpDt(manifestId: number, dtManifestId: number): Observable<any> {
     return this.http.patch('/api/core-components/bccp/' + manifestId + '/dt', {}, {
-      params: new HttpParams().set('dtManifestId', dtManifestId)
+      params: new HttpParams().set('dtManifestId', dtManifestId),
+      context: scoreRequest('BCCP_UPDATE_DT')
     });
   }
 
@@ -468,12 +473,15 @@ export class CcNodeService {
     if (projectFieldOptionOverride) {
       body.projectFieldOptionOverride = projectFieldOptionOverride;
     }
-    return this.http.patch<any>(url, body, {params});
+    return this.http.patch<any>(url, body, {
+      params,
+      context: scoreRequest(type.toUpperCase() + '_STATE_CHANGE')
+    });
   }
 
   purge(type: string, manifestId: number): Observable<any> {
     const url = '/api/core-components/' + type.toLowerCase() + '/' + manifestId;
-    return this.http.delete<any>(url);
+    return this.http.delete<any>(url, {context: scoreRequest(type.toUpperCase() + '_PURGE')});
   }
 
   verifyCreateExtensionComponent(accManifestId: number): Observable<VerifyAppendAssociationResponse> {
@@ -484,12 +492,14 @@ export class CcNodeService {
 
   createExtensionComponent(manifestId: number): Observable<CcNodeUpdateResponse> {
     const url = '/api/core-components/acc/' + manifestId + '/extension';
-    return this.http.post<CcNodeUpdateResponse>(url, {});
+    return this.http.post<CcNodeUpdateResponse>(url, {}, {context: scoreRequest('ACC_CREATE_EXTENSION')});
   }
 
   makeNewRevision(type: string, manifestId: number): Observable<any> {
     const url = '/api/core-components/' + type.toLowerCase() + '/' + manifestId + '/revise';
-    return this.http.patch<any>(url, {});
+    return this.http.patch<any>(url, {}, {
+      context: scoreRequest(type.toUpperCase() + '_REVISE')
+    });
   }
 
   cancelRevision(type: string, manifestId: number, comment?: string,
@@ -504,7 +514,9 @@ export class CcNodeService {
     if (projectFieldOptionOverride) {
       body.projectFieldOptionOverride = projectFieldOptionOverride;
     }
-    return this.http.patch<any>(url, body);
+    return this.http.patch<any>(url, body, {
+      context: scoreRequest(type.toUpperCase() + '_CANCEL')
+    });
   }
 
   postComment(reference: string, text: string, prevCommentId?: number): Observable<any> {
@@ -542,15 +554,18 @@ export class CcNodeService {
   }
 
   updateAccSequence(changes: CcSeqUpdateRequest, manifestId: number): Observable<any> {
-    return this.http.patch('/api/core-components/acc/' + manifestId + '/sequence', changes);
+    return this.http.patch('/api/core-components/acc/' + manifestId + '/sequence', changes,
+      {context: scoreRequest('ACC_UPDATE_SEQUENCE')});
   }
 
   appendDtSc(ownerDtManifestId: number): Observable<any> {
-    return this.http.post('/api/core-components/dt/' + ownerDtManifestId + '/dt-sc', {});
+    return this.http.post('/api/core-components/dt/' + ownerDtManifestId + '/dt-sc', {},
+      {context: scoreRequest('DT_APPEND_DT_SC')});
   }
 
   discardDtSc(dtScManifestId: number): Observable<any> {
-    return this.http.delete('/api/core-components/dt-sc/' + dtScManifestId, {});
+    return this.http.delete('/api/core-components/dt-sc/' + dtScManifestId,
+      {context: scoreRequest('DT_DISCARD_DT_SC')});
   }
 
   ungroup(sourceAccManifestId: number, targetAsccManifestId: number, pos: number): Observable<any> {
@@ -558,7 +573,8 @@ export class CcNodeService {
         .set('asccManifestId', targetAsccManifestId)
         .set('pos', pos);
     return this.http.post('/api/core-components/acc/' + sourceAccManifestId + '/ungroup', {}, {
-      params
+      params,
+      context: scoreRequest('ACC_UNGROUP')
     });
   }
 

@@ -4,6 +4,7 @@ import {Observable} from 'rxjs';
 import {CcListEntry} from '../../cc-list/domain/cc-list';
 import {map} from 'rxjs/operators';
 import {ValidateRefactoringResponse} from './refactor-dialog';
+import {scoreRequest} from '../../../common/score-request';
 
 @Injectable()
 export class RefactorDialogService {
@@ -33,7 +34,8 @@ export class RefactorDialogService {
         .set('targetManifestId', targetManifestId.toString())
         .set('destinationManifestId', destinationManifestId.toString());
     return this.http.post('/api/core-components/' + type.toLowerCase() + '/refactor', {}, {
-      params
+      params,
+      context: scoreRequest('ACC_REFACTOR_' + type.toUpperCase())
     });
   }
 
