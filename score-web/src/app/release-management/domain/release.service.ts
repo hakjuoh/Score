@@ -13,6 +13,7 @@ import {
 } from './release';
 import {PageResponse} from '../../basis/basis';
 import {map} from 'rxjs/operators';
+import {scoreRequest} from '../../common/score-request';
 
 @Injectable()
 export class ReleaseService {
@@ -133,11 +134,15 @@ export class ReleaseService {
   }
 
   makeDraft(releaseId: number, request: ReleaseValidationRequest): Observable<ReleaseValidationResponse> {
-    return this.http.post<ReleaseValidationResponse>('/api/releases/' + releaseId + '/draft', request);
+    return this.http.post<ReleaseValidationResponse>('/api/releases/' + releaseId + '/draft', request, {
+      context: scoreRequest('RELEASE_DRAFT')
+    });
   }
 
   updateState(releaseId: number, state: string): Observable<any> {
-    return this.http.post<ReleaseValidationResponse>('/api/releases/' + releaseId + '/state', {state});
+    return this.http.post<ReleaseValidationResponse>('/api/releases/' + releaseId + '/state', {state}, {
+      context: scoreRequest('RELEASE_' + state.toUpperCase())
+    });
   }
 
   generateMigrationScript(releaseId: number, includeViewOrder = false): Observable<HttpResponse<Blob>> {

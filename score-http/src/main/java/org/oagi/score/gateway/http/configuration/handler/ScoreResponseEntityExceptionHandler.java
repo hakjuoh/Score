@@ -1,6 +1,7 @@
 package org.oagi.score.gateway.http.configuration.handler;
 
 import org.oagi.score.gateway.http.api.DataAccessForbiddenException;
+import org.oagi.score.gateway.http.api.activity_management.model.ScoreActivityException;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiSharedStateUnavailableException;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyErrorCode;
 import org.oagi.score.gateway.http.api.ai_management.policy.exception.AiPolicyViolationException;
@@ -126,6 +127,13 @@ public class ScoreResponseEntityExceptionHandler extends ResponseEntityException
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity handleIllegalArgumentException(
             IllegalArgumentException ex, WebRequest webRequest) {
+        logger.debug(ex.getMessage(), ex);
+        return errorResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(ScoreActivityException.class)
+    public ResponseEntity<String> handleScoreActivityException(
+            ScoreActivityException ex, WebRequest webRequest) {
         logger.debug(ex.getMessage(), ex);
         return errorResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
     }

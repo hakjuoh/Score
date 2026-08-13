@@ -6,6 +6,57 @@ Both local observability stacks accept OTLP signals through the same loopback-on
 - OTLP/HTTP: `http://127.0.0.1:4318`
 - Collector health: <http://127.0.0.1:13133/>
 
+### SCORE activity traces
+
+`@ScoreActivity` creates a language-neutral activity event. `AsyncScoreActivityEventPublisher`
+queues the event after transaction commit, and the selected OpenTelemetry sink converts it to an
+OTLP span on a bounded background worker. The private OpenTelemetry SDK batches those finished
+spans before OTLP/HTTP export. No OpenTelemetry Java Agent or application-wide automatic
+instrumentation is used.
+
+The browser sends `X-Score-Request-Type`, `X-Score-Request-Id`,
+`X-Score-Request-Timestamp`, and `X-Score-Web-Version`. The server validates them, records the
+request identity as `score.request.*` attributes and W3C baggage, and returns `X-Score-Trace-Id`.
+Activity spans also contain the applicable OpenTelemetry HTTP semantic attributes (`http.*`,
+`url.*`, `server.*`, `client.*`, `network.*`, and `user_agent.*`) and the sanitized UI origin/page.
+An explicit proxy-header allowlist covers RFC `Forwarded`/`Via`, the `X-Forwarded-*` family,
+`X-Real-IP`, common request IDs, and Cloudflare, AWS, Envoy, Azure, Google Cloud, Fastly, and
+Akamai metadata. Values use the OTel `http.request.header.<lowercase-name>` string-array format;
+`score.http.client_address_source` identifies which header supplied `client.address`. Collection
+is bounded to 8 KiB and excludes authorization, cookies, and arbitrary headers. Forwarded values
+are observability evidence only, not trusted authorization input. The Trace ID is the distributed
+correlation identifier. Release Redis messages carry W3C `traceparent`, `tracestate`, and
+`baggage`, so downstream activities remain in the originating trace.
+
+A single resource is indexed as `score.target.{type,id,guid,name,role}`. Only a genuine
+multi-resource activity uses the structured `score.activity.targets` attribute. Actor identity is
+stored as `score.actor.user_id` and `score.actor.login_id`. `service.name=score` groups SCORE
+runtime activity across producer implementations, while `service.version` identifies the backend
+build and `score.web.version` identifies the initiating UI build.
+
+Enable the best-effort activity publisher and point its OpenTelemetry sink at the Collector:
+
+```bash
+OTEL_SERVICE_NAME=score \
+SCORE_ACTIVITY_EVENTS_ENABLED=true \
+SCORE_ACTIVITY_EVENTS_SINK=opentelemetry \
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces \
+java -jar score-http.war
+```
+
+Disabling `score.activity.events.enabled` installs no publisher worker and performs no activity
+export. Queue saturation or Collector failure drops only the optional activity record and never
+fails or blocks the user operation.
+
+`OTEL_TRACES_EXPORT_ENABLED` is not required for SCORE activities. That switch controls the
+separate management/AI export policy; `SCORE_ACTIVITY_EVENTS_ENABLED` alone controls this direct
+activity-event path.
+
+Search the returned Trace ID directly in Jaeger, or query the API at
+`http://127.0.0.1:16686/api/traces/{traceId}`. A Release transition appears as a
+`score.activity release.state-change` root span with its individual component activity spans as
+children. There is intentionally no automatically instrumented HTTP server span.
+
 The private AI observability SDK sends only AI request traces and metrics to the OTLP/HTTP
 endpoints when the `dev` Spring profile is active. It uses `service.name=score-ai`; HTTP, JDBC,
 scheduler, JVM, and other application-wide signals are intentionally excluded. Prometheus scrapes

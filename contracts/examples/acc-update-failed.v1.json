@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0",
+  "eventId": "61fd5db7-c490-4e75-b9f2-f760b69f6487",
+  "occurredAt": "2026-08-06T12:00:00Z",
+  "name": "acc.update",
+  "source": "CONNECT_CENTER_REST",
+  "outcome": "FAILED",
+  "actor": {
+    "userId": "7",
+    "loginId": "developer"
+  },
+  "targets": [
+    {
+      "type": "ACC",
+      "id": "42",
+      "guid": "0123456789abcdef0123456789abcdef",
+      "name": "Invoice. Details",
+      "role": "PRIMARY"
+    }
+  ],
+  "properties": {
+    "errorCode": "INVALID_STATE",
+    "requestedFields": ["objectClassTerm", "namespaceId"]
+  },
+  "context": {
+    "traceId": null,
+    "spanId": null
+  }
+}

@@ -1,6 +1,10 @@
 package org.oagi.score.gateway.http.api.cc_management.service;
 
 import jakarta.annotation.Nullable;
+import org.oagi.score.gateway.http.api.activity_management.annotation.ScoreActivity;
+import org.oagi.score.gateway.http.api.activity_management.annotation.ScoreActivityHandlerBinding;
+import org.oagi.score.gateway.http.api.activity_management.model.ScoreActivityException;
+import org.oagi.score.gateway.http.api.activity_management.model.ScoreActivityInvalidStateException;
 import org.oagi.score.gateway.http.api.cc_management.controller.payload.acc.AccCreateRequest;
 import org.oagi.score.gateway.http.api.cc_management.controller.payload.acc.AccUpdateRequest;
 import org.oagi.score.gateway.http.api.cc_management.controller.payload.ascc.AsccCreateRequest;
@@ -32,6 +36,9 @@ import org.oagi.score.gateway.http.api.cc_management.model.dt_sc.DtScAwdPriSumma
 import org.oagi.score.gateway.http.api.cc_management.model.dt_sc.DtScManifestId;
 import org.oagi.score.gateway.http.api.cc_management.model.dt_sc.DtScSummaryRecord;
 import org.oagi.score.gateway.http.api.cc_management.repository.DtQueryRepository;
+import org.oagi.score.gateway.http.api.cc_management.service.activity.CoreComponentActivityExecutor;
+import org.oagi.score.gateway.http.api.cc_management.service.activity.CoreComponentActivityHandler;
+import org.oagi.score.gateway.http.api.cc_management.service.activity.CoreComponentOperationActivityHandler;
 import org.oagi.score.gateway.http.api.graph.model.CoreComponentGraphContext;
 import org.oagi.score.gateway.http.api.graph.model.Node;
 import org.oagi.score.gateway.http.api.graph.repository.GraphContextRepository;
@@ -65,6 +72,7 @@ import static org.springframework.util.StringUtils.hasLength;
 
 @Service
 @Transactional
+@ScoreActivityHandlerBinding(CoreComponentActivityHandler.class)
 public class CcCommandService {
 
     @Autowired
@@ -79,6 +87,10 @@ public class CcCommandService {
     @Autowired
     private ComponentStateChangeEventPublisher stateChangeEventPublisher;
 
+    @Autowired
+    private CoreComponentActivityExecutor coreComponentActivityExecutor;
+
+    @ScoreActivity(category = "acc", action = "create")
     public AccManifestId createAcc(ScoreUser requester, AccCreateRequest request) {
 
         if (requester == null) {
@@ -89,17 +101,12 @@ public class CcCommandService {
             throw new IllegalArgumentException("'request' must not be null.");
         }
 
-        assertReleaseIsPublished(requester, request.releaseId());
-        ReleaseSummaryRecord targetRelease = repositoryFactory.releaseQueryRepository(requester)
-                .getReleaseSummary(request.releaseId());
-        if (targetRelease == null) {
-            throw new IllegalArgumentException("Target release does not exist.");
-        }
+        ReleaseSummaryRecord targetRelease = publishedRelease(requester, request.releaseId());
         if (request.basedAccManifestId() != null) {
             AccSummaryRecord basedAcc = repositoryFactory.accQueryRepository(requester)
                     .getAccSummary(request.basedAccManifestId());
             if (basedAcc == null) {
-                throw new IllegalArgumentException("Base ACC does not exist.");
+                throw ScoreActivityException.targetNotFound("Base ACC does not exist.");
             }
             assertReferencedReleaseAllowed(
                     requester,
@@ -181,12 +188,20 @@ public class CcCommandService {
         repositoryFactory.accCommandRepository(requester).updateLogId(accManifestId, logId);
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "append-ascc",
+            handler = CoreComponentOperationActivityHandler.class)
     public AsccManifestId createAscc(
             ScoreUser requester, AsccCreateRequest request) {
         return createAscc(requester, request, LogAction.Modified, LogUtils.generateHash(), false);
     }
 
     public AsccManifestId createAscc(
+            ScoreUser requester, AsccCreateRequest request, LogAction logAction, String logHash, boolean skipDependencyCheck) {
+        return coreComponentActivityExecutor.createAscc(requester,
+                () -> createAsccInternal(requester, request, logAction, logHash, skipDependencyCheck));
+    }
+
+    private AsccManifestId createAsccInternal(
             ScoreUser requester, AsccCreateRequest request, LogAction logAction, String logHash, boolean skipDependencyCheck) {
 
         if (requester == null) {
@@ -195,6 +210,12 @@ public class CcCommandService {
 
         if (request == null) {
             throw new IllegalArgumentException("'request' must not be null.");
+        }
+        if (request.accManifestId() == null) {
+            throw ScoreActivityException.validation("'accManifestId' must not be null.");
+        }
+        if (request.asccpManifestId() == null) {
+            throw ScoreActivityException.validation("'asccpManifestId' must not be null.");
         }
 
         if (logAction == null) {
@@ -253,12 +274,20 @@ public class CcCommandService {
         return asccManifestId;
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "append-bcc",
+            handler = CoreComponentOperationActivityHandler.class)
     public BccManifestId createBcc(
             ScoreUser requester, BccCreateRequest request) {
         return createBcc(requester, request, LogAction.Modified, LogUtils.generateHash(), false);
     }
 
     public BccManifestId createBcc(
+            ScoreUser requester, BccCreateRequest request, LogAction logAction, String logHash, boolean skipDependencyCheck) {
+        return coreComponentActivityExecutor.createBcc(requester,
+                () -> createBccInternal(requester, request, logAction, logHash, skipDependencyCheck));
+    }
+
+    private BccManifestId createBccInternal(
             ScoreUser requester, BccCreateRequest request, LogAction logAction, String logHash, boolean skipDependencyCheck) {
 
         if (requester == null) {
@@ -267,6 +296,12 @@ public class CcCommandService {
 
         if (request == null) {
             throw new IllegalArgumentException("'request' must not be null.");
+        }
+        if (request.accManifestId() == null) {
+            throw ScoreActivityException.validation("'accManifestId' must not be null.");
+        }
+        if (request.bccpManifestId() == null) {
+            throw ScoreActivityException.validation("'bccpManifestId' must not be null.");
         }
 
         if (logAction == null) {
@@ -304,6 +339,7 @@ public class CcCommandService {
         return bccManifestId;
     }
 
+    @ScoreActivity(category = "asccp", action = "create")
     public AsccpManifestId createAsccp(ScoreUser requester, AsccpCreateRequest request) {
 
         if (requester == null) {
@@ -314,17 +350,12 @@ public class CcCommandService {
             throw new IllegalArgumentException("'request' must not be null.");
         }
 
-        assertReleaseIsPublished(requester, request.releaseId());
-        ReleaseSummaryRecord targetRelease = repositoryFactory.releaseQueryRepository(requester)
-                .getReleaseSummary(request.releaseId());
-        if (targetRelease == null) {
-            throw new IllegalArgumentException("Target release does not exist.");
-        }
+        ReleaseSummaryRecord targetRelease = publishedRelease(requester, request.releaseId());
 
         AccSummaryRecord roleOfAcc = repositoryFactory.accQueryRepository(requester)
                 .getAccSummary(request.roleOfAccManifestId());
         if (roleOfAcc == null) {
-            throw new IllegalArgumentException("Role ACC does not exist.");
+            throw ScoreActivityException.targetNotFound("Role ACC does not exist.");
         }
         assertReferencedReleaseAllowed(
                 requester,
@@ -370,6 +401,8 @@ public class CcCommandService {
         repositoryFactory.asccpCommandRepository(requester).updateLogId(asccpManifestId, logId);
     }
 
+    @ScoreActivity(category = "oagis-bod", action = "create", operation = "generate-bod",
+            handler = CoreComponentOperationActivityHandler.class)
     public CreateOagisBodResponse createOagisBod(
             ScoreUser requester, CreateOagisBodRequest request) {
 
@@ -396,10 +429,13 @@ public class CcCommandService {
                 ReleaseId releaseId = verb.release().releaseId();
                 NamespaceId verbNamespaceId = verb.namespaceId();
 
-                AccManifestId dataAreaAccManifestId = createAcc(requester, AccCreateRequest.builder(releaseId)
-                        .initialObjectClassTerm(String.join(" ", Arrays.asList(verb.propertyTerm(), noun.propertyTerm(), "Data Area")))
+                AccCreateRequest dataAreaAccCreateRequest = AccCreateRequest.builder(releaseId)
+                        .initialObjectClassTerm(String.join(" ", Arrays.asList(
+                                verb.propertyTerm(), noun.propertyTerm(), "Data Area")))
                         .namespaceId(verbNamespaceId)
-                        .build());
+                        .build();
+                AccManifestId dataAreaAccManifestId = createNestedAcc(
+                        requester, dataAreaAccCreateRequest);
 
                 createAscc(requester, AsccCreateRequest.builder(dataAreaAccManifestId, verbManifestId)
                         .cardinalityMin(1)
@@ -424,7 +460,8 @@ public class CcCommandService {
                         .definition(new Definition(dataAreaDefinition, dataAreaDefinitionSource))
                         .build();
 
-                AsccpManifestId dataAreaAsccpManifestId = createAsccp(requester, dataAreaAsccpRequest);
+                AsccpManifestId dataAreaAsccpManifestId = createNestedAsccp(
+                        requester, dataAreaAsccpRequest);
 
                 AccSummaryRecord bodAcc = repositoryFactory.accQueryRepository(requester)
                         .getAccSummaryList(List.of(releaseId), "Business Object Document")
@@ -438,7 +475,7 @@ public class CcCommandService {
                         .initialObjectClassTerm(String.join(" ", Arrays.asList(verb.propertyTerm(), noun.propertyTerm())))
                         .namespaceId(verbNamespaceId)
                         .build();
-                AccManifestId bodAccManifestId = createAcc(requester, bodCreateRequest);
+                AccManifestId bodAccManifestId = createNestedAcc(requester, bodCreateRequest);
 
                 createAscc(requester, AsccCreateRequest.builder(bodAccManifestId, dataAreaAsccpManifestId)
                         .cardinalityMin(1)
@@ -450,7 +487,8 @@ public class CcCommandService {
                         .namespaceId(verbNamespaceId)
                         .tag("BOD")
                         .build();
-                AsccpManifestId bodAsccpManifestId = createAsccp(requester, bodAsccpRequest);
+                AsccpManifestId bodAsccpManifestId = createNestedAsccp(
+                        requester, bodAsccpRequest);
                 bodManifestIdList.add(bodAsccpManifestId);
             }
         }
@@ -458,6 +496,8 @@ public class CcCommandService {
         return new CreateOagisBodResponse(bodManifestIdList);
     }
 
+    @ScoreActivity(category = "oagis-verb", action = "create", operation = "generate-verb",
+            handler = CoreComponentOperationActivityHandler.class)
     public CreateOagisVerbResponse createOagisVerb(
             ScoreUser requester, CreateOagisVerbRequest request) {
 
@@ -474,11 +514,12 @@ public class CcCommandService {
         }
         NamespaceId namespaceId = verbAcc.namespaceId();
 
-        AccManifestId verbAccManifestId = createAcc(requester, AccCreateRequest.builder(releaseId)
+        AccCreateRequest verbAccCreateRequest = AccCreateRequest.builder(releaseId)
                 .basedAccManifestId(request.basedVerbAccManifestId())
                 .initialObjectClassTerm(verbAcc.objectClassTerm())
                 .namespaceId(namespaceId)
-                .build());
+                .build();
+        AccManifestId verbAccManifestId = createNestedAcc(requester, verbAccCreateRequest);
 
         AsccpCreateRequest verbAsccpRequest = AsccpCreateRequest.builder(releaseId, verbAccManifestId)
                 .initialPropertyTerm(verbAcc.objectClassTerm())
@@ -486,20 +527,23 @@ public class CcCommandService {
                 .tag("Verb")
                 .build();
 
-        AsccpManifestId verbAsccpManifestId = createAsccp(requester, verbAsccpRequest);
+        AsccpManifestId verbAsccpManifestId = createNestedAsccp(requester, verbAsccpRequest);
         return new CreateOagisVerbResponse(verbAsccpManifestId);
     }
 
+    @ScoreActivity(category = "bccp", action = "create")
     public BccpManifestId createBccp(ScoreUser requester, BccpCreateRequest request) {
-        assertReleaseIsPublished(requester, request.releaseId());
-        ReleaseSummaryRecord targetRelease = repositoryFactory.releaseQueryRepository(requester)
-                .getReleaseSummary(request.releaseId());
-        if (targetRelease == null) {
-            throw new IllegalArgumentException("Target release does not exist.");
+        if (requester == null) {
+            throw new IllegalArgumentException("'requester' must not be null.");
         }
+        if (request == null) {
+            throw ScoreActivityException.validation("'request' must not be null.");
+        }
+
+        ReleaseSummaryRecord targetRelease = publishedRelease(requester, request.releaseId());
         DtSummaryRecord bdt = repositoryFactory.dtQueryRepository(requester).getDtSummary(request.basedDtManifestId());
         if (bdt == null) {
-            throw new IllegalArgumentException("Target BDT does not exist.");
+            throw ScoreActivityException.targetNotFound("Target BDT does not exist.");
         }
         assertReferencedReleaseAllowed(
                 requester,
@@ -537,6 +581,8 @@ public class CcCommandService {
         repositoryFactory.bccpCommandRepository(requester).updateLogId(bccpManifestId, logId);
     }
 
+    @ScoreActivity(category = "dt", action = "create", operation = "create-dt",
+            handler = CoreComponentOperationActivityHandler.class)
     public DtManifestId createDt(ScoreUser requester, DtCreateRequest request) {
 
         if (requester == null) {
@@ -590,6 +636,8 @@ public class CcCommandService {
         repositoryFactory.dtCommandRepository(requester).updateLogId(dtManifestId, logId);
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "create-extension",
+            handler = CoreComponentOperationActivityHandler.class)
     public AccManifestId createAccExtension(ScoreUser requester, AccManifestId accManifestId) {
 
         var accQueryRepository = repositoryFactory.accQueryRepository(requester);
@@ -609,13 +657,15 @@ public class CcCommandService {
                 = accQueryRepository.getAllExtensionAccManifest(releaseId);
 
         // create extension ACC
-        AccManifestId extensionAccManifestId = createAcc(requester, AccCreateRequest.builder(releaseId)
+        AccCreateRequest extensionAccCreateRequest = AccCreateRequest.builder(releaseId)
                 .basedAccManifestId(allExtension.accManifestId())
                 .initialObjectClassTerm(acc.objectClassTerm() + " Extension")
                 .initialComponentType(Extension)
                 .initialType(AccType.Extension)
                 .namespaceId((acc.namespace() != null) ? acc.namespace().namespaceId() : null)
-                .build());
+                .build();
+        AccManifestId extensionAccManifestId = createNestedAcc(
+                requester, extensionAccCreateRequest);
 
         // create extension ASCCP
 
@@ -631,7 +681,8 @@ public class CcCommandService {
                 .definition(new Definition(extensionAsccpDefintion, extensionAsccpDefintionSource))
                 .build();
 
-        AsccpManifestId extensionAsccpManifestId = createAsccp(requester, asccpCreateRequest);
+        AsccpManifestId extensionAsccpManifestId = createNestedAsccp(
+                requester, asccpCreateRequest);
 
         // create ASCC between extension ACC and extension ASCCP
         createAscc(requester, AsccCreateRequest.builder(accManifestId, extensionAsccpManifestId)
@@ -648,9 +699,31 @@ public class CcCommandService {
         }
     }
 
+    private ReleaseSummaryRecord publishedRelease(ScoreUser requester, ReleaseId releaseId) {
+        ReleaseSummaryRecord release = repositoryFactory.releaseQueryRepository(requester)
+                .getReleaseSummary(releaseId);
+        if (release == null) {
+            throw ScoreActivityException.targetNotFound("Target release does not exist.");
+        }
+        if (release.state() != ReleaseState.Published) {
+            throw new ScoreActivityInvalidStateException(
+                    "'" + release.state() + "' Release cannot be modified.");
+        }
+        return release;
+    }
+
+    @ScoreActivity(category = "acc", action = "update")
     public List<AccManifestId> updateAccList(ScoreUser requester, List<AccUpdateRequest> requestList) {
         if (requestList == null || requestList.isEmpty()) {
             return Collections.emptyList();
+        }
+        Set<AccManifestId> targetIds = new HashSet<>();
+        for (AccUpdateRequest request : requestList) {
+            if (request != null && request.accManifestId() != null
+                    && !targetIds.add(request.accManifestId())) {
+                throw ScoreActivityException.validation(
+                        "Duplicate ACC targets are not allowed in an update batch.");
+            }
         }
 
         List<AccManifestId> updatedAccManifestIdList = new ArrayList<>();
@@ -662,6 +735,7 @@ public class CcCommandService {
         return updatedAccManifestIdList;
     }
 
+    @ScoreActivity(category = "acc", action = "update")
     public boolean updateAcc(ScoreUser requester, AccUpdateRequest request) {
 
         if (requester == null) {
@@ -669,20 +743,28 @@ public class CcCommandService {
         }
 
         if (request == null) {
-            throw new IllegalArgumentException("'request' must not be null.");
+            throw ScoreActivityException.validation("'request' must not be null.");
+        }
+        if (request.accManifestId() == null) {
+            throw ScoreActivityException.validation("'accManifestId' must not be null.");
         }
 
         var query = repositoryFactory.accQueryRepository(requester);
         AccSummaryRecord acc = query.getAccSummary(request.accManifestId());
+        if (acc == null) {
+            throw ScoreActivityException.targetNotFound("The ACC does not exist.");
+        }
 
         if (CcState.WIP != acc.state()) {
-            throw new IllegalArgumentException("The ACC '" + acc.den() + "' cannot be updated " +
-                    "because it is in the '" + acc.state() + "' state. "
-                    + "Only ACCs in the 'WIP' state can be updated.");
+            throw ScoreActivityException.invalidState(
+                    "The ACC '" + acc.den() + "' cannot be updated " +
+                            "because it is in the '" + acc.state() + "' state. "
+                            + "Only ACCs in the 'WIP' state can be updated.");
         }
 
         if (!requester.isAdministrator() && !acc.owner().userId().equals(requester.userId())) {
-            throw new IllegalArgumentException("It only allows to modify the core component by the owner.");
+            throw ScoreActivityException.accessDenied(
+                    "It only allows to modify the core component by the owner.");
         }
 
         var command = repositoryFactory.accCommandRepository(requester);
@@ -727,6 +809,8 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "update-ascc",
+            handler = CoreComponentOperationActivityHandler.class)
     public List<AsccManifestId> updateAsccList(ScoreUser requester, List<AsccUpdateRequest> requestList) {
         if (requestList == null || requestList.isEmpty()) {
             return Collections.emptyList();
@@ -734,13 +818,21 @@ public class CcCommandService {
 
         List<AsccManifestId> updatedAsccManifestId = new ArrayList<>();
         for (AsccUpdateRequest request : requestList) {
-            if (updateAscc(requester, request)) {
+            if (request == null) {
+                throw ScoreActivityException.validation("ASCC update request must not be null.");
+            }
+            if (request.asccManifestId() == null) {
+                throw ScoreActivityException.validation("'asccManifestId' must not be null.");
+            }
+            if (coreComponentActivityExecutor.updateAscc(requester, request.asccManifestId(),
+                    () -> updateAscc(requester, request))) {
                 updatedAsccManifestId.add(request.asccManifestId());
             }
         }
         return updatedAsccManifestId;
     }
 
+    @ScoreActivity(category = "asccp", action = "update")
     public List<AsccpManifestId> updateAsccpList(ScoreUser requester, List<AsccpUpdateRequest> requestList) {
         if (requestList == null || requestList.isEmpty()) {
             return Collections.emptyList();
@@ -808,17 +900,24 @@ public class CcCommandService {
         if (request == null) {
             throw new IllegalArgumentException("'request' must not be null.");
         }
+        if (request.asccpManifestId() == null) {
+            throw ScoreActivityException.validation("'asccpManifestId' must not be null.");
+        }
 
         var query = repositoryFactory.asccpQueryRepository(requester);
         AsccpSummaryRecord asccp = query.getAsccpSummary(request.asccpManifestId());
+        if (asccp == null) {
+            throw ScoreActivityException.targetNotFound("The ASCCP does not exist.");
+        }
         if (CcState.WIP != asccp.state()) {
-            throw new IllegalArgumentException("The ASCCP '" + asccp.den() + "' cannot be updated " +
+            throw ScoreActivityException.invalidState("The ASCCP '" + asccp.den() + "' cannot be updated " +
                     "because it is in the '" + asccp.state() + "' state. "
                     + "Only ASCCPs in the 'WIP' state can be updated.");
         }
 
         if (!requester.isAdministrator() && !asccp.owner().userId().equals(requester.userId())) {
-            throw new IllegalArgumentException("It only allows to modify the core component by the owner.");
+            throw ScoreActivityException.accessDenied(
+                    "It only allows to modify the core component by the owner.");
         }
 
         var command = repositoryFactory.asccpCommandRepository(requester);
@@ -847,6 +946,8 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "update-bcc",
+            handler = CoreComponentOperationActivityHandler.class)
     public List<BccManifestId> updateBccList(ScoreUser requester, List<BccUpdateRequest> requestList) {
         if (requestList == null || requestList.isEmpty()) {
             return Collections.emptyList();
@@ -854,7 +955,14 @@ public class CcCommandService {
 
         List<BccManifestId> updatedBccManifestIdList = new ArrayList<>();
         for (BccUpdateRequest request : requestList) {
-            if (updateBcc(requester, request)) {
+            if (request == null) {
+                throw ScoreActivityException.validation("BCC update request must not be null.");
+            }
+            if (request.bccManifestId() == null) {
+                throw ScoreActivityException.validation("'bccManifestId' must not be null.");
+            }
+            if (coreComponentActivityExecutor.updateBcc(requester, request.bccManifestId(),
+                    () -> updateBcc(requester, request))) {
                 updatedBccManifestIdList.add(request.bccManifestId());
             }
         }
@@ -910,6 +1018,7 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "bccp", action = "update")
     public List<BccpManifestId> updateBccpList(ScoreUser requester, List<BccpUpdateRequest> requestList) {
         if (requestList == null || requestList.isEmpty()) {
             return Collections.emptyList();
@@ -942,18 +1051,18 @@ public class CcCommandService {
         var query = repositoryFactory.bccpQueryRepository(requester);
         BccpSummaryRecord bccp = query.getBccpSummary(request.bccpManifestId());
         if (bccp == null) {
-            throw new IllegalArgumentException("No BCCP exists for the provided manifest ID: "
+            throw ScoreActivityException.targetNotFound("No BCCP exists for the provided manifest ID: "
                     + request.bccpManifestId() + ". Please ensure the manifest ID is correct.");
         }
 
         if (CcState.WIP != bccp.state()) {
-            throw new IllegalArgumentException("The BCCP '" + bccp.den() + "' cannot be updated " +
+            throw ScoreActivityException.invalidState("The BCCP '" + bccp.den() + "' cannot be updated " +
                     "because it is in the '" + bccp.state() + "' state. "
                     + "Only BCCPs in the 'WIP' state can be updated.");
         }
 
         if (!requester.isAdministrator() && !bccp.owner().userId().equals(requester.userId())) {
-            throw new IllegalArgumentException("You can't modify this BCCP because you're not the owner. " +
+            throw ScoreActivityException.accessDenied("You can't modify this BCCP because you're not the owner. " +
                     "Only the owner of this BCCP (" + bccp.owner().loginId() + ") can make changes.");
         }
 
@@ -985,6 +1094,8 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "dt", action = "update", operation = "update-details",
+            handler = CoreComponentOperationActivityHandler.class)
     public List<DtManifestId> updateDtList(ScoreUser requester, List<DtUpdateRequest> requestList) {
         if (requestList == null || requestList.isEmpty()) {
             return Collections.emptyList();
@@ -992,6 +1103,12 @@ public class CcCommandService {
 
         List<DtManifestId> updatedDtDetailsList = new ArrayList<>();
         for (DtUpdateRequest request : requestList) {
+            if (request == null) {
+                throw ScoreActivityException.validation("DT update request must not be null.");
+            }
+            if (request.dtManifestId() == null) {
+                throw ScoreActivityException.validation("'dtManifestId' must not be null.");
+            }
             if (updateDt(requester, request, false)) {
                 updatedDtDetailsList.add(request.dtManifestId());
             }
@@ -1113,6 +1230,8 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "dt", action = "update", operation = "update-dt-sc",
+            handler = CoreComponentOperationActivityHandler.class)
     public List<DtScManifestId> updateDtScList(ScoreUser requester, List<DtScUpdateRequest> requestList) {
         if (requestList == null || requestList.isEmpty()) {
             return Collections.emptyList();
@@ -1120,7 +1239,14 @@ public class CcCommandService {
 
         List<DtScManifestId> updatedDtScManifestIdList = new ArrayList<>();
         for (DtScUpdateRequest request : requestList) {
-            if (updateDtSc(requester, request, false)) {
+            if (request == null) {
+                throw ScoreActivityException.validation("DT_SC update request must not be null.");
+            }
+            if (request.dtScManifestId() == null) {
+                throw ScoreActivityException.validation("'dtScManifestId' must not be null.");
+            }
+            if (coreComponentActivityExecutor.updateDtSc(requester, request.dtScManifestId(),
+                    () -> updateDtSc(requester, request, false))) {
                 updatedDtScManifestIdList.add(request.dtScManifestId());
             }
         }
@@ -1229,7 +1355,7 @@ public class CcCommandService {
             makeLog(requester, dt.dtManifestId(), LogAction.Modified);
 
             for (DtScSummaryRecord inheritedDtSc : query.getInheritedDtScSummaryList(dtSc.dtScManifestId())) {
-                updateDtSc(requester, DtScUpdateRequest.builder(inheritedDtSc.dtScManifestId())
+                DtScUpdateRequest inheritedRequest = DtScUpdateRequest.builder(inheritedDtSc.dtScManifestId())
                         .objectClassTerm(request.objectClassTerm())
                         .propertyTerm(request.propertyTerm())
                         .representationTerm(request.representationTerm())
@@ -1241,7 +1367,10 @@ public class CcCommandService {
                         .defaultValue(request.defaultValue())
                         .fixedValue(request.fixedValue())
                         .dtScAwdPriList(request.dtScAwdPriList())
-                        .build(), true);
+                        .build();
+                coreComponentActivityExecutor.updateDtSc(
+                        requester, inheritedDtSc.dtScManifestId(),
+                        () -> updateDtSc(requester, inheritedRequest, true));
             }
         }
 
@@ -1285,6 +1414,8 @@ public class CcCommandService {
         return objectClassTerm + ". " + representationTerm;
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "update-base",
+            handler = CoreComponentOperationActivityHandler.class)
     public boolean updateBasedAccManifestId(
             ScoreUser requester, AccManifestId accManifestId, AccManifestId basedAccManifestId) {
 
@@ -1326,14 +1457,17 @@ public class CcCommandService {
         return command.updateBasedAccManifestId(accManifestId, basedAccManifestId);
     }
 
+    @ScoreActivity(category = "acc", action = "state-change")
     public boolean updateState(ScoreUser requester, AccManifestId accManifestId, CcState state) {
         return updateState(requester, accManifestId, state, null, null);
     }
 
+    @ScoreActivity(category = "acc", action = "state-change")
     public boolean updateState(ScoreUser requester, AccManifestId accManifestId, CcState state, String comment) {
         return updateState(requester, accManifestId, state, comment, null);
     }
 
+    @ScoreActivity(category = "acc", action = "state-change")
     public boolean updateState(ScoreUser requester, AccManifestId accManifestId, CcState state, String comment,
                                String projectFieldOptionOverride) {
 
@@ -1351,18 +1485,23 @@ public class CcCommandService {
 
         var query = repositoryFactory.accQueryRepository(requester);
         AccSummaryRecord acc = query.getAccSummary(accManifestId);
+        if (acc == null) {
+            throw ScoreActivityException.targetNotFound("The ACC does not exist.");
+        }
 
         CcState prevState = acc.state();
         CcState nextState = state;
 
         if (!prevState.canMove(nextState)) {
-            throw new IllegalArgumentException("The core component in '" + prevState + "' state cannot move to '" + nextState + "' state.");
+            throw ScoreActivityException.invalidState(
+                    "The core component in '" + prevState + "' state cannot move to '" + nextState + "' state.");
         }
 
         boolean restore = prevState == CcState.Deleted && nextState == CcState.WIP;
         if (!restore) {
             if (!requester.isAdministrator() && !acc.owner().userId().equals(requester.userId()) && !prevState.isImplicitMove(nextState)) {
-                throw new IllegalArgumentException("It only allows to modify the core component by the owner.");
+                throw ScoreActivityException.accessDenied(
+                        "It only allows to modify the core component by the owner.");
             }
 
             if (nextState != CcState.Deleted && acc.namespaceId() == null) {
@@ -1382,6 +1521,7 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "asccp", action = "update")
     public boolean updateAsccpRoleOfAcc(ScoreUser requester, AsccpManifestId asccpManifestId, AccManifestId roleOfAccManifestId) {
 
         if (requester == null) {
@@ -1398,20 +1538,24 @@ public class CcCommandService {
 
         var query = repositoryFactory.asccpQueryRepository(requester);
         AsccpSummaryRecord asccp = query.getAsccpSummary(asccpManifestId);
+        if (asccp == null) {
+            throw ScoreActivityException.targetNotFound("The ASCCP does not exist.");
+        }
 
         CcState state = asccp.state();
         if (CcState.WIP != state) {
-            throw new IllegalArgumentException("The ASCCP '" + asccp.den() + "' cannot be updated " +
+            throw ScoreActivityException.invalidState("The ASCCP '" + asccp.den() + "' cannot be updated " +
                     "because it is in the '" + asccp.state() + "' state. "
                     + "Only ASCCPs in the 'WIP' state can be updated.");
         }
 
         if (!requester.isAdministrator() && !asccp.owner().userId().equals(requester.userId())) {
-            throw new IllegalArgumentException("It only allows to modify the core component by the owner.");
+            throw ScoreActivityException.accessDenied(
+                    "It only allows to modify the core component by the owner.");
         }
         AccSummaryRecord roleOfAcc = repositoryFactory.accQueryRepository(requester).getAccSummary(roleOfAccManifestId);
         if (roleOfAcc == null) {
-            throw new IllegalArgumentException("Role ACC does not exist.");
+            throw ScoreActivityException.targetNotFound("Role ACC does not exist.");
         }
         assertReferencedReleaseAllowed(
                 requester,
@@ -1433,14 +1577,17 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "asccp", action = "state-change")
     public boolean updateState(ScoreUser requester, AsccpManifestId asccpManifestId, CcState state) {
         return updateState(requester, asccpManifestId, state, null, null);
     }
 
+    @ScoreActivity(category = "asccp", action = "state-change")
     public boolean updateState(ScoreUser requester, AsccpManifestId asccpManifestId, CcState state, String comment) {
         return updateState(requester, asccpManifestId, state, comment, null);
     }
 
+    @ScoreActivity(category = "asccp", action = "state-change")
     public boolean updateState(ScoreUser requester, AsccpManifestId asccpManifestId, CcState state, String comment,
                                String projectFieldOptionOverride) {
 
@@ -1458,18 +1605,23 @@ public class CcCommandService {
 
         var query = repositoryFactory.asccpQueryRepository(requester);
         AsccpSummaryRecord asccp = query.getAsccpSummary(asccpManifestId);
+        if (asccp == null) {
+            throw ScoreActivityException.targetNotFound("The ASCCP does not exist.");
+        }
 
         CcState prevState = asccp.state();
         CcState nextState = state;
 
         if (!prevState.canMove(nextState)) {
-            throw new IllegalArgumentException("The core component in '" + prevState + "' state cannot move to '" + nextState + "' state.");
+            throw ScoreActivityException.invalidState(
+                    "The core component in '" + prevState + "' state cannot move to '" + nextState + "' state.");
         }
 
         boolean restore = prevState == CcState.Deleted && nextState == CcState.WIP;
         if (!restore) {
             if (!requester.isAdministrator() && !asccp.owner().userId().equals(requester.userId()) && !prevState.isImplicitMove(nextState)) {
-                throw new IllegalArgumentException("It only allows to modify the core component by the owner.");
+                throw ScoreActivityException.accessDenied(
+                        "It only allows to modify the core component by the owner.");
             }
 
             if (nextState != CcState.Deleted && asccp.namespaceId() == null) {
@@ -1489,6 +1641,7 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "bccp", action = "update")
     public boolean updateBccpDt(ScoreUser requester, BccpManifestId bccpManifestId, DtManifestId dtManifestId) {
 
         if (requester == null) {
@@ -1505,18 +1658,23 @@ public class CcCommandService {
 
         var query = repositoryFactory.bccpQueryRepository(requester);
         BccpSummaryRecord bccp = query.getBccpSummary(bccpManifestId);
+        if (bccp == null) {
+            throw ScoreActivityException.targetNotFound("The BCCP does not exist.");
+        }
 
         CcState state = bccp.state();
         if (CcState.WIP != state) {
-            throw new IllegalArgumentException("Only the core component in 'WIP' state can be modified.");
+            throw ScoreActivityException.invalidState(
+                    "Only the core component in 'WIP' state can be modified.");
         }
 
         if (!requester.isAdministrator() && !bccp.owner().userId().equals(requester.userId())) {
-            throw new IllegalArgumentException("It only allows to modify the core component by the owner.");
+            throw ScoreActivityException.accessDenied(
+                    "It only allows to modify the core component by the owner.");
         }
         DtSummaryRecord bdt = repositoryFactory.dtQueryRepository(requester).getDtSummary(dtManifestId);
         if (bdt == null) {
-            throw new IllegalArgumentException("Target BDT does not exist.");
+            throw ScoreActivityException.targetNotFound("Target BDT does not exist.");
         }
         assertReferencedReleaseAllowed(
                 requester,
@@ -1538,14 +1696,17 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "bccp", action = "state-change")
     public boolean updateState(ScoreUser requester, BccpManifestId bccpManifestId, CcState state) {
         return updateState(requester, bccpManifestId, state, null, null);
     }
 
+    @ScoreActivity(category = "bccp", action = "state-change")
     public boolean updateState(ScoreUser requester, BccpManifestId bccpManifestId, CcState state, String comment) {
         return updateState(requester, bccpManifestId, state, comment, null);
     }
 
+    @ScoreActivity(category = "bccp", action = "state-change")
     public boolean updateState(ScoreUser requester, BccpManifestId bccpManifestId, CcState state, String comment,
                                String projectFieldOptionOverride) {
 
@@ -1563,18 +1724,23 @@ public class CcCommandService {
 
         var query = repositoryFactory.bccpQueryRepository(requester);
         BccpSummaryRecord bccp = query.getBccpSummary(bccpManifestId);
+        if (bccp == null) {
+            throw ScoreActivityException.targetNotFound("The BCCP does not exist.");
+        }
 
         CcState prevState = bccp.state();
         CcState nextState = state;
 
         if (!prevState.canMove(nextState)) {
-            throw new IllegalArgumentException("The core component in '" + prevState + "' state cannot move to '" + nextState + "' state.");
+            throw ScoreActivityException.invalidState(
+                    "The core component in '" + prevState + "' state cannot move to '" + nextState + "' state.");
         }
 
         boolean restore = prevState == CcState.Deleted && nextState == CcState.WIP;
         if (!restore) {
             if (!requester.isAdministrator() && !bccp.owner().userId().equals(requester.userId()) && !prevState.isImplicitMove(nextState)) {
-                throw new IllegalArgumentException("It only allows to modify the core component by the owner.");
+                throw ScoreActivityException.accessDenied(
+                        "It only allows to modify the core component by the owner.");
             }
 
             if (nextState != CcState.Deleted && bccp.namespaceId() == null) {
@@ -1594,14 +1760,17 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "dt", action = "state-change")
     public boolean updateState(ScoreUser requester, DtManifestId dtManifestId, CcState state) {
         return updateState(requester, dtManifestId, state, null, null);
     }
 
+    @ScoreActivity(category = "dt", action = "state-change")
     public boolean updateState(ScoreUser requester, DtManifestId dtManifestId, CcState state, String comment) {
         return updateState(requester, dtManifestId, state, comment, null);
     }
 
+    @ScoreActivity(category = "dt", action = "state-change")
     public boolean updateState(ScoreUser requester, DtManifestId dtManifestId, CcState state, String comment,
                                String projectFieldOptionOverride) {
 
@@ -1650,6 +1819,7 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "acc", action = "delete")
     public boolean purge(ScoreUser requester, AccManifestId accManifestId) {
 
         if (requester == null) {
@@ -1662,6 +1832,9 @@ public class CcCommandService {
 
         var query = repositoryFactory.accQueryRepository(requester);
         AccSummaryRecord acc = query.getAccSummary(accManifestId);
+        if (acc == null) {
+            throw ScoreActivityException.targetNotFound("The ACC does not exist.");
+        }
         if (acc.componentType() == UserExtensionGroup) {
             var asccpQuery = repositoryFactory.asccpQueryRepository(requester);
             AsccpSummaryRecord groupAsccp = asccpQuery.getAsccpSummaryList(accManifestId).stream().findFirst().orElse(null);
@@ -1674,9 +1847,10 @@ public class CcCommandService {
         }
 
         if (CcState.Deleted != acc.state()) {
-            throw new IllegalArgumentException("The ACC '" + acc.den() + "' cannot be purged " +
-                    "because it is in the '" + acc.state() + "' state. "
-                    + "Only ACCs in the 'Deleted' state can be purged.");
+            throw ScoreActivityException.invalidState(
+                    "The ACC '" + acc.den() + "' cannot be purged " +
+                            "because it is in the '" + acc.state() + "' state. "
+                            + "Only ACCs in the 'Deleted' state can be purged.");
         }
 
         if (!repositoryFactory.asccpQueryRepository(requester)
@@ -1692,10 +1866,12 @@ public class CcCommandService {
         return repositoryFactory.accCommandRepository(requester).delete(accManifestId);
     }
 
+    @ScoreActivity(category = "asccp", action = "delete")
     public boolean purge(ScoreUser requester, AsccpManifestId asccpManifestId) {
         return purge(requester, asccpManifestId, false);
     }
 
+    @ScoreActivity(category = "asccp", action = "delete")
     public boolean purge(ScoreUser requester, AsccpManifestId asccpManifestId, boolean skipStateCheck) {
 
         if (requester == null) {
@@ -1708,9 +1884,12 @@ public class CcCommandService {
 
         var query = repositoryFactory.asccpQueryRepository(requester);
         AsccpSummaryRecord asccp = query.getAsccpSummary(asccpManifestId);
+        if (asccp == null) {
+            throw ScoreActivityException.targetNotFound("The ASCCP does not exist.");
+        }
 
         if (!skipStateCheck && CcState.Deleted != asccp.state()) {
-            throw new IllegalArgumentException("The ASCCP '" + asccp.den() + "' cannot be purged " +
+            throw ScoreActivityException.invalidState("The ASCCP '" + asccp.den() + "' cannot be purged " +
                     "because it is in the '" + asccp.state() + "' state. "
                     + "Only ASCCPs in the 'Deleted' state can be purged.");
         }
@@ -1724,6 +1903,7 @@ public class CcCommandService {
         return repositoryFactory.asccpCommandRepository(requester).delete(asccpManifestId);
     }
 
+    @ScoreActivity(category = "bccp", action = "delete")
     public boolean purge(ScoreUser requester, BccpManifestId bccpManifestId) {
 
         if (requester == null) {
@@ -1736,9 +1916,12 @@ public class CcCommandService {
 
         var query = repositoryFactory.bccpQueryRepository(requester);
         BccpSummaryRecord bccp = query.getBccpSummary(bccpManifestId);
+        if (bccp == null) {
+            throw ScoreActivityException.targetNotFound("The BCCP does not exist.");
+        }
 
         if (CcState.Deleted != bccp.state()) {
-            throw new IllegalArgumentException("The BCCP '" + bccp.den() + "' cannot be purged " +
+            throw ScoreActivityException.invalidState("The BCCP '" + bccp.den() + "' cannot be purged " +
                     "because it is in the '" + bccp.state() + "' state. "
                     + "Only BCCPs in the 'Deleted' state can be purged.");
         }
@@ -1746,12 +1929,15 @@ public class CcCommandService {
         if (!repositoryFactory.accQueryRepository(requester)
                 .getBccSummaryList(bccpManifestId)
                 .isEmpty()) {
-            new IllegalArgumentException("Please purge related-BCCs first before purging the BCCP '" + bccp.den() + "'.");
+            throw new IllegalArgumentException(
+                    "Please purge related-BCCs first before purging the BCCP '" + bccp.den() + "'.");
         }
 
         return repositoryFactory.bccpCommandRepository(requester).delete(bccpManifestId);
     }
 
+    @ScoreActivity(category = "dt", action = "delete", operation = "purge",
+            handler = CoreComponentOperationActivityHandler.class)
     public boolean purge(ScoreUser requester, DtManifestId dtManifestId) {
 
         if (requester == null) {
@@ -1782,12 +1968,21 @@ public class CcCommandService {
         return repositoryFactory.dtCommandRepository(requester).delete(dtManifestId);
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "discard-ascc",
+            handler = CoreComponentOperationActivityHandler.class)
     public boolean discard(ScoreUser requester, AsccManifestId asccManifestId) {
         return discard(requester, asccManifestId, false, Modified, LogUtils.generateHash());
     }
 
     public boolean discard(ScoreUser requester, AsccManifestId asccManifestId, boolean skipStateCheck,
                            LogAction logAction, String logHash) {
+        return coreComponentActivityExecutor.deleteAscc(requester, asccManifestId,
+                () -> discardAsccInternal(requester, asccManifestId, skipStateCheck, logAction, logHash));
+    }
+
+    private boolean discardAsccInternal(
+            ScoreUser requester, AsccManifestId asccManifestId, boolean skipStateCheck,
+            LogAction logAction, String logHash) {
 
         if (requester == null) {
             throw new IllegalArgumentException("'requester' must not be null.");
@@ -1832,12 +2027,21 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "discard-bcc",
+            handler = CoreComponentOperationActivityHandler.class)
     public boolean discard(ScoreUser requester, BccManifestId bccManifestId) {
         return discard(requester, bccManifestId, false, Modified, LogUtils.generateHash());
     }
 
     public boolean discard(ScoreUser requester, BccManifestId bccManifestId, boolean skipStateCheck,
                            LogAction logAction, String logHash) {
+        return coreComponentActivityExecutor.deleteBcc(requester, bccManifestId,
+                () -> discardBccInternal(requester, bccManifestId, skipStateCheck, logAction, logHash));
+    }
+
+    private boolean discardBccInternal(
+            ScoreUser requester, BccManifestId bccManifestId, boolean skipStateCheck,
+            LogAction logAction, String logHash) {
 
         if (requester == null) {
             throw new IllegalArgumentException("'requester' must not be null.");
@@ -1882,8 +2086,10 @@ public class CcCommandService {
         return updated;
     }
 
-    public void updateAccSequence(ScoreUser requester, AccManifestId accManifestId,
-                                  AsccpOrBccpManifestId item, @Nullable AsccpOrBccpManifestId after) {
+    @ScoreActivity(category = "acc", action = "update", operation = "update-sequence",
+            handler = CoreComponentOperationActivityHandler.class)
+    public boolean updateAccSequence(ScoreUser requester, AccManifestId accManifestId,
+                                     AsccpOrBccpManifestId item, @Nullable AsccpOrBccpManifestId after) {
 
         if (requester == null) {
             throw new IllegalArgumentException("`requester` must not be null.");
@@ -1900,7 +2106,7 @@ public class CcCommandService {
         var query = repositoryFactory.accQueryRepository(requester);
         AccSummaryRecord acc = query.getAccSummary(accManifestId);
         if (acc == null) {
-            return;
+            return false;
         }
 
         if (CcState.WIP != acc.state()) {
@@ -1913,10 +2119,39 @@ public class CcCommandService {
             throw new IllegalArgumentException("It only allows to modify the core component by the owner.");
         }
 
+        if (item.asccpManifestId() != null) {
+            AsccSummaryRecord ascc = query.getAsccSummaryList(accManifestId).stream()
+                    .filter(candidate -> item.asccpManifestId().equals(candidate.toAsccpManifestId()))
+                    .findFirst().orElse(null);
+            if (ascc != null) {
+                coreComponentActivityExecutor.updateAscc(requester, ascc.asccManifestId(), () -> {
+                    repositoryFactory.seqKeyCommandRepository(requester).move(accManifestId, item, after);
+                    makeLog(requester, acc.accManifestId(), LogAction.Modified);
+                    return true;
+                });
+                return true;
+            }
+        } else if (item.bccpManifestId() != null) {
+            BccSummaryRecord bcc = query.getBccSummaryList(accManifestId).stream()
+                    .filter(candidate -> item.bccpManifestId().equals(candidate.toBccpManifestId()))
+                    .findFirst().orElse(null);
+            if (bcc != null) {
+                coreComponentActivityExecutor.updateBcc(requester, bcc.bccManifestId(), () -> {
+                    repositoryFactory.seqKeyCommandRepository(requester).move(accManifestId, item, after);
+                    makeLog(requester, acc.accManifestId(), LogAction.Modified);
+                    return true;
+                });
+                return true;
+            }
+        }
+
         repositoryFactory.seqKeyCommandRepository(requester).move(accManifestId, item, after);
         makeLog(requester, acc.accManifestId(), LogAction.Modified);
+        return true;
     }
 
+    @ScoreActivity(category = "acc", action = "state-change", operation = "revise",
+            handler = CoreComponentOperationActivityHandler.class)
     public void reviseAcc(ScoreUser requester, AccManifestId accManifestId) {
 
         if (requester == null) {
@@ -1968,6 +2203,8 @@ public class CcCommandService {
                 CcType.ACC, accManifestId, prevAcc.state(), CcState.WIP, requester.userId());
     }
 
+    @ScoreActivity(category = "acc", action = "state-change", operation = "cancel",
+            handler = CoreComponentOperationActivityHandler.class)
     public void cancelAcc(ScoreUser requester, AccManifestId accManifestId, String comment, String projectFieldOptionOverride) {
 
         if (requester == null) {
@@ -2016,6 +2253,8 @@ public class CcCommandService {
                 CcType.ACC, accManifestId, CcState.WIP, revertedTo, requester.userId(), comment, projectFieldOptionOverride);
     }
 
+    @ScoreActivity(category = "asccp", action = "state-change", operation = "revise",
+            handler = CoreComponentOperationActivityHandler.class)
     public void reviseAsccp(ScoreUser requester, AsccpManifestId asccpManifestId) {
 
         if (requester == null) {
@@ -2067,6 +2306,8 @@ public class CcCommandService {
                 CcType.ASCCP, asccpManifestId, prevAsccp.state(), CcState.WIP, requester.userId());
     }
 
+    @ScoreActivity(category = "asccp", action = "state-change", operation = "cancel",
+            handler = CoreComponentOperationActivityHandler.class)
     public void cancelAsccp(ScoreUser requester, AsccpManifestId asccpManifestId, String comment, String projectFieldOptionOverride) {
 
         if (requester == null) {
@@ -2113,6 +2354,8 @@ public class CcCommandService {
                 CcType.ASCCP, asccpManifestId, CcState.WIP, revertedTo, requester.userId(), comment, projectFieldOptionOverride);
     }
 
+    @ScoreActivity(category = "bccp", action = "state-change", operation = "revise",
+            handler = CoreComponentOperationActivityHandler.class)
     public void reviseBccp(ScoreUser requester, BccpManifestId bccpManifestId) {
 
         if (requester == null) {
@@ -2164,6 +2407,8 @@ public class CcCommandService {
                 CcType.BCCP, bccpManifestId, prevBccp.state(), CcState.WIP, requester.userId());
     }
 
+    @ScoreActivity(category = "bccp", action = "state-change", operation = "cancel",
+            handler = CoreComponentOperationActivityHandler.class)
     public void cancelBccp(ScoreUser requester, BccpManifestId bccpManifestId, String comment, String projectFieldOptionOverride) {
 
         if (requester == null) {
@@ -2210,6 +2455,8 @@ public class CcCommandService {
                 CcType.BCCP, bccpManifestId, CcState.WIP, revertedTo, requester.userId(), comment, projectFieldOptionOverride);
     }
 
+    @ScoreActivity(category = "dt", action = "state-change", operation = "revise",
+            handler = CoreComponentOperationActivityHandler.class)
     public void reviseDt(ScoreUser requester, DtManifestId dtManifestId) {
 
         if (requester == null) {
@@ -2261,6 +2508,8 @@ public class CcCommandService {
                 CcType.DT, dtManifestId, prevDt.state(), CcState.WIP, requester.userId());
     }
 
+    @ScoreActivity(category = "dt", action = "state-change", operation = "cancel",
+            handler = CoreComponentOperationActivityHandler.class)
     public void cancelDt(ScoreUser requester, DtManifestId dtManifestId, String comment, String projectFieldOptionOverride) {
 
         if (requester == null) {
@@ -2307,6 +2556,8 @@ public class CcCommandService {
                 CcType.DT, dtManifestId, CcState.WIP, revertedTo, requester.userId(), comment, projectFieldOptionOverride);
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "transfer-ownership",
+            handler = CoreComponentOperationActivityHandler.class)
     public void transferOwnership(
             ScoreUser requester, ScoreUser targetUser, AccManifestId accManifestId) {
 
@@ -2350,6 +2601,8 @@ public class CcCommandService {
         makeLog(requester, accManifestId, Modified);
     }
 
+    @ScoreActivity(category = "asccp", action = "update", operation = "transfer-ownership",
+            handler = CoreComponentOperationActivityHandler.class)
     public void transferOwnership(
             ScoreUser requester, ScoreUser targetUser, AsccpManifestId asccpManifestId) {
 
@@ -2393,6 +2646,8 @@ public class CcCommandService {
         makeLog(requester, asccpManifestId, Modified);
     }
 
+    @ScoreActivity(category = "bccp", action = "update", operation = "transfer-ownership",
+            handler = CoreComponentOperationActivityHandler.class)
     public void transferOwnership(
             ScoreUser requester, ScoreUser targetUser, BccpManifestId bccpManifestId) {
 
@@ -2436,6 +2691,8 @@ public class CcCommandService {
         makeLog(requester, bccpManifestId, Modified);
     }
 
+    @ScoreActivity(category = "dt", action = "update", operation = "transfer-ownership",
+            handler = CoreComponentOperationActivityHandler.class)
     public void transferOwnership(
             ScoreUser requester, ScoreUser targetUser, DtManifestId dtManifestId) {
 
@@ -2479,7 +2736,15 @@ public class CcCommandService {
         makeLog(requester, dtManifestId, Modified);
     }
 
+    @ScoreActivity(category = "dt", action = "update", operation = "discard-dt-sc",
+            handler = CoreComponentOperationActivityHandler.class)
     public boolean discard(ScoreUser requester, DtScManifestId dtScManifestId, boolean skipOwnershipCheck) {
+        return coreComponentActivityExecutor.deleteDtSc(requester, dtScManifestId,
+                () -> discardDtScInternal(requester, dtScManifestId, skipOwnershipCheck));
+    }
+
+    private boolean discardDtScInternal(
+            ScoreUser requester, DtScManifestId dtScManifestId, boolean skipOwnershipCheck) {
 
         if (requester == null) {
             throw new IllegalArgumentException("'requester' must not be null.");
@@ -2528,7 +2793,14 @@ public class CcCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "dt", action = "update", operation = "append-dt-sc",
+            handler = CoreComponentOperationActivityHandler.class)
     public DtScManifestId createDtSc(ScoreUser requester, DtManifestId ownerDtManifestId) {
+        return coreComponentActivityExecutor.createDtSc(requester,
+                () -> createDtScInternal(requester, ownerDtManifestId));
+    }
+
+    private DtScManifestId createDtScInternal(ScoreUser requester, DtManifestId ownerDtManifestId) {
 
         if (requester == null) {
             throw new IllegalArgumentException("'requester' must not be null.");
@@ -2570,6 +2842,12 @@ public class CcCommandService {
     }
 
     public DtScManifestId createDtScFromBase(ScoreUser requester, DtManifestId ownerDtManifestId, DtScManifestId basedDtScManifestId) {
+        return coreComponentActivityExecutor.createDtSc(requester,
+                () -> createDtScFromBaseInternal(requester, ownerDtManifestId, basedDtScManifestId));
+    }
+
+    private DtScManifestId createDtScFromBaseInternal(
+            ScoreUser requester, DtManifestId ownerDtManifestId, DtScManifestId basedDtScManifestId) {
 
         if (requester == null) {
             throw new IllegalArgumentException("'requester' must not be null.");
@@ -2646,6 +2924,8 @@ public class CcCommandService {
         // TODO
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "append-user-extension",
+            handler = CoreComponentOperationActivityHandler.class)
     public AccManifestId appendUserExtension(
             ScoreUser requester, AccSummaryRecord eAcc, AccSummaryRecord ueAcc, ReleaseId releaseId) {
         if (requester.isDeveloper()) {
@@ -2654,7 +2934,11 @@ public class CcCommandService {
 
         if (ueAcc != null) {
             if (ueAcc.state() == CcState.Production) {
-                reviseAcc(requester, ueAcc.accManifestId());
+                coreComponentActivityExecutor.changeAccState(
+                        requester, ueAcc.accManifestId(), CcState.WIP, () -> {
+                            reviseAcc(requester, ueAcc.accManifestId());
+                            return true;
+                        });
             }
             return ueAcc.accManifestId();
         } else {
@@ -2665,18 +2949,22 @@ public class CcCommandService {
     private AccManifestId createNewUserExtensionGroupACC(ScoreUser requester, AccSummaryRecord eAcc, ReleaseId releaseId) {
         String objectClassTerm = Utility.getUserExtensionGroupObjectClassTerm(eAcc.objectClassTerm());
 
-        AccManifestId ueAccManifestId = createAcc(requester, new AccCreateRequest(
+        AccCreateRequest userExtensionAccCreateRequest = new AccCreateRequest(
                 releaseId, null,
                 objectClassTerm, OagisComponentType.UserExtensionGroup, AccType.Extension,
                 "A system created component containing user extension to the " + eAcc.objectClassTerm() + ".",
-                null, null));
+                null, null);
+        AccManifestId ueAccManifestId = createNestedAcc(
+                requester, userExtensionAccCreateRequest);
 
-        AsccpManifestId ueAsccpManifestId = createAsccp(requester, new AsccpCreateRequest(
+        AsccpCreateRequest userExtensionAsccpCreateRequest = new AsccpCreateRequest(
                 releaseId, ueAccManifestId,
                 objectClassTerm, AsccpType.Default, false,
                 CcState.Production, null,
                 new Definition("A system created component containing user extension to the " + eAcc.objectClassTerm() + ".", null),
-                null));
+                null);
+        AsccpManifestId ueAsccpManifestId = createNestedAsccp(
+                requester, userExtensionAsccpCreateRequest);
 
         createAscc(requester, AsccCreateRequest.builder(eAcc.accManifestId(), ueAsccpManifestId)
                 .cardinalityMin(1)
@@ -2686,6 +2974,21 @@ public class CcCommandService {
         return ueAccManifestId;
     }
 
+    private AccManifestId createNestedAcc(
+            ScoreUser requester,
+            AccCreateRequest request) {
+        return coreComponentActivityExecutor.createAcc(requester, () -> createAcc(requester, request));
+    }
+
+    private AsccpManifestId createNestedAsccp(
+            ScoreUser requester,
+            AsccpCreateRequest request) {
+        return coreComponentActivityExecutor.createAsccp(
+                requester, () -> createAsccp(requester, request));
+    }
+
+    @ScoreActivity(category = "acc", action = "update", operation = "refactor-ascc",
+            handler = CoreComponentOperationActivityHandler.class)
     public AsccManifestId refactorAscc(ScoreUser requester, AsccManifestId asccManifestId, AccManifestId accManifestId) {
 
         var accQuery = repositoryFactory.accQueryRepository(requester);
@@ -2706,6 +3009,8 @@ public class CcCommandService {
                 targetAscc.cardinality()), LogAction.Refactored, hash, false);
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "refactor-bcc",
+            handler = CoreComponentOperationActivityHandler.class)
     public BccManifestId refactorBcc(ScoreUser requester, BccManifestId bccManifestId, AccManifestId accManifestId) {
 
         var accQuery = repositoryFactory.accQueryRepository(requester);
@@ -2726,6 +3031,8 @@ public class CcCommandService {
                 targetBcc.cardinality()), LogAction.Refactored, hash, false);
     }
 
+    @ScoreActivity(category = "acc", action = "update", operation = "ungroup",
+            handler = CoreComponentOperationActivityHandler.class)
     public void ungroup(ScoreUser requester, AccManifestId accManifestId, AsccManifestId asccManifestId, int pos) {
 
         var accQuery = repositoryFactory.accQueryRepository(requester);

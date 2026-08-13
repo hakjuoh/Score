@@ -1,0 +1,544 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oagi.org/score/contracts/score-activity-event.schema.json",
+  "title": "SCORE Activity Event",
+  "description": "Shared event envelope for user-visible activity emitted by SCORE runtimes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "eventId", "occurredAt", "name", "source", "outcome",
+    "actor", "targets", "properties", "context"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "eventId": {"type": "string", "format": "uuid"},
+    "occurredAt": {"type": "string", "format": "date-time"},
+    "name": {"type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"},
+    "source": {
+      "enum": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"]
+    },
+    "outcome": {"enum": ["SUCCEEDED", "FAILED"]},
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["userId", "loginId"],
+      "properties": {
+        "userId": {"type": "string", "minLength": 1},
+        "loginId": {"type": "string", "minLength": 1}
+      }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "id", "role"],
+        "properties": {
+          "type": {"type": "string", "minLength": 1},
+          "id": {"type": "string", "minLength": 1},
+          "guid": {"type": ["string", "null"]},
+          "name": {"type": ["string", "null"]},
+          "role": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "properties": {"type": "object", "additionalProperties": true},
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "traceId": {
+          "type": ["string", "null"],
+          "pattern": "^(?!0{32}$)[0-9a-f]{32}$"
+        },
+        "spanId": {
+          "type": ["string", "null"],
+          "pattern": "^(?!0{16}$)[0-9a-f]{16}$"
+        },
+        "parentSpanId": {
+          "type": ["string", "null"],
+          "pattern": "^(?!0{16}$)[0-9a-f]{16}$"
+        },
+        "traceFlags": {"type": ["string", "null"], "pattern": "^[0-9a-f]{2}$"},
+        "traceState": {"type": ["string", "null"]},
+        "activityStartedAt": {"type": ["string", "null"], "format": "date-time"},
+        "requestType": {"type": ["string", "null"]},
+        "requestId": {"type": ["string", "null"]},
+        "requestTimestamp": {"type": ["string", "null"], "format": "date-time"},
+        "httpRequest": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "method": {"type": ["string", "null"]},
+                "originalMethod": {"type": ["string", "null"]},
+                "scheme": {"type": ["string", "null"]},
+                "serverAddress": {"type": ["string", "null"]},
+                "serverPort": {"type": ["integer", "null"], "minimum": 1, "maximum": 65535},
+                "path": {"type": ["string", "null"]},
+                "query": {"type": ["string", "null"]},
+                "protocolVersion": {"type": ["string", "null"]},
+                "clientAddress": {"type": ["string", "null"]},
+                "networkPeerAddress": {"type": ["string", "null"]},
+                "networkPeerPort": {"type": ["integer", "null"], "minimum": 1, "maximum": 65535},
+                "userAgent": {"type": ["string", "null"]},
+                "uiOrigin": {"type": ["string", "null"], "format": "uri"},
+                "uiPageUrl": {"type": ["string", "null"], "format": "uri"},
+                "webVersion": {"type": ["string", "null"]},
+                "serverSoftware": {"type": ["string", "null"]},
+                "clientAddressSource": {
+                  "type": ["string", "null"],
+                  "enum": [null, "forwarded", "x-forwarded-for", "cf-connecting-ip",
+                    "true-client-ip", "x-azure-clientip", "x-envoy-external-address",
+                    "fastly-client-ip", "x-real-ip", "network.peer.address"]
+                },
+                "proxyHeaders": {
+                  "type": "object",
+                  "maxProperties": 30,
+                  "propertyNames": {
+                    "enum": ["forwarded", "via", "x-forwarded-for", "x-forwarded-host",
+                      "x-forwarded-proto", "x-forwarded-port", "x-forwarded-server",
+                      "x-forwarded-prefix", "x-forwarded-scheme", "x-forwarded-protocol", "x-scheme",
+                      "x-original-host", "x-real-ip", "x-request-id", "x-correlation-id",
+                      "front-end-https", "cf-connecting-ip", "true-client-ip", "cf-ray",
+                      "cf-visitor", "cdn-loop", "x-amzn-trace-id",
+                      "x-envoy-external-address", "x-azure-clientip", "x-azure-ref",
+                      "x-cloud-trace-context", "fastly-client-ip", "x-served-by", "x-cache",
+                      "akamai-grn"]
+                  },
+                  "additionalProperties": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {"type": "string", "maxLength": 2048}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {"$ref": "#/$defs/accActivity"},
+    {"$ref": "#/$defs/asccpActivity"},
+    {"$ref": "#/$defs/bccpActivity"},
+    {"$ref": "#/$defs/asccActivity"},
+    {"$ref": "#/$defs/bccActivity"},
+    {"$ref": "#/$defs/dtActivity"},
+    {"$ref": "#/$defs/dtScActivity"},
+    {"$ref": "#/$defs/oagisActivity"},
+    {"$ref": "#/$defs/codeListActivity"},
+    {"$ref": "#/$defs/agencyIdListActivity"},
+    {"$ref": "#/$defs/releaseActivity"},
+    {"$ref": "#/$defs/createActivity"},
+    {"$ref": "#/$defs/updateActivity"},
+    {"$ref": "#/$defs/stateChangeActivity"},
+    {"$ref": "#/$defs/releaseStateChangeActivity"},
+    {"$ref": "#/$defs/deleteActivity"}
+  ],
+  "$defs": {
+    "accActivity": {
+      "if": {"properties": {"name": {"pattern": "^acc\\."}}, "required": ["name"]},
+      "then": {
+        "properties": {
+          "targets": {"items": {"properties": {"type": {"const": "ACC"}}}},
+          "properties": {
+            "properties": {"requestedFields": {"$ref": "#/$defs/accFieldList"}}
+          }
+        }
+      }
+    },
+    "asccpActivity": {
+      "if": {"properties": {"name": {"pattern": "^asccp\\."}}, "required": ["name"]},
+      "then": {
+        "properties": {
+          "targets": {"items": {"properties": {"type": {"const": "ASCCP"}}}},
+          "properties": {
+            "properties": {"requestedFields": {"$ref": "#/$defs/asccpFieldList"}}
+          }
+        }
+      }
+    },
+    "bccpActivity": {
+      "if": {"properties": {"name": {"pattern": "^bccp\\."}}, "required": ["name"]},
+      "then": {
+        "properties": {
+          "targets": {"items": {"properties": {"type": {"const": "BCCP"}}}},
+          "properties": {
+            "properties": {"requestedFields": {"$ref": "#/$defs/bccpFieldList"}}
+          }
+        }
+      }
+    },
+    "asccActivity": {
+      "if": {"properties": {"name": {"pattern": "^ascc\\."}}, "required": ["name"]},
+      "then": {
+        "properties": {"targets": {"items": {"properties": {"type": {"const": "ASCC"}}}}}
+      }
+    },
+    "bccActivity": {
+      "if": {"properties": {"name": {"pattern": "^bcc\\."}}, "required": ["name"]},
+      "then": {
+        "properties": {"targets": {"items": {"properties": {"type": {"const": "BCC"}}}}}
+      }
+    },
+    "dtActivity": {
+      "if": {"properties": {"name": {"pattern": "^dt\\."}}, "required": ["name"]},
+      "then": {
+        "properties": {"targets": {"items": {"properties": {"type": {"const": "DT"}}}}}
+      }
+    },
+    "dtScActivity": {
+      "if": {"properties": {"name": {"pattern": "^dt-sc\\."}}, "required": ["name"]},
+      "then": {
+        "properties": {"targets": {"items": {"properties": {"type": {"const": "DT_SC"}}}}}
+      }
+    },
+    "oagisActivity": {
+      "if": {
+        "properties": {"name": {"enum": ["oagis-bod.create", "oagis-verb.create"]}},
+        "required": ["name"]
+      },
+      "then": {
+        "properties": {"targets": {"items": {"properties": {"type": {"const": "ASCCP"}}}}}
+      }
+    },
+    "codeListActivity": {
+      "if": {"properties": {"name": {"pattern": "^code-list\\."}}, "required": ["name"]},
+      "then": {
+        "properties": {"targets": {"items": {"properties": {"type": {"const": "CODE_LIST"}}}}}
+      }
+    },
+    "agencyIdListActivity": {
+      "if": {"properties": {"name": {"pattern": "^agency-id-list\\."}}, "required": ["name"]},
+      "then": {
+        "properties": {"targets": {"items": {"properties": {"type": {"const": "AGENCY_ID_LIST"}}}}}
+      }
+    },
+    "releaseActivity": {
+      "if": {"properties": {"name": {"pattern": "^release\\."}}, "required": ["name"]},
+      "then": {
+        "properties": {
+          "targets": {"items": {"properties": {"type": {"const": "RELEASE"}}}}
+        }
+      }
+    },
+    "createActivity": {
+      "if": {
+        "properties": {
+          "name": {"enum": [
+            "acc.create", "asccp.create", "bccp.create", "dt.create",
+            "ascc.create", "bcc.create", "dt-sc.create",
+            "oagis-bod.create", "oagis-verb.create"
+          ]}
+        },
+        "required": ["name"]
+      },
+      "then": {
+        "properties": {
+          "targets": {"items": {"$ref": "#/$defs/coreComponentTarget"}},
+          "properties": {
+            "oneOf": [
+              {"additionalProperties": false, "maxProperties": 0},
+              {
+                "additionalProperties": false,
+                "required": ["operation"],
+                "properties": {"operation": {"type": "string", "minLength": 1}}
+              },
+              {
+                "additionalProperties": false,
+                "required": ["errorCode"],
+                "properties": {
+                  "operation": {"type": "string", "minLength": 1},
+                  "errorCode": {"$ref": "#/$defs/lifecycleFailureCode"}
+                }
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {"$ref": "#/$defs/successRequiresTargetAndNoError"},
+          {"$ref": "#/$defs/failureRequiresError"},
+          {
+            "if": {"properties": {"outcome": {"const": "SUCCEEDED"}}, "required": ["outcome"]},
+            "then": {
+              "properties": {
+                "targets": {
+                  "items": {
+                    "required": ["guid", "name"],
+                    "properties": {
+                      "guid": {"type": "string", "minLength": 1},
+                      "name": {"type": "string", "minLength": 1}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "updateActivity": {
+      "if": {
+        "properties": {
+          "name": {"enum": [
+            "acc.update", "asccp.update", "bccp.update", "dt.update",
+            "ascc.update", "bcc.update", "dt-sc.update"
+          ]}
+        },
+        "required": ["name"]
+      },
+      "then": {
+        "properties": {
+          "targets": {"items": {"$ref": "#/$defs/coreComponentTarget"}},
+          "properties": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "required": ["requestedFields"],
+                "properties": {"requestedFields": {"$ref": "#/$defs/coreComponentFieldList"}}
+              },
+              {
+                "additionalProperties": false,
+                "required": ["operation"],
+                "properties": {"operation": {"type": "string", "minLength": 1}}
+              },
+              {
+                "additionalProperties": false,
+                "required": ["errorCode"],
+                "properties": {
+                  "requestedFields": {"$ref": "#/$defs/coreComponentFieldList"},
+                  "operation": {"type": "string", "minLength": 1},
+                  "errorCode": {"$ref": "#/$defs/scoreActivityFailureCode"}
+                }
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"outcome": {"const": "SUCCEEDED"}}, "required": ["outcome"]},
+            "then": {
+              "properties": {
+                "targets": {"minItems": 1},
+                "properties": {
+                  "oneOf": [
+                    {"required": ["requestedFields"]},
+                    {"required": ["operation"]}
+                  ],
+                  "not": {"required": ["errorCode"]}
+                }
+              }
+            }
+          },
+          {"$ref": "#/$defs/failureRequiresError"}
+        ]
+      }
+    },
+    "stateChangeActivity": {
+      "if": {
+        "properties": {
+          "name": {"enum": [
+            "acc.state-change", "asccp.state-change", "bccp.state-change",
+            "dt.state-change", "code-list.state-change", "agency-id-list.state-change"
+          ]}
+        },
+        "required": ["name"]
+      },
+      "then": {
+        "properties": {
+          "targets": {"maxItems": 1, "items": {"$ref": "#/$defs/coreComponentTarget"}},
+          "properties": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "required": ["toState"],
+                "properties": {
+                  "fromState": {"type": "string", "minLength": 1},
+                  "toState": {"type": "string", "minLength": 1},
+                  "operation": {"type": "string", "minLength": 1}
+                }
+              },
+              {
+                "additionalProperties": false,
+                "required": ["errorCode"],
+                "properties": {
+                  "fromState": {"type": "string", "minLength": 1},
+                  "toState": {"type": "string", "minLength": 1},
+                  "operation": {"type": "string", "minLength": 1},
+                  "errorCode": {"$ref": "#/$defs/lifecycleFailureCode"}
+                }
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"outcome": {"const": "SUCCEEDED"}}, "required": ["outcome"]},
+            "then": {
+              "properties": {
+                "targets": {"minItems": 1},
+                "properties": {
+                  "required": ["toState"],
+                  "not": {"required": ["errorCode"]}
+                }
+              }
+            }
+          },
+          {"$ref": "#/$defs/failureRequiresError"}
+        ]
+      }
+    },
+    "releaseStateChangeActivity": {
+      "if": {
+        "properties": {"name": {"const": "release.state-change"}},
+        "required": ["name"]
+      },
+      "then": {
+        "properties": {
+          "targets": {"maxItems": 1, "items": {"$ref": "#/$defs/releaseTarget"}},
+          "properties": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "required": ["toState", "completionStage"],
+                "properties": {
+                  "toState": {"enum": ["Initialized", "Draft", "Published"]},
+                  "completionStage": {"enum": ["REQUEST_ACCEPTED", "COMPLETED"]}
+                }
+              },
+              {
+                "additionalProperties": false,
+                "required": ["errorCode"],
+                "properties": {
+                  "toState": {"enum": ["Initialized", "Draft", "Published"]},
+                  "errorCode": {"$ref": "#/$defs/scoreActivityFailureCode"}
+                }
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {"$ref": "#/$defs/successRequiresTargetAndNoError"},
+          {"$ref": "#/$defs/failureRequiresError"}
+        ]
+      }
+    },
+    "deleteActivity": {
+      "if": {
+        "properties": {
+          "name": {"enum": [
+            "acc.delete", "asccp.delete", "bccp.delete", "dt.delete",
+            "ascc.delete", "bcc.delete", "dt-sc.delete"
+          ]}
+        },
+        "required": ["name"]
+      },
+      "then": {
+        "properties": {
+          "targets": {"maxItems": 1, "items": {"$ref": "#/$defs/coreComponentTarget"}},
+          "properties": {
+            "oneOf": [
+              {"additionalProperties": false, "maxProperties": 0},
+              {
+                "additionalProperties": false,
+                "required": ["operation"],
+                "properties": {"operation": {"type": "string", "minLength": 1}}
+              },
+              {
+                "additionalProperties": false,
+                "required": ["errorCode"],
+                "properties": {
+                  "operation": {"type": "string", "minLength": 1},
+                  "errorCode": {"$ref": "#/$defs/lifecycleFailureCode"}
+                }
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {"$ref": "#/$defs/successRequiresTargetAndNoError"},
+          {"$ref": "#/$defs/failureRequiresError"}
+        ]
+      }
+    },
+    "successRequiresTargetAndNoError": {
+      "if": {"properties": {"outcome": {"const": "SUCCEEDED"}}, "required": ["outcome"]},
+      "then": {
+        "properties": {
+          "targets": {"minItems": 1},
+          "properties": {"not": {"required": ["errorCode"]}}
+        }
+      }
+    },
+    "failureRequiresError": {
+      "if": {"properties": {"outcome": {"const": "FAILED"}}, "required": ["outcome"]},
+      "then": {"properties": {"properties": {"required": ["errorCode"]}}}
+    },
+    "coreComponentTarget": {
+      "properties": {
+        "type": {"enum": [
+          "ACC", "ASCCP", "BCCP", "ASCC", "BCC", "DT", "DT_SC",
+          "CODE_LIST", "AGENCY_ID_LIST"
+        ]},
+        "role": {"const": "PRIMARY"}
+      }
+    },
+    "releaseTarget": {
+      "properties": {
+        "type": {"const": "RELEASE"},
+        "role": {"const": "PRIMARY"}
+      }
+    },
+    "scoreActivityFailureCode": {
+      "enum": [
+        "ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND",
+        "NOT_APPLIED", "BATCH_ROLLED_BACK", "INTERNAL_ERROR"
+      ]
+    },
+    "lifecycleFailureCode": {
+      "enum": [
+        "ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND",
+        "NOT_APPLIED", "INTERNAL_ERROR"
+      ]
+    },
+    "coreComponentFieldList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "accFieldList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "objectClassTerm", "componentType", "definition", "definitionSource",
+          "isAbstract", "deprecated", "namespaceId"
+        ]
+      }
+    },
+    "asccpFieldList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "propertyTerm", "definition", "definitionSource", "reusable", "deprecated",
+          "nillable", "namespaceId", "roleOfAccManifestId"
+        ]
+      }
+    },
+    "bccpFieldList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "propertyTerm", "nillable", "deprecated", "namespaceId", "defaultValue",
+          "fixedValue", "definition", "definitionSource", "dtManifestId"
+        ]
+      }
+    }
+  }
+}

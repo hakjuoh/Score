@@ -8,6 +8,7 @@ import {BieEditAbieNode, BieEditNode} from '../../../bie-management/bie-edit/dom
 import {CcDtNodeInfo, OagisComponentType, XbtSummary} from '../../domain/core-component-node';
 import {base64Encode} from '../../../common/utility';
 import {BieEditNodeDetail} from '../../../bie-management/domain/bie-flat-tree';
+import {scoreRequest} from '../../../common/score-request';
 
 @Injectable()
 export class CcListService {
@@ -165,7 +166,7 @@ export class CcListService {
     return this.http.patch<any>('/api/core-components/' +
       type.toLowerCase() + '/' + manifestId + '/transfer', {
       targetLoginId
-    });
+    }, {context: scoreRequest(type.toUpperCase() + '_TRANSFER_OWNERSHIP')});
   }
 
   transferOwnershipOnList(ccLists: CcListEntry[], targetLoginId: string): Observable<any> {
@@ -196,7 +197,7 @@ export class CcListService {
       asccpManifestIdList,
       bccpManifestIdList,
       dtManifestIdList
-    });
+    }, {context: scoreRequest('CORE_COMPONENT_TRANSFER_OWNERSHIP')});
   }
 
   updateState(ccListEntries: CcListEntry[], toState: string,
@@ -240,7 +241,8 @@ export class CcListService {
     if (projectFieldOptionOverrides && Object.keys(projectFieldOptionOverrides).length > 0) {
       body.projectFieldOptionOverrides = projectFieldOptionOverrides;
     }
-    return this.http.patch<any>('/api/core-components/state', body);
+    return this.http.patch<any>('/api/core-components/state', body,
+      {context: scoreRequest('CORE_COMPONENT_STATE_CHANGE')});
   }
 
   delete(ccListEntries: CcListEntry[]): Observable<any> {
@@ -271,7 +273,7 @@ export class CcListService {
       asccpManifestIdList,
       bccpManifestIdList,
       dtManifestIdList
-    });
+    }, {context: scoreRequest('CORE_COMPONENT_MARK_DELETED')});
   }
 
   restore(ccListEntries: CcListEntry[]): Observable<any> {
@@ -302,7 +304,7 @@ export class CcListService {
       asccpManifestIdList,
       bccpManifestIdList,
       dtManifestIdList
-    });
+    }, {context: scoreRequest('CORE_COMPONENT_RESTORE')});
   }
 
   purge(ccListEntries: CcListEntry[]): Observable<any> {
@@ -329,6 +331,7 @@ export class CcListService {
     }
 
     return this.http.delete<any>('/api/core-components', {
+      context: scoreRequest('CORE_COMPONENT_PURGE'),
       body: {
         accManifestIdList,
         asccpManifestIdList,

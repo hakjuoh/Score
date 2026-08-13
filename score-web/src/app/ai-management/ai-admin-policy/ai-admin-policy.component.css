@@ -475,7 +475,8 @@ mat-radio-group {
   display: flex;
   flex-wrap: nowrap;
   gap: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
+  padding: 0 1rem;
 }
 
 .usage-date-field {

@@ -1,0 +1,368 @@
+{
+  "schemaVersion": "1.0",
+  "propertyTypes": {
+    "accFieldList": {
+      "type": "array",
+      "uniqueItems": true,
+      "values": ["objectClassTerm", "componentType", "definition", "definitionSource", "isAbstract", "deprecated", "namespaceId"],
+      "normalization": "Include non-null request fields in the listed order. Always include namespaceId because null explicitly clears the namespace."
+    },
+    "asccpFieldList": {
+      "type": "array",
+      "uniqueItems": true,
+      "values": ["propertyTerm", "definition", "definitionSource", "reusable", "deprecated", "nillable", "namespaceId", "roleOfAccManifestId"],
+      "normalization": "Include non-null request fields in the listed order. Always include namespaceId because null explicitly clears the namespace."
+    },
+    "bccpFieldList": {
+      "type": "array",
+      "uniqueItems": true,
+      "values": ["propertyTerm", "nillable", "deprecated", "namespaceId", "defaultValue", "fixedValue", "definition", "definitionSource", "dtManifestId"],
+      "normalization": "Include non-null request fields in the listed order. Always include namespaceId because null explicitly clears the namespace."
+    },
+    "scoreActivityFailureCode": {
+      "type": "string",
+      "values": {
+        "ACCESS_DENIED": "The actor was not permitted to perform the action.",
+        "VALIDATION_ERROR": "The request was structurally or semantically invalid.",
+        "INVALID_STATE": "The target existed but its lifecycle state did not allow the action.",
+        "TARGET_NOT_FOUND": "The requested target identity was valid but did not resolve.",
+        "NOT_APPLIED": "The command completed without applying a change.",
+        "BATCH_ROLLED_BACK": "A multi-item batch failed and the surrounding transaction rolled back every requested action.",
+        "INTERNAL_ERROR": "An unexpected application or infrastructure failure interrupted the action."
+      }
+    }
+  },
+  "events": [
+    {
+      "name": "acc.create",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["errorCode"],
+      "requiredPropertyKeysByOutcome": {"FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {
+        "type": "ACC",
+        "role": "PRIMARY",
+        "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}
+      }
+    },
+    {
+      "name": "acc.update",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["requestedFields", "operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {
+        "SUCCEEDED": [],
+        "FAILED": ["errorCode"]
+      },
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "BATCH_ROLLED_BACK", "INTERNAL_ERROR"],
+      "propertySchemas": {
+        "requestedFields": {"type": "accFieldList"},
+        "operation": {"type": "string"},
+        "errorCode": {"type": "scoreActivityFailureCode"}
+      },
+      "target": {
+        "type": "ACC",
+        "role": "PRIMARY",
+        "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}
+      },
+      "batchSemantics": "Duplicate ACC target IDs are rejected before mutation. Legacy ACC detail batches emit one event per item. Named association batches emit one ACC parent event plus one ASCC/BCC child event per attempted item; a partial normal result makes the parent NOT_APPLIED, and an exception makes the parent BATCH_ROLLED_BACK."
+    },
+    {
+      "name": "acc.state-change",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["fromState", "toState", "operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["toState"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {
+        "type": "ACC",
+        "role": "PRIMARY",
+        "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}
+      }
+    },
+    {
+      "name": "acc.delete",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["errorCode"],
+      "requiredPropertyKeysByOutcome": {"FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {
+        "type": "ACC",
+        "role": "PRIMARY",
+        "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}
+      }
+    },
+    {
+      "name": "asccp.create",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["errorCode"],
+      "requiredPropertyKeysByOutcome": {"FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "ASCCP", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "asccp.update",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["requestedFields", "operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": [], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "BATCH_ROLLED_BACK", "INTERNAL_ERROR"],
+      "propertySchemas": {"requestedFields": {"type": "asccpFieldList"}, "operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "ASCCP", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}},
+      "batchSemantics": "A multi-item exception rolls back the transaction and emits BATCH_ROLLED_BACK for every requested item."
+    },
+    {
+      "name": "asccp.state-change",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["fromState", "toState", "operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["toState"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "ASCCP", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "asccp.delete",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["errorCode"],
+      "requiredPropertyKeysByOutcome": {"FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "ASCCP", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "bccp.create",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["errorCode"],
+      "requiredPropertyKeysByOutcome": {"FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "BCCP", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "bccp.update",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["requestedFields", "operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": [], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "BATCH_ROLLED_BACK", "INTERNAL_ERROR"],
+      "propertySchemas": {"requestedFields": {"type": "bccpFieldList"}, "operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "BCCP", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}},
+      "batchSemantics": "A multi-item exception rolls back the transaction and emits BATCH_ROLLED_BACK for every requested item."
+    },
+    {
+      "name": "bccp.state-change",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["fromState", "toState", "operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["toState"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "BCCP", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "bccp.delete",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["errorCode"],
+      "requiredPropertyKeysByOutcome": {"FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "BCCP", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "dt.create",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "DT", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "dt.update",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "BATCH_ROLLED_BACK", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "DT", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}},
+      "batchSemantics": "DT and DT_SC detail batches succeed only when every requested target was applied. A partial normal result is NOT_APPLIED; an exception in a multi-item batch is BATCH_ROLLED_BACK."
+    },
+    {
+      "name": "dt.delete",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "DT", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "ascc.create",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "ASCC", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "ascc.update",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "ASCC", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "ascc.delete",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "ASCC", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "bcc.create",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "BCC", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "bcc.update",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "BCC", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "bcc.delete",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "BCC", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "dt-sc.create",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "DT_SC", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "dt-sc.update",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "DT_SC", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "dt-sc.delete",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "DT_SC", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "oagis-bod.create",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "ASCCP", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "oagis-verb.create",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["operation"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "ASCCP", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "release.state-change",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["toState", "completionStage", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["toState", "completionStage"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {
+        "completionStage": {"type": "string", "values": ["REQUEST_ACCEPTED", "COMPLETED"]},
+        "errorCode": {"type": "scoreActivityFailureCode"}
+      },
+      "target": {"type": "RELEASE", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}},
+      "successSemantics": "REQUEST_ACCEPTED means that the UI command committed and asynchronous Release processing was scheduled; COMPLETED means the requested state was applied synchronously. W3C context is propagated to activity events emitted during asynchronous processing, but this event alone does not assert asynchronous completion."
+    },
+    {
+      "name": "dt.state-change",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["fromState", "toState", "operation", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["toState"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"operation": {"type": "string"}, "errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "DT", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "code-list.state-change",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["fromState", "toState", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["toState"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "CODE_LIST", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    },
+    {
+      "name": "agency-id-list.state-change",
+      "allowedSources": ["SCORE_HTTP_API", "CONNECT_CENTER_REST", "CONNECT_CENTER_MCP", "AI_ASSISTANT"],
+      "allowedOutcomes": ["SUCCEEDED", "FAILED"],
+      "allowedPropertyKeys": ["fromState", "toState", "errorCode"],
+      "requiredPropertyKeysByOutcome": {"SUCCEEDED": ["toState"], "FAILED": ["errorCode"]},
+      "allowedErrorCodes": ["ACCESS_DENIED", "VALIDATION_ERROR", "INVALID_STATE", "TARGET_NOT_FOUND", "NOT_APPLIED", "INTERNAL_ERROR"],
+      "propertySchemas": {"errorCode": {"type": "scoreActivityFailureCode"}},
+      "target": {"type": "AGENCY_ID_LIST", "role": "PRIMARY", "requiredByOutcome": {"SUCCEEDED": true, "FAILED": false}}
+    }
+  ]
+}

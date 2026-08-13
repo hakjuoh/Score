@@ -83,6 +83,8 @@ class ScoreAiConfigurationTest {
                 .isEqualTo("false");
         assertThat(environment.getProperty("management.opentelemetry.resource-attributes"
                 + ".deployment.environment.name")).isEqualTo("unknown");
+        assertThat(environment.getProperty("management.opentelemetry.resource-attributes.service.name"))
+                .isEqualTo("score");
         assertThat(environment.getProperty("score.ai.observability.enabled")).isEqualTo("false");
     }
 
@@ -111,6 +113,7 @@ class ScoreAiConfigurationTest {
                         "management.opentelemetry.resource-attributes"
                                 + ".deployment.environment.name",
                         "management.otlp.metrics.export.enabled",
+                        "score.activity.events.enabled",
                         "score.ai.catalog.bootstrap-enabled",
                         "score.ai.observability.enabled");
 
@@ -131,6 +134,7 @@ class ScoreAiConfigurationTest {
                 .isEqualTo("true");
         assertThat(environment.getProperty("management.opentelemetry.resource-attributes"
                 + ".deployment.environment.name")).isEqualTo("development");
+        assertThat(environment.getProperty("score.activity.events.enabled")).isEqualTo("true");
         assertThat(environment.getProperty("score.ai.observability.enabled")).isEqualTo("true");
     }
 
