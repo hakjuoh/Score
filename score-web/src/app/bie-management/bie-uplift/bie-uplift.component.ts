@@ -1,6 +1,6 @@
 import {CdkVirtualScrollViewport} from '@angular/cdk/scrolling';
 import {faCircleExclamation, faRecycle} from '@fortawesome/free-solid-svg-icons';
-import { Component, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, OnInit, ViewChild, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatDialog} from '@angular/material/dialog';
 import {forkJoin, Observable, of} from 'rxjs';
 import {finalize, map, switchMap} from 'rxjs/operators';
@@ -172,6 +172,7 @@ export class BieUpliftTargetFlatNodeDatabase<T extends BieFlatNode> extends BieF
   standalone: false,
   selector: 'score-bie-uplift',
   templateUrl: './bie-uplift.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-uplift.component.css']
 })
 export class BieUpliftComponent implements OnInit {
@@ -721,14 +722,14 @@ export class BieUpliftComponent implements OnInit {
     }
   }
 
-  isSource(node: BieFlatNode): boolean {
+  isSource(node: BieFlatNode): node is BieUpliftSourceFlatNode {
     if (!node) {
       return false;
     }
     return node instanceof BieUpliftSourceFlatNode;
   }
 
-  isTarget(node: BieFlatNode): boolean {
+  isTarget(node: BieFlatNode): node is BieUpliftTargetFlatNode {
     if (!node) {
       return false;
     }

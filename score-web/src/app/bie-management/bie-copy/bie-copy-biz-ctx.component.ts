@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort, SortDirection} from '@angular/material/sort';
 import {MatTableDataSource} from '@angular/material/table';
@@ -24,6 +24,7 @@ import {SearchBarComponent} from '../../common/search-bar/search-bar.component';
   standalone: false,
   selector: 'score-bie-create',
   templateUrl: './bie-copy-biz-ctx.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-copy-biz-ctx.component.css']
 })
 export class BieCopyBizCtxComponent implements OnInit {

@@ -15,7 +15,7 @@ import {AssignBusinessTermBtComponent} from './assign-business-term/assign-busin
 import {AssignBusinessTermBieComponent} from './assign-business-term/assign-business-term-bie.component';
 import {AssignedBusinessTermDetailComponent} from './assigned-business-term-detail/assigned-business-term-detail.component';
 import {BusinessTermImportDialogComponent} from './business-term-import-dialog/business-term-import-dialog.component';
-import {TranslateModule} from '@ngx-translate/core';
+import {TranslatePipe} from '@ngx-translate/core';
 import {SearchBarModule} from '../common/search-bar/search-bar.module';
 import {ColumnSelectorModule} from '../common/column-selector/column-selector.module';
 import {TitleWithLibrarySelector} from '../common/title-with-library-selector/title-with-library-selector';
@@ -89,7 +89,7 @@ const routes: Routes = [
         ConfirmDialogModule,
         CommonModule,
         ScoreCommonModule,
-        TranslateModule,
+        TranslatePipe,
         SearchBarModule,
         ColumnSelectorModule,
         TitleWithLibrarySelector

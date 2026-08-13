@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatTableDataSource} from '@angular/material/table';
 import {SelectionModel} from '@angular/cdk/collections';
 import {FormControl} from '@angular/forms';
@@ -32,6 +32,7 @@ import {LibraryService} from '../../../library-management/domain/library.service
   standalone: false,
   selector: 'score-oas-doc-assign-dialog',
   templateUrl: './oas-doc-assign-dialog.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./oas-doc-assign-dialog.component.css']
 })
 export class OasDocAssignDialogComponent implements OnInit {

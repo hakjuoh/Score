@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {Location} from '@angular/common';
 import {SelectionModel} from '@angular/cdk/collections';
 import {FormControl} from '@angular/forms';
@@ -40,6 +40,7 @@ import {LibrarySummary} from '../../../library-management/domain/library';
   standalone: false,
   selector: 'score-bie-package-list',
   templateUrl: './bie-package-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-package-list.component.css']
 })
 export class BiePackageListComponent implements OnInit {

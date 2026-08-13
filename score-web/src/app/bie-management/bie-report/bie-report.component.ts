@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import {faRecycle} from '@fortawesome/free-solid-svg-icons';
 import {AuthService} from '../../authentication/auth.service';
 import {base64Encode} from '../../common/utility';
@@ -15,6 +15,7 @@ import {SettingsPreferencesService} from '../../settings-management/settings-pre
   standalone: false,
   selector: 'score-bie-report',
   templateUrl: './bie-report.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-report.component.css']
 })
 export class BieReportComponent implements OnInit {

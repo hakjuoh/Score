@@ -7,7 +7,7 @@ import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {MaterialModule} from '../../material.module';
 import {AuthService} from '../../authentication/auth.service';
 import {MatInputModule} from '@angular/material/input';
-import {TranslateModule} from '@ngx-translate/core';
+import {TranslatePipe} from '@ngx-translate/core';
 import {AppendAssociationDialogComponent} from './append-association-dialog/append-association-dialog.component';
 import {BasedAccDialogComponent} from './based-acc-dialog/based-acc-dialog.component';
 import {ScoreCommonModule} from '../../common/score-common.module';
@@ -42,7 +42,7 @@ const routes: Routes = [
         MaterialModule,
         MatInputModule,
         CommonModule,
-        TranslateModule,
+        TranslatePipe,
         ScoreCommonModule,
         SearchOptionsDialogModule,
         FindUsagesDialogModule,

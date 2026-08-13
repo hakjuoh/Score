@@ -1,6 +1,6 @@
 import {SelectionModel} from '@angular/cdk/collections';
 import {Location} from '@angular/common';
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {FormControl} from '@angular/forms';
 import {MatDatepicker} from '@angular/material/datepicker';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
@@ -33,6 +33,7 @@ import {LibraryService} from '../../../library-management/domain/library.service
   standalone: false,
   selector: 'score-module-set-release-list',
   templateUrl: './module-set-release-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./module-set-release-list.component.css']
 })
 export class ModuleSetReleaseListComponent implements OnInit {

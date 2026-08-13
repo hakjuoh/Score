@@ -4,7 +4,7 @@ import {RouterModule, Routes} from '@angular/router';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {MaterialModule} from '../../material.module';
 import {AuthService} from '../../authentication/auth.service';
-import {TranslateModule} from '@ngx-translate/core';
+import {TranslatePipe} from '@ngx-translate/core';
 import {CcListComponent} from './cc-list.component';
 import {CcListService} from './domain/cc-list.service';
 import {CcNodeService} from '../domain/core-component-node.service';
@@ -35,7 +35,7 @@ const routes: Routes = [
     ReactiveFormsModule,
     MaterialModule,
     CommonModule,
-    TranslateModule,
+    TranslatePipe,
     ScoreCommonModule,
     SearchBarModule,
     ColumnSelectorModule,

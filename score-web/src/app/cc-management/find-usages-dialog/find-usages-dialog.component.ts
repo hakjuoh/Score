@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, OnInit, ViewChild, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {FindUsagesDialogService} from './domain/find-usages-dialog.service';
 import {AsccpFlatNode, BccpFlatNode, CcFlatNode, CcFlatNodeDatabase, CcFlatNodeDataSource, DtFlatNode} from '../domain/cc-flat-tree';
@@ -92,6 +92,7 @@ export class FindUsagesCcFlatNodeDatabase<T extends CcFlatNode> extends CcFlatNo
   standalone: false,
   selector: 'score-find-usages-dialog',
   templateUrl: './find-usages-dialog.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./find-usages-dialog.component.css']
 })
 export class FindUsagesDialogComponent implements OnInit {

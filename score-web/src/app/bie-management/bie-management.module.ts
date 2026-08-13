@@ -22,7 +22,7 @@ import {BieCopyService} from './bie-copy/domain/bie-copy.service';
 import {OasDocModule} from './openapi-doc/oas-doc.module';
 import {ReleaseService} from '../release-management/domain/release.service';
 
-import {TranslateModule} from '@ngx-translate/core';
+import {TranslatePipe} from '@ngx-translate/core';
 import {ConfirmDialogModule} from '../common/confirm-dialog/confirm-dialog.module';
 import {ScoreCommonModule} from '../common/score-common.module';
 import {BieReportComponent} from './bie-report/bie-report.component';
@@ -155,7 +155,7 @@ const routes: Routes = [
         BiePackageModule,
         OasDocModule,
         TransferOwnershipDialogModule,
-        TranslateModule,
+        TranslatePipe,
         CommonModule,
         ScoreCommonModule,
         MatBadgeModule,

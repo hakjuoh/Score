@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import {SettingsAccountService} from './domain/settings-account.service';
 import {AccountListService} from '../../account-management/domain/account-list.service';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -11,6 +11,7 @@ import {UserToken} from '../../authentication/domain/auth';
   standalone: false,
   selector: 'score-settings-account',
   templateUrl: './settings-account.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./settings-account.component.css']
 })
 export class SettingsAccountComponent implements OnInit {

@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {AuthService} from '../../authentication/auth.service';
 import {ReleaseService} from '../domain/release.service';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
@@ -7,7 +7,7 @@ import {MatSort, SortDirection} from '@angular/material/sort';
 import {MatTableDataSource} from '@angular/material/table';
 import {SelectionModel} from '@angular/cdk/collections';
 import {ActivatedRoute, Router} from '@angular/router';
-import {ReleaseListEntry, ReleaseListRequest, ReleaseSummary, WorkingRelease} from '../domain/release';
+import {ReleaseListEntry, ReleaseListRequest, WorkingRelease} from '../domain/release';
 import {AccountListService} from '../../account-management/domain/account-list.service';
 import {MatDatepicker} from '@angular/material/datepicker';
 import {PageRequest} from '../../basis/basis';
@@ -32,6 +32,7 @@ import {ReleaseDiagramDialogComponent} from '../release-diagram-dialog/release-d
   standalone: false,
   selector: 'score-release-list',
   templateUrl: './release-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./release-list.component.css']
 })
 export class ReleaseListComponent implements OnInit {
@@ -369,11 +370,11 @@ export class ReleaseListComponent implements OnInit {
     this.router.navigateByUrl('/release/create');
   }
 
-  createDraft(release: ReleaseSummary) {
+  createDraft(release: ReleaseListEntry) {
     this.router.navigateByUrl('release/' + release.releaseId + '/assign');
   }
 
-  updateState(release: ReleaseSummary, state: string) {
+  updateState(release: ReleaseListEntry, state: string) {
     const dialogConfig = this.confirmDialogService.newConfig();
     dialogConfig.data.header = 'Update state to \'' + state + '\'?';
     dialogConfig.data.content = ['Are you sure you want to update the state to \'' + state + '\'?'];
@@ -397,7 +398,7 @@ export class ReleaseListComponent implements OnInit {
       });
   }
 
-  discard(release?: ReleaseSummary) {
+  discard(release?: ReleaseListEntry) {
     const dialogConfig = this.confirmDialogService.newConfig();
     dialogConfig.data.header = 'Discard Release?';
     if (release) {

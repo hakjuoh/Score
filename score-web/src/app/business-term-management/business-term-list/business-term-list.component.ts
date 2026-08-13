@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {BusinessTermListEntry, BusinessTermListRequest} from '../domain/business-term';
 import {BusinessTermService} from '../domain/business-term.service';
 import {MatDialog} from '@angular/material/dialog';
@@ -29,6 +29,7 @@ import {BatchImportResult} from '../business-term-import-dialog/business-term-im
   standalone: false,
   selector: 'score-business-term',
   templateUrl: './business-term-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./business-term-list.component.css']
 })
 export class BusinessTermListComponent implements OnInit {

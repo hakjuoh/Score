@@ -1,5 +1,5 @@
 import {SelectionModel} from '@angular/cdk/collections';
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatDialog} from '@angular/material/dialog';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort, SortDirection} from '@angular/material/sort';
@@ -21,6 +21,7 @@ import {AuthService} from '../../authentication/auth.service';
   standalone: false,
   selector: 'score-log-list',
   templateUrl: './log-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./log-list.component.css'],
 })
 export class LogListComponent implements OnInit {

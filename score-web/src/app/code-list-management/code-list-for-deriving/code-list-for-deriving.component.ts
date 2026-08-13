@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort, SortDirection} from '@angular/material/sort';
 import {MatTableDataSource} from '@angular/material/table';
@@ -29,6 +29,7 @@ import {LibraryService} from '../../library-management/domain/library.service';
   standalone: false,
   selector: 'score-code-list-for-deriving',
   templateUrl: './code-list-for-deriving.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./code-list-for-deriving.component.css']
 })
 export class CodeListForDerivingComponent implements OnInit {

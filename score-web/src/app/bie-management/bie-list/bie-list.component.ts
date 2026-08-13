@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {HttpErrorResponse} from '@angular/common/http';
 import {ReleaseSummary} from '../../release-management/domain/release';
 import {ReleaseService} from '../../release-management/domain/release.service';
@@ -46,6 +46,7 @@ import {StateDependencySelection} from '../domain/state-dependency-target';
   standalone: false,
   selector: 'score-bie-list',
   templateUrl: './bie-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-list.component.css']
 })
 export class BieListComponent implements OnInit {

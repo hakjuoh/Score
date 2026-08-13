@@ -108,7 +108,7 @@ export class BusinessContextService implements OnInit {
     return this.http.post('/api/business-contexts/' + businessContext.businessContextId + '/assignments/' + topLevelAsbiepId, {});
   }
 
-  unassign(topLevelAsbiepId: number, businessContext: BusinessContext): Observable<any> {
+  unassign(topLevelAsbiepId: number, businessContext: BusinessContextSummary): Observable<any> {
     return this.http.delete('/api/business-contexts/' + businessContext.businessContextId + '/assignments/' + topLevelAsbiepId, {});
   }
 

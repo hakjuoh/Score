@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import {faRecycle} from '@fortawesome/free-solid-svg-icons';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatTableDataSource} from '@angular/material/table';
@@ -15,6 +15,7 @@ import {forkJoin} from 'rxjs';
   standalone: false,
   selector: 'score-bie-list-dialog',
   templateUrl: './bie-list-dialog.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-list-dialog.component.css']
 })
 export class BieListDialogComponent implements OnInit {

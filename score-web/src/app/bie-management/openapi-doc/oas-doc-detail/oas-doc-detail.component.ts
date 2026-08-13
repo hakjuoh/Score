@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {
   BieForOasDoc,
   BieForOasDocDeleteRequest,
@@ -23,7 +23,7 @@ import {ActivatedRoute, Router} from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {ErrorStateMatcher} from '@angular/material/core';
 import {forkJoin} from 'rxjs';
-import {hashCode, saveAsBlobResponse, saveBranch} from 'src/app/common/utility';
+import {hashCode, saveAsBlobResponse, saveBranch} from '../../../common/utility';
 import {SelectionModel} from '@angular/cdk/collections';
 import {finalize} from 'rxjs/operators';
 import {MatDialog, MatDialogConfig} from '@angular/material/dialog';
@@ -59,6 +59,7 @@ import {ReleaseSummary} from '../../../release-management/domain/release';
   standalone: false,
   selector: 'score-oas-doc-detail',
   templateUrl: './oas-doc-detail.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./oas-doc-detail.component.css']
 })
 export class OasDocDetailComponent implements OnInit {
