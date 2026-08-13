@@ -1,4 +1,4 @@
-import {Component, inject, OnInit, QueryList, ViewChild, ViewChildren} from '@angular/core';
+import {Component, inject, OnInit, QueryList, ViewChild, ViewChildren, ChangeDetectionStrategy} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {SelectionModel} from '@angular/cdk/collections';
@@ -50,6 +50,7 @@ export interface BieBusinessTermAssignDialogData {
   standalone: false,
   selector: 'score-bie-business-term-assign-dialog',
   templateUrl: './bie-business-term-assign-dialog.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-business-term-assign-dialog.component.css']
 })
 export class BieBusinessTermAssignDialogComponent implements OnInit {

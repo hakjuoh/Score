@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatDialog, MatDialogConfig} from '@angular/material/dialog';
 import {MatPaginator} from '@angular/material/paginator';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -31,6 +31,7 @@ import {LibraryService} from '../../library-management/domain/library.service';
   standalone: false,
   selector: 'score-namespace-list',
   templateUrl: './namespace-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./namespace-list.component.css']
 })
 export class NamespaceListComponent implements OnInit {
@@ -378,7 +379,7 @@ export class NamespaceListComponent implements OnInit {
       });
   }
 
-  openTransferDialog(item: NamespaceListEntry) {
+  openTransferDialog(item: NamespaceListEntry, event?: MouseEvent) {
     if (!this.isEditable(item)) {
       return;
     }

@@ -1,5 +1,5 @@
 import {animate, state, style, transition, trigger} from '@angular/animations';
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatDialog, MatDialogConfig} from '@angular/material/dialog';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -38,6 +38,7 @@ import {LibraryService} from '../../library-management/domain/library.service';
   selector: 'score-agency-id-list-list',
   templateUrl: './agency-id-list-list.component.html',
   styleUrls: ['./agency-id-list-list.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
   animations: [
     trigger('detailExpand', [
       state('collapsed', style({height: '0px', minHeight: '0'})),

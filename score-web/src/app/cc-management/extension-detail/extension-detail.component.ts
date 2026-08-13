@@ -1,6 +1,6 @@
 import {CdkDragDrop} from '@angular/cdk/drag-drop';
 import {CdkVirtualScrollViewport} from '@angular/cdk/scrolling';
-import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatSidenav} from '@angular/material/sidenav';
 import {catchError, finalize, switchMap, take} from 'rxjs/operators';
 import {ActivatedRoute, ParamMap, Router} from '@angular/router';
@@ -84,6 +84,7 @@ import {setAppTitleIfPresent} from '../../common/app-title.strategy';
   standalone: false,
   selector: 'score-extension-detail',
   templateUrl: './extension-detail.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./extension-detail.component.css']
 })
 export class ExtensionDetailComponent implements OnInit {

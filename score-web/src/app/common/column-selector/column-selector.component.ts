@@ -1,4 +1,4 @@
-import {Component, EventEmitter, Input, Output, ViewEncapsulation} from '@angular/core';
+import {Component, EventEmitter, Input, Output, ViewEncapsulation, ChangeDetectionStrategy} from '@angular/core';
 import {CdkDragDrop, moveItemInArray} from '@angular/cdk/drag-drop';
 
 @Component({
@@ -6,6 +6,7 @@ import {CdkDragDrop, moveItemInArray} from '@angular/cdk/drag-drop';
   selector: 'score-column-selector',
   templateUrl: './column-selector.component.html',
   styleUrls: ['./column-selector.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
   encapsulation: ViewEncapsulation.None,
 })
 export class ColumnSelectorComponent {

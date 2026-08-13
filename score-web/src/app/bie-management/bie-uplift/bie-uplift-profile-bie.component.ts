@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {MatSort, SortDirection} from '@angular/material/sort';
@@ -31,6 +31,7 @@ import {LibraryService} from '../../library-management/domain/library.service';
   standalone: false,
   selector: 'score-bie-uplift-profile-bie',
   templateUrl: './bie-uplift-profile-bie.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-uplift-profile-bie.component.css']
 })
 export class BieUpliftProfileBieComponent implements OnInit {

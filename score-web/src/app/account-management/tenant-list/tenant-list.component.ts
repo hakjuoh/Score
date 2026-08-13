@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
 import {MatSort, SortDirection} from '@angular/material/sort';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
@@ -19,6 +19,7 @@ import {SearchBarComponent} from '../../common/search-bar/search-bar.component';
   standalone: false,
   selector: 'score-tenant-list',
   templateUrl: './tenant-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./tenant-list.component.css']
 })
 

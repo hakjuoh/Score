@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, OnInit, ViewChild, inject, ChangeDetectionStrategy } from '@angular/core';
 import {Location} from '@angular/common';
 import {ActivatedRoute, Router} from '@angular/router';
 import {CodelistListDialogComponent} from '../codelist-list-dialog/codelist-list-dialog.component';
@@ -31,6 +31,7 @@ import {CodeListService} from '../../../code-list-management/domain/code-list.se
   standalone: false,
   selector: 'score-context-scheme-create',
   templateUrl: './context-scheme-create.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./context-scheme-create.component.css']
 })
 export class ContextSchemeCreateComponent implements OnInit {

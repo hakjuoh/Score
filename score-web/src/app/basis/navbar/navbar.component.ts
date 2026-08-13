@@ -1,5 +1,5 @@
 import {HttpParams} from '@angular/common/http';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import {AuthService} from '../../authentication/auth.service';
 import {LangChangeEvent, TranslateService} from '@ngx-translate/core';
 import {UserToken} from '../../authentication/domain/auth';
@@ -21,6 +21,7 @@ import {LibraryService} from '../../library-management/domain/library.service';
   standalone: false,
   selector: 'score-navbar',
   templateUrl: './navbar.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./navbar.component.css']
 })
 export class NavbarComponent implements OnInit {
@@ -46,7 +47,7 @@ export class NavbarComponent implements OnInit {
     const translate = this.translate;
 
     translate.addLangs(['ccts', 'oagis']);
-    translate.setDefaultLang('ccts');
+    translate.setFallbackLang('ccts');
     const browserLang = translate.getBrowserLang();
     const savedLang = localStorage.getItem('score.lang');
     translate.use((savedLang && savedLang.match(/ccts|oagis/)) ? savedLang
@@ -203,7 +204,7 @@ export class NavbarComponent implements OnInit {
   }
 
   getActiveCcts(translate: TranslateService): boolean {
-    return translate.currentLang === 'ccts';
+    return translate.currentLang() === 'ccts';
   }
 
   q(set: any): string {

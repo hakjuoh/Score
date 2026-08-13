@@ -1,5 +1,5 @@
 import {SelectionModel} from '@angular/cdk/collections';
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {faFlask} from '@fortawesome/free-solid-svg-icons';
 import {forkJoin, of, ReplaySubject} from 'rxjs';
 import {CreateBodDialogComponent} from './create-bod-dialog/create-bod-dialog.component';
@@ -55,6 +55,7 @@ import {LibraryService} from '../../library-management/domain/library.service';
   selector: 'score-cc-list',
   templateUrl: './cc-list.component.html',
   styleUrls: ['./cc-list.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
   animations: [
     trigger('detailExpand', [
       state('collapsed', style({height: '0px', minHeight: '0'})),

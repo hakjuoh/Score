@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {ActivatedRoute, ParamMap, Router} from '@angular/router';
 import {forkJoin, of} from 'rxjs';
 import {AuthService} from '../../authentication/auth.service';
@@ -24,6 +24,7 @@ import {setAppTitleIfPresent} from '../../common/app-title.strategy';
   standalone: false,
   selector: 'score-tenant-user-detail',
   templateUrl: './tenant-user-detail.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./tenant-user-detail.component.css']
 })
 

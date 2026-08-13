@@ -433,7 +433,7 @@
                               <input matInput [(ngModel)]="asAccDetail().release.releaseNum" [disabled]="true">
                             </mat-form-field>
                           </div>
-                          <div class="{{ asAccDetail().lastChanged > 0 ? 'col-1' : 'col-2' }}"
+                          <div class="{{ asAccDetail().lastChanged ? 'col-1' : 'col-2' }}"
                             (click)="openInNewTab('/core_component/acc/' + asAccDetail().since.accManifestId)"
                             style="cursor: pointer;">
                             <mat-form-field>
@@ -537,7 +537,7 @@
                             <div class="checkbox">
                               <mat-checkbox color="primary"
                                 [(ngModel)]="asAccDetail().deprecated"
-                                [disabled]="selectedNode.level !== 0 || !isEditable() || !hasRevision() || this.prevAccDetails.isDeprecated === true">
+                                [disabled]="selectedNode.level !== 0 || !isEditable() || !hasRevision() || this.prevAccDetails.deprecated === true">
                                 <span>Deprecated</span>
                                 @if (asAccDetail().replacement) {
                                   <span>, replaced by </span>
@@ -1191,7 +1191,7 @@
                               <mat-form-field>
                                 <mat-label>Value Constraint</mat-label>
                                 <mat-select [(ngModel)]="asBccpDetail().bcc.fixedOrDefault"
-                                  [disabled]="selectedNode.level !== 1 || !isEditable() || asBccpDetail().bcc.entityType === 1">
+                                  [disabled]="selectedNode.level !== 1 || !isEditable() || asBccpDetail().bcc.entityType === 'Element'">
                                   <mat-option value="none">None</mat-option>
                                   <mat-option value="fixed">Fixed Value</mat-option>
                                   <mat-option value="default">Default Value</mat-option>

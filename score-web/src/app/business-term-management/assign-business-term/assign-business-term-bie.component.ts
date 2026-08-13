@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {animate, state, style, transition, trigger} from '@angular/animations';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort, SortDirection} from '@angular/material/sort';
@@ -33,6 +33,7 @@ import {AsbieBbieListEntry} from '../domain/business-term';
   selector: 'score-bie-create-bie',
   templateUrl: './assign-business-term-bie.component.html',
   styleUrls: ['./assign-business-term-bie.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
   animations: [
     trigger('detailExpand', [
       state('collapsed', style({height: '0px', minHeight: '0'})),

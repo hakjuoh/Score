@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {Location} from '@angular/common';
 import {SelectionModel} from '@angular/cdk/collections';
 import {OasDoc, OasDocListRequest, toMinorOpenApiVersion} from '../domain/openapi-doc';
@@ -30,6 +30,7 @@ import {SearchBarComponent} from '../../../common/search-bar/search-bar.componen
   standalone: false,
   selector: 'score-oas-doc-list',
   templateUrl: './oas-doc-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./oas-doc-list.component.css']
 })
 export class OasDocListComponent implements OnInit {

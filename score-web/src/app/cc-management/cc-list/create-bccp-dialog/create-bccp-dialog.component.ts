@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort} from '@angular/material/sort';
@@ -34,6 +34,7 @@ import {SearchBarComponent} from '../../../common/search-bar/search-bar.componen
   selector: 'score-create-bccp-dialog',
   templateUrl: './create-bccp-dialog.component.html',
   styleUrls: ['./create-bccp-dialog.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
   animations: [
     trigger('detailExpand', [
       state('collapsed', style({height: '0px', minHeight: '0', display: 'none'})),

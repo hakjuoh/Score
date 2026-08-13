@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {ContextCategoryService} from '../domain/context-category.service';
 import {ContextCategoryListEntry, ContextCategoryListRequest} from '../domain/context-category';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
@@ -30,6 +30,7 @@ import {SearchBarComponent} from '../../../common/search-bar/search-bar.componen
   standalone: false,
   selector: 'score-context-category',
   templateUrl: './context-category-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./context-category-list.component.css']
 })
 export class ContextCategoryListComponent implements OnInit {

@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {catchError, switchMap} from 'rxjs/operators';
 import {ActivatedRoute, ParamMap, Router} from '@angular/router';
 import {Location} from '@angular/common';
@@ -47,6 +47,7 @@ import {SetWeightDialogComponent, SetWeightDialogData} from './set-weight-dialog
   standalone: false,
   selector: 'score-model-browser',
   templateUrl: './model-browser.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./model-browser.component.css']
 })
 export class ModelBrowserComponent implements OnInit, ChangeListener<ModelBrowserNode> {

@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {Location} from '@angular/common';
 import {ActivatedRoute, ParamMap, Router} from '@angular/router';
 import {BusinessContextService} from '../domain/business-context.service';
@@ -31,6 +31,7 @@ import {setAppTitleIfPresent} from '../../../common/app-title.strategy';
   standalone: false,
   selector: 'score-business-context-detail',
   templateUrl: './business-context-detail.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./business-context-detail.component.css']
 })
 export class BusinessContextDetailComponent implements OnInit {

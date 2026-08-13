@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {Location} from '@angular/common';
 import {ActivatedRoute, Router} from '@angular/router';
 import {BusinessContextService} from '../domain/business-context.service';
@@ -26,6 +26,7 @@ import {forkJoin} from 'rxjs';
   standalone: false,
   selector: 'score-business-context-create',
   templateUrl: './business-context-create.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./business-context-create.component.css']
 })
 export class BusinessContextCreateComponent implements OnInit {

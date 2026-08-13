@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {animate, state, style, transition, trigger} from '@angular/animations';
 import {BieCreateService} from './domain/bie-create.service';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
@@ -38,6 +38,7 @@ import {LibraryService} from '../../library-management/domain/library.service';
   selector: 'score-bie-create-asccp',
   templateUrl: './bie-create-asccp.component.html',
   styleUrls: ['./bie-create-asccp.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
   animations: [
     trigger('detailExpand', [
       state('collapsed', style({height: '0px', minHeight: '0'})),

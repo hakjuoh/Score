@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {BieCopyService} from './domain/bie-copy.service';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -35,6 +35,7 @@ import {LibraryService} from '../../library-management/domain/library.service';
   standalone: false,
   selector: 'score-bie-create-asccp',
   templateUrl: './bie-copy-profile-bie.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-copy-profile-bie.component.css']
 })
 export class BieCopyProfileBieComponent implements OnInit {

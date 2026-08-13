@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort, SortDirection} from '@angular/material/sort';
@@ -19,6 +19,7 @@ import {SearchBarComponent} from '../../common/search-bar/search-bar.component';
   standalone: false,
   selector: 'score-account-list',
   templateUrl: './account-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./account-list.component.css']
 })
 export class AccountListComponent implements OnInit {

@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, ElementRef, HostListener, OnInit, QueryList, Renderer2, ViewChild, ViewChildren, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, HostListener, OnInit, QueryList, Renderer2, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {HttpErrorResponse} from '@angular/common/http';
 import {faRecycle, faSitemap} from '@fortawesome/free-solid-svg-icons';
 import {BieEditService} from '../bie-edit/domain/bie-edit.service';
@@ -101,6 +101,7 @@ import {
   standalone: false,
   selector: 'score-bie-edit',
   templateUrl: './bie-edit.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-edit.component.css']
 })
 export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
@@ -190,8 +191,8 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
   }
 
   @HostListener('document:click', ['$event.target'])
-  onClickOutside(targetElement: HTMLElement): void {
-    const clickedInside = targetElement.closest('.mat-tree-node');
+  onClickOutside(targetElement: EventTarget | null): void {
+    const clickedInside = targetElement instanceof HTMLElement && targetElement.closest('.mat-tree-node');
     if (!clickedInside || !this.renamingNode) {
       this.stopChangingDisplayName();
     }
@@ -199,7 +200,7 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
 
   // Listen for 'esc' key press within the input
   @HostListener('document:keydown.escape', ['$event'])
-  cancelEditing($event: KeyboardEvent): void {
+  cancelEditing($event: Event): void {
     if (this.renamingNode) {
       this.stopChangingDisplayName(true);
       $event.preventDefault();
@@ -650,6 +651,10 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
   }
 
   copyToDefinition(sourceStr: string, targetObj: object) {
+    // The template call sites keep the Angular 22 $safeNavigationMigration() wrapper on their
+    // `…definition?.content` arguments: v22 made template optional chaining yield `undefined`
+    // instead of `null`, and an `undefined` definition is dropped by JSON.stringify on the
+    // update payload rather than sent as an explicit null. The wrapper preserves `null`.
     // Issue #1312: "Copy to Context Definition" writes the selected node's (change-tracked) Context
     // Definition, so it must respect the same editability gate as that field. Without this a non-owner
     // viewing a WIP BIE read-only could mutate the definition (and enable Update) — see isReadOnlyWipViewer.
@@ -3751,7 +3756,7 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
     return l;
   }
 
-  removeBusinessContext(businessContext: BusinessContext) {
+  removeBusinessContext(businessContext: BusinessContextSummary) {
     // Issue #1312: a non-owner viewing a WIP BIE read-only cannot change its business contexts.
     if (this.isReadOnlyWipViewer || this.businessContextUpdating || this.businessContexts.length <= 1) {
       return;
