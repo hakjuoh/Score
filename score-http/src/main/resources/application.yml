@@ -98,6 +98,7 @@ management:
         enabled: ${OTEL_TRACES_EXPORT_ENABLED:false}
   opentelemetry:
     resource-attributes:
+      service.name: ${OTEL_SERVICE_NAME:score}
       service.namespace: ${OTEL_SERVICE_NAMESPACE:oagi.score}
       deployment.environment.name: ${OTEL_DEPLOYMENT_ENVIRONMENT:unknown}
     tracing:
@@ -135,6 +136,17 @@ springdoc:
     tags-sorter: alpha
 
 score:
+  activity:
+    events:
+      # Best-effort activity collection. Disabled means that no worker or destination I/O is used.
+      enabled: ${SCORE_ACTIVITY_EVENTS_ENABLED:false}
+      sink: ${SCORE_ACTIVITY_EVENTS_SINK:opentelemetry}
+      worker-count: ${SCORE_ACTIVITY_EVENTS_WORKER_COUNT:1}
+      queue-capacity: ${SCORE_ACTIVITY_EVENTS_QUEUE_CAPACITY:1024}
+      # Keep this above the default 10s OTLP export timeout so normal shutdown can drain in flight.
+      shutdown-timeout: ${SCORE_ACTIVITY_EVENTS_SHUTDOWN_TIMEOUT:12s}
+      redis:
+        topic: ${SCORE_ACTIVITY_EVENTS_REDIS_TOPIC:score.activity.events.v1}
   security:
     secret-encryption:
       active-key-id: ${SCORE_APP_SECRET_ACTIVE_KEY_ID:primary}

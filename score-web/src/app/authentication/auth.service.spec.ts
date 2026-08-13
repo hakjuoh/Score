@@ -12,8 +12,36 @@ import {firstValueFrom, throwError} from 'rxjs';
 import {
   AuthService,
   ErrorAlertInterceptor,
-  HANDLE_HTTP_ERROR_LOCALLY
+  HANDLE_HTTP_ERROR_LOCALLY,
+  XhrInterceptor
 } from './auth.service';
+import {of} from 'rxjs';
+import {SCORE_REQUEST_TYPE} from '../common/score-request';
+import {projectVersion} from '../../environments/version';
+
+describe('XhrInterceptor SCORE request correlation', () => {
+  it('adds a unique request identity, timestamp, and semantic request type', async () => {
+    const interceptor = new XhrInterceptor();
+    const request = new HttpRequest('POST', '/api/releases/42/draft', null, {
+      context: new HttpContext().set(SCORE_REQUEST_TYPE, 'RELEASE_DRAFT')
+    });
+    let forwarded: HttpRequest<unknown>;
+    const handler = {
+      handle: (value: HttpRequest<unknown>) => {
+        forwarded = value;
+        return of({} as any);
+      }
+    } as HttpHandler;
+
+    await firstValueFrom(interceptor.intercept(request, handler));
+
+    expect(forwarded.headers.get('X-Score-Request-Type')).toBe('RELEASE_DRAFT');
+    expect(forwarded.headers.get('X-Score-Request-Id')).toMatch(/^[0-9a-f-]{36}$/);
+    expect(Date.parse(forwarded.headers.get('X-Score-Request-Timestamp'))).not.toBeNaN();
+    expect(forwarded.headers.get('X-Score-Web-Version')).toBe(projectVersion);
+    expect(forwarded.withCredentials).toBe(true);
+  });
+});
 
 describe('ErrorAlertInterceptor local error handling', () => {
   let interceptor: ErrorAlertInterceptor;

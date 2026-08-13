@@ -3,6 +3,9 @@ package org.oagi.score.gateway.http.api.release_management.service;
 import org.jooq.DSLContext;
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListManifestId;
 import org.oagi.score.gateway.http.api.agency_id_management.service.AgencyIdListCommandService;
+import org.oagi.score.gateway.http.api.activity_management.annotation.ScoreActivity;
+import org.oagi.score.gateway.http.api.activity_management.model.ScoreActivityException;
+import org.oagi.score.gateway.http.api.activity_management.trace.ScoreTraceContextPropagator;
 import org.oagi.score.gateway.http.api.cc_management.model.CcState;
 import org.oagi.score.gateway.http.api.cc_management.model.acc.AccManifestId;
 import org.oagi.score.gateway.http.api.cc_management.model.asccp.AsccpManifestId;
@@ -18,22 +21,20 @@ import org.oagi.score.gateway.http.api.release_management.model.ReleaseState;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseSummaryRecord;
 import org.oagi.score.gateway.http.api.release_management.model.event.ReleaseCleanupEvent;
 import org.oagi.score.gateway.http.api.release_management.model.event.ReleaseCreateRequestEvent;
+import org.oagi.score.gateway.http.api.release_management.service.activity.ReleaseActivityHandler;
 import org.oagi.score.gateway.http.api.tag_management.model.AccManifestTagSummaryRecord;
 import org.oagi.score.gateway.http.api.tag_management.model.AsccpManifestTagSummaryRecord;
 import org.oagi.score.gateway.http.api.tag_management.model.BccpManifestTagSummaryRecord;
 import org.oagi.score.gateway.http.api.tag_management.model.DtManifestTagSummaryRecord;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
-import org.oagi.score.gateway.http.common.model.event.EventListenerContainer;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
 import org.oagi.score.gateway.http.configuration.security.SessionService;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,7 +55,7 @@ import static org.oagi.score.gateway.http.common.model.ScoreRole.DEVELOPER;
  */
 @Service
 @Transactional
-public class ReleaseCommandService implements InitializingBean {
+public class ReleaseCommandService {
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -77,24 +78,16 @@ public class ReleaseCommandService implements InitializingBean {
     private SessionService sessionService;
 
     @Autowired
-    private RedisTemplate redisTemplate;
-
-    @Autowired
     private RedissonClient redissonClient;
 
     @Autowired
-    private EventListenerContainer eventListenerContainer;
+    private RedisTemplate redisTemplate;
 
-    private final String RELEASE_CREATE_REQUEST_EVENT = "releaseCreateRequestEvent";
-    private final String RELEASE_CLEANUP_EVENT = "releaseCleanupEvent";
+    @Autowired
+    private ScoreTraceContextPropagator traceContextPropagator;
 
-    @Override
-    public void afterPropertiesSet() throws Exception {
-        eventListenerContainer.addMessageListener(this, "onReleaseCreateRequestEventReceived",
-                new ChannelTopic(RELEASE_CREATE_REQUEST_EVENT));
-        eventListenerContainer.addMessageListener(this, "onReleaseCleanupEventReceived",
-                new ChannelTopic(RELEASE_CLEANUP_EVENT));
-    }
+    static final String RELEASE_CREATE_REQUEST_EVENT = "releaseCreateRequestEvent";
+    static final String RELEASE_CLEANUP_EVENT = "releaseCleanupEvent";
 
     /**
      * Creates a new release if the release number is not already in use.
@@ -200,16 +193,32 @@ public class ReleaseCommandService implements InitializingBean {
         }
     }
 
+    @ScoreActivity(category = "release", action = "state-change", handler = ReleaseActivityHandler.class)
     public void transitState(ScoreUser requester,
                              TransitStateRequest request) {
 
+        if (requester == null) {
+            throw ScoreActivityException.validation("'requester' must not be null.");
+        }
+        if (request == null) {
+            throw ScoreActivityException.validation("'request' must not be null.");
+        }
+        if (request.getReleaseId() == null) {
+            throw ScoreActivityException.validation("'releaseId' must not be null.");
+        }
+        if (request.getState() == null) {
+            throw ScoreActivityException.validation("'state' must not be null.");
+        }
         ReleaseState requestState = ReleaseState.valueOf(request.getState());
         if (requestState == Published && !requester.hasRole(ADMINISTRATOR)) {
-            throw new IllegalArgumentException("Only administrators can publish the release.");
+            throw ScoreActivityException.accessDenied("Only administrators can publish the release.");
         }
 
         var query = repositoryFactory.releaseQueryRepository(requester);
         ReleaseSummaryRecord release = query.getReleaseSummary(request.getReleaseId());
+        if (release == null) {
+            throw ScoreActivityException.targetNotFound("The release does not exist.");
+        }
 
         CcState fromCcState = null;
         CcState toCcState = null;
@@ -217,7 +226,8 @@ public class ReleaseCommandService implements InitializingBean {
         switch (release.state()) {
             case Initialized:
                 if (requestState != Draft) {
-                    throw new IllegalArgumentException("The release in '" + release.state() + "' state cannot transit to '" + requestState + "' state.");
+                    throw ScoreActivityException.invalidState("The release in '" + release.state()
+                            + "' state cannot transit to '" + requestState + "' state.");
                 }
 
                 requestState = Processing;
@@ -227,7 +237,8 @@ public class ReleaseCommandService implements InitializingBean {
 
             case Draft:
                 if (requestState != Initialized && requestState != Published) {
-                    throw new IllegalArgumentException("The release in '" + release.state() + "' state cannot transit to '" + requestState + "' state.");
+                    throw ScoreActivityException.invalidState("The release in '" + release.state()
+                            + "' state cannot transit to '" + requestState + "' state.");
                 }
 
                 if (requestState == Initialized) {
@@ -243,11 +254,13 @@ public class ReleaseCommandService implements InitializingBean {
 
             case Processing:
             case Published:
-                throw new IllegalArgumentException("The release in '" + release.state() + "' state cannot be transited.");
+                throw ScoreActivityException.invalidState(
+                        "The release in '" + release.state() + "' state cannot be transited.");
         }
 
         if (!requester.isDeveloper()) {
-            throw new IllegalArgumentException("It only allows to modify the release by the developer.");
+            throw ScoreActivityException.accessDenied(
+                    "It only allows to modify the release by the developer.");
         }
 
         var command = repositoryFactory.releaseCommandRepository(requester);
@@ -335,7 +348,7 @@ public class ReleaseCommandService implements InitializingBean {
 
                 // fire the create release draft event.
                 ReleaseCleanupEvent releaseCleanupEvent = new ReleaseCleanupEvent(
-                        requester.userId(), request.getReleaseId());
+                        requester.userId(), request.getReleaseId(), traceContextPropagator.capture());
 
                 /*
                  * Message Publishing
@@ -406,11 +419,22 @@ public class ReleaseCommandService implements InitializingBean {
     }
 
     @Transactional
+    @ScoreActivity(category = "release", action = "state-change", handler = ReleaseActivityHandler.class)
     public ReleaseValidationResponse createDraft(ScoreUser requester,
                                                  ReleaseValidationRequest request) {
+        if (requester == null) {
+            throw ScoreActivityException.validation("'requester' must not be null.");
+        }
+        if (request == null) {
+            throw ScoreActivityException.validation("'request' must not be null.");
+        }
+        if (request.getReleaseId() == null) {
+            throw ScoreActivityException.validation("'releaseId' must not be null.");
+        }
         ReleaseId releaseId = request.getReleaseId();
         if (isReleaseInAnyOfStates(requester, releaseId, Draft, Processing)) {
-            throw new IllegalArgumentException("It cannot make any release to 'Draft' due to a release restriction.");
+            throw ScoreActivityException.invalidState(
+                    "It cannot make any release to 'Draft' due to a release restriction.");
         }
 
         ReleaseValidationResponse response = this.validate(requester, request);
@@ -432,7 +456,8 @@ public class ReleaseCommandService implements InitializingBean {
                     request.getAssignedBccpComponentManifestIds(),
                     request.getAssignedDtComponentManifestIds(),
                     request.getAssignedCodeListComponentManifestIds(),
-                    request.getAssignedAgencyIdListComponentManifestIds());
+                    request.getAssignedAgencyIdListComponentManifestIds(),
+                    traceContextPropagator.capture());
 
             /*
              * Message Publishing
@@ -452,28 +477,38 @@ public class ReleaseCommandService implements InitializingBean {
      */
     @Transactional
     public void onReleaseCreateRequestEventReceived(ReleaseCreateRequestEvent releaseCreateRequestEvent) {
-        RLock lock = redissonClient.getLock("ReleaseCreateRequestEvent:" + releaseCreateRequestEvent.hashCode());
-        if (!lock.tryLock()) {
-            return;
-        }
-        try {
-            logger.debug("Received ReleaseCreateRequestEvent: " + releaseCreateRequestEvent);
-            ScoreUser requester = sessionService.getScoreUserByUserId(releaseCreateRequestEvent.getUserId());
+        try (var trace = traceContextPropagator.continueConsumer(
+                RELEASE_CREATE_REQUEST_EVENT, releaseCreateRequestEvent.getTraceContext())) {
+            try {
+                RLock lock = redissonClient.getLock(
+                        "ReleaseCreateRequestEvent:" + releaseCreateRequestEvent.getReleaseId());
+                if (!lock.tryLock()) {
+                    return;
+                }
+                try {
+                    logger.debug("Received ReleaseCreateRequestEvent for releaseId={}",
+                            releaseCreateRequestEvent.getReleaseId());
+                    ScoreUser requester = sessionService.getScoreUserByUserId(releaseCreateRequestEvent.getUserId());
 
-            copyWorkingManifests(requester,
-                    releaseCreateRequestEvent.getReleaseId(),
-                    releaseCreateRequestEvent.getAccManifestIds(),
-                    releaseCreateRequestEvent.getAsccpManifestIds(),
-                    releaseCreateRequestEvent.getBccpManifestIds(),
-                    releaseCreateRequestEvent.getDtManifestIds(),
-                    releaseCreateRequestEvent.getCodeListManifestIds(),
-                    releaseCreateRequestEvent.getAgencyIdListManifestIds()
-            );
+                    copyWorkingManifests(requester,
+                            releaseCreateRequestEvent.getReleaseId(),
+                            releaseCreateRequestEvent.getAccManifestIds(),
+                            releaseCreateRequestEvent.getAsccpManifestIds(),
+                            releaseCreateRequestEvent.getBccpManifestIds(),
+                            releaseCreateRequestEvent.getDtManifestIds(),
+                            releaseCreateRequestEvent.getCodeListManifestIds(),
+                            releaseCreateRequestEvent.getAgencyIdListManifestIds()
+                    );
 
-            updateState(sessionService.getScoreUserByUserId(releaseCreateRequestEvent.getUserId()),
-                    releaseCreateRequestEvent.getReleaseId(), Draft);
-        } finally {
-            lock.unlock();
+                    updateState(sessionService.getScoreUserByUserId(releaseCreateRequestEvent.getUserId()),
+                            releaseCreateRequestEvent.getReleaseId(), Draft);
+                } finally {
+                    lock.unlock();
+                }
+            } catch (RuntimeException | Error failure) {
+                trace.failed(failure);
+                throw failure;
+            }
         }
     }
 
@@ -494,35 +529,31 @@ public class ReleaseCommandService implements InitializingBean {
             throw new IllegalStateException("Cannot find 'Working' release");
         }
 
-        try {
-            // copying manifests from 'Working' release
-            ReleaseId workingReleaseId = workingRelease.releaseId();
+        // copying manifests from 'Working' release
+        ReleaseId workingReleaseId = workingRelease.releaseId();
 
-            repositoryFactory.ccCommandRepository(requester)
-                    .copyWorkingManifests(releaseId, workingReleaseId,
-                            accManifestIds,
-                            asccpManifestIds,
-                            bccpManifestIds,
-                            dtManifestIds,
-                            codeListManifestIds,
-                            agencyIdListManifestIds);
+        repositoryFactory.ccCommandRepository(requester)
+                .copyWorkingManifests(releaseId, workingReleaseId,
+                        accManifestIds,
+                        asccpManifestIds,
+                        bccpManifestIds,
+                        dtManifestIds,
+                        codeListManifestIds,
+                        agencyIdListManifestIds);
 
-            repositoryFactory.releaseCommandRepository(requester)
-                    .copyDepsFromWorking(releaseId, workingReleaseId);
+        repositoryFactory.releaseCommandRepository(requester)
+                .copyDepsFromWorking(releaseId, workingReleaseId);
 
-            // Carry GitHub issue links over from the 'Working' release onto the new draft release's
-            // manifests, mirroring how component tags are carried over (issue #1533). The repository
-            // resolves the library's 'Working' release internally from the target release.
-            repositoryFactory.gitHubIssueLinkCommandRepository(requester)
-                    .copyLinksFromWorking(releaseId);
+        // Carry GitHub issue links over from the 'Working' release onto the new draft release's
+        // manifests, mirroring how component tags are carried over (issue #1533). The repository
+        // resolves the library's 'Working' release internally from the target release.
+        repositoryFactory.gitHubIssueLinkCommandRepository(requester)
+                .copyLinksFromWorking(releaseId);
 
-            // Forward the 'Working' release's sibling view-order weights onto the corresponding new-release
-            // manifests, so ordering authored on 'Working' carries into each new release (issue #1638).
-            repositoryFactory.bieViewOrderCommandRepository(requester)
-                    .copyFromWorking(releaseId);
-        } catch (Exception e) {
-            logger.error(e.getMessage(), e);
-        }
+        // Forward the 'Working' release's sibling view-order weights onto the corresponding new-release
+        // manifests, so ordering authored on 'Working' carries into each new release (issue #1638).
+        repositoryFactory.bieViewOrderCommandRepository(requester)
+                .copyFromWorking(releaseId);
     }
 
     /**
@@ -532,27 +563,37 @@ public class ReleaseCommandService implements InitializingBean {
      */
     @Transactional
     public void onReleaseCleanupEventReceived(ReleaseCleanupEvent releaseCleanupEvent) {
-        RLock lock = redissonClient.getLock("ReleaseCleanupEvent:" + releaseCleanupEvent.hashCode());
-        if (!lock.tryLock()) {
-            return;
-        }
-        try {
-            logger.debug("Received ReleaseCleanupEvent: " + releaseCleanupEvent);
-            ScoreUser requester = sessionService.getScoreUserByUserId(releaseCleanupEvent.getUserId());
+        try (var trace = traceContextPropagator.continueConsumer(
+                RELEASE_CLEANUP_EVENT, releaseCleanupEvent.getTraceContext())) {
+            try {
+                RLock lock = redissonClient.getLock(
+                        "ReleaseCleanupEvent:" + releaseCleanupEvent.getReleaseId());
+                if (!lock.tryLock()) {
+                    return;
+                }
+                try {
+                    logger.debug("Received ReleaseCleanupEvent for releaseId={}",
+                            releaseCleanupEvent.getReleaseId());
+                    ScoreUser requester = sessionService.getScoreUserByUserId(releaseCleanupEvent.getUserId());
 
-            var ccCommand = repositoryFactory.ccCommandRepository(requester);
-            ccCommand.cleanUp(releaseCleanupEvent.getReleaseId());
-            updateState(requester, releaseCleanupEvent.getReleaseId(), Published);
+                    var ccCommand = repositoryFactory.ccCommandRepository(requester);
+                    ccCommand.cleanUp(releaseCleanupEvent.getReleaseId());
+                    updateState(requester, releaseCleanupEvent.getReleaseId(), Published);
 
-            // The published release already holds its own copy of the GitHub issue links (carried over
-            // when it was drafted); remove the 'Working' release's links for the components included in
-            // this release so those issues live only in the published release going forward. Links on
-            // Working components not part of this release are kept (issue #1533). The repository resolves
-            // the library's 'Working' release internally from the published release.
-            repositoryFactory.gitHubIssueLinkCommandRepository(requester)
-                    .deleteWorkingLinksIncludedInRelease(releaseCleanupEvent.getReleaseId());
-        } finally {
-            lock.unlock();
+                    // The published release already holds its own copy of the GitHub issue links (carried over
+                    // when it was drafted); remove the 'Working' release's links for the components included in
+                    // this release so those issues live only in the published release going forward. Links on
+                    // Working components not part of this release are kept (issue #1533). The repository resolves
+                    // the library's 'Working' release internally from the published release.
+                    repositoryFactory.gitHubIssueLinkCommandRepository(requester)
+                            .deleteWorkingLinksIncludedInRelease(releaseCleanupEvent.getReleaseId());
+                } finally {
+                    lock.unlock();
+                }
+            } catch (RuntimeException | Error failure) {
+                trace.failed(failure);
+                throw failure;
+            }
         }
     }
 

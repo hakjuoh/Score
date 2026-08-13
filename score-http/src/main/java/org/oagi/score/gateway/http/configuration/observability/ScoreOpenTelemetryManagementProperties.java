@@ -1,4 +1,4 @@
-package org.oagi.score.gateway.http.configuration.ai;
+package org.oagi.score.gateway.http.configuration.observability;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -7,12 +7,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * AI SDK view of Spring Boot's standard {@code management.*} OpenTelemetry settings.
- * Keeping the standard property names lets a future application-wide OTel integration
- * reuse the same endpoints, resource attributes, sampling, and export cadence.
+ * Shared view of Spring Boot's standard {@code management.*} OpenTelemetry settings.
+ * Keeping the standard property names lets isolated telemetry components reuse the applicable
+ * endpoints and resource attributes. Each private SDK still controls its own sampling and export
+ * cadence.
  */
 @ConfigurationProperties("management")
-public class ScoreAiObservabilityManagementProperties {
+public class ScoreOpenTelemetryManagementProperties {
 
     private final Tracing tracing = new Tracing();
     private final OpenTelemetry opentelemetry = new OpenTelemetry();

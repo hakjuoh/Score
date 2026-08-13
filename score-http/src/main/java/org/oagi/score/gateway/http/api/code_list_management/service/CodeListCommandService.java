@@ -1,8 +1,10 @@
 package org.oagi.score.gateway.http.api.code_list_management.service;
 
+import org.oagi.score.gateway.http.api.activity_management.annotation.ScoreActivity;
 import org.oagi.score.gateway.http.api.cc_management.model.CcState;
 import org.oagi.score.gateway.http.api.cc_management.model.CcType;
 import org.oagi.score.gateway.http.api.cc_management.service.ComponentStateChangeEventPublisher;
+import org.oagi.score.gateway.http.api.cc_management.service.activity.CoreComponentActivityHandler;
 import org.oagi.score.gateway.http.api.bie_management.model.CodeListBieReferenceRecord;
 import org.oagi.score.gateway.http.api.bie_management.model.TopLevelAsbiepSummaryRecord;
 import org.oagi.score.gateway.http.api.code_list_management.controller.payload.CodeListUpliftingResponse;
@@ -138,14 +140,17 @@ public class CodeListCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "code-list", action = "state-change", handler = CoreComponentActivityHandler.class)
     public boolean updateState(ScoreUser requester, CodeListManifestId codeListManifestId, CcState nextState) {
         return updateState(requester, codeListManifestId, nextState, null, null);
     }
 
+    @ScoreActivity(category = "code-list", action = "state-change", handler = CoreComponentActivityHandler.class)
     public boolean updateState(ScoreUser requester, CodeListManifestId codeListManifestId, CcState nextState, String comment) {
         return updateState(requester, codeListManifestId, nextState, comment, null);
     }
 
+    @ScoreActivity(category = "code-list", action = "state-change", handler = CoreComponentActivityHandler.class)
     public boolean updateState(ScoreUser requester, CodeListManifestId codeListManifestId, CcState nextState,
                                String comment, String projectFieldOptionOverride) {
 

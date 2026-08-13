@@ -37,6 +37,9 @@ management:
         enabled: ${OTEL_METRICS_EXPORT_ENABLED:true}
 
 score:
+  activity:
+    events:
+      enabled: ${SCORE_ACTIVITY_EVENTS_ENABLED:true}
   ai:
     catalog:
       bootstrap-enabled: ${SCORE_AI_CATALOG_BOOTSTRAP_ENABLED:true}

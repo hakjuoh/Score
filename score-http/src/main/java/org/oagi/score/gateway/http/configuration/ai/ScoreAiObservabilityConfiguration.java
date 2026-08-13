@@ -13,6 +13,7 @@ import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 import io.opentelemetry.sdk.trace.samplers.Sampler;
+import org.oagi.score.gateway.http.configuration.observability.ScoreOpenTelemetryManagementProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.info.BuildProperties;
@@ -25,13 +26,13 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({ScoreAiObservabilityProperties.class,
-        ScoreAiObservabilityManagementProperties.class})
+        ScoreOpenTelemetryManagementProperties.class})
 public class ScoreAiObservabilityConfiguration {
 
     @Bean(destroyMethod = "close")
     ScoreAiObservabilitySdk scoreAiObservabilitySdk(
             ScoreAiObservabilityProperties properties,
-            ScoreAiObservabilityManagementProperties management,
+            ScoreOpenTelemetryManagementProperties management,
             ObjectProvider<BuildProperties> buildProperties) {
         BuildProperties build = buildProperties.getIfAvailable();
         String version = build != null ? build.getVersion() : "development";
@@ -100,7 +101,7 @@ public class ScoreAiObservabilityConfiguration {
         return Math.max(0.0, Math.min(1.0, probability));
     }
 
-    private static Sampler sampler(ScoreAiObservabilityManagementProperties.Sampler sampler,
+    private static Sampler sampler(ScoreOpenTelemetryManagementProperties.Sampler sampler,
                                    double probability) {
         Sampler ratio = Sampler.traceIdRatioBased(boundedProbability(probability));
         return switch (sampler) {
