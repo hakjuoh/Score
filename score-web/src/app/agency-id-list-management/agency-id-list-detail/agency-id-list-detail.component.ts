@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {Location} from '@angular/common';
 import {MatSidenav} from '@angular/material/sidenav';
 import {ActivatedRoute, ParamMap, Router} from '@angular/router';
@@ -46,6 +46,7 @@ import {setAppTitleIfPresent} from '../../common/app-title.strategy';
   standalone: false,
   selector: 'score-agency-id-list-detail',
   templateUrl: './agency-id-list-detail.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./agency-id-list-detail.component.css']
 })
 export class AgencyIdListDetailComponent implements OnInit {

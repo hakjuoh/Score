@@ -1,7 +1,7 @@
 import {NgModule} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {MatCardModule} from '@angular/material/card';
-import {TranslateModule} from '@ngx-translate/core';
+import {TranslatePipe} from '@ngx-translate/core';
 import {DisabledActivate, DisabledComponent} from './disabled/disabled.component';
 
 import {HomepageComponent} from './homepage/homepage.component';
@@ -47,7 +47,7 @@ const routes: Routes = [
         MatCardModule,
         RouterModule,
         MaterialModule,
-        TranslateModule,
+        TranslatePipe,
         StateProgressBarModule,
         NgxMatSelectSearchModule,
         CommonModule,

@@ -3,7 +3,7 @@ import {CommonModule} from '@angular/common';
 import {MatBadgeModule} from '@angular/material/badge';
 import {RouterModule, Routes} from '@angular/router';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {TranslateModule} from '@ngx-translate/core';
+import {TranslatePipe} from '@ngx-translate/core';
 import {MatDialogModule} from '@angular/material/dialog';
 import {NgxMatSelectSearchModule} from 'ngx-mat-select-search';
 import {AngularSplitModule} from 'angular-split';
@@ -45,7 +45,7 @@ const routes: Routes = [
     ReactiveFormsModule,
     MaterialModule,
     ConfirmDialogModule,
-    TranslateModule,
+    TranslatePipe,
     CommonModule,
     ScoreCommonModule,
     MatBadgeModule,

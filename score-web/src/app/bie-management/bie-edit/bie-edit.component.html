@@ -954,7 +954,7 @@
                                 <!-- Issue #1312: the copy target is the read-only Context Definition, so only offer it when that field is editable (never to a non-owner WIP viewer). -->
                                 @if (isEditable(selectedNode)) {
                                   <button mat-icon-button mat-small-icon-button
-                                    (click)="copyToDefinition(asAbieDetail().asccp.definition?.content, asAbieDetail().asbiep)"
+                                    (click)="copyToDefinition($safeNavigationMigration(asAbieDetail().asccp.definition?.content), asAbieDetail().asbiep)"
                                     matTooltip="Copy to Context Definition">
                                     <mat-icon>content_paste</mat-icon>
                                   </button>
@@ -975,7 +975,7 @@
                                 <!-- Issue #1312: the copy target is the read-only Context Definition, so only offer it when that field is editable (never to a non-owner WIP viewer). -->
                                 @if (isEditable(selectedNode)) {
                                   <button mat-icon-button mat-small-icon-button
-                                    (click)="copyToDefinition(asAbieDetail().acc.definition?.content, asAbieDetail().asbiep)"
+                                    (click)="copyToDefinition($safeNavigationMigration(asAbieDetail().acc.definition?.content), asAbieDetail().asbiep)"
                                     matTooltip="Copy to Context Definition">
                                     <mat-icon>content_paste</mat-icon>
                                   </button>
@@ -1339,7 +1339,6 @@
                                 <mat-chip-grid #reusedBusinessContextChipList>
                                   @for (businessContext of reusedBusinessContexts; track businessContext.businessContextId) {
                                     <mat-chip-row
-                                      [selectable]="false"
                                       [removable]="false">
                                       {{ businessContext.name }}
                                     </mat-chip-row>
@@ -1439,7 +1438,7 @@
                                 <!-- Issue #1312: the copy target is the read-only Context Definition, so only offer it when that field is editable (never to a non-owner WIP viewer). -->
                                 @if (isEditable(selectedNode)) {
                                   <button mat-icon-button mat-small-icon-button
-                                    (click)="copyToDefinition(asAsbiepDetail().ascc.definition?.content, asAsbiepDetail().asbie)"
+                                    (click)="copyToDefinition($safeNavigationMigration(asAsbiepDetail().ascc.definition?.content), asAsbiepDetail().asbie)"
                                     matTooltip="Copy to Context Definition">
                                     <mat-icon>content_paste</mat-icon>
                                   </button>
@@ -1460,7 +1459,7 @@
                                 <!-- Issue #1312: the copy target is the read-only Context Definition, so only offer it when that field is editable (never to a non-owner WIP viewer). -->
                                 @if (isEditable(selectedNode)) {
                                   <button mat-icon-button mat-small-icon-button
-                                    (click)="copyToDefinition(asAsbiepDetail().asccp.definition?.content, asAsbiepDetail().asbie)"
+                                    (click)="copyToDefinition($safeNavigationMigration(asAsbiepDetail().asccp.definition?.content), asAsbiepDetail().asbie)"
                                     matTooltip="Copy to Context Definition">
                                     <mat-icon>content_paste</mat-icon>
                                   </button>
@@ -1481,7 +1480,7 @@
                                 <!-- Issue #1312: the copy target is the read-only Context Definition, so only offer it when that field is editable (never to a non-owner WIP viewer). -->
                                 @if (isEditable(selectedNode)) {
                                   <button mat-icon-button mat-small-icon-button
-                                    (click)="copyToDefinition(asAsbiepDetail().acc.definition?.content, asAsbiepDetail().asbie)"
+                                    (click)="copyToDefinition($safeNavigationMigration(asAsbiepDetail().acc.definition?.content), asAsbiepDetail().asbie)"
                                     matTooltip="Copy to Context Definition">
                                     <mat-icon>content_paste</mat-icon>
                                   </button>
@@ -1626,7 +1625,6 @@
                                   <mat-chip-grid #reusedBaseBusinessContextChipList>
                                     @for (businessContext of reusedBaseBusinessContexts; track businessContext.businessContextId) {
                                       <mat-chip-row
-                                        [selectable]="false"
                                         [removable]="false">
                                         {{ businessContext.name }}
                                       </mat-chip-row>
@@ -2180,7 +2178,7 @@
                                 <!-- Issue #1312: the copy target is the read-only Context Definition, so only offer it when that field is editable (never to a non-owner WIP viewer). -->
                                 @if (isEditable(selectedNode)) {
                                   <button mat-icon-button mat-small-icon-button
-                                    (click)="copyToDefinition(asBbiepDetail().bcc.definition?.content, asBbiepDetail().bbie)"
+                                    (click)="copyToDefinition($safeNavigationMigration(asBbiepDetail().bcc.definition?.content), asBbiepDetail().bbie)"
                                     matTooltip="Copy to Context Definition">
                                     <mat-icon>content_paste</mat-icon>
                                   </button>
@@ -2201,7 +2199,7 @@
                                 <!-- Issue #1312: the copy target is the read-only Context Definition, so only offer it when that field is editable (never to a non-owner WIP viewer). -->
                                 @if (isEditable(selectedNode)) {
                                   <button mat-icon-button mat-small-icon-button
-                                    (click)="copyToDefinition(asBbiepDetail().bccp.definition?.content, asBbiepDetail().bbie)"
+                                    (click)="copyToDefinition($safeNavigationMigration(asBbiepDetail().bccp.definition?.content), asBbiepDetail().bbie)"
                                     matTooltip="Copy to Context Definition">
                                     <mat-icon>content_paste</mat-icon>
                                   </button>
@@ -2928,7 +2926,7 @@
                                 <!-- Issue #1312: the copy target is the read-only Context Definition, so only offer it when that field is editable (never to a non-owner WIP viewer). -->
                                 @if (isEditable(selectedNode)) {
                                   <button mat-icon-button mat-small-icon-button
-                                    (click)="copyToDefinition(asBbieScDetail().bdtSc.definition?.content, asBbieScDetail().bbieSc)"
+                                    (click)="copyToDefinition($safeNavigationMigration(asBbieScDetail().bdtSc.definition?.content), asBbieScDetail().bbieSc)"
                                     matTooltip="Copy to Context Definition">
                                     <mat-icon>content_paste</mat-icon>
                                   </button>

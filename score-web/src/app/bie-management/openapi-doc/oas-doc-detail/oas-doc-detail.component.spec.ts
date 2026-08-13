@@ -2,7 +2,7 @@ import {vi} from 'vitest';
 import {of} from 'rxjs';
 import {OasDocDetailComponent} from './oas-doc-detail.component';
 import {OasOperationValidator} from '../domain/oas-operation-validation';
-import {hashCode} from 'src/app/common/utility';
+import {hashCode} from '../../../common/utility';
 
 /**
  * Issue #1610 unit tests for the OpenAPI-document editor.

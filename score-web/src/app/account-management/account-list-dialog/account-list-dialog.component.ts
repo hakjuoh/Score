@@ -1,6 +1,6 @@
 import {SelectionModel} from '@angular/cdk/collections';
 import {Location} from '@angular/common';
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort, SortDirection} from '@angular/material/sort';
@@ -21,6 +21,7 @@ import {ScoreTableColumnResizeDirective} from '../../common/score-table-column-r
   standalone: false,
   selector: 'score-account-list-dialog',
   templateUrl: './account-list-dialog.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./account-list-dialog.component.css']
 })
 export class AccountListDialogComponent implements OnInit {

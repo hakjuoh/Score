@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {animate, state, style, transition, trigger} from '@angular/animations';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
@@ -32,6 +32,7 @@ import {ScoreTableColumnResizeDirective} from '../../../common/score-table-colum
   selector: 'score-based-acc-dialog',
   templateUrl: './based-acc-dialog.component.html',
   styleUrls: ['./based-acc-dialog.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
   animations: [
     trigger('detailExpand', [
       state('collapsed', style({height: '0px', minHeight: '0', display: 'none'})),

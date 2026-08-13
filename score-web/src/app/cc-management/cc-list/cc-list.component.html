@@ -408,13 +408,13 @@
                 score-table-column-resize [defaultWidth]="width('Type')" [resizable]="!isBrowseStandardMode"
               (onResize)="onResizeWidth($event)"> Type</th>
               <td mat-cell *matCellDef="let element">
-                <mat-chip-list>
+                <mat-chip-set>
                   @switch (element.type) {
                     @default {
                       <mat-chip>{{ displayType(element) }}</mat-chip>
                     }
                   }
-                </mat-chip-list>
+                </mat-chip-set>
               </td>
             </ng-container>
 

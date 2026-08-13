@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {Location} from '@angular/common';
 import {HttpErrorResponse} from '@angular/common/http';
 import {MatSidenav} from '@angular/material/sidenav';
@@ -48,6 +48,7 @@ import {setAppTitleIfPresent} from '../../common/app-title.strategy';
   standalone: false,
   selector: 'score-code-list-detail',
   templateUrl: './code-list-detail.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./code-list-detail.component.css']
 })
 export class CodeListDetailComponent implements OnInit {

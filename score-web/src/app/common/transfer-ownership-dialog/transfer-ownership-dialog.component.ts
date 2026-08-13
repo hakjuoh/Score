@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort} from '@angular/material/sort';
@@ -17,6 +17,7 @@ import {ScoreTableColumnResizeDirective} from '../score-table-column-resize/scor
   standalone: false,
   selector: 'score-transfer-ownership-dialog',
   templateUrl: './transfer-ownership-dialog.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./transfer-ownership-dialog.component.css']
 })
 export class TransferOwnershipDialogComponent implements OnInit {

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatTableDataSource} from '@angular/material/table';
 import {finalize} from 'rxjs/operators';
@@ -17,6 +17,7 @@ import {forkJoin} from 'rxjs';
   standalone: false,
   selector: 'score-report-dialog',
   templateUrl: './report-dialog.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./report-dialog.component.css']
 })
 export class ReportDialogComponent implements OnInit {

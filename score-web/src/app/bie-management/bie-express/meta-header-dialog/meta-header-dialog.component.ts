@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort, SortDirection} from '@angular/material/sort';
@@ -27,6 +27,7 @@ import {LibrarySummary} from '../../../library-management/domain/library';
   standalone: false,
   selector: 'score-meta-header-dialog',
   templateUrl: './meta-header-dialog.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./meta-header-dialog.component.css']
 })
 export class MetaHeaderDialogComponent implements OnInit {

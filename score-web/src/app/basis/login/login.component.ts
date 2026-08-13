@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, ChangeDetectionStrategy } from '@angular/core';
 import {HttpClient} from '@angular/common/http';
 import {AuthService} from '../../authentication/auth.service';
 import {ActivatedRoute, Router} from '@angular/router';
@@ -12,6 +12,7 @@ import {WebPageInfoService} from '../basis.service';
   standalone: false,
   selector: 'score-login',
   templateUrl: './login.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./login.component.css']
 })
 export class LoginComponent {

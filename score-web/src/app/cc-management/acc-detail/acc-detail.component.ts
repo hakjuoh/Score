@@ -1,6 +1,6 @@
 import {CdkDragDrop} from '@angular/cdk/drag-drop';
 import {CdkVirtualScrollViewport} from '@angular/cdk/scrolling';
-import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatSidenav} from '@angular/material/sidenav';
 import {faFlask} from '@fortawesome/free-solid-svg-icons';
 import {catchError, finalize, switchMap, take} from 'rxjs/operators';
@@ -89,6 +89,7 @@ import {setAppTitleIfPresent} from '../../common/app-title.strategy';
   standalone: false,
   selector: 'score-acc-detail',
   templateUrl: './acc-detail.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./acc-detail.component.css']
 })
 export class AccDetailComponent implements OnInit {

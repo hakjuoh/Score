@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatTableDataSource} from '@angular/material/table';
 import {AccountListEntry, AccountListRequest} from '../domain/accounts';
 import {MatSort, SortDirection} from '@angular/material/sort';
@@ -22,6 +22,7 @@ import {SearchBarComponent} from '../../common/search-bar/search-bar.component';
   standalone: false,
   selector: 'score-transfer-ownership-list',
   templateUrl: './transfer-ownership-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./transfer-ownership-list.component.css']
 })
 export class TransferOwnershipListComponent implements OnInit {

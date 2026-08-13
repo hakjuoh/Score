@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {BusinessContextListEntry, BusinessContextListRequest} from '../domain/business-context';
 import {BusinessContextService} from '../domain/business-context.service';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
@@ -30,6 +30,7 @@ import {SearchBarComponent} from '../../../common/search-bar/search-bar.componen
   standalone: false,
   selector: 'score-business-context',
   templateUrl: './business-context-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./business-context-list.component.css']
 })
 export class BusinessContextListComponent implements OnInit {

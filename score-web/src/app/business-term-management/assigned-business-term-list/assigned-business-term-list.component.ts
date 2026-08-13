@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {AsbieBbieListEntry, AssignedBtListRequest, AssignedBusinessTermListEntry, BieToAssign} from '../domain/business-term';
 import {BusinessTermService} from '../domain/business-term.service';
 import {MatDialog} from '@angular/material/dialog';
@@ -27,6 +27,7 @@ import {SearchBarComponent} from '../../common/search-bar/search-bar.component';
   standalone: false,
   selector: 'score-assigned-business-term',
   templateUrl: './assigned-business-term-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./assigned-business-term-list.component.css']
 })
 export class AssignedBusinessTermListComponent implements OnInit {

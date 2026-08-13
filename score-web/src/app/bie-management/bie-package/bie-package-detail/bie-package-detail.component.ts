@@ -1,9 +1,9 @@
-import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, HostListener, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {Location} from '@angular/common';
 import {ActivatedRoute, Router} from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import {hashCode, saveAsBlobResponse} from 'src/app/common/utility';
+import {hashCode, saveAsBlobResponse} from '../../../common/utility';
 import {SelectionModel} from '@angular/cdk/collections';
 import {catchError, finalize, map} from 'rxjs/operators';
 import {MatDialog, MatDialogConfig} from '@angular/material/dialog';
@@ -32,6 +32,7 @@ import {setAppTitleIfPresent} from '../../../common/app-title.strategy';
   standalone: false,
   selector: 'score-bie-package-detail',
   templateUrl: './bie-package-detail.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-package-detail.component.css']
 })
 export class BiePackageDetailComponent implements OnInit {

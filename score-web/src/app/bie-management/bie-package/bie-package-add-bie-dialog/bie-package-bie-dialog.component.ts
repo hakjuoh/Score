@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {SelectionModel} from '@angular/cdk/collections';
 import {FormControl} from '@angular/forms';
 import {forkJoin, ReplaySubject} from 'rxjs';
@@ -34,6 +34,7 @@ import {LibraryService} from '../../../library-management/domain/library.service
   standalone: false,
   selector: 'score-bie-package-bie-dialog',
   templateUrl: './bie-package-bie-dialog.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./bie-package-bie-dialog.component.css']
 })
 export class BiePackageBieDialogComponent implements OnInit {

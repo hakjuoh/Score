@@ -1,4 +1,4 @@
-import {Component, OnInit, QueryList, ViewChild, ViewChildren, inject} from '@angular/core';
+import {Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort, SortDirection} from '@angular/material/sort';
@@ -55,6 +55,7 @@ const CONFIRM_MESSAGE_DEN = 'Confirm Message. Confirm Message';
   standalone: false,
   selector: 'score-oas-doc-confirm-message-dialog',
   templateUrl: './oas-doc-confirm-message-dialog.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./oas-doc-confirm-message-dialog.component.css']
 })
 export class OasDocConfirmMessageDialogComponent implements OnInit {

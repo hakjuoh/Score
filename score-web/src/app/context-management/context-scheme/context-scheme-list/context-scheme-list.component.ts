@@ -1,4 +1,4 @@
-import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy } from '@angular/core';
 import {ContextSchemeListEntry, ContextSchemeListRequest} from '../domain/context-scheme';
 import {ContextSchemeService} from '../domain/context-scheme.service';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
@@ -30,6 +30,7 @@ import {SearchBarComponent} from '../../../common/search-bar/search-bar.componen
   standalone: false,
   selector: 'score-context-scheme',
   templateUrl: './context-scheme-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./context-scheme-list.component.css']
 })
 export class ContextSchemeListComponent implements OnInit {
