@@ -26,6 +26,9 @@ import {
 } from './domain/auth';
 import {MultiActionsSnackBarComponent} from '../common/multi-actions-snack-bar/multi-actions-snack-bar.component';
 import {Clipboard} from '@angular/cdk/clipboard';
+import {v4 as uuid} from 'uuid';
+import {SCORE_REQUEST_TYPE} from '../common/score-request';
+import {projectVersion} from '../../environments/version';
 
 @Injectable()
 export class AuthService implements OnInit, CanActivate {
@@ -283,9 +286,15 @@ export class AuthService implements OnInit, CanActivate {
 @Injectable()
 export class XhrInterceptor implements HttpInterceptor {
   intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    const requestType = req.context.get(SCORE_REQUEST_TYPE);
     const xhr = req.clone({
       withCredentials: true,
-      headers: req.headers.set('X-Requested-With', 'XMLHttpRequest')
+      headers: req.headers
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .set('X-Score-Request-Type', requestType)
+        .set('X-Score-Request-Id', uuid())
+        .set('X-Score-Request-Timestamp', new Date().toISOString())
+        .set('X-Score-Web-Version', projectVersion)
     });
     return next.handle(xhr);
   }

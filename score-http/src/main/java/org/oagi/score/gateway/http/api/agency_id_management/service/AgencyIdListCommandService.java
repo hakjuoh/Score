@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.api.agency_id_management.service;
 
+import org.oagi.score.gateway.http.api.activity_management.annotation.ScoreActivity;
 import org.oagi.score.gateway.http.api.agency_id_management.controller.payload.CreateAgencyIdListRequest;
 import org.oagi.score.gateway.http.api.agency_id_management.controller.payload.UpdateAgencyIdListRequest;
 import org.oagi.score.gateway.http.api.agency_id_management.controller.payload.UpdateAgencyIdListValueRequest;
@@ -9,6 +10,7 @@ import org.oagi.score.gateway.http.api.agency_id_management.repository.AgencyIdL
 import org.oagi.score.gateway.http.api.cc_management.model.CcState;
 import org.oagi.score.gateway.http.api.cc_management.model.CcType;
 import org.oagi.score.gateway.http.api.cc_management.service.ComponentStateChangeEventPublisher;
+import org.oagi.score.gateway.http.api.cc_management.service.activity.CoreComponentActivityHandler;
 import org.oagi.score.gateway.http.api.log_management.model.LogAction;
 import org.oagi.score.gateway.http.api.log_management.model.LogId;
 import org.oagi.score.gateway.http.api.log_management.repository.LogCommandRepository;
@@ -148,14 +150,17 @@ public class AgencyIdListCommandService {
         return updated;
     }
 
+    @ScoreActivity(category = "agency-id-list", action = "state-change", handler = CoreComponentActivityHandler.class)
     public boolean updateState(ScoreUser requester, AgencyIdListManifestId agencyIdListManifestId, CcState nextState) {
         return updateState(requester, agencyIdListManifestId, nextState, null, null);
     }
 
+    @ScoreActivity(category = "agency-id-list", action = "state-change", handler = CoreComponentActivityHandler.class)
     public boolean updateState(ScoreUser requester, AgencyIdListManifestId agencyIdListManifestId, CcState nextState, String comment) {
         return updateState(requester, agencyIdListManifestId, nextState, comment, null);
     }
 
+    @ScoreActivity(category = "agency-id-list", action = "state-change", handler = CoreComponentActivityHandler.class)
     public boolean updateState(ScoreUser requester, AgencyIdListManifestId agencyIdListManifestId, CcState nextState,
                                String comment, String projectFieldOptionOverride) {
 
