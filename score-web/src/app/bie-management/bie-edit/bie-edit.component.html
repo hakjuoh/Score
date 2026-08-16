@@ -52,7 +52,6 @@
                          aria-label="Type Code"
                          (ngModelChange)="clearTypeCodeEditError()"
                          (click)="$event.stopPropagation()"
-                         (blur)="cancelTypeCodeEdit()"
                          (keydown)="onTypeCodeEditKeydown($event)"
                          (keydown.enter)="$event.preventDefault(); saveTypeCodeEdit(bt, $event)"
                          (keydown.escape)="$event.preventDefault(); cancelTypeCodeEdit($event)"/>
@@ -64,7 +63,7 @@
                     <mat-icon>check</mat-icon>
                   </button>
                 } @else if (bt.typeCode) {
-                  <span class="bt-chip-type">{{ bt.typeCode }}</span>
+                  <span class="bt-chip-type" (click)="startTypeCodeEdit(bt, editable, $event)">{{ bt.typeCode }}</span>
                 }
                 @if (editable) {
                   <button matChipRemove type="button" matTooltip="Unassign">

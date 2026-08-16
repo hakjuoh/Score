@@ -659,6 +659,10 @@ public class TC_42_4_LoadBusinessTermsFromExternalSource extends BaseTest {
             assertTrue(uploadBusinessTermsPage.isFileTileVisible());
             assertEquals(csvFileForUpload.getName(), uploadBusinessTermsPage.getSelectedFileName());
         } finally {
+            try {
+                uploadBusinessTermsPage.cancelViaCloseButton();
+            } catch (Exception ignore) {
+            }
             csvFileForUpload.delete();
             txtFile.delete();
         }
