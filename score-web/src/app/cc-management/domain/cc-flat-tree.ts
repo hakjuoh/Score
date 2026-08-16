@@ -1373,6 +1373,7 @@ export class CcFlatNodeDataSourceSearcher<T extends CcFlatNode>
           searchResult.push(item);
         }
         if (item.expandable) {
+          this.database.loadChildren(item);
           expandingLimit--;
         }
 

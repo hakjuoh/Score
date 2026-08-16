@@ -542,7 +542,7 @@ public class ACCExtensionViewEditPageImpl extends BasePageImpl implements ACCExt
 
         private WebElement getCheckboxByName(String baseXPath, String name) {
             return visibilityOfElementLocated(getDriver(), By.xpath(
-                    baseXPath + "//*[contains(text(), \"" + name + "\")]//ancestor::mat-checkbox[1]"));
+                    baseXPath + "//*[contains(., \"" + name + "\")]//ancestor::mat-checkbox[1]"));
         }
 
         @Override
