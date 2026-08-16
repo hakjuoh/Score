@@ -276,7 +276,8 @@ public abstract class PageHelper {
      * @return the UI element of the snackbar
      */
     public static WebElement getSnackBar(WebDriver driver, String message) {
-        String xpathExpr = "//simple-snack-bar//div[contains(text(), \"" + message + "\")]";
+        String xpathExpr = "//mat-snack-bar-container//*[contains(text(), \"" + message + "\") or contains(., \"" + message + "\")] | " +
+                "//simple-snack-bar//*[contains(text(), \"" + message + "\") or contains(., \"" + message + "\")]";
         return visibilityOfElementLocated(driver, By.xpath(xpathExpr));
     }
 
@@ -298,7 +299,7 @@ public abstract class PageHelper {
     }
 
     public static WebElement getDialogButtonByName(WebDriver driver, String buttonName) {
-        String xpathExpr = "//score-confirm-dialog//span[contains(text(), \"" + buttonName + "\")]//ancestor::button[1]";
+        String xpathExpr = "//score-confirm-dialog//button[contains(., \"" + buttonName + "\")]";
         return retry(() -> elementToBeClickable(driver, By.xpath(xpathExpr)));
     }
 

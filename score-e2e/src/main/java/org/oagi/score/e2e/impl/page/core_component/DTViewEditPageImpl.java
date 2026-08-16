@@ -304,11 +304,11 @@ public class DTViewEditPageImpl extends BasePageImpl implements DTViewEditPage {
         WebElement tdDomainType = getColumnByName(tr, "type");
         click(getDriver(), tdDomainType);
         click(getDriver(), elementToBeClickable(PageHelper.longWait(getDriver()), By.xpath(
-                "//div[contains(@class, \"cdk-overlay-container\")]//span[contains(text(), \"Code List\")]//ancestor::mat-option[1]")));
+                "//div[contains(@class, \"cdk-overlay-pane\")]//span[contains(text(), \"Code List\")]//ancestor::mat-option[1]")));
         WebElement tdDomainName = getColumnByName(tr, "name");
         click(getDriver(), tdDomainName);
         click(getDriver(), elementToBeClickable(PageHelper.longWait(getDriver()), By.xpath(
-                "//div[contains(@class, \"cdk-overlay-container\")]//span[contains(text(), \"" + valueDomainName + "\")]//ancestor::mat-option[1]")));
+                "//div[contains(@class, \"cdk-overlay-pane\")]//span[contains(text(), \"" + valueDomainName + "\")]//ancestor::mat-option[1]")));
     }
 
     @Override
@@ -395,7 +395,7 @@ public class DTViewEditPageImpl extends BasePageImpl implements DTViewEditPage {
     public void setDefaultValueDomain(String name) {
         click(getDriver(), getDefaultValueDomainField());
         click(getDriver(), elementToBeClickable(PageHelper.longWait(getDriver()), By.xpath(
-                "//div[contains(@class, \"cdk-overlay-container\")]//span[contains(text(), \"" + name + "\")]//ancestor::mat-option[1]")));
+                "//div[contains(@class, \"cdk-overlay-pane\")]//span[contains(text(), \"" + name + "\")]//ancestor::mat-option[1]")));
     }
 
     @Override
@@ -810,7 +810,7 @@ public class DTViewEditPageImpl extends BasePageImpl implements DTViewEditPage {
             click(getDriver(), getCardinalityField());
             waitFor(ofMillis(1000L));
             WebElement option = elementToBeClickable(PageHelper.longWait(getDriver()), By.xpath(
-                    "//div[contains(@class, \"cdk-overlay-container\")]//span[contains(text(), \"" + cardinality + "\")]//ancestor::mat-option"));
+                    "//div[contains(@class, \"cdk-overlay-pane\")]//span[contains(text(), \"" + cardinality + "\")]//ancestor::mat-option"));
             click(getDriver(), option);
         }
 
@@ -824,7 +824,7 @@ public class DTViewEditPageImpl extends BasePageImpl implements DTViewEditPage {
             click(getDriver(), getValueConstraintTypeField());
             waitFor(ofMillis(1000L));
             WebElement option = elementToBeClickable(PageHelper.longWait(getDriver()), By.xpath(
-                    "//div[contains(@class, \"cdk-overlay-container\")]//span[contains(text(), \"" + valueConstraintType + "\")]//ancestor::mat-option"));
+                    "//div[contains(@class, \"cdk-overlay-pane\")]//span[contains(text(), \"" + valueConstraintType + "\")]//ancestor::mat-option"));
             click(getDriver(), option);
         }
 
@@ -918,7 +918,7 @@ public class DTViewEditPageImpl extends BasePageImpl implements DTViewEditPage {
         public void selectRepresentationTerm(String representationTerm) {
             click(getDriver(), getRepresentationSelectField());
             click(getDriver(), elementToBeClickable(PageHelper.longWait(getDriver()), By.xpath(
-                    "//div[contains(@class, \"cdk-overlay-container\")]//span[text() = \"" + representationTerm + "\"]//ancestor::mat-option[1]")));
+                    "//div[contains(@class, \"cdk-overlay-pane\")]//span[text() = \"" + representationTerm + "\"]//ancestor::mat-option[1]")));
         }
 
         @Override
@@ -946,7 +946,7 @@ public class DTViewEditPageImpl extends BasePageImpl implements DTViewEditPage {
         public void setDefaultValueDomain(String valueDomain) {
             click(getDriver(), getDefaultValueDomainField());
             click(getDriver(), elementToBeClickable(PageHelper.longWait(getDriver()), By.xpath(
-                    "//div[contains(@class, \"cdk-overlay-container\")]//span[contains(text(), \"" + valueDomain + "\")]//ancestor::mat-option[1]")));
+                    "//div[contains(@class, \"cdk-overlay-pane\")]//span[contains(text(), \"" + valueDomain + "\")]//ancestor::mat-option[1]")));
         }
 
         @Override

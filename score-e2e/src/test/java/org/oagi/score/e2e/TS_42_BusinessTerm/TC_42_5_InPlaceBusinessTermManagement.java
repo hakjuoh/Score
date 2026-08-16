@@ -12,6 +12,7 @@ import org.oagi.score.e2e.obj.*;
 import org.oagi.score.e2e.page.HomePage;
 import org.oagi.score.e2e.page.bie.BieBusinessTermAssignDialog;
 import org.oagi.score.e2e.page.bie.EditBIEPage;
+import org.oagi.score.e2e.page.bie.ViewEditBIEPage;
 import org.oagi.score.e2e.page.business_term.ViewEditBusinessTermPage;
 import org.openqa.selenium.By;
 import org.openqa.selenium.NoSuchElementException;
@@ -439,7 +440,24 @@ public class TC_42_5_InPlaceBusinessTermManagement extends BaseTest {
         bbiePanel.toggleUsed();
         editBIEPage.hitUpdateButton();
 
-        // Switch to the base (inherited) tab; its chip field is read-only.
+        // Switch to the base (inherited) tab on an inherited BIE; its chip field is read-only.
+        ViewEditBIEPage viewEditBIEPage = homePage.getBIEMenu().openViewEditBIESubMenu();
+        WebElement tr = viewEditBIEPage.getTableRecordByValue(topLevelASBIEP.getPropertyTerm());
+        viewEditBIEPage.hitCreateInheritedBIE(tr);
+        viewEditBIEPage.hitSearchButton();
+
+        WebElement inheritedBieTr = null;
+        for (int i = 1; i <= 2; i++) {
+            WebElement tableRecord = viewEditBIEPage.getTableRecordAtIndex(i);
+            WebElement denCol = viewEditBIEPage.getColumnByName(tableRecord, "den");
+            if (getText(denCol).contains("Based on:")) {
+                inheritedBieTr = tableRecord;
+                break;
+            }
+        }
+        assertNotNull(inheritedBieTr);
+        editBIEPage = viewEditBIEPage.openEditBIEPage(inheritedBieTr);
+
         editBIEPage.getBBIEPanel(editBIEPage.getNodeByPath(path)).getBaseBBIEPanel();
 
         // The read-only base chip field is present, but the interactive '+' add button is not rendered

@@ -96,7 +96,7 @@ public class ViewEditBIEPageImpl extends BaseSearchBarPageImpl implements ViewEd
         click(getDriver(), getBranchSelectField());
         sendKeys(visibilityOfElementLocated(getDriver(), DROPDOWN_SEARCH_FIELD_LOCATOR), branch);
         WebElement searchedSelectField = visibilityOfElementLocated(getDriver(),
-                By.xpath("//div[@class = \"cdk-overlay-container\"]//mat-option//span[text() = \"" + branch + "\"]"));
+                By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//mat-option//span[text() = \"" + branch + "\"]"));
         click(searchedSelectField);
         escape(getDriver());
     }
@@ -260,7 +260,7 @@ public class ViewEditBIEPageImpl extends BaseSearchBarPageImpl implements ViewEd
         click(td.findElement(By.tagName("button")));
 
         WebElement createInheritedBIEButton = elementToBeClickable(getDriver(), By.xpath(
-                "//div[@class=\"cdk-overlay-container\"]" +
+                "//div[contains(@class, \"cdk-overlay-pane\")]" +
                         "//span[text() = \"Create Inherited BIE\"]//ancestor::button[1]"));
         click(createInheritedBIEButton);
 

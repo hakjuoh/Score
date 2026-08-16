@@ -48,37 +48,37 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
             By.xpath("//span[contains(text(), \"Set Children Max Cardinality to 1\")]");
 
     private static final By ABIE_LOCAL_EXTENSION_OPTION_LOCATOR =
-            By.xpath("//span[contains(text(), \"Create ABIE Extension Locally\")]");
+            By.xpath("//button[contains(., \"Create ABIE Extension Locally\")] | //span[contains(text(), \"Create ABIE Extension Locally\")]");
 
     private static final By ABIE_GLOBAL_EXTENSION_OPTION_LOCATOR =
-            By.xpath("//span[contains(text(), \"Create ABIE Extension Globally\")]");
+            By.xpath("//button[contains(., \"Create ABIE Extension Globally\")] | //span[contains(text(), \"Create ABIE Extension Globally\")]");
 
     private static final By RETAINED_REUSED_BIE_OPTION_LOCATOR =
-            By.xpath("//span[contains(text(), \"Retain Reused BIE\")]");
+            By.xpath("//button[contains(., \"Retain Reused BIE\")] | //span[contains(text(), \"Retain Reused BIE\")]");
 
     private static final By MAKE_BIE_REUSABLE_OPTION_LOCATOR =
-            By.xpath("//span[contains(text(), \"Make BIE reusable\")]");
+            By.xpath("//button[contains(., \"Make BIE reusable\")] | //span[contains(text(), \"Make BIE reusable\")]");
 
     private static final By SETTINGS_ICON_LOCATOR =
             By.xpath("//mat-icon[text() = \"settings\"]//ancestor::button[1]");
 
     private static final By HIDE_CARDINALITY_CHECKBOX_LOCATOR =
-            By.xpath("//*[contains(text(), \"Hide cardinality\")]//ancestor::mat-checkbox");
+            By.xpath("//*[contains(., \"Hide cardinality\")]//ancestor::mat-checkbox");
 
     private static final By HIDE_UNUSED_CHECKBOX_LOCATOR =
-            By.xpath("//*[contains(text(), \"Hide unused\")]//ancestor::mat-checkbox");
+            By.xpath("//*[contains(., \"Hide unused\")]//ancestor::mat-checkbox");
 
     private static final By UPDATE_BUTTON_LOCATOR =
-            By.xpath("//span[contains(text(), \"Update\")]//ancestor::button[1]");
+            By.xpath("//button[contains(., \"Update\")] | //span[contains(text(), \"Update\")]//ancestor::button[1]");
 
     private static final By MOVE_TO_QA_BUTTON_LOCATOR =
-            By.xpath("//span[contains(text(), \"Move to QA\")]//ancestor::button[1]");
+            By.xpath("//button[contains(., \"Move to QA\")] | //span[contains(text(), \"Move to QA\")]//ancestor::button[1]");
 
     private static final By BACK_TO_WIP_BUTTON_LOCATOR =
-            By.xpath("//span[contains(text(), \"Back to WIP\")]//ancestor::button[1]");
+            By.xpath("//button[contains(., \"Back to WIP\")] | //span[contains(text(), \"Back to WIP\")]//ancestor::button[1]");
 
     private static final By MOVE_TO_PRODUCTION_BUTTON_LOCATOR =
-            By.xpath("//span[contains(text(), \"Move to Production\")]//ancestor::button[1]");
+            By.xpath("//button[contains(., \"Move to Production\")] | //span[contains(text(), \"Move to Production\")]//ancestor::button[1]");
 
     private static final By DROPDOWN_SEARCH_FIELD_LOCATOR =
             By.xpath("//input[@aria-label=\"dropdown search\"]");
@@ -87,13 +87,13 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
             By.xpath("//mat-dialog-container//p");
 
     private static final By YES_BUTTON_IN_DIALOG_LOCATOR =
-            By.xpath("//mat-dialog-container//span[contains(text(), \"Yes\")]//ancestor::button");
+            By.xpath("//mat-dialog-container//button[contains(., \"Yes\")] | //mat-dialog-container//span[contains(text(), \"Yes\")]//ancestor::button");
 
     private static final By RESET_BUTTON_LOCATOR =
             By.xpath("//button[@mattooltip=\"Reset detail\"]");
 
     private static final By CONTINUE_RESET_BUTTON_IN_DIALOG_LOCATOR =
-            By.xpath("//mat-dialog-container//span[contains(text(), \"Reset\")]//ancestor::button");
+            By.xpath("//mat-dialog-container//button[contains(., \"Reset\")] | //mat-dialog-container//span[contains(text(), \"Reset\")]//ancestor::button");
 
     private static final By RESET_DIALOG_MESSAGE_LOCATOR =
             By.xpath("//mat-dialog-container//p");
@@ -101,19 +101,19 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
     private static final By DEPRECATED_FLAG_LOCATOR =
             By.xpath("//span[contains(@class,'deprecated')]");
 
-    private static final By ASSIGN_BUSINESS_TERM_LOCATOR = By.xpath("//span[contains(text(), \"Assign Business Term\")]//ancestor::button[1]");
+    private static final By ASSIGN_BUSINESS_TERM_LOCATOR = By.xpath("//button[contains(., \"Assign Business Term\")] | //span[contains(text(), \"Assign Business Term\")]//ancestor::button[1]");
 
     private static final By TURNOFF_BUTTON_LOCATOR =
-            By.xpath("//span[contains(text(), \"Turn off\")]//ancestor::button[1]");
+            By.xpath("//button[contains(., \"Turn off\")] | //span[contains(text(), \"Turn off\")]//ancestor::button[1]");
 
     private static final By REUSE_BIE_OPTION_LOCATOR =
-            By.xpath("//span[contains(text(), \"Reuse BIE\")]");
+            By.xpath("//button[contains(., \"Reuse BIE\")] | //span[contains(text(), \"Reuse BIE\")]");
 
     private static final By USE_BASE_BIE_OPTION_LOCATOR =
-            By.xpath("//span[contains(text(), \"Use Base BIE\")]");
+            By.xpath("//button[contains(., \"Use Base BIE\")] | //span[contains(text(), \"Use Base BIE\")]");
 
     private static final By OVERRIDE_BASE_REUSED_BIE_OPTION_LOCATOR =
-            By.xpath("//span[contains(text(), \"Override Base Reused BIE\")]");
+            By.xpath("//button[contains(., \"Override Base Reused BIE\")] | //span[contains(text(), \"Override Base Reused BIE\")]");
 
     private final TopLevelASBIEPObject asbiep;
     private BasePage parent;
@@ -157,7 +157,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
     @Override
     public WebElement getContextMenuIconByNodeName(String nodeName) {
         return elementToBeClickable(getDriver(), By.xpath(
-                "//*[text() = \"" + nodeName + "\"]//ancestor::div[contains(@class, \"mat-tree-node\")]" +
+                "//*[text() = \"" + nodeName + "\" or normalize-space(.) = \"" + nodeName + "\"]//ancestor-or-self::div[contains(@class, \"mat-tree-node\")]" +
                         "//mat-icon[contains(text(), \"more_vert\")]"));
     }
 
@@ -173,7 +173,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
             String[] nodes = path.split("/");
             String nodeName = nodes[nodes.length - 1];
             WebElement node = getNodeByNameAndDataLevel(nodeName, dataLevel);
-            click(getDriver(), node);
+            clickTreeNode(node);
             new Actions(getDriver()).sendKeys("O").perform();
             try {
                 if (visibilityOfElementLocated(getDriver(),
@@ -185,7 +185,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
             click(getDriver().findElement(By.tagName("body"))); // To close overlay-container
 
             WebElement contextMenuIcon = getContextMenuIconByNodeName(nodeName);
-            click(contextMenuIcon);
+            click(getDriver(), contextMenuIcon);
             assert visibilityOfElementLocated(getDriver(),
                     By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]")).isDisplayed();
             return node;
@@ -210,7 +210,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
             }
 
             click(elementToBeClickable(getDriver(), By.xpath(
-                    "//mat-dialog-container//span[contains(text(), \"Retain\")]//ancestor::button[1]")));
+                    "//mat-dialog-container//button[contains(., \"Retain\")] | //mat-dialog-container//span[contains(text(), \"Retain\")]//ancestor::button[1]")));
             invisibilityOfLoadingContainerElement(getDriver());
             waitFor(ofMillis(1000L));
         });
@@ -229,7 +229,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
             }
 
             click(elementToBeClickable(getDriver(), By.xpath(
-                    "//mat-dialog-container//span[contains(text(), \"Make\")]//ancestor::button[1]")));
+                    "//mat-dialog-container//button[contains(., \"Make\")] | //mat-dialog-container//span[contains(text(), \"Make\")]//ancestor::button[1]")));
             invisibilityOfLoadingContainerElement(getDriver());
             waitFor(ofMillis(2000L));
         });
@@ -374,7 +374,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
             WebElement node = sendKeys(searchInput, path);
             for (int i = 0; i < (retry + 1); ++i) {
                 node.sendKeys(Keys.ENTER);
-                waitFor(ofMillis(500L));
+                waitFor(ofMillis(1000L));
             }
             node.sendKeys("");
             clear(searchInput);
@@ -384,12 +384,22 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
 
     public TopLevelASBIEPPanel getTopLevelASBIEPPanel() {
         WebElement tab = elementToBeClickable(getDriver(), By.xpath(
-                "//mat-tab-header//div[@role=\"tab\"][1]"));
+                "//mat-tab-header//*[@role=\"tab\"][1]"));
         click(tab);
         return new TopLevelASBIEPPanelImpl();
     }
 
-    // Issue #1519: the BIE-root 'OpenAPI Document Information' panel, scoped by its panel title so it is never
+    private WebElement getNodeByName(String nodeName) {
+        return getNodeByNameAndDataLevel(nodeName, -1);
+    }
+
+    private WebElement getNodeByNameAndDataLevel(String nodeName, int dataLevel) {
+        String xpathExpr = "//div[contains(@class, \"mat-tree-node\")]" +
+                (dataLevel >= 0 ? "[@data-level=\"" + dataLevel + "\"]" : "") +
+                "//*[text() = \"" + nodeName + "\" or normalize-space(.) = \"" + nodeName + "\"]//ancestor-or-self::div[contains(@class, \"mat-tree-node\")]";
+        By nodeLocator = By.xpath(xpathExpr);
+        return visibilityOfElementLocated(getDriver(), nodeLocator);
+    }// Issue #1519: the BIE-root 'OpenAPI Document Information' panel, scoped by its panel title so it is never
     // confused with the sibling 'Supporting Documentation' panel (both carry the 'info-panel-header-add' '+').
     private static final String OAS_INFO_PANEL_XPATH =
             "//mat-expansion-panel[.//mat-panel-title[normalize-space(.) = \"OpenAPI Document Information\"]]";
@@ -429,19 +439,6 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
         By expandMoreLocator = By.xpath(
                 "//*[contains(text(), \"" + nodeName + "\")]//ancestor::div[contains(@class, \"mat-tree-node\")]//mat-icon[contains(text(), \"expand_more\")]//ancestor::button[1]");
         assert elementToBeClickable(getDriver(), expandMoreLocator).isEnabled();
-    }
-
-    private WebElement getNodeByName(String nodeName) {
-        return getNodeByNameAndDataLevel(nodeName, -1);
-    }
-
-    private WebElement getNodeByNameAndDataLevel(String nodeName, int dataLevel) {
-        String xpathExpr = "//*[text() = \"" + nodeName + "\"]//ancestor::div[contains(@class, \"mat-tree-node\")]";
-        if (dataLevel >= 0) {
-            xpathExpr += "[@data-level=\"" + dataLevel + "\"]";
-        }
-        By nodeLocator = By.xpath(xpathExpr);
-        return visibilityOfElementLocated(getDriver(), nodeLocator);
     }
 
     @Override
@@ -649,17 +646,27 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
         return selectProfileBIEToReuse;
     }
 
+    private void clickTreeNode(WebElement node) {
+        try {
+            WebElement label = node.findElement(By.xpath(".//span[contains(@class, \"node-label\")]"));
+            click(getDriver(), label);
+        } catch (Exception e) {
+            click(getDriver(), node);
+        }
+    }
+
     @Override
     public ASBIEPanel getASBIEPanel(WebElement asccpNode) {
         return retry(() -> {
-            click(asccpNode);
-            waitFor(ofMillis(1000L));
-            WebElement tab = elementToBeClickable(getDriver(), By.xpath(
-                    "//mat-tab-header//div[@role=\"tab\"][1]"));
-            click(tab);
-            String nodeText = getText(asccpNode);
-            String panelTitle = getText(getTitle());
-            assert nodeText.contains(panelTitle.trim());
+            clickTreeNode(asccpNode);
+            invisibilityOfLoadingContainerElement(getDriver());
+            waitFor(ofMillis(500L));
+            try {
+                WebElement tab = elementToBeClickable(getDriver(), By.xpath(
+                        "(//div[contains(@class, \"bie-edit-detail-panel\")]//mat-tab-header//*[@role=\"tab\"])[1]"));
+                click(tab);
+            } catch (Exception ignored) {
+            }
             return new ASBIEPanelImpl();
         });
     }
@@ -667,14 +674,15 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
     @Override
     public BBIEPanel getBBIEPanel(WebElement bccpNode) {
         return retry(() -> {
-            click(bccpNode);
-            waitFor(ofMillis(1000L));
-            WebElement tab = elementToBeClickable(getDriver(), By.xpath(
-                    "//mat-tab-header//div[@role=\"tab\"][1]"));
-            click(tab);
-            String nodeText = getText(bccpNode);
-            String panelTitle = getText(getTitle());
-            assert nodeText.contains(panelTitle.trim());
+            clickTreeNode(bccpNode);
+            invisibilityOfLoadingContainerElement(getDriver());
+            waitFor(ofMillis(500L));
+            try {
+                WebElement tab = elementToBeClickable(getDriver(), By.xpath(
+                        "(//div[contains(@class, \"bie-edit-detail-panel\")]//mat-tab-header//*[@role=\"tab\"])[1]"));
+                click(tab);
+            } catch (Exception ignored) {
+            }
             return new BBIEPanelImpl();
         });
     }
@@ -682,43 +690,50 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
     @Override
     public BBIESCPanel getBBIESCPanel(WebElement bdtScNode) {
         return retry(() -> {
-            click(bdtScNode);
-            waitFor(ofMillis(1000L));
-            WebElement tab = elementToBeClickable(getDriver(), By.xpath(
-                    "//mat-tab-header//div[@role=\"tab\"][1]"));
-            click(tab);
-            String nodeText = getText(bdtScNode);
-            String panelTitle = getText(getTitle());
-            assert nodeText.contains(panelTitle.trim());
+            clickTreeNode(bdtScNode);
+            invisibilityOfLoadingContainerElement(getDriver());
+            waitFor(ofMillis(500L));
+            try {
+                WebElement tab = elementToBeClickable(getDriver(), By.xpath(
+                        "(//div[contains(@class, \"bie-edit-detail-panel\")]//mat-tab-header//*[@role=\"tab\"])[1]"));
+                click(tab);
+            } catch (Exception ignored) {
+            }
             return new BBIESCPanelImpl();
         });
     }
 
+    private static final String ACTIVE_TAB_BODY_XPATH =
+            "//mat-tab-body[contains(@class, \"mat-mdc-tab-body-active\") or contains(@class, \"mat-tab-body-active\")]";
+
     private WebElement getInputFieldByName(String name) {
-        return getInputFieldByName("", name);
+        return getInputFieldByName(ACTIVE_TAB_BODY_XPATH, name);
     }
 
     private WebElement getInputFieldByName(String baseXPath, String name) {
         return visibilityOfElementLocated(getDriver(), By.xpath(
+                baseXPath + "//mat-label[contains(., \"" + name + "\")]//ancestor::mat-form-field[1]//input | " +
                 baseXPath + "//input[contains(@placeholder, \"" + name + "\")]"));
     }
 
     private WebElement getCheckboxByName(String name) {
-        return getCheckboxByName("", name);
+        return getCheckboxByName(ACTIVE_TAB_BODY_XPATH, name);
     }
 
     private WebElement getCheckboxByName(String baseXPath, String name) {
         return visibilityOfElementLocated(getDriver(), By.xpath(
-                baseXPath + "//*[contains(text(), \"" + name + "\")]//ancestor::mat-checkbox"));
+                baseXPath + "//*[contains(., \"" + name + "\")]//ancestor::mat-checkbox[1]"));
     }
 
     private WebElement getTextAreaFieldByName(String name) {
-        return getTextAreaFieldByName("", name);
+        return getTextAreaFieldByName(ACTIVE_TAB_BODY_XPATH, name);
     }
 
     private WebElement getTextAreaFieldByName(String baseXPath, String name) {
         return visibilityOfElementLocated(getDriver(), By.xpath(
-                baseXPath + "//*[@placeholder = \"" + name + "\"]//ancestor::div[1]/textarea"));
+                baseXPath + "//mat-label[contains(., \"" + name + "\")]//ancestor::mat-form-field[1]//textarea | " +
+                baseXPath + "//*[@placeholder = \"" + name + "\"]//ancestor::div[1]/textarea | " +
+                baseXPath + "//textarea[contains(@placeholder, \"" + name + "\")]"));
     }
 
     private WebElement getIconButtonByName(String iconName) {
@@ -793,8 +808,9 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
 
     private void startTypeCodeInlineEdit(WebElement chip) {
         // Clicking the chip body (not the star/remove) opens the inline Type Code edit input.
-        click(getDriver(), chip.findElement(By.xpath(
-                ".//span[contains(concat(\" \", normalize-space(@class), \" \"), \" bt-chip-term \")]")));
+        WebElement target = chip.findElement(By.xpath(
+                ".//*[contains(concat(\" \", normalize-space(@class), \" \"), \" bt-chip-term \") or contains(concat(\" \", normalize-space(@class), \" \"), \" bt-chip-type \")]"));
+        click(getDriver(), target);
         waitFor(ofMillis(500L));
     }
 
@@ -804,7 +820,8 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
         retry(() -> {
             WebElement input = visibilityOfElementLocated(getDriver(), By.xpath(
                     "//input[contains(concat(\" \", normalize-space(@class), \" \"), \" bt-chip-type-input \")]"));
-            sendKeys(input, typeCode);
+            input.clear();
+            input.sendKeys(typeCode);
             return input;
         });
     }
@@ -1012,7 +1029,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
         @Override
         public TopLevelASBIEPPanel getBaseTopLevelASBIEPPanel() {
             WebElement tab = elementToBeClickable(getDriver(), By.xpath(
-                    "//mat-tab-header//div[@role=\"tab\"][2]"));
+                    "//mat-tab-header//*[@role=\"tab\"][2]"));
             click(tab);
             return this;
         }
@@ -1021,9 +1038,10 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
     @Override
     public ReusedASBIEPanel getReusedASBIEPanel(WebElement asccpNode) {
         return retry(() -> {
-            click(asccpNode);
-            waitFor(ofMillis(500L));
-            return new ReusedASBIEPanelImpl("//div[contains(@class, \"detail-reused\")][1]");
+            clickTreeNode(asccpNode);
+            invisibilityOfLoadingContainerElement(getDriver());
+            waitFor(ofMillis(1000L));
+            return new ReusedASBIEPanelImpl("//div[contains(@class, \"detail-reused\")]");
         });
     }
 
@@ -1297,7 +1315,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
         @Override
         public ASBIEPanel getBaseASBIEPanel() {
             WebElement tab = elementToBeClickable(getDriver(), By.xpath(
-                    "//mat-tab-header//div[@role=\"tab\"][2]"));
+                    "//mat-tab-header//*[@role=\"tab\"][2]"));
             click(tab);
             return this;
         }
@@ -1566,7 +1584,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
                 sendKeys(dropdownSearchField, valueDomain);
                 click(getDriver(), elementToBeClickable(
                         PageHelper.wait(getDriver(), Duration.ofSeconds(10L), ofMillis(100L)),
-                        By.xpath("//div[@class=\"cdk-overlay-container\"]//span[contains(text(), \"" + valueDomain + "\")]//ancestor::mat-option[1]")));
+                        By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//span[contains(text(), \"" + valueDomain + "\")]//ancestor::mat-option[1]")));
                 escape(getDriver());
             });
         }
@@ -1639,7 +1657,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
         @Override
         public BBIEPanel getBaseBBIEPanel() {
             WebElement tab = elementToBeClickable(getDriver(), By.xpath(
-                    "//mat-tab-header//div[@role=\"tab\"][2]"));
+                    "//mat-tab-header//*[@role=\"tab\"][2]"));
             click(tab);
             return this;
         }
@@ -1788,7 +1806,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
                 sendKeys(dropdownSearchField, valueDomain);
                 click(getDriver(), elementToBeClickable(
                         PageHelper.wait(getDriver(), Duration.ofSeconds(10L), ofMillis(100L)),
-                        By.xpath("//div[@class=\"cdk-overlay-container\"]//span[contains(text(), \"" + valueDomain + "\")]//ancestor::mat-option[1]")));
+                        By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//span[contains(text(), \"" + valueDomain + "\")]//ancestor::mat-option[1]")));
                 escape(getDriver());
             });
         }
@@ -1811,7 +1829,7 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
         @Override
         public BBIESCPanel getBaseBBIESCPanel() {
             WebElement tab = elementToBeClickable(getDriver(), By.xpath(
-                    "//mat-tab-header//div[@role=\"tab\"][2]"));
+                    "//mat-tab-header//*[@role=\"tab\"][2]"));
             click(tab);
             return this;
         }

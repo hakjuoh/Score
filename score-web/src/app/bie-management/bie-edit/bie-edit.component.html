@@ -37,7 +37,7 @@
                   <mat-icon matChipAvatar class="bt-chip-star bt-chip-star-on"
                             matTooltip="Preferred business term">star</mat-icon>
                 }
-                <span class="bt-chip-term">{{ bt.businessTerm }}</span>
+                <span class="bt-chip-term" (click)="startTypeCodeEdit(bt, editable, $event)">{{ bt.businessTerm }}</span>
                 @if (isTypeCodeEditing(bt)) {
                   <input class="bt-chip-type-input"
                          [attr.data-assigned-biz-term-id]="bt.assignedBizTermId"
@@ -47,7 +47,6 @@
                          aria-label="Type Code"
                          (ngModelChange)="clearTypeCodeEditError()"
                          (click)="$event.stopPropagation()"
-                         (blur)="cancelTypeCodeEdit()"
                          (keydown)="onTypeCodeEditKeydown($event)"
                          (keydown.enter)="$event.preventDefault(); saveTypeCodeEdit(bt, $event)"
                          (keydown.escape)="$event.preventDefault(); cancelTypeCodeEdit($event)"/>
@@ -59,7 +58,7 @@
                     <mat-icon>check</mat-icon>
                   </button>
                 } @else if (bt.typeCode) {
-                  <span class="bt-chip-type">{{ bt.typeCode }}</span>
+                  <span class="bt-chip-type" (click)="startTypeCodeEdit(bt, editable, $event)">{{ bt.typeCode }}</span>
                 }
                 @if (editable) {
                   <button matChipRemove type="button" matTooltip="Unassign">

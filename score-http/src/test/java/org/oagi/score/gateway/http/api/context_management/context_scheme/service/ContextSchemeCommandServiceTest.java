@@ -82,18 +82,8 @@ class ContextSchemeCommandServiceTest {
     }
 
     @Test
-    void create_rejects_a_duplicate_name() {
-        when(query.hasDuplicate(any(), any(), any())).thenReturn(false);
-        when(query.hasDuplicateName(any(), any(), any(), any())).thenReturn(true);
-
-        assertThrows(IllegalArgumentException.class, () -> service.create(requester, createRequest()));
-        verify(command, never()).create(any(), any(), any(), any(), any(), any(), any());
-    }
-
-    @Test
     void create_persists_a_unique_scheme() {
         when(query.hasDuplicate(any(), any(), any())).thenReturn(false);
-        when(query.hasDuplicateName(any(), any(), any(), any())).thenReturn(false);
         when(command.create(any(), any(), any(), any(), any(), any(), any())).thenReturn(SCHEME_ID);
 
         assertEquals(SCHEME_ID, service.create(requester, createRequest()));

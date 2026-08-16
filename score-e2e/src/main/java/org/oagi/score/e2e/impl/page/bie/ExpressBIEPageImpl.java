@@ -123,7 +123,7 @@ public class ExpressBIEPageImpl extends BaseSearchBarPageImpl implements Express
             click(getDriver(), getBranchSelectField());
             sendKeys(visibilityOfElementLocated(getDriver(), DROPDOWN_SEARCH_FIELD_LOCATOR), branch);
             WebElement optionField = visibilityOfElementLocated(getDriver(),
-                    By.xpath("//div[@class = \"cdk-overlay-container\"]//mat-option//span[text() = \"" + branch + "\"]"));
+                    By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//mat-option//span[text() = \"" + branch + "\"]"));
             click(getDriver(), optionField);
             escape(getDriver());
         });

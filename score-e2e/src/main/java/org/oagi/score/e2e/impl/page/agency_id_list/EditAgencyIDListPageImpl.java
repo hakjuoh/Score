@@ -219,7 +219,7 @@ public class EditAgencyIDListPageImpl extends BasePageImpl implements EditAgency
             waitFor(ofMillis(1000L));
             sendKeys(visibilityOfElementLocated(longWait(getDriver()), DROPDOWN_SEARCH_FIELD_LOCATOR), namespace.getUri());
             WebElement optionField = elementToBeClickable(longWait(getDriver()),
-                    By.xpath("//div[contains(@class, \"cdk-overlay-container\")]//span[contains(text(), \"" +
+                    By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//span[contains(text(), \"" +
                             namespace.getUri() + "\")]//ancestor::mat-option[1]"));
             click(getDriver(), optionField);
         });

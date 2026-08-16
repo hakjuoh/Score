@@ -148,10 +148,15 @@ export class PathLikeExpressionEvaluator<T extends FlatNode> implements Expressi
   }
 
   protected doEval(node: T, token: string): boolean {
+    if (!node || !node.name) {
+      return false;
+    }
+    const tokenNoSpace = token.replace(/\s+/g, '');
     if (this._caseSensitive) {
-      return node.name.indexOf(token) > -1;
+      return node.name.indexOf(token) > -1 || node.name.indexOf(tokenNoSpace) > -1;
     } else {
-      return node.name.toLowerCase().indexOf(token.toLowerCase()) > -1;
+      const nodeNameLower = node.name.toLowerCase();
+      return nodeNameLower.indexOf(token.toLowerCase()) > -1 || nodeNameLower.indexOf(tokenNoSpace.toLowerCase()) > -1;
     }
   }
 

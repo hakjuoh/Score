@@ -150,7 +150,7 @@ public class ViewEditAgencyIDListPageImpl extends BaseSearchBarPageImpl implemen
             click(getDriver(), getBranchSelectField());
             waitFor(ofSeconds(2L));
             WebElement optionField = visibilityOfElementLocated(longWait(getDriver()),
-                    By.xpath("//div[@class = \"cdk-overlay-container\"]//mat-option//span[text() = \"" + branch + "\"]"));
+                    By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//mat-option//span[text() = \"" + branch + "\"]"));
             click(getDriver(), optionField);
         });
     }
@@ -164,7 +164,7 @@ public class ViewEditAgencyIDListPageImpl extends BaseSearchBarPageImpl implemen
     public void setState(String state) {
         click(getDriver(), getStateSelectField());
         WebElement optionField = visibilityOfElementLocated(longWait(getDriver()),
-                By.xpath("//div[contains(@class, \"cdk-overlay-container\")]//mat-option//span[contains(text(), \"" + state + "\")]"));
+                By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//mat-option//span[contains(text(), \"" + state + "\")]"));
         click(getDriver(), optionField);
         escape(getDriver());
     }
@@ -178,7 +178,7 @@ public class ViewEditAgencyIDListPageImpl extends BaseSearchBarPageImpl implemen
     public void setDeprecated(boolean deprecated) {
         click(getDriver(), getDeprecatedSelectField());
         WebElement optionField = visibilityOfElementLocated(longWait(getDriver()),
-                By.xpath("//div[contains(@class, \"cdk-overlay-container\")]//mat-option//span[contains(text(), \"" + (deprecated ? "True" : "False") + "\")]"));
+                By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//mat-option//span[contains(text(), \"" + (deprecated ? "True" : "False") + "\")]"));
         click(getDriver(), optionField);
         escape(getDriver());
     }
@@ -193,7 +193,7 @@ public class ViewEditAgencyIDListPageImpl extends BaseSearchBarPageImpl implemen
         click(getDriver(), getOwnerSelectField());
         sendKeys(visibilityOfElementLocated(longWait(getDriver()), DROPDOWN_SEARCH_FIELD_LOCATOR), owner);
         WebElement searchedSelectField = visibilityOfElementLocated(longWait(getDriver()),
-                By.xpath("//div[contains(@class, \"cdk-overlay-container\")]//mat-option//span[contains(text(), \"" + owner + "\")]"));
+                By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//mat-option//span[contains(text(), \"" + owner + "\")]"));
         click(getDriver(), searchedSelectField);
         escape(getDriver());
     }
@@ -208,7 +208,7 @@ public class ViewEditAgencyIDListPageImpl extends BaseSearchBarPageImpl implemen
         click(getDriver(), getUpdaterSelectField());
         sendKeys(visibilityOfElementLocated(longWait(getDriver()), DROPDOWN_SEARCH_FIELD_LOCATOR), updater);
         WebElement searchedSelectField = visibilityOfElementLocated(longWait(getDriver()),
-                By.xpath("//div[contains(@class, \"cdk-overlay-container\")]//mat-option//span[contains(text(), \"" + updater + "\")]"));
+                By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//mat-option//span[contains(text(), \"" + updater + "\")]"));
         click(getDriver(), searchedSelectField);
         escape(getDriver());
     }

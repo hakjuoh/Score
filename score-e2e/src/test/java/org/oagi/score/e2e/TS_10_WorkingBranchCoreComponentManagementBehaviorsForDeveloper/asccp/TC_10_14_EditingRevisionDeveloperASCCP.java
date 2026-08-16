@@ -15,7 +15,6 @@ import org.oagi.score.e2e.page.core_component.ASCCPChangeACCDialog;
 import org.oagi.score.e2e.page.core_component.ASCCPViewEditPage;
 import org.oagi.score.e2e.page.core_component.ViewEditCoreComponentPage;
 import org.openqa.selenium.By;
-import org.openqa.selenium.ElementClickInterceptedException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebElement;
 
@@ -218,8 +217,11 @@ public class TC_10_14_EditingRevisionDeveloperASCCP extends BaseTest {
         asccpViewEditPage = viewEditCoreComponentPage.openASCCPViewEditPageByManifestID(asccp_not_reusable.getAsccpManifestId());
         WebElement asccNodeNotReusable = asccpViewEditPage.getNodeByPath("/" + asccp_not_reusable.getPropertyTerm());
         asccpPanel = asccpViewEditPage.getASCCPanelContainer(asccNodeNotReusable).getASCCPPanel();
-        ASCCPViewEditPage.ASCCPPanel finalAsccpPanel = asccpPanel;
-        assertThrows(ElementClickInterceptedException.class, () -> finalAsccpPanel.toggleReusable());
+        // Material no longer covers a disabled checkbox with an overlay, so clicking it reaches the
+        // disabled input and is dropped by the browser instead of raising an interception. Assert
+        // the disabled state and that the click leaves the value untouched.
+        assertDisabled(asccpPanel.getReusableCheckbox());
+        asccpPanel.toggleReusable();
         assertNotChecked(asccpPanel.getReusableCheckbox());
         assertDisabled(asccpPanel.getReusableCheckbox());
         asccpViewEditPage.hitReviseButton();

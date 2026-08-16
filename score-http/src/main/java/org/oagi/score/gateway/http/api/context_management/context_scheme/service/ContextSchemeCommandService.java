@@ -55,11 +55,6 @@ public class ContextSchemeCommandService {
             throw new IllegalArgumentException(
                     "Another context scheme with the triplet (schemeID, AgencyID, Version) already exists.");
         }
-        if (query.hasDuplicateName(request.schemeName(), request.schemeId(),
-                request.schemeAgencyId(), request.schemeVersionId())) {
-            throw new IllegalArgumentException(
-                    "Another context scheme with the same name and triplet (schemeID, AgencyID, Version) already exists.");
-        }
 
         var command = command(requester);
 
@@ -95,11 +90,6 @@ public class ContextSchemeCommandService {
                 request.schemeId(), request.schemeAgencyId(), request.schemeVersionId())) {
             throw new IllegalArgumentException(
                     "Another context scheme with the triplet (schemeID, AgencyID, Version) already exists.");
-        }
-        if (query.hasDuplicateNameExcludingCurrent(request.contextSchemeId(), request.schemeName(),
-                request.schemeId(), request.schemeAgencyId(), request.schemeVersionId())) {
-            throw new IllegalArgumentException(
-                    "Another context scheme with the same name and triplet (schemeID, AgencyID, Version) already exists.");
         }
 
         // Fetch existing values, then determine which ones the request removes.

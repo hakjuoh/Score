@@ -133,7 +133,7 @@ public class ACCViewEditPageImpl extends BasePageImpl implements ACCViewEditPage
     private static final By REMOVE_OPTION_LOCATOR =
             By.xpath("//span[contains(text(), \"Remove\")]//ancestor::button[1]");
     private static final By DELETE_OPTION_LOCATOR =
-            By.xpath("//div[contains(@class, \"cdk-overlay-container\")]//span[contains(text(),\"Delete\")]");
+            By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]//span[contains(text(),\"Delete\")]");
 
     private final ACCObject acc;
 
@@ -789,7 +789,7 @@ public class ACCViewEditPageImpl extends BasePageImpl implements ACCViewEditPage
         return retry(() -> {
             click(accNode);
             waitFor(ofMillis(500L));
-            return new ACCPanelImpl("//div[contains(@class, \"cc-node-detail-panel\")][1]");
+            return new ACCPanelImpl("//div[contains(@class, \"cc-node-detail-panel\") and .//input[@value=\"ACC\"]]");
         });
     }
 
@@ -801,12 +801,12 @@ public class ACCViewEditPageImpl extends BasePageImpl implements ACCViewEditPage
             return new ASCCPanelContainer() {
                 @Override
                 public ASCCPanel getASCCPanel() {
-                    return new ASCCPanelImpl("//div[contains(@class, \"cc-node-detail-panel\")][1]");
+                    return new ASCCPanelImpl("//div[contains(@class, \"cc-node-detail-panel\") and .//input[@value=\"ASCC\"]]");
                 }
 
                 @Override
                 public ASCCPPanel getASCCPPanel() {
-                    return new ASCCPPanelImpl("//div[contains(@class, \"cc-node-detail-panel\")][2]");
+                    return new ASCCPPanelImpl("//div[contains(@class, \"cc-node-detail-panel\") and .//input[@value=\"ASCCP\"]]");
                 }
             };
         });
@@ -820,12 +820,12 @@ public class ACCViewEditPageImpl extends BasePageImpl implements ACCViewEditPage
             return new BCCPanelContainer() {
                 @Override
                 public BCCPanel getBCCPanel() {
-                    return new BCCPanelImpl("//div[contains(@class, \"cc-node-detail-panel\")][1]");
+                    return new BCCPanelImpl("//div[contains(@class, \"cc-node-detail-panel\") and .//input[@value=\"BCC\"]]");
                 }
 
                 @Override
                 public BCCPPanel getBCCPPanel() {
-                    return new BCCPPanelImpl("//div[contains(@class, \"cc-node-detail-panel\")][2]");
+                    return new BCCPPanelImpl("//div[contains(@class, \"cc-node-detail-panel\") and .//input[@value=\"BCCP\"]]");
                 }
             };
         });
@@ -848,17 +848,20 @@ public class ACCViewEditPageImpl extends BasePageImpl implements ACCViewEditPage
 
     private WebElement getInputFieldByName(String baseXPath, String name) {
         return visibilityOfElementLocated(getDriver(), By.xpath(
-                baseXPath + "//*[contains(text(), \"" + name + "\")]//ancestor::div[1]//input"));
+                baseXPath + "//mat-label[contains(., \"" + name + "\")]//ancestor::mat-form-field[1]//input | " +
+                baseXPath + "//*[self::mat-label or self::label or self::span][contains(., \"" + name + "\")]//ancestor::div[1]//input | " +
+                baseXPath + "//input[contains(@placeholder, \"" + name + "\")]"));
     }
 
     private WebElement getSelectFieldByName(String baseXPath, String name) {
         return visibilityOfElementLocated(getDriver(), By.xpath(
-                baseXPath + "//*[contains(text(), \"" + name + "\")]//ancestor::div[1]/mat-select"));
+                baseXPath + "//mat-label[contains(., \"" + name + "\")]//ancestor::mat-form-field[1]//mat-select | " +
+                baseXPath + "//*[self::mat-label or self::label or self::span][contains(., \"" + name + "\")]//ancestor::div[1]/mat-select"));
     }
 
     private WebElement getCheckboxByName(String baseXPath, String name) {
         return visibilityOfElementLocated(getDriver(), By.xpath(
-                baseXPath + "//*[contains(text(), \"" + name + "\")]//ancestor::mat-checkbox[1]"));
+                baseXPath + "//mat-checkbox[contains(., \"" + name + "\")]"));
     }
 
     private WebElement getTextAreaFieldByName(String baseXPath, String name) {
