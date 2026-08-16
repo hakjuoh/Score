@@ -2,7 +2,7 @@ import {Component, OnInit, inject} from '@angular/core';
 import {ActivatedRoute} from '@angular/router';
 import {forkJoin} from 'rxjs';
 import {finalize} from 'rxjs/operators';
-import {Sort} from '@angular/material/sort';
+import {Sort, SortDirection} from '@angular/material/sort';
 import {PageEvent} from '@angular/material/paginator';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {MatTableDataSource} from '@angular/material/table';
@@ -39,6 +39,9 @@ export class AiPolicyUserDetailComponent implements OnInit {
   usageEnd: Date | null = null;
   selectedTabIndex = 0;
   usagePage = new PageRequest('time', 'desc', 0, 10);
+  get usageSortDirection(): SortDirection {
+    return (this.usagePage.sortDirection as SortDirection) || 'desc';
+  }
   private usageLoadSequence = 0;
   private baselineHash = '';
   readonly usageColumns = ['time', 'model', 'kind', 'status', 'charged'];
