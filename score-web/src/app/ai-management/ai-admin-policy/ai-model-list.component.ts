@@ -1,4 +1,4 @@
-import {Component, OnInit, QueryList, ViewChild, ViewChildren, inject} from '@angular/core';
+import {Component, OnInit, QueryList, ViewChild, ViewChildren, inject, ChangeDetectionStrategy} from '@angular/core';
 import {MatPaginator, PageEvent} from '@angular/material/paginator';
 import {MatSort, SortDirection} from '@angular/material/sort';
 import {MatTableDataSource} from '@angular/material/table';
@@ -16,8 +16,13 @@ import {AccountListService} from '../../account-management/domain/account-list.s
 import {SearchBarComponent} from '../../common/search-bar/search-bar.component';
 import {AiAdminListNavigationService} from './domain/ai-admin-list-navigation.service';
 
-@Component({standalone: false, selector: 'score-ai-model-list',
-  templateUrl: './ai-model-list.component.html', styleUrls: ['./ai-admin-policy.component.css']})
+@Component({
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
+  selector: 'score-ai-model-list',
+  templateUrl: './ai-model-list.component.html',
+  styleUrls: ['./ai-admin-policy.component.css']
+})
 export class AiModelListComponent implements OnInit {
   private readonly service = inject(AiAdminPolicyService);
   private readonly preferencesService = inject(SettingsPreferencesService);
