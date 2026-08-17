@@ -100,6 +100,7 @@ export class AiModelSettingsCoordinator {
       error: () => {
         state.selectedModelName = previous.modelName;
         state.selectedReasoningEffort = previous.reasoningEffort;
+        state.resetContextUsageForSelectedModel();
         state.modelChangePending = false;
         callbacks.failed();
       }

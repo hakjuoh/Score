@@ -178,6 +178,9 @@ export class AiChatPanelState {
   }
 
   contextUsageLabel(): string {
+    if (this.contextUsage && this.contextUsage.modelName !== this.selectedModelName) {
+      this.resetContextUsageForSelectedModel();
+    }
     const usage = this.contextUsage;
     if (!usage) return 'Context unavailable';
     const prefix = usage.estimated ? '~' : '';

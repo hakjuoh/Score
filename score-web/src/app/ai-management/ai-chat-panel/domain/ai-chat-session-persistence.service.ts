@@ -72,6 +72,7 @@ export class AiChatSessionPersistenceService {
     state.permissionMode = requestedPermissionMode === 'auto'
       || requestedPermissionMode === 'full_access' ? requestedPermissionMode : 'ask';
     state.permissionDraft = state.permissionMode;
+    state.resetContextUsageForSelectedModel();
     this.persistSelection(state);
   }
 

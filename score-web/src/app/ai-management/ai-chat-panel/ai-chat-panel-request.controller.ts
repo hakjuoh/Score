@@ -13,7 +13,8 @@ import {
   AiChatAttachment,
   AiChatContextUpdate,
   AiChatSocketEvent,
-  AiChangeConfirmationAuthorization
+  AiChangeConfirmationAuthorization,
+  disabledAiSelfPolicy
 } from './domain/ai-chat-panel.model';
 import {AiRequestDispatchIntent} from './domain/ai-request-dispatch-coordinator';
 import {
@@ -275,16 +276,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           if (this.state.policy) {
             this.state.policy.enabled = false;
           } else {
-            this.state.policy = {
-              enabled: false,
-              multiAgentEnabled: false,
-              maxAgentsPerRequest: 1,
-              maxActiveRequests: 1,
-              allowedModels: [],
-              defaultModelKey: '',
-              allowedReasoningEfforts: {},
-              quota: {limitTokens: null, consumedTokens: 0, reservedTokens: 0, remainingTokens: 0, periodEnd: null}
-            };
+            this.state.policy = disabledAiSelfPolicy();
           }
         } else if (errorCode === 'AI_QUOTA_EXHAUSTED' && this.state.policy) {
           this.state.policy.quota.remainingTokens = 0;

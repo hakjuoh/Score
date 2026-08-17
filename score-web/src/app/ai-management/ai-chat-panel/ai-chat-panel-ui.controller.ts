@@ -11,7 +11,8 @@ import {AiChatAttachmentQueueCallbacks} from './domain/ai-chat-attachment-queue.
 import {
   AiChatCommand,
   AiChatDock,
-  AiChatPanelTab
+  AiChatPanelTab,
+  disabledAiSelfPolicy
 } from './domain/ai-chat-panel.model';
 
 @Directive()
@@ -23,16 +24,7 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     this.refreshBranding();
     const userToken = this.auth.getUserToken();
     if (userToken?.ai && userToken.ai.enabled === false) {
-      this.state.policy = {
-        enabled: false,
-        multiAgentEnabled: false,
-        maxAgentsPerRequest: 1,
-        maxActiveRequests: 1,
-        allowedModels: [],
-        defaultModelKey: '',
-        allowedReasoningEfforts: {},
-        quota: {limitTokens: null, consumedTokens: 0, reservedTokens: 0, remainingTokens: 0, periodEnd: null}
-      };
+      this.state.policy = disabledAiSelfPolicy();
     }
     const workspaceRestored = this.sessionPersistence.restoreWorkspace(this.state);
     this.state.sideSize = this.layoutService.clamp(
