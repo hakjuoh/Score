@@ -1,4 +1,4 @@
-import {Component, OnInit, ViewChild, inject} from '@angular/core';
+import {Component, OnInit, ViewChild, inject, ChangeDetectionStrategy} from '@angular/core';
 import {MatExpansionPanel} from '@angular/material/expansion';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {ActivatedRoute, Router} from '@angular/router';
@@ -30,6 +30,7 @@ type TokenLimitField = 'contextWindow' | 'maxTokens' | 'outputReserveTokens' |
   'autoCompactThresholdTokens' | 'emergencyHeadroomTokens' | 'thinkingBudgetTokens';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.Eager,
   standalone: false,
   selector: 'score-ai-model-detail',
   templateUrl: './ai-model-detail.component.html',

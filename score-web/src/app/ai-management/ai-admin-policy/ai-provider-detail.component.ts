@@ -1,4 +1,4 @@
-import {Component, DestroyRef, OnDestroy, OnInit, inject} from '@angular/core';
+import {Component, DestroyRef, OnDestroy, OnInit, inject, ChangeDetectionStrategy} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
 import {AiAdminPolicyService} from './domain/ai-admin-policy.service';
 import {AiProviderUpdate, AiProviderView} from './domain/ai-admin-policy';
@@ -11,6 +11,7 @@ import {faEye, faEyeSlash} from '@fortawesome/free-regular-svg-icons';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.Eager,
   standalone: false,
   selector: 'score-ai-provider-detail',
   templateUrl: './ai-provider-detail.component.html',
@@ -75,7 +76,7 @@ export class AiProviderDetailComponent implements OnInit, OnDestroy {
   }
 
   get canRevealStoredApiKey(): boolean {
-    return !this.isNew && !!this.provider?.apiKeyConfigured && !this.apiKeyEdited;
+    return !this.isNew && !this.apiKeyEdited && !!this.provider?.apiKeyConfigured;
   }
 
   get isAnthropicProvider(): boolean {
@@ -110,7 +111,7 @@ export class AiProviderDetailComponent implements OnInit, OnDestroy {
       return;
     }
     this.apiKeyLoading = true;
-    this.service.revealProviderApiKey(this.provider.aiProviderId)
+    this.service.revealProviderApiKey(this.provider!.aiProviderId)
       .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: result => {
         this.apiKeyLoading = false;
