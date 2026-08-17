@@ -16,6 +16,7 @@ import {catchError, map} from 'rxjs/operators';
 import {Observable, of, throwError} from 'rxjs';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {
+  AiProperties,
   BIEProperties,
   BrowseStandardModeProperties,
   BusinessTermProperties,
@@ -158,6 +159,11 @@ export class AuthService implements OnInit, CanActivate {
       if (!value.browseStandardMode) {
         value.browseStandardMode = new BrowseStandardModeProperties();
         value.browseStandardMode.enabled = false;
+        this.storeUserInfo(value);
+      }
+      if (!value.ai) {
+        value.ai = new AiProperties();
+        value.ai.enabled = true;
         this.storeUserInfo(value);
       }
     } catch (ignore) {

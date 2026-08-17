@@ -63,6 +63,9 @@ public class SystemAccountQueryController implements InitializingBean {
     @Autowired
     private TenantQueryService tenantService;
 
+    @Autowired(required = false)
+    private org.oagi.score.gateway.http.api.ai_management.policy.service.AiPolicyService aiPolicyService;
+
     @Autowired
     private SessionService sessionService;
 
@@ -150,6 +153,16 @@ public class SystemAccountQueryController implements InitializingBean {
         resp.put("browseStandardMode", ImmutableMap.builder()
                 .put("enabled", configService.isBrowseStandardModeEnabled(requester))
                 .build());
+
+        if (aiPolicyService != null) {
+            try {
+                var policy = aiPolicyService.resolve(requester);
+                resp.put("ai", ImmutableMap.builder()
+                        .put("enabled", policy.aiEnabled())
+                        .build());
+            } catch (Exception ignore) {
+            }
+        }
 
         return resp;
     }

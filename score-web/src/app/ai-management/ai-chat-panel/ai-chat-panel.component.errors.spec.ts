@@ -2,6 +2,7 @@
  * Verifies the AI chat panel's terminal error and data-change behavior.
  */
 
+import {HttpErrorResponse, HttpHeaders} from '@angular/common/http';
 import {
   AiCancellationResponse,
   Subject,
@@ -251,15 +252,16 @@ describe('AiChatPanelComponent terminal errors and data changes', () => {
     expect(component.state.currentStatus).toBe('Ready');
   });
 
-  it('blocks the composer while the self-service policy is loading', () => {
+  it('does not block the composer while the self-service policy is loading (optimistic UI)', () => {
     const policy = new Subject<any>();
     (api as any).getPolicy = vi.fn(() => policy);
 
     (component as any).loadPolicy();
 
     expect(component.state.policyLoading).toBe(true);
-    expect(component.commandInputBlocked).toBe(true);
-    expect(component.composerPlaceholder).toBe('Loading AI policy');
+    expect(component.commandInputBlocked).toBe(false);
+    expect(component.composerPlaceholder).toBe('Ask a question');
+    expect(component.policyNotice).toBeUndefined();
   });
 
   it('fails closed when the self-service policy cannot be loaded', () => {
@@ -270,6 +272,68 @@ describe('AiChatPanelComponent terminal errors and data changes', () => {
     expect(component.state.policyLoadFailed).toBe(true);
     expect(component.commandInputBlocked).toBe(true);
     expect(component.policyNotice).toContain('could not be loaded');
+    expect(component.policyNotice).toContain('contact your administrator');
+  });
+
+  it('handles AI_DISABLED_BY_POLICY error with clear admin contact instruction', () => {
+    const error = new HttpErrorResponse({
+      status: 403,
+      headers: new HttpHeaders({
+        'X-Error-Code': 'AI_DISABLED_BY_POLICY',
+        'X-Error-Message': 'AI Assistant is disabled by policy'
+      })
+    });
+    const message = (component as any).resolveRequestErrorMessage(error);
+    expect(message).toContain('disabled by your administrator');
+    expect(message).toContain('contact your administrator');
+    expect(component.state.policy?.enabled).toBe(false);
+  });
+
+  it('handles AI_QUOTA_EXHAUSTED error with quota instructions', () => {
+    component.state.policy = {
+      enabled: true,
+      multiAgentEnabled: true,
+      maxAgentsPerRequest: 4,
+      maxActiveRequests: 8,
+      allowedModels: [],
+      defaultModelKey: 'gpt-4o',
+      allowedReasoningEfforts: {},
+      quota: {limitTokens: 1000, consumedTokens: 1000, reservedTokens: 0, remainingTokens: 50, periodEnd: null}
+    };
+    const error = new HttpErrorResponse({
+      status: 429,
+      headers: new HttpHeaders({
+        'X-Error-Code': 'AI_QUOTA_EXHAUSTED',
+        'X-Error-Message': 'AI token quota exhausted'
+      })
+    });
+    const message = (component as any).resolveRequestErrorMessage(error);
+    expect(message).toContain('quota has been exhausted');
+    expect(message).toContain('contact your administrator');
+    expect(component.state.policy.quota.remainingTokens).toBe(0);
+  });
+
+  it('handles all policy error codes with administrator contact guidance', () => {
+    const errorCodes = [
+      'AI_DISABLED_BY_POLICY',
+      'AI_QUOTA_EXHAUSTED',
+      'AI_REQUEST_TOKEN_LIMIT_EXHAUSTED',
+      'AI_ACTIVE_REQUEST_LIMIT',
+      'AI_MODEL_NOT_ALLOWED',
+      'AI_REASONING_EFFORT_NOT_ALLOWED',
+      'AI_NO_ALLOWED_MODELS',
+      'AI_PROVIDER_NOT_CONFIGURED',
+      'AI_POLICY_VERSION_CONFLICT'
+    ];
+
+    for (const code of errorCodes) {
+      const error = new HttpErrorResponse({
+        status: 400,
+        headers: new HttpHeaders({'X-Error-Code': code})
+      });
+      const message = (component as any).resolveRequestErrorMessage(error);
+      expect(message).toContain('administrator');
+    }
   });
 
 });
