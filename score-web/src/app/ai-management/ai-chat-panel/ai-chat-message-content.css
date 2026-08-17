@@ -73,6 +73,24 @@
   font: inherit;
 }
 
+.session-summary-loading {
+  background: #fbfbfb;
+  border-style: dashed;
+}
+
+.session-summary-loading .session-summary-title {
+  border-bottom: none;
+  padding-bottom: 0;
+  color: #52525b;
+}
+
+.session-summary-loading .session-summary-tip {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 4px;
+  color: #71717a;
+}
+
 .formatted-layer {
   grid-area: 1 / 1;
 }

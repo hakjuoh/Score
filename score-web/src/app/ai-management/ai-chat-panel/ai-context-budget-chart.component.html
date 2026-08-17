@@ -1,7 +1,10 @@
 <div class="context-budget-chart" [class.compact]="compact">
   <div class="context-model-row">
-    <span>{{ data.usage.modelName }}</span>
-    <span class="context-measurement-kind">
+    <span matTooltip="Currently selected AI model">{{ data.usage.modelName }}</span>
+    <span class="context-measurement-kind"
+          [matTooltip]="data.usage.estimated
+            ? 'Estimated token usage calculated from conversation context.'
+            : 'Actual token usage reported directly by the AI model provider.'">
       {{ data.usage.estimated ? 'Estimated' : 'Provider-reported' }}
     </span>
   </div>
@@ -11,12 +14,15 @@
          role="img"
          [attr.aria-label]="'Context input ' + data.usage.currentInputTokens
            + ' tokens out of a ' + data.usage.contextWindow + ' token model window'"
+         [matTooltip]="(data.usage.currentInputTokens | number) + ' / ' + (data.usage.safeInputLimit | number) + ' safe input tokens · ' + (data.usage.contextWindow | number) + ' model window'"
          [style.background]="pieBackground">
     </div>
 
     <div class="context-legend">
       @for (slice of slices; track slice.label) {
-        <div class="context-legend-row">
+        <div class="context-legend-row"
+             [matTooltip]="slice.description"
+             matTooltipPosition="above">
           <span class="context-legend-swatch" [style.background]="slice.color"></span>
           <span class="context-legend-label">{{ slice.label }}</span>
           <span class="context-legend-value">
@@ -27,7 +33,8 @@
     </div>
   </div>
 
-  <div class="context-chart-summary">
+  <div class="context-chart-summary"
+       matTooltip="Safe input limit = Context window minus Output reserve and Emergency headroom">
     {{ data.usage.currentInputTokens | number }} / {{ data.usage.safeInputLimit | number }} safe input tokens
     <span>·</span>
     {{ data.usage.contextWindow | number }} model window

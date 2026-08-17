@@ -49,6 +49,7 @@ describe('AiChatPanelComponent settings and active recovery', () => {
 
     expect(component.state.selectedModelName).toBe('claude-fable-5');
     expect(component.state.selectedReasoningEffort).toBe('medium');
+    expect(component.state.contextUsage?.modelName).toBe('claude-fable-5');
     expect(JSON.parse(localStorage.getItem(AI_CHAT_SELECTION_PREFERENCE_STORAGE_KEY)!)).toEqual({
       version: 1,
       modelName: 'claude-fable-5',

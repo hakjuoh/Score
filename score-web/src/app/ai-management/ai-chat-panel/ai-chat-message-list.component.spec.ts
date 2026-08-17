@@ -45,6 +45,8 @@ describe('AiChatMessageListComponent', () => {
     }];
     fixture.detectChanges();
     await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    fixture.detectChanges();
 
     const markdown = fixture.nativeElement.querySelector('.message-markdown') as HTMLElement;
     expect(markdown.classList.contains('markdown-body')).toBe(true);
@@ -108,6 +110,7 @@ describe('AiChatMessageListComponent', () => {
     ];
     fixture.detectChanges();
     await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 50));
     fixture.detectChanges();
 
     const userRow = fixture.nativeElement.querySelector('.message-row.user') as HTMLElement;
@@ -368,6 +371,19 @@ describe('AiChatMessageListComponent', () => {
 
     const remove = fixture.nativeElement.querySelector('.attachment-chip button') as HTMLButtonElement;
     expect(remove.getAttribute('aria-label')).toBe('Remove attachment purchase-order.json');
+  });
+
+  it('shows an initializing session status banner while models are loading', () => {
+    fixture.componentInstance.availableModels = [];
+    fixture.componentInstance.selectedModelName = '';
+    fixture.detectChanges();
+
+    const loadingSummary = fixture.nativeElement.querySelector('.session-summary-loading') as HTMLElement;
+    expect(loadingSummary).not.toBeNull();
+    expect(loadingSummary.getAttribute('aria-label')).toBe('Initializing assistant session');
+    expect(loadingSummary.textContent).toContain('Initializing assistant session…');
+    expect(loadingSummary.textContent).toContain('Loading models and session settings…');
+    expect(loadingSummary.querySelector('mat-progress-spinner')).not.toBeNull();
   });
 
   it('shows the selected session settings at the top of an empty chat', () => {
@@ -993,6 +1009,7 @@ describe('AiChatMessageListComponent', () => {
     };
     fixture.detectChanges();
     await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 50));
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.message-turn')).toBeNull();
@@ -1048,6 +1065,7 @@ describe('AiChatMessageListComponent', () => {
 
     fixture.detectChanges();
     await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 50));
     fixture.detectChanges();
 
     const focus = fixture.nativeElement.querySelector('.agent-focus-events') as HTMLElement;
