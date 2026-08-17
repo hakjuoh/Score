@@ -1,4 +1,4 @@
-import {Component, OnInit, inject} from '@angular/core';
+import {Component, OnInit, inject, ChangeDetectionStrategy} from '@angular/core';
 import {ActivatedRoute} from '@angular/router';
 import {forkJoin} from 'rxjs';
 import {finalize} from 'rxjs/operators';
@@ -14,6 +14,7 @@ import {notifyAiAdminConflict, notifyAiAdminError,
   notifyAiAdminSuccess} from './domain/ai-admin-notifications';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.Eager,
   standalone: false,
   selector: 'score-ai-policy-user-detail',
   templateUrl: './ai-policy-user-detail.component.html',
