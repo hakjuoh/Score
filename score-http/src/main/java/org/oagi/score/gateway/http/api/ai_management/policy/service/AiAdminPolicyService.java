@@ -64,6 +64,9 @@ public class AiAdminPolicyService {
     private final AiRequestRegistry requests;
     private final AiUsageReportService usageReports;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+
     public AiAdminPolicyService(DSLContext dsl, AiPolicyQueryRepository queries,
                                 AiPolicyCommandRepository commands,
                                 AiPolicyService policyService,
@@ -359,12 +362,31 @@ public class AiAdminPolicyService {
         if (!saved.aiEnabled()) {
             requests.cancelByUser(targetUserId, "AI_DISABLED_BY_POLICY");
         }
-        return view(resolveFor(ULong.valueOf(targetUserId.value())));
+        AiPolicyView updatedView = view(resolveFor(ULong.valueOf(targetUserId.value())));
+        broadcastPolicyChange(targetUserId, updatedView);
+        return updatedView;
     }
 
     public void delete(ScoreUser actor, UserId targetUserId, long expectedVersion) {
         requireAdministrator(actor);
         commands.delete(targetUserId, expectedVersion);
+        AiPolicyView updatedView = view(resolveFor(ULong.valueOf(targetUserId.value())));
+        broadcastPolicyChange(targetUserId, updatedView);
+    }
+
+    private void broadcastPolicyChange(UserId targetUserId, AiPolicyView policyView) {
+        if (messagingTemplate != null && targetUserId != null) {
+            try {
+                messagingTemplate.convertAndSend("/topic/ai/user/" + targetUserId.value() + "/policy", policyView);
+                String loginId = dsl.select(APP_USER.LOGIN_ID).from(APP_USER)
+                        .where(APP_USER.APP_USER_ID.eq(ULong.valueOf(targetUserId.value())))
+                        .fetchOne(APP_USER.LOGIN_ID);
+                if (loginId != null && !loginId.isBlank()) {
+                    messagingTemplate.convertAndSend("/topic/ai/user/" + loginId + "/policy", policyView);
+                }
+            } catch (Exception ignore) {
+            }
+        }
     }
 
     public AiAdminUsageView usage(ScoreUser actor, UserId targetUserId,

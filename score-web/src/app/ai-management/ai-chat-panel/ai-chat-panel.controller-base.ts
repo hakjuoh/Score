@@ -218,7 +218,7 @@ export abstract class AiChatPanelControllerBase {
   }
 
   get commandInputBlocked(): boolean {
-    return this.state.policyLoading || this.state.policyLoadFailed
+    return this.state.policyLoadFailed
       || this.state.policy?.enabled === false
       || this.state.policy?.quota.remainingTokens === 0
       || this.state.reconciliationRequired
@@ -231,7 +231,6 @@ export abstract class AiChatPanelControllerBase {
   }
 
   get composerPlaceholder(): string {
-    if (this.state.policyLoading) return 'Loading AI policy';
     if (this.state.policyLoadFailed) return 'AI policy unavailable';
     if (this.state.policy?.enabled === false) return 'AI Assistant is disabled by policy';
     if (this.state.policy?.quota.remainingTokens === 0) return 'Token quota exhausted';
@@ -240,15 +239,14 @@ export abstract class AiChatPanelControllerBase {
   }
 
   get policyNotice(): string | undefined {
-    if (this.state.policyLoading) return 'Loading your AI access policy…';
     if (this.state.policyLoadFailed) {
-      return 'Your AI access policy could not be loaded. Refresh the page to try again.';
+      return 'Your AI access policy could not be loaded. Please contact your administrator.';
     }
     const policy = this.state.policy;
     if (!policy) return undefined;
-    if (!policy.enabled) return 'AI Assistant access is disabled by your administrator.';
+    if (!policy.enabled) return 'AI Assistant access is disabled by your administrator. Please contact your administrator to request access.';
     if (policy.quota.remainingTokens === 0) {
-      return `AI token quota exhausted. Resets ${policy.quota.periodEnd || 'at the next period'}.`;
+      return `AI token quota exhausted. Resets ${policy.quota.periodEnd || 'at the next period'}. Please contact your administrator to request a quota increase.`;
     }
     const quota = policy.quota.remainingTokens !== null
       ? `${policy.quota.remainingTokens.toLocaleString()} tokens remain until ${policy.quota.periodEnd}.` : '';

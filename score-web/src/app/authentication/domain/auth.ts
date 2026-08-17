@@ -21,6 +21,10 @@ export class BrowseStandardModeProperties {
   enabled: boolean;
 }
 
+export class AiProperties {
+  enabled: boolean;
+}
+
 export class TenantProperties {
   enabled: boolean;
   roles: string[];
@@ -37,6 +41,7 @@ export class UserToken {
   bie: BIEProperties;
   functionsRequiringEmailTransmission: FunctionsRequiringEmailTransmissionProperties;
   browseStandardMode: BrowseStandardModeProperties;
+  ai: AiProperties;
 
   constructor() {
     this.roles = ['', ];
@@ -59,6 +64,9 @@ export class UserToken {
 
     this.browseStandardMode = new BrowseStandardModeProperties();
     this.browseStandardMode.enabled = false;
+
+    this.ai = new AiProperties();
+    this.ai.enabled = true;
   }
 }
 
