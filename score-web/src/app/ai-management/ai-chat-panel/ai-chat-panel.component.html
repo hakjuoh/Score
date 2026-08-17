@@ -119,27 +119,29 @@
             (elicitationResponded)="respondToElicitation($event)"
             (messageListClicked)="onMessageListClick($event)">
           </score-ai-chat-message-list>
-          @if (policyNotice) {<div class="ai-policy-notice" role="status">{{policyNotice}}</div>}
-          <score-ai-chat-composer
-            [prompt]="state.prompt"
-            [trajectoryUrl]="trajectoryUrl"
-            [pending]="state.pending"
-            [blocked]="commandInputBlocked"
-            [cancellationInProgress]="cancellationInProgress"
-            [cancellationDelayed]="cancellationDelayed"
-            [showCommandSuggestions]="showCommandSuggestions"
-            [commandSuggestions]="commandSuggestions"
-            [selectedCommandIndex]="state.selectedCommandIndex"
-            [placeholder]="composerPlaceholder"
-            (promptChange)="state.prompt = $event; onPromptChange()"
-            (keydownEvent)="onComposerKeydown($event)"
-            (commandSuggestionSelected)="applyCommandSuggestion($event)"
-            (fileInputChanged)="onFileInputChange($event)"
-            (filePickerRequested)="openFilePicker($event)"
-            (stopRequested)="cancelActiveRequest()"
-            (cancellationRetryRequested)="retryCancellation()"
-            (forceSafeStopRequested)="forceSafeStop()">
-          </score-ai-chat-composer>
+          @if (state.selectedModel()) {
+            @if (policyNotice) {<div class="ai-policy-notice" role="status">{{policyNotice}}</div>}
+            <score-ai-chat-composer
+              [prompt]="state.prompt"
+              [trajectoryUrl]="trajectoryUrl"
+              [pending]="state.pending"
+              [blocked]="commandInputBlocked"
+              [cancellationInProgress]="cancellationInProgress"
+              [cancellationDelayed]="cancellationDelayed"
+              [showCommandSuggestions]="showCommandSuggestions"
+              [commandSuggestions]="commandSuggestions"
+              [selectedCommandIndex]="state.selectedCommandIndex"
+              [placeholder]="composerPlaceholder"
+              (promptChange)="state.prompt = $event; onPromptChange()"
+              (keydownEvent)="onComposerKeydown($event)"
+              (commandSuggestionSelected)="applyCommandSuggestion($event)"
+              (fileInputChanged)="onFileInputChange($event)"
+              (filePickerRequested)="openFilePicker($event)"
+              (stopRequested)="cancelActiveRequest()"
+              (cancellationRetryRequested)="retryCancellation()"
+              (forceSafeStopRequested)="forceSafeStop()">
+            </score-ai-chat-composer>
+          }
         </div>
         @if (agentStripVisible) {
           @if (state.agentListOpen && state.agentActivities.length > 0) {
