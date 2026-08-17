@@ -61,4 +61,25 @@ describe('AiChatHistoryListComponent', () => {
 
     expect(positions).toEqual([75]);
   });
+
+  it('does not display loading status when conversations are already present', () => {
+    fixture.componentInstance.conversations = [{
+      conversationId: 'conversation-1', title: 'Existing conversation',
+      visibleMessageCount: 2, compacted: false
+    }];
+    fixture.componentInstance.loading = true;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.chat-history-status')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Existing conversation');
+  });
+
+  it('displays loading status when conversations are empty and loading', () => {
+    fixture.componentInstance.conversations = [];
+    fixture.componentInstance.loading = true;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.chat-history-status')?.textContent)
+      .toContain('Loading history...');
+  });
 });
