@@ -1,5 +1,5 @@
 <div #historyPanel class="chat-history-panel" (scroll)="onScroll()">
-  @if (loading) {
+  @if (loading && conversations.length === 0) {
     <div class="chat-history-status" role="status" aria-live="polite">Loading history...</div>
   } @else if (loadFailed) {
     <div class="chat-history-status error" role="alert">
