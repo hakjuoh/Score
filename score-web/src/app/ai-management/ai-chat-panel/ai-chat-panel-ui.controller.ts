@@ -3,6 +3,8 @@
  */
 
 import {Directive} from '@angular/core';
+import {Subscription} from 'rxjs';
+import {Message} from '@stomp/stompjs';
 import {takeUntil} from 'rxjs/operators';
 import {AiChatPanelRequestController} from './ai-chat-panel-request.controller';
 import {AiChatAttachmentQueueCallbacks} from './domain/ai-chat-attachment-queue.service';
@@ -15,9 +17,23 @@ import {
 @Directive()
 export abstract class AiChatPanelUiController extends AiChatPanelRequestController {
   private reattachFallbackTimeout?: number;
+  private policyTopicSubscription?: Subscription;
 
   ngOnInit(): void {
     this.refreshBranding();
+    const userToken = this.auth.getUserToken();
+    if (userToken?.ai && userToken.ai.enabled === false) {
+      this.state.policy = {
+        enabled: false,
+        multiAgentEnabled: false,
+        maxAgentsPerRequest: 1,
+        maxActiveRequests: 1,
+        allowedModels: [],
+        defaultModelKey: '',
+        allowedReasoningEfforts: {},
+        quota: {limitTokens: null, consumedTokens: 0, reservedTokens: 0, remainingTokens: 0, periodEnd: null}
+      };
+    }
     const workspaceRestored = this.sessionPersistence.restoreWorkspace(this.state);
     this.state.sideSize = this.layoutService.clamp(
       this.state.sideSize, 320, Math.max(320, window.innerWidth - 96)
@@ -28,6 +44,7 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     this.initializeWorkspacePersistence(workspaceRestored);
     this.loadAvailableModels();
     this.loadPolicy();
+    this.subscribeToPolicyTopic();
     this.state.dock = this.sessionPersistence.restorePanelDock() || this.state.dock;
     this.windowCoordinator.connect({
       popoutReady: () => this.markPopoutReady(),
@@ -79,6 +96,28 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     });
   }
 
+  protected subscribeToPolicyTopic(): void {
+    const userToken = this.auth.getUserToken();
+    const username = userToken?.username?.trim();
+    if (!username || username === 'unknown') return;
+
+    this.policyTopicSubscription?.unsubscribe();
+    this.policyTopicSubscription = this.transportService.watch('/topic/ai/user/' + username + '/policy')
+      .pipe(takeUntil(this.destroyed$))
+      .subscribe((message: Message) => {
+        try {
+          const updated = JSON.parse(message.body);
+          if (updated) {
+            this.state.policy = updated;
+            this.state.policyLoading = false;
+            this.state.policyLoadFailed = false;
+          }
+        } catch (e) {
+          // ignore
+        }
+      });
+  }
+
   ngOnDestroy(): void {
     if (!this.state.popoutActive || this.popoutMode) this.flushWorkspacePersistence();
     this.windowCoordinator.destroy();
@@ -94,6 +133,7 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
     this.elicitationCoordinator.clear(this.state);
     this.clearChangeApprovalBatch();
     this.invalidateAttachmentReads();
+    this.policyTopicSubscription?.unsubscribe();
     this.requestSubscription?.unsubscribe();
     this.conversationHistorySubscription?.unsubscribe();
     this.lastConversationRestoreSubscription?.unsubscribe();
