@@ -65,6 +65,9 @@ public class SystemAccountQueryController implements InitializingBean {
     @Autowired
     private TenantQueryService tenantService;
 
+    @Autowired(required = false)
+    private org.oagi.score.gateway.http.api.ai_management.policy.service.AiPolicyService aiPolicyService;
+
     @Autowired
     private PasskeyProperties passkeyProperties;
 
@@ -159,6 +162,15 @@ public class SystemAccountQueryController implements InitializingBean {
         resp.put("passkey", ImmutableMap.builder()
                 .put("enabled", passkeyProperties.isEnabled())
                 .build());
+        if (aiPolicyService != null) {
+            try {
+                var policy = aiPolicyService.resolve(requester);
+                resp.put("ai", ImmutableMap.builder()
+                        .put("enabled", policy.aiEnabled())
+                        .build());
+            } catch (Exception ignore) {
+            }
+        }
 
         return resp;
     }

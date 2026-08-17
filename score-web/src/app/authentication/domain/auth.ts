@@ -25,6 +25,10 @@ export class PasskeyProperties {
   enabled: boolean;
 }
 
+export class AiProperties {
+  enabled: boolean;
+}
+
 export class TenantProperties {
   enabled: boolean;
   roles: string[];
@@ -42,6 +46,7 @@ export class UserToken {
   functionsRequiringEmailTransmission: FunctionsRequiringEmailTransmissionProperties;
   browseStandardMode: BrowseStandardModeProperties;
   passkey: PasskeyProperties;
+  ai: AiProperties;
 
   constructor() {
     this.roles = ['', ];
@@ -67,6 +72,8 @@ export class UserToken {
 
     this.passkey = new PasskeyProperties();
     this.passkey.enabled = false;
+    this.ai = new AiProperties();
+    this.ai.enabled = true;
   }
 }
 

@@ -20,6 +20,10 @@ import {
   admitsRestLiveSideChannel,
   restReplayDisposition
 } from './domain/ai-chat-event-admission';
+import {
+  AI_POLICY_ERROR_MESSAGES,
+  resolvePolicyErrorMessage
+} from './domain/ai-policy-error';
 
 export abstract class AiChatPanelRequestController extends AiChatPanelControllerBase {
   protected startChatRequest(prompt: string, attachments: AiChatAttachment[]): void {
@@ -227,7 +231,7 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         });
         this.state.messages.push({
           role: 'error',
-          content: this.attachmentFailureMessage(error)
+          content: this.resolveRequestErrorMessage(error)
         });
         this.state.currentStatus = 'Error';
         if (this.runDeferredNewChat()) {
@@ -260,6 +264,38 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
         unregister();
       });
     }
+  }
+
+  protected resolveRequestErrorMessage(error: unknown): string {
+    if (error instanceof HttpErrorResponse) {
+      const errorCode = error.headers?.get('x-error-code')?.trim();
+      const errorMessage = error.headers?.get('x-error-message')?.trim();
+      if (errorCode && AI_POLICY_ERROR_MESSAGES[errorCode]) {
+        if (errorCode === 'AI_DISABLED_BY_POLICY') {
+          if (this.state.policy) {
+            this.state.policy.enabled = false;
+          } else {
+            this.state.policy = {
+              enabled: false,
+              multiAgentEnabled: false,
+              maxAgentsPerRequest: 1,
+              maxActiveRequests: 1,
+              allowedModels: [],
+              defaultModelKey: '',
+              allowedReasoningEfforts: {},
+              quota: {limitTokens: null, consumedTokens: 0, reservedTokens: 0, remainingTokens: 0, periodEnd: null}
+            };
+          }
+        } else if (errorCode === 'AI_QUOTA_EXHAUSTED' && this.state.policy) {
+          this.state.policy.quota.remainingTokens = 0;
+        }
+        return AI_POLICY_ERROR_MESSAGES[errorCode];
+      }
+      if (errorMessage && (errorMessage.toLowerCase().includes('policy') || errorMessage.toLowerCase().includes('quota') || errorMessage.toLowerCase().includes('administrator'))) {
+        return resolvePolicyErrorMessage(errorCode, errorMessage);
+      }
+    }
+    return this.attachmentFailureMessage(error);
   }
 
   protected attachmentFailureMessage(error: unknown): string {
