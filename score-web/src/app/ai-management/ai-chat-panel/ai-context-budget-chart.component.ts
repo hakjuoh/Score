@@ -4,6 +4,7 @@
 
 import {CommonModule} from '@angular/common';
 import {Component, Input} from '@angular/core';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {
   AiContextBudgetData,
   AiContextBudgetSlice,
@@ -13,7 +14,7 @@ import {
 @Component({
   standalone: true,
   selector: 'score-ai-context-budget-chart',
-  imports: [CommonModule],
+  imports: [CommonModule, MatTooltipModule],
   templateUrl: './ai-context-budget-chart.component.html',
   styleUrls: ['./ai-context-budget-chart.component.css']
 })

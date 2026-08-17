@@ -155,14 +155,16 @@ export function setupAiChatPanelSpec(): void {
           {name: 'low', displayName: 'Low', description: 'Fast responses.'},
           {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'},
           {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
-        ]},
+        ],
+        contextWindow: 200000, outputReserveTokens: 16000, emergencyHeadroomTokens: 8192},
       {name: 'gpt-5_6-sol', displayName: 'GPT-5.6 SOL', description: 'GPT model.',
         provider: 'azure-openai', defaultModel: false,
         defaultReasoningEffort: 'medium', reasoningEfforts: [
           {name: 'low', displayName: 'Low', description: 'Fast responses.'},
           {name: 'medium', displayName: 'Medium', description: 'Balanced reasoning.'},
           {name: 'high', displayName: 'High', description: 'Greater reasoning.'}
-        ]}
+        ],
+        contextWindow: 1050000, outputReserveTokens: 128000, emergencyHeadroomTokens: 4096}
     ])),
     getMcpStatus: vi.fn(() => of({
       servers: [{name: 'connect-center-mcp', status: 'CONNECTED', toolCount: 12}]

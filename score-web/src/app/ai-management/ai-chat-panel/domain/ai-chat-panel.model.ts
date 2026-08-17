@@ -123,6 +123,25 @@ export interface AiSelfPolicy {
     periodStart: string | null; periodEnd: string | null};
 }
 
+export function disabledAiSelfPolicy(): AiSelfPolicy {
+  return {
+    enabled: false,
+    multiAgentEnabled: false,
+    maxAgentsPerRequest: 1,
+    maxOutputTokensPerCall: null,
+    maxTotalTokensPerRequest: null,
+    quota: {
+      period: null,
+      limitTokens: null,
+      consumedTokens: 0,
+      reservedTokens: 0,
+      remainingTokens: 0,
+      periodStart: null,
+      periodEnd: null
+    }
+  };
+}
+
 export type AiMcpServerStatusCode = 'CONNECTED' | 'NOT_CONFIGURED' | 'UNAVAILABLE';
 
 export interface AiMcpServerStatus {

@@ -39,6 +39,9 @@ export abstract class AiChatPanelViewController extends AiChatPanelEventControll
   }
 
   contextBudgetData(): AiContextBudgetData | undefined {
+    if (this.state.contextUsage && this.state.contextUsage.modelName !== this.state.selectedModelName) {
+      this.state.resetContextUsageForSelectedModel();
+    }
     const usage = this.state.contextUsage;
     if (!usage) return undefined;
     const model = this.state.selectedModel();

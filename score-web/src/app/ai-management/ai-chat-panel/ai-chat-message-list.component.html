@@ -27,6 +27,18 @@
           Check MCP with <code>/mcp</code>.
         </p>
       </section>
+    } @else if (messages.length === 0) {
+      <section class="session-summary session-summary-loading" aria-label="Initializing assistant session" aria-live="polite">
+        <div class="session-summary-title">
+          <mat-progress-spinner class="message-progress-spinner"
+                                mode="indeterminate"
+                                [diameter]="12"></mat-progress-spinner>
+          <span>Initializing assistant session…</span>
+        </div>
+        <p class="session-summary-tip">
+          Loading models and session settings…
+        </p>
+      </section>
     }
     @if (agentFocus; as focus) {
     <div class="agent-focus-view" role="region"
