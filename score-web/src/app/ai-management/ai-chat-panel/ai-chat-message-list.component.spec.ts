@@ -363,16 +363,6 @@ describe('AiChatMessageListComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('mat-progress-spinner')).toHaveLength(1);
   });
 
-  it('identifies the attachment in its remove control accessible name', () => {
-    fixture.componentInstance.attachments = [{
-      name: 'purchase-order.json', size: 128, mediaType: 'application/json', data: 'e30='
-    }];
-    fixture.detectChanges();
-
-    const remove = fixture.nativeElement.querySelector('.attachment-chip button') as HTMLButtonElement;
-    expect(remove.getAttribute('aria-label')).toBe('Remove attachment purchase-order.json');
-  });
-
   it('shows an initializing session status banner while models are loading', () => {
     fixture.componentInstance.availableModels = [];
     fixture.componentInstance.selectedModelName = '';

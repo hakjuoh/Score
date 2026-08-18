@@ -398,6 +398,7 @@ export abstract class AiChatPanelLifecycleController extends AiChatPanelConversa
 
   protected invalidateAttachmentReads(): void {
     this.attachmentQueue.invalidate();
+    this.state.loadingAttachments = [];
   }
 
   protected updateMainPanelInset(): void {

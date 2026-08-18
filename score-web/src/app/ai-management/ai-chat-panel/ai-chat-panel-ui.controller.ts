@@ -376,13 +376,35 @@ export abstract class AiChatPanelUiController extends AiChatPanelRequestControll
   protected attachmentQueueCallbacks(): AiChatAttachmentQueueCallbacks {
     return {
       active: () => !this.destroyed,
-      added: () => {
+      started: file => {
+        this.state.loadingAttachments.push({name: file.name});
+        this.scrollToBottom(true);
+      },
+      added: file => {
+        this.removeLoadingAttachment(file?.name);
         this.invalidateDraftAttachmentRestore();
         this.flushWorkspacePersistence();
+        this.scrollToBottom(true);
         this.focusPrompt();
       },
-      rejected: message => this.snackBar.open(message, 'Dismiss', {duration: 3500})
+      rejected: (message, file) => {
+        this.removeLoadingAttachment(file?.name);
+        this.snackBar.open(message, 'Dismiss', {duration: 3500});
+      }
     };
+  }
+
+  private removeLoadingAttachment(fileName?: string): void {
+    if (!fileName) {
+      this.state.loadingAttachments.pop();
+      return;
+    }
+    const index = this.state.loadingAttachments.findIndex(item => item.name === fileName);
+    if (index !== -1) {
+      this.state.loadingAttachments.splice(index, 1);
+    } else {
+      this.state.loadingAttachments.pop();
+    }
   }
 
   applyCommandSuggestion(command: AiChatCommand): void {

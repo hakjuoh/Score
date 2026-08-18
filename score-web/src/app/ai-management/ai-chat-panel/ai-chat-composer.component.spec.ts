@@ -206,4 +206,114 @@ describe('AiChatComposerComponent cancellation actions', () => {
     expect(selected).toHaveBeenCalledWith(component.commandSuggestions[0]);
   });
 
+  it('identifies the attachment in its remove control accessible name and emits removal', () => {
+    const removed = vi.fn();
+    component.attachmentRemoved.subscribe(removed);
+    component.attachments = [{
+      name: 'purchase-order.json', size: 128, mediaType: 'application/json', data: 'e30='
+    }];
+    fixture.detectChanges();
+
+    const chip = fixture.nativeElement.querySelector('.attachment-chip') as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.textContent).toContain('purchase-order.json');
+    const remove = chip.querySelector('button') as HTMLButtonElement;
+    expect(remove.getAttribute('aria-label')).toBe('Remove attachment purchase-order.json');
+    expect(remove.disabled).toBe(false);
+
+    remove.click();
+    expect(removed).toHaveBeenCalledWith(0);
+  });
+
+  it('disables attachment removal while a request is pending', () => {
+    component.pending = true;
+    component.attachments = [{
+      name: 'purchase-order.json', size: 128, mediaType: 'application/json', data: 'e30='
+    }];
+    fixture.detectChanges();
+
+    const remove = fixture.nativeElement.querySelector('.attachment-chip button') as HTMLButtonElement;
+    expect(remove.disabled).toBe(true);
+  });
+
+  it('renders attachment chips inside the command box alongside the prompt input', () => {
+    component.attachments = [{
+      name: 'E3077_inline.xsd', size: 256, mediaType: 'application/xml', data: 'e30='
+    }];
+    fixture.detectChanges();
+
+    const commandBox = fixture.nativeElement.querySelector('.command-box') as HTMLElement;
+    const chip = commandBox.querySelector('.attachment-chip') as HTMLElement;
+    const textarea = commandBox.querySelector('textarea') as HTMLTextAreaElement;
+
+    expect(chip).not.toBeNull();
+    expect(textarea).not.toBeNull();
+    expect(commandBox.contains(chip)).toBe(true);
+    expect(commandBox.contains(textarea)).toBe(true);
+  });
+
+  it('removes the last attachment when Backspace is pressed with empty prompt', () => {
+    const removed = vi.fn();
+    component.attachmentRemoved.subscribe(removed);
+    component.attachments = [
+      {name: 'file1.json', size: 100, mediaType: 'application/json', data: 'e30='},
+      {name: 'file2.xsd', size: 200, mediaType: 'application/xml', data: 'e30='}
+    ];
+    fixture.detectChanges();
+
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = '';
+    textarea.selectionStart = 0;
+    textarea.selectionEnd = 0;
+
+    const event = new KeyboardEvent('keydown', {key: 'Backspace', cancelable: true});
+    textarea.dispatchEvent(event);
+
+    expect(removed).toHaveBeenCalledWith(1);
+  });
+
+  it('does not remove attachment on Backspace when cursor is not at position 0', () => {
+    const removed = vi.fn();
+    component.attachmentRemoved.subscribe(removed);
+    component.attachments = [{name: 'file1.json', size: 100, mediaType: 'application/json', data: 'e30='}];
+    component.prompt = 'hello';
+    fixture.detectChanges();
+
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'hello';
+    textarea.selectionStart = 3;
+    textarea.selectionEnd = 3;
+
+    const event = new KeyboardEvent('keydown', {key: 'Backspace', cancelable: true});
+    textarea.dispatchEvent(event);
+
+    expect(removed).not.toHaveBeenCalled();
+  });
+
+  it('renders loading attachment chips with spinner while files are uploading', () => {
+    component.loadingAttachments = [{name: 'E3077_inline.xsd'}];
+    fixture.detectChanges();
+
+    const loadingChip = fixture.nativeElement.querySelector('.attachment-chip.loading') as HTMLElement;
+    expect(loadingChip).not.toBeNull();
+    expect(loadingChip.textContent).toContain('E3077_inline.xsd');
+    expect(loadingChip.querySelector('mat-progress-spinner')).not.toBeNull();
+    expect(loadingChip.querySelector('button')).toBeNull();
+  });
+
+  it('renders both loaded and loading attachment chips concurrently', () => {
+    component.attachments = [{name: 'ready.json', size: 100, mediaType: 'application/json', data: 'e30='}];
+    component.loadingAttachments = [{name: 'uploading.xsd'}];
+    fixture.detectChanges();
+
+    const chips = fixture.nativeElement.querySelectorAll('.attachment-chip') as NodeListOf<HTMLElement>;
+    expect(chips).toHaveLength(2);
+    expect(chips[0].textContent).toContain('ready.json');
+    expect(chips[0].querySelector('button')).not.toBeNull();
+    expect(chips[1].classList.contains('loading')).toBe(true);
+    expect(chips[1].textContent).toContain('uploading.xsd');
+    expect(chips[1].querySelector('mat-progress-spinner')).not.toBeNull();
+  });
+
 });
+
