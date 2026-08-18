@@ -49,7 +49,7 @@ export function validModelUpdate(form: AiModelUpdate): boolean {
   if (new Set(form.thinkingModes).size !== form.thinkingModes.length
     || form.thinkingModes.some(mode => !mode.trim())
     || !!form.defaultThinking && !form.thinkingModes.includes(form.defaultThinking.trim())
-    || form.defaultModel && !form.enabled) return false;
+    || (form.defaultModel || form.lightweightModel) && !form.enabled) return false;
 
   const efforts = form.reasoningEfforts;
   const effortNames = efforts.map(effort => effort.name.trim().toLowerCase());

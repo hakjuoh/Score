@@ -43,12 +43,13 @@ public class AiModelCatalogAdminService {
     public PageResponse<AiModelCatalogView> search(ScoreUser actor, String model,
                                                    String provider, Boolean enabled,
                                                    Boolean defaultModel,
+                                                   Boolean lightweightModel,
                                                    String defaultEffort, String effort,
                                                    List<String> updaterLoginIdList,
                                                    Instant updatedAfter, Instant updatedBefore,
                                                    PageRequest pageRequest) {
         authorization.requireAdministrator(actor);
-        return repository().search(model, provider, enabled, defaultModel,
+        return repository().search(model, provider, enabled, defaultModel, lightweightModel,
                 defaultEffort, effort, updaterLoginIdList,
                 updatedAfter, updatedBefore, pageRequest);
     }

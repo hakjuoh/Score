@@ -237,7 +237,8 @@ score:
         base-url: ${AZURE_OPENAI_ENDPOINT:}
         key: ${AZURE_OPENAI_API_KEY:}
         api-version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
-    model-name: claude-opus-5
+    model-name: gpt-5_6-sol
+    lightweight-model-name: gpt-5_6-luna
     request-inactivity-timeout: ${SCORE_AI_REQUEST_INACTIVITY_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
     elicitation-timeout: ${SCORE_AI_ELICITATION_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}
     change-approval-timeout: ${SCORE_AI_CHANGE_APPROVAL_TIMEOUT:${SCORE_AI_REQUEST_TIMEOUT:${score.ai.request-timeout:10m}}}

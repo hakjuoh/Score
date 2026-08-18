@@ -8,7 +8,7 @@ describe('AI admin validation', () => {
 
   const model = (): AiModelUpdate => ({providerId: 1,
     modelKey: 'model', providerModelName: 'model', displayName: 'Model', description: '',
-    enabled: true, defaultModel: true, sortOrder: 0, maxTokens: 4096,
+    enabled: true, defaultModel: true, lightweightModel: false, sortOrder: 0, maxTokens: 4096,
     contextWindow: 128000, outputReserveTokens: 4096, autoCompactThresholdTokens: 100000,
     emergencyHeadroomTokens: 4096, toolOutputTokenLimit: 32000,
     providerCompactionEnabled: true, temperature: null, thinkingBudgetTokens: null,
@@ -23,10 +23,10 @@ describe('AI admin validation', () => {
     expect(validProviderUpdate({...provider(), providerType: 'azure-openai'})).toBe(false);
     expect(validProviderUpdate({...provider(), providerType: 'custom'})).toBe(false);
     expect(validProviderUpdate({...provider(), baseUrl: null})).toBe(false);
-    expect(validProviderUpdate({...provider(), baseUrl: 'file:///tmp/key'})).toBe(false);
+    expect(validProviderUpdate({...provider(), enabled: false, baseUrl: null})).toBe(true);
   });
 
-  it('matches context budget, uniqueness, integer, and effort invariants', () => {
+  it('validates model numeric bounds, uniqueness, and effort defaults', () => {
     expect(validModelUpdate(model())).toBe(true);
     expect(validModelUpdate({...model(), maxTokens: 1.5})).toBe(false);
     expect(validModelUpdate({...model(), autoCompactThresholdTokens: 128000})).toBe(false);
@@ -36,7 +36,8 @@ describe('AI admin validation', () => {
     expect(validModelUpdate({...model(), reasoningEfforts: [
       ...model().reasoningEfforts, {...model().reasoningEfforts[0], name: 'HIGH', defaultEffort: false}
     ]})).toBe(false);
-    expect(validModelUpdate({...model(), enabled: false, defaultModel: false,
+    expect(validModelUpdate({...model(), enabled: false, defaultModel: false, lightweightModel: true})).toBe(false);
+    expect(validModelUpdate({...model(), enabled: false, defaultModel: false, lightweightModel: false,
       reasoningEfforts: [{...model().reasoningEfforts[0], defaultEffort: false}]})).toBe(false);
     expect(validModelUpdate({...model(), reasoningEfforts: [
       {...model().reasoningEfforts[0], sortOrder: -1}

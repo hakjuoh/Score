@@ -169,6 +169,16 @@ final class JooqAiChatConversationCommands {
                 .execute();
     }
 
+    void updateTitle(String conversationId, String newTitle) {
+        AiChatConversationId internalConversationId = access.lockOwned(conversationId);
+        dslContext.update(AI_CHAT_CONVERSATION)
+                .set(AI_CHAT_CONVERSATION.TITLE, title(newTitle))
+                .set(AI_CHAT_CONVERSATION.LAST_UPDATE_TIMESTAMP, LocalDateTime.now())
+                .where(AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID
+                        .eq(access.valueOf(internalConversationId)))
+                .execute();
+    }
+
     boolean delete(String conversationId) {
         access.requireOwned(conversationId);
         return dslContext.deleteFrom(AI_CHAT_CONVERSATION)

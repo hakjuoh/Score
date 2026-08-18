@@ -15,6 +15,7 @@ class AiAgentCatalogTest {
 
         assertThat(catalog.all()).extracting(AiAgentDefinition::id)
                 .containsExactly("compactor-agent", "connectcenter-assistant",
+                        "conversation-titler",
                         "critical-reviewer", "definition-generator", "evidence-researcher",
                         "gateway-agent", "general-purpose", "name-suggester",
                         "response-only-agent", "tool-search-advisor", "workflow-evaluator",

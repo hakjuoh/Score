@@ -43,9 +43,18 @@ public class ScoreAiModelRegistry {
                  Map<String, ScoreAiProperties.Provider> providers,
                  Map<String, ScoreAiProperties.Model> configurations,
                  String defaultModel) {
+        install(refreshedModels, providers, configurations, defaultModel, null);
+    }
+
+    void install(Map<String, ChatModel> refreshedModels,
+                 Map<String, ScoreAiProperties.Provider> providers,
+                 Map<String, ScoreAiProperties.Model> configurations,
+                 String defaultModel,
+                 String lightweightModel) {
         properties.setProviders(new LinkedHashMap<>(providers));
         properties.setModels(new LinkedHashMap<>(configurations));
         properties.setModelName(defaultModel);
+        properties.setLightweightModelName(lightweightModel);
         this.models = Map.copyOf(refreshedModels);
     }
 
@@ -84,6 +93,15 @@ public class ScoreAiModelRegistry {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                         "score.ai.model-name must reference a configured model"));
+    }
+
+    public String lightweightModelName() {
+        refresh();
+        String name = properties.getLightweightModelName();
+        if (StringUtils.hasText(name) && isAvailable(name)) {
+            return name;
+        }
+        return modelName();
     }
 
     public String resolveModelName(String requestedModelName) {

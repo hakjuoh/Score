@@ -11,6 +11,7 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequ
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
 import org.oagi.score.gateway.http.api.ai_management.conversation.ConversationCompactor;
 import org.oagi.score.gateway.http.api.ai_management.conversation.ConversationResultCommitter;
+import org.oagi.score.gateway.http.api.ai_management.conversation.ConversationTitleGenerator;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentInputGuardrailChain;
 import org.oagi.score.gateway.http.api.ai_management.guardrail.AgentOutputGuardrailChain;
@@ -71,6 +72,7 @@ public class ChatService {
                        AgentOutputGuardrailChain outputGuardrails,
                        ConversationResultCommitter resultCommitter,
                        ConversationCompactor compactor,
+                       ConversationTitleGenerator titleGenerator,
                        ResponseOnlyAgent responseOnlyAgent, AiFileService files,
                        ScoreAiObservability observability,
                        ObjectProvider<ExecutionObserver> executionObservers,
@@ -81,7 +83,7 @@ public class ChatService {
                         requester, AiChatJsonSerializer.getInstance()),
                 objectMapper, requests, contextBudgets, workflow, agentRunner,
                 atifTrajectoryService, inputGuardrails, outputGuardrails, resultCommitter,
-                compactor, responseOnlyAgent, files, observability,
+                compactor, titleGenerator, responseOnlyAgent, files, observability,
                 executionObservers != null
                         ? executionObservers.getIfAvailable(ExecutionObserver::noop)
                         : ExecutionObserver.noop()), policyService);
@@ -132,7 +134,7 @@ public class ChatService {
                 conversations, value.objectMapper(), value.contextBudgets(),
                 value.inputGuardrails(), observability, observer, compactions,
                 journal, outputDiscloser, turnExecutor, turnCommitter, results, responses,
-                manualCompactions);
+                manualCompactions, value.titleGenerator());
     }
 
     /** Cohesive runtime collaborators; tests customize this value instead of constructors. */
@@ -151,6 +153,7 @@ public class ChatService {
             AgentOutputGuardrailChain outputGuardrails,
             ConversationResultCommitter resultCommitter,
             ConversationCompactor compactor,
+            ConversationTitleGenerator titleGenerator,
             ResponseOnlyAgent responseOnlyAgent,
             AiFileService files,
             ScoreAiObservability observability,
