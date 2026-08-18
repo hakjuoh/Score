@@ -446,11 +446,33 @@ class ScoreAiConfigurationTest {
 
         assertTrue(registry.isAvailable());
         assertEquals("gpt-5.6-sol", registry.modelName());
+        assertEquals("gpt-5.6-sol", registry.lightweightModelName());
         assertTrue(registry.availableModels().getFirst().defaultModel());
         assertEquals("GPT-5.6 SOL", registry.availableModels().getFirst().displayName());
         assertEquals("medium", registry.availableModels().getFirst().defaultReasoningEffort());
         assertEquals(List.of("Low", "Medium", "High"), registry.availableModels().getFirst()
                 .reasoningEfforts().stream().map(ScoreAiModelRegistry.ReasoningEffortDescriptor::displayName).toList());
+    }
+
+    @Test
+    void resolvesConfiguredLightweightModelWhenAvailable() {
+        ScoreAiProperties properties = properties("gpt-5.6-sol", "azure-openai");
+        ScoreAiProperties.Model miniModel = new ScoreAiProperties.Model();
+        miniModel.setDisplayName("GPT-4o Mini");
+        miniModel.setProvider("azure-openai");
+        miniModel.setModel("gpt-4o-mini");
+        properties.getModels().put("gpt-4o-mini", miniModel);
+        properties.setLightweightModelName("gpt-4o-mini");
+        ScoreAiProperties.Provider provider = properties.getProviders().get("azure-openai");
+        provider.setBaseUrl("https://example.openai.azure.com");
+        provider.setKey("test-key");
+
+        ScoreAiModelRegistry registry = new ScoreAiModelRegistry(
+                properties, Map.of("gpt-5.6-sol", mock(ChatModel.class),
+                "gpt-4o-mini", mock(ChatModel.class)));
+
+        assertEquals("gpt-5.6-sol", registry.modelName());
+        assertEquals("gpt-4o-mini", registry.lightweightModelName());
     }
 
     @Test

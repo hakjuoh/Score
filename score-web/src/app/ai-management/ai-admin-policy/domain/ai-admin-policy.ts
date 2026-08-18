@@ -120,6 +120,7 @@ export interface AiAdminModel {
   description: string;
   enabled: boolean;
   defaultModel: boolean;
+  lightweightModel: boolean;
   sortOrder: number;
   maxTokens: number | null;
   contextWindow: number;
@@ -153,6 +154,7 @@ export interface AiModelUpdate {
   description: string;
   enabled: boolean;
   defaultModel: boolean;
+  lightweightModel: boolean;
   sortOrder: number;
   maxTokens: number | null;
   contextWindow: number;
@@ -181,6 +183,7 @@ export interface AiModelCommand {
   modelKey: string;
   enabled: boolean;
   defaultModel: boolean;
+  lightweightModel: boolean;
   sortOrder: number;
   maxTokens: number | null;
   contextWindow: number;
@@ -320,7 +323,7 @@ export class AiProviderListRequest {
 export class AiModelListRequest {
   filters = {
     model: '', provider: '', enabled: [] as boolean[],
-    defaultModel: [] as boolean[], defaultEffort: '', effort: '',
+    defaultModel: [] as boolean[], lightweightModel: [] as boolean[], defaultEffort: '', effort: '',
     updaterLoginIdList: [] as string[], updatedAfter: null as Date | null,
     updatedBefore: null as Date | null
   };
@@ -334,6 +337,7 @@ export class AiModelListRequest {
       provider: params.get('provider') || '',
       enabled: booleanList(params, 'enabled'),
       defaultModel: booleanList(params, 'defaultModel'),
+      lightweightModel: booleanList(params, 'lightweightModel'),
       defaultEffort: params.get('defaultEffort') || '',
       effort: params.get('effort') || '',
       updaterLoginIdList: stringList(params, 'updaterLoginIdList'),
@@ -348,6 +352,7 @@ export class AiModelListRequest {
     params = setText(params, 'provider', this.filters.provider);
     params = setList(params, 'enabled', this.filters.enabled);
     params = setList(params, 'defaultModel', this.filters.defaultModel);
+    params = setList(params, 'lightweightModel', this.filters.lightweightModel);
     params = setText(params, 'defaultEffort', this.filters.defaultEffort);
     params = setText(params, 'effort', this.filters.effort);
     params = setList(params, 'updaterLoginIdList', this.filters.updaterLoginIdList);

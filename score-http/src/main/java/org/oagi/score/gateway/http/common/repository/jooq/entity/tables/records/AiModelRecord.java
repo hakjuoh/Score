@@ -150,11 +150,27 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
+     * Setter for <code>oagi.ai_model.lightweight_model</code>. Set to 1 only
+     * for the global lightweight AI model
+     */
+    public void setLightweightModel(Byte value) {
+        set(8, value);
+    }
+
+    /**
+     * Getter for <code>oagi.ai_model.lightweight_model</code>. Set to 1 only
+     * for the global lightweight AI model
+     */
+    public Byte getLightweightModel() {
+        return (Byte) get(8);
+    }
+
+    /**
      * Setter for <code>oagi.ai_model.sort_order</code>. Stable display and
      * fallback ordering of AI models
      */
     public void setSortOrder(UInteger value) {
-        set(8, value);
+        set(9, value);
     }
 
     /**
@@ -162,7 +178,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * fallback ordering of AI models
      */
     public UInteger getSortOrder() {
-        return (UInteger) get(8);
+        return (UInteger) get(9);
     }
 
     /**
@@ -170,7 +186,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * budget for one provider call
      */
     public void setMaxTokens(UInteger value) {
-        set(9, value);
+        set(10, value);
     }
 
     /**
@@ -178,7 +194,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * budget for one provider call
      */
     public UInteger getMaxTokens() {
-        return (UInteger) get(9);
+        return (UInteger) get(10);
     }
 
     /**
@@ -186,7 +202,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * window size in tokens
      */
     public void setContextWindow(ULong value) {
-        set(10, value);
+        set(11, value);
     }
 
     /**
@@ -194,7 +210,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * window size in tokens
      */
     public ULong getContextWindow() {
-        return (ULong) get(10);
+        return (ULong) get(11);
     }
 
     /**
@@ -202,7 +218,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * tokens reserved during context budget calculation
      */
     public void setOutputReserveTokens(ULong value) {
-        set(11, value);
+        set(12, value);
     }
 
     /**
@@ -210,7 +226,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * tokens reserved during context budget calculation
      */
     public ULong getOutputReserveTokens() {
-        return (ULong) get(11);
+        return (ULong) get(12);
     }
 
     /**
@@ -218,7 +234,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Context token threshold that triggers automatic compaction
      */
     public void setAutoCompactThresholdTokens(ULong value) {
-        set(12, value);
+        set(13, value);
     }
 
     /**
@@ -226,7 +242,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Context token threshold that triggers automatic compaction
      */
     public ULong getAutoCompactThresholdTokens() {
-        return (ULong) get(12);
+        return (ULong) get(13);
     }
 
     /**
@@ -234,7 +250,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Emergency context headroom in tokens
      */
     public void setEmergencyHeadroomTokens(ULong value) {
-        set(13, value);
+        set(14, value);
     }
 
     /**
@@ -242,7 +258,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Emergency context headroom in tokens
      */
     public ULong getEmergencyHeadroomTokens() {
-        return (ULong) get(13);
+        return (ULong) get(14);
     }
 
     /**
@@ -250,7 +266,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * tool output tokens retained in context
      */
     public void setToolOutputTokenLimit(ULong value) {
-        set(14, value);
+        set(15, value);
     }
 
     /**
@@ -258,7 +274,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * tool output tokens retained in context
      */
     public ULong getToolOutputTokenLimit() {
-        return (ULong) get(14);
+        return (ULong) get(15);
     }
 
     /**
@@ -266,7 +282,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Spring AI model options as a JSON object
      */
     public void setModelOptionsJson(String value) {
-        set(15, value);
+        set(16, value);
     }
 
     /**
@@ -274,7 +290,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Spring AI model options as a JSON object
      */
     public String getModelOptionsJson() {
-        return (String) get(15);
+        return (String) get(16);
     }
 
     /**
@@ -282,7 +298,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * administrator who created the model
      */
     public void setCreatedBy(ULong value) {
-        set(16, value);
+        set(17, value);
     }
 
     /**
@@ -290,7 +306,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * administrator who created the model
      */
     public ULong getCreatedBy() {
-        return (ULong) get(16);
+        return (ULong) get(17);
     }
 
     /**
@@ -298,7 +314,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * administrator who last updated the model
      */
     public void setLastUpdatedBy(ULong value) {
-        set(17, value);
+        set(18, value);
     }
 
     /**
@@ -306,7 +322,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * administrator who last updated the model
      */
     public ULong getLastUpdatedBy() {
-        return (ULong) get(17);
+        return (ULong) get(18);
     }
 
     /**
@@ -314,7 +330,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * when the model was created
      */
     public void setCreationTimestamp(LocalDateTime value) {
-        set(18, value);
+        set(19, value);
     }
 
     /**
@@ -322,7 +338,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * when the model was created
      */
     public LocalDateTime getCreationTimestamp() {
-        return (LocalDateTime) get(18);
+        return (LocalDateTime) get(19);
     }
 
     /**
@@ -330,7 +346,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * time when the model was last updated
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
-        set(19, value);
+        set(20, value);
     }
 
     /**
@@ -338,7 +354,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * time when the model was last updated
      */
     public LocalDateTime getLastUpdateTimestamp() {
-        return (LocalDateTime) get(19);
+        return (LocalDateTime) get(20);
     }
 
     // -------------------------------------------------------------------------
@@ -364,7 +380,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     /**
      * Create a detached, initialised AiModelRecord
      */
-    public AiModelRecord(ULong aiModelId, ULong providerId, String modelKey, String providerModelName, String displayName, String description, Byte enabled, Byte defaultModel, UInteger sortOrder, UInteger maxTokens, ULong contextWindow, ULong outputReserveTokens, ULong autoCompactThresholdTokens, ULong emergencyHeadroomTokens, ULong toolOutputTokenLimit, String modelOptionsJson, ULong createdBy, ULong lastUpdatedBy, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
+    public AiModelRecord(ULong aiModelId, ULong providerId, String modelKey, String providerModelName, String displayName, String description, Byte enabled, Byte defaultModel, Byte lightweightModel, UInteger sortOrder, UInteger maxTokens, ULong contextWindow, ULong outputReserveTokens, ULong autoCompactThresholdTokens, ULong emergencyHeadroomTokens, ULong toolOutputTokenLimit, String modelOptionsJson, ULong createdBy, ULong lastUpdatedBy, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
         super(AiModel.AI_MODEL);
 
         setAiModelId(aiModelId);
@@ -375,6 +391,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
         setDescription(description);
         setEnabled(enabled);
         setDefaultModel(defaultModel);
+        setLightweightModel(lightweightModel);
         setSortOrder(sortOrder);
         setMaxTokens(maxTokens);
         setContextWindow(contextWindow);

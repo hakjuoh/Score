@@ -22,6 +22,7 @@ public class ScoreAiProperties {
     private Map<String, Provider> providers = new LinkedHashMap<>();
     private Map<String, Model> models = new LinkedHashMap<>();
     private String modelName;
+    private String lightweightModelName;
     private Duration requestTimeout;
     private Duration requestInactivityTimeout;
     private Duration elicitationTimeout;
@@ -63,6 +64,14 @@ public class ScoreAiProperties {
 
     public void setModelName(String modelName) {
         this.modelName = modelName;
+    }
+
+    public String getLightweightModelName() {
+        return lightweightModelName;
+    }
+
+    public void setLightweightModelName(String lightweightModelName) {
+        this.lightweightModelName = lightweightModelName;
     }
 
     /** Legacy shared timeout retained as a fallback for existing deployments. */

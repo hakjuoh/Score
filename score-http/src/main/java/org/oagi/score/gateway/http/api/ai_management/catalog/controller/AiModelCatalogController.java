@@ -33,6 +33,7 @@ public class AiModelCatalogController {
             @RequestParam(required = false) String provider,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) Boolean defaultModel,
+            @RequestParam(required = false) Boolean lightweightModel,
             @RequestParam(required = false) String defaultEffort,
             @RequestParam(required = false) String effort,
             @RequestParam(required = false) String updaterLoginIdList,
@@ -42,7 +43,7 @@ public class AiModelCatalogController {
             @RequestParam(required = false) Integer pageIndex,
             @RequestParam(required = false) Integer pageSize) {
         return models.search(sessions.asScoreUser(p), model, provider, enabled, defaultModel,
-                defaultEffort, effort, separate(updaterLoginIdList).toList(),
+                lightweightModel, defaultEffort, effort, separate(updaterLoginIdList).toList(),
                 updatedAfter, updatedBefore,
                 org.oagi.score.gateway.http.common.util.ControllerUtils.pageRequest(
                         pageIndex, pageSize, orderBy));

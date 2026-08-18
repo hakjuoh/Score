@@ -54,6 +54,7 @@ export class AiAdminPolicyService {
     params = this.text(params, 'provider', request.filters.provider);
     params = this.value(params, 'enabled', this.singleBoolean(request.filters.enabled));
     params = this.value(params, 'defaultModel', this.singleBoolean(request.filters.defaultModel));
+    params = this.value(params, 'lightweightModel', this.singleBoolean(request.filters.lightweightModel));
     params = this.text(params, 'defaultEffort', request.filters.defaultEffort);
     params = this.text(params, 'effort', request.filters.effort);
     params = this.list(params, 'updaterLoginIdList', request.filters.updaterLoginIdList);

@@ -100,6 +100,7 @@ class ChatServiceTest {
         AgentOutputGuardrailChain outputGuardrails = null;
         org.oagi.score.gateway.http.api.ai_management.conversation.ConversationResultCommitter committer = null;
         org.oagi.score.gateway.http.api.ai_management.conversation.ConversationCompactor compactor = null;
+        org.oagi.score.gateway.http.api.ai_management.conversation.ConversationTitleGenerator titleGenerator = null;
         ResponseOnlyAgent responseOnly = null;
         org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability observability =
                 org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability.noop();
@@ -120,6 +121,8 @@ class ChatServiceTest {
                 committer = value;
             } else if (override instanceof org.oagi.score.gateway.http.api.ai_management.conversation.ConversationCompactor value) {
                 compactor = value;
+            } else if (override instanceof org.oagi.score.gateway.http.api.ai_management.conversation.ConversationTitleGenerator value) {
+                titleGenerator = value;
             } else if (override instanceof ResponseOnlyAgent value) responseOnly = value;
             else if (override instanceof org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability value) {
                 observability = value;
@@ -133,7 +136,7 @@ class ChatServiceTest {
         return new ChatService(models, new ChatService.Dependencies(
                 identity, advisor, ignored -> memory, ignored -> repository,
                 objectMapper, requests, budgets, workflow, runner, atif,
-                inputGuardrails, outputGuardrails, committer, compactor,
+                inputGuardrails, outputGuardrails, committer, compactor, titleGenerator,
                 responseOnly, null, observability, observer));
     }
 
@@ -1431,6 +1434,37 @@ class ChatServiceTest {
         verify(memory, never()).add(any(), any(Message.class));
         verify(repository, never()).markExpanded("conversation-1");
         assertThat(registry.finish(entry, new CancellationException())).isEqualTo("CANCELLED");
+    }
+
+    @Test
+    void generatesTitleOnFirstTurnUsingUserPromptAfterGuardrails() {
+        ScoreAiModelRegistry models = mock(ScoreAiModelRegistry.class);
+        when(models.isAvailable()).thenReturn(true);
+        AgentIdentityProvider identity = identity();
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("conversation-1")).thenReturn(List.of());
+        AiChatConversationRepository repository = mock(AiChatConversationRepository.class);
+        when(repository.latestUsage("conversation-1")).thenReturn(Optional.empty());
+        WorkflowRunner workflow = mock(WorkflowRunner.class);
+        when(workflow.execute(any())).thenReturn(new AgentOutput("Hi back!", Map.of()));
+        AiContextBudgetService budgets = mock(AiContextBudgetService.class);
+        when(budgets.budget("model")).thenReturn(Optional.empty());
+        org.oagi.score.gateway.http.api.ai_management.conversation.ConversationTitleGenerator titleGenerator =
+                mock(org.oagi.score.gateway.http.api.ai_management.conversation.ConversationTitleGenerator.class);
+        when(titleGenerator.generateTitle(org.mockito.ArgumentMatchers.eq("Hello there"), org.mockito.ArgumentMatchers.any()))
+                .thenReturn("Hello Summary");
+
+        ChatService service = service(models, identity, null, memory, repository,
+                new ObjectMapper(), null, budgets, workflow, null, null, titleGenerator);
+
+        ScoreUser requester = user();
+        var response = service.chat(prepared("Hello there", List.of()), requester, ignored -> {});
+
+        assertThat(response.response()).isEqualTo("Hi back!");
+        org.mockito.Mockito.verify(titleGenerator, org.mockito.Mockito.timeout(1000))
+                .generateTitle(org.mockito.ArgumentMatchers.eq("Hello there"), org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.timeout(1000))
+                .updateTitle(org.mockito.ArgumentMatchers.eq("conversation-1"), org.mockito.ArgumentMatchers.eq("Hello Summary"));
     }
 
     private ChatRequest prepared(String prompt, List<ChatAttachment> attachments) {

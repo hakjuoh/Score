@@ -214,6 +214,7 @@ CREATE TABLE `ai_model`
     `description`                  varchar(1000) NOT NULL COMMENT 'Human-readable description of the model',
     `enabled`                      tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Indicates whether the model is available for new requests',
     `default_model`                tinyint(1) NULL DEFAULT NULL COMMENT 'Set to 1 only for the global default AI model',
+    `lightweight_model`            tinyint(1) NULL DEFAULT NULL COMMENT 'Set to 1 only for the global lightweight AI model',
     `sort_order`                   int unsigned NOT NULL DEFAULT 0 COMMENT 'Stable display and fallback ordering of AI models',
     `max_tokens`                   int unsigned NULL COMMENT 'Maximum output-token budget for one provider call',
     `context_window`               bigint unsigned NOT NULL COMMENT 'Maximum context window size in tokens',
@@ -229,8 +230,10 @@ CREATE TABLE `ai_model`
     PRIMARY KEY (`ai_model_id`),
     UNIQUE KEY `ai_model_key_uk` (`model_key`),
     UNIQUE KEY `ai_model_default_model_uk` (`default_model`),
+    UNIQUE KEY `ai_model_lightweight_model_uk` (`lightweight_model`),
     KEY `ai_model_provider_idx` (`provider_id`),
     CONSTRAINT `ai_model_default_model_ck` CHECK (`default_model` = 1 OR `default_model` IS NULL),
+    CONSTRAINT `ai_model_lightweight_model_ck` CHECK (`lightweight_model` = 1 OR `lightweight_model` IS NULL),
     CONSTRAINT `ai_model_provider_fk`
         FOREIGN KEY (`provider_id`) REFERENCES `ai_provider` (`ai_provider_id`) ON DELETE RESTRICT,
     CONSTRAINT `ai_model_created_by_fk`
