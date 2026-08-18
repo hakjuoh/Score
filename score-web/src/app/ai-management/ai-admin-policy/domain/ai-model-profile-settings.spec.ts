@@ -110,7 +110,7 @@ describe('AI model profile settings', () => {
   function form(): AiModelUpdate {
     return {providerId: 1, modelKey: 'model',
       providerModelName: 'provider-model', displayName: 'Model', description: '',
-      enabled: true, defaultModel: false, sortOrder: 0, maxTokens: 100,
+      enabled: true, defaultModel: false, lightweightModel: false, sortOrder: 0, maxTokens: 100,
       contextWindow: 1000, outputReserveTokens: 100, autoCompactThresholdTokens: 700,
       emergencyHeadroomTokens: 10, toolOutputTokenLimit: 100,
       providerCompactionEnabled: false, temperature: 0.5, thinkingBudgetTokens: null,

@@ -41,11 +41,12 @@ describe('AiAdminPolicyService REST contract', () => {
 
     const models = new AiModelListRequest();
     models.filters = {...models.filters, provider: 'OpenAI', enabled: [true],
-      defaultModel: [false], defaultEffort: 'medium', effort: 'high'};
+      defaultModel: [false], lightweightModel: [true], defaultEffort: 'medium', effort: 'high'};
     service.searchModels(models).subscribe();
     request = http.expectOne(req => req.url === '/api/admin/ai/models/search');
     expect(request.request.params.get('provider')).toBe('OpenAI');
     expect(request.request.params.get('defaultModel')).toBe('false');
+    expect(request.request.params.get('lightweightModel')).toBe('true');
     expect(request.request.params.get('effort')).toBe('high');
     request.flush({list: [], page: 0, size: 10, length: 0});
 

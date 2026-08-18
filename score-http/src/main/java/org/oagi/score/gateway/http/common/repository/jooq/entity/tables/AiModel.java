@@ -117,6 +117,12 @@ public class AiModel extends TableImpl<AiModelRecord> {
     public final TableField<AiModelRecord, Byte> DEFAULT_MODEL = createField(DSL.name("default_model"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Set to 1 only for the global default AI model");
 
     /**
+     * The column <code>oagi.ai_model.lightweight_model</code>. Set to 1 only
+     * for the global lightweight AI model
+     */
+    public final TableField<AiModelRecord, Byte> LIGHTWEIGHT_MODEL = createField(DSL.name("lightweight_model"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Set to 1 only for the global lightweight AI model");
+
+    /**
      * The column <code>oagi.ai_model.sort_order</code>. Stable display and
      * fallback ordering of AI models
      */
@@ -272,7 +278,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
 
     @Override
     public List<UniqueKey<AiModelRecord>> getUniqueKeys() {
-        return Arrays.asList(Keys.KEY_AI_MODEL_AI_MODEL_DEFAULT_MODEL_UK, Keys.KEY_AI_MODEL_AI_MODEL_KEY_UK);
+        return Arrays.asList(Keys.KEY_AI_MODEL_AI_MODEL_DEFAULT_MODEL_UK, Keys.KEY_AI_MODEL_AI_MODEL_KEY_UK, Keys.KEY_AI_MODEL_AI_MODEL_LIGHTWEIGHT_MODEL_UK);
     }
 
     @Override
@@ -374,6 +380,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
     public List<Check<AiModelRecord>> getChecks() {
         return Arrays.asList(
             Internal.createCheck(this, DSL.name("ai_model_default_model_ck"), "`default_model` = 1 or `default_model` is null", true),
+            Internal.createCheck(this, DSL.name("ai_model_lightweight_model_ck"), "`lightweight_model` = 1 or `lightweight_model` is null", true),
             Internal.createCheck(this, DSL.name("model_options_json"), "json_valid(`model_options_json`)", true)
         );
     }

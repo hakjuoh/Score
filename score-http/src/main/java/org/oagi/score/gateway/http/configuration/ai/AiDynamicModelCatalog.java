@@ -51,7 +51,7 @@ public class AiDynamicModelCatalog {
                 var clients = configuration.createChatModelsFromProperties(
                         candidate, anthropic, openAi);
                 registry.install(clients, candidate.getProviders(), candidate.getModels(),
-                        candidate.getModelName());
+                        candidate.getModelName(), candidate.getLightweightModelName());
             } finally {
                 configuration.clearProviderKeys(candidate);
             }

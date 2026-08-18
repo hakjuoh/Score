@@ -20,6 +20,7 @@ export function isImplicitUnsetEffort(
 export function modelCommand(form: AiModelUpdate): AiModelCommand {
   return {providerId: form.providerId,
     modelKey: form.modelKey, enabled: form.enabled, defaultModel: form.defaultModel,
+    lightweightModel: form.lightweightModel,
     sortOrder: form.sortOrder, maxTokens: form.maxTokens, contextWindow: form.contextWindow,
     outputReserveTokens: form.outputReserveTokens,
     autoCompactThresholdTokens: form.autoCompactThresholdTokens,

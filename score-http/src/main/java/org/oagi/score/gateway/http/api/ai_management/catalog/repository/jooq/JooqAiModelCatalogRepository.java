@@ -75,6 +75,7 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
     @Override
     public PageResponse<AiModelCatalogView> search(String model, String provider,
                                                    Boolean enabled, Boolean defaultModel,
+                                                   Boolean lightweightModel,
                                                    String defaultEffort, String effort,
                                                    List<String> updaterLoginIdList,
                                                    Instant updatedAfter, Instant updatedBefore,
@@ -96,6 +97,11 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
             condition = condition.and(defaultModel
                     ? AI_MODEL.DEFAULT_MODEL.eq((byte) 1)
                     : AI_MODEL.DEFAULT_MODEL.isNull());
+        }
+        if (lightweightModel != null) {
+            condition = condition.and(lightweightModel
+                    ? AI_MODEL.LIGHTWEIGHT_MODEL.eq((byte) 1)
+                    : AI_MODEL.LIGHTWEIGHT_MODEL.isNull());
         }
         var effortFilter = AI_MODEL_REASONING_EFFORT.as("effort_filter");
         if (StringUtils.hasText(defaultEffort)) {
@@ -209,6 +215,7 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 updateDefault(tx, id, shouldMakeDefault(
                                 input.defaultModel(), input.enabled(), hasDefault),
                         actorUserId, now);
+                updateLightweight(tx, id, input.lightweightModel(), actorUserId, now);
                 return view(tx, requireModel(tx, id));
             });
         } catch (org.jooq.exception.IntegrityConstraintViolationException exception) {
@@ -253,6 +260,7 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                     .where(AI_MODEL.DEFAULT_MODEL.eq((byte) 1)));
             updateDefault(tx, modelId, shouldMakeDefault(
                     input.defaultModel(), input.enabled(), hasDefault), actorUserId, now);
+            updateLightweight(tx, modelId, input.lightweightModel(), actorUserId, now);
             return view(tx, requireModel(tx, modelId));
         });
     }
@@ -273,7 +281,11 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 .where(AI_MODEL.DEFAULT_MODEL.eq((byte) 1))
                 .and(AI_MODEL.ENABLED.eq((byte) 1))
                 .fetchOne(AI_MODEL.MODEL_KEY);
-        return new ActiveCatalog(models, defaultModelKey);
+        String lightweightModelKey = dslContext().select(AI_MODEL.MODEL_KEY).from(AI_MODEL)
+                .where(AI_MODEL.LIGHTWEIGHT_MODEL.eq((byte) 1))
+                .and(AI_MODEL.ENABLED.eq((byte) 1))
+                .fetchOne(AI_MODEL.MODEL_KEY);
+        return new ActiveCatalog(models, defaultModelKey, lightweightModelKey);
     }
 
     AiModelRecord configurationRecord(DSLContext tx, AiModelProfile profile,
@@ -370,6 +382,30 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(id))).execute();
     }
 
+    private void updateLightweight(DSLContext tx, AiModelId id, boolean makeLightweight,
+                                   UserId actorUserId, LocalDateTime now) {
+        if (makeLightweight) {
+            tx.update(AI_MODEL)
+                    .setNull(AI_MODEL.LIGHTWEIGHT_MODEL)
+                    .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
+                    .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, now)
+                    .where(AI_MODEL.LIGHTWEIGHT_MODEL.eq((byte) 1))
+                    .and(AI_MODEL.AI_MODEL_ID.ne(valueOf(id))).execute();
+            tx.update(AI_MODEL)
+                    .set(AI_MODEL.LIGHTWEIGHT_MODEL, (byte) 1)
+                    .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
+                    .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, now)
+                    .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(id))).execute();
+        } else {
+            tx.update(AI_MODEL)
+                    .setNull(AI_MODEL.LIGHTWEIGHT_MODEL)
+                    .set(AI_MODEL.LAST_UPDATED_BY, valueOf(actorUserId))
+                    .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, now)
+                    .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(id)))
+                    .and(AI_MODEL.LIGHTWEIGHT_MODEL.eq((byte) 1)).execute();
+        }
+    }
+
     static boolean shouldMakeDefault(boolean requestedDefault, boolean enabled,
                                      boolean hasDefault) {
         return requestedDefault || enabled && !hasDefault;
@@ -406,6 +442,7 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
                 row.get(AI_MODEL.DISPLAY_NAME), row.get(AI_MODEL.DESCRIPTION),
                 row.get(AI_MODEL.ENABLED) == 1,
                 java.util.Objects.equals(row.get(AI_MODEL.DEFAULT_MODEL), (byte) 1),
+                java.util.Objects.equals(row.get(AI_MODEL.LIGHTWEIGHT_MODEL), (byte) 1),
                 row.get(AI_MODEL.SORT_ORDER).intValue(),
                 row.get(AI_MODEL.MAX_TOKENS) != null
                         ? row.get(AI_MODEL.MAX_TOKENS).intValue() : null,

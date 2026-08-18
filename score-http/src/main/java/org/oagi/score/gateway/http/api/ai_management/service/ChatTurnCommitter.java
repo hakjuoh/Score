@@ -53,6 +53,8 @@ final class ChatTurnCommitter {
     private void persistConversationMessages(Command command) {
         ChatRequest request = command.request();
         ChatAutomaticCompaction automatic = command.automaticCompaction();
+        ChatMemory memory = conversations.memory(command.requester());
+        boolean isFirstTurn = (memory == null || memory.get(request.conversationId()).isEmpty());
         if (automatic.occurred()) {
             compactions.replaceChatMemory(command.requester(), request.conversationId(), List.of(
                     compactions.summaryMessage(automatic.summary()), command.userMessage(),
@@ -60,9 +62,10 @@ final class ChatTurnCommitter {
             journal.recordCompaction(command.requester(), request, automatic.beforeTokens(),
                     automatic.afterTokens(), automatic.summary(), true, command.generation());
         } else {
-            ChatMemory memory = conversations.memory(command.requester());
-            memory.add(request.conversationId(), command.userMessage());
-            memory.add(request.conversationId(), new AssistantMessage(command.answer()));
+            if (memory != null) {
+                memory.add(request.conversationId(), command.userMessage());
+                memory.add(request.conversationId(), new AssistantMessage(command.answer()));
+            }
         }
         command.repository().markExpanded(request.conversationId());
     }

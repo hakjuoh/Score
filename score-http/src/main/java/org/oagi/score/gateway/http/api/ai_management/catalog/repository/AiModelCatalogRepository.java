@@ -19,7 +19,8 @@ public interface AiModelCatalogRepository {
     List<AiModelCatalogView> findAll();
 
     PageResponse<AiModelCatalogView> search(String model, String provider, Boolean enabled,
-                                            Boolean defaultModel, String defaultEffort,
+                                            Boolean defaultModel, Boolean lightweightModel,
+                                            String defaultEffort,
                                             String effort, List<String> updaterLoginIdList,
                                             Instant updatedAfter, Instant updatedBefore,
                                             PageRequest pageRequest);
@@ -40,9 +41,12 @@ public interface AiModelCatalogRepository {
 
     record ActiveModel(AiModelId id, String modelKey) {}
 
-    record ActiveCatalog(List<ActiveModel> models, String defaultModelKey) {
+    record ActiveCatalog(List<ActiveModel> models, String defaultModelKey, String lightweightModelKey) {
         public ActiveCatalog {
             models = List.copyOf(models);
+        }
+        public ActiveCatalog(List<ActiveModel> models, String defaultModelKey) {
+            this(models, defaultModelKey, null);
         }
     }
 }

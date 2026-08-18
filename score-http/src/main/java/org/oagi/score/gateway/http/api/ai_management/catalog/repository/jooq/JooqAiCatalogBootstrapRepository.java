@@ -57,6 +57,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
         Map<String, AiProviderId> providerIds = insertProviders(tx, properties, audit);
         Map<String, AiModelId> modelIds = insertModels(tx, properties, providerIds, audit);
         insertDefaultModel(tx, properties, modelIds, audit);
+        insertLightweightModel(tx, properties, modelIds, audit);
     }
 
     private Map<String, AiProviderId> insertProviders(
@@ -207,7 +208,13 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
 
     private void insertDefaultModel(DSLContext tx, ScoreAiProperties properties,
                                     Map<String, AiModelId> modelIds, BootstrapAudit audit) {
-        AiModelId defaultModelId = modelIds.get(properties.getModelName());
+        AiModelId defaultModelId = null;
+        if (StringUtils.hasText(properties.getModelName())) {
+            defaultModelId = modelIds.get(properties.getModelName().strip());
+        }
+        if (defaultModelId == null) {
+            defaultModelId = modelIds.get("gpt-5_6-sol");
+        }
         if (defaultModelId == null) {
             defaultModelId = modelIds.values().stream().findFirst().orElse(null);
         }
@@ -217,6 +224,23 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
                 .set(AI_MODEL.LAST_UPDATED_BY, audit.lastUpdatedBy())
                 .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, audit.lastUpdateTimestamp())
                 .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(defaultModelId))).execute();
+    }
+
+    private void insertLightweightModel(DSLContext tx, ScoreAiProperties properties,
+                                        Map<String, AiModelId> modelIds, BootstrapAudit audit) {
+        AiModelId lightweightModelId = null;
+        if (StringUtils.hasText(properties.getLightweightModelName())) {
+            lightweightModelId = modelIds.get(properties.getLightweightModelName().strip());
+        }
+        if (lightweightModelId == null) {
+            lightweightModelId = modelIds.get("gpt-5_6-luna");
+        }
+        if (lightweightModelId == null) return;
+        tx.update(AI_MODEL)
+                .set(AI_MODEL.LIGHTWEIGHT_MODEL, (byte) 1)
+                .set(AI_MODEL.LAST_UPDATED_BY, audit.lastUpdatedBy())
+                .set(AI_MODEL.LAST_UPDATE_TIMESTAMP, audit.lastUpdateTimestamp())
+                .where(AI_MODEL.AI_MODEL_ID.eq(valueOf(lightweightModelId))).execute();
     }
 
     private static String normalized(String value, String fallback) {

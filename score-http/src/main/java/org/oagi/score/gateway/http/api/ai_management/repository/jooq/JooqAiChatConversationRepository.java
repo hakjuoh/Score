@@ -142,6 +142,12 @@ public class JooqAiChatConversationRepository extends JooqBaseRepository
 
     @Override
     @Transactional
+    public void updateTitle(String conversationId, String title) {
+        commands.updateTitle(conversationId, title);
+    }
+
+    @Override
+    @Transactional
     public boolean delete(String conversationId) {
         return commands.delete(conversationId);
     }

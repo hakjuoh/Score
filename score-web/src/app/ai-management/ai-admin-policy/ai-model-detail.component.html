@@ -58,6 +58,7 @@
               <div class="model-status-row">
                 <mat-slide-toggle [(ngModel)]="form.enabled">Enabled</mat-slide-toggle>
                 <mat-slide-toggle [(ngModel)]="form.defaultModel">Default</mat-slide-toggle>
+                <mat-slide-toggle [(ngModel)]="form.lightweightModel">Lightweight</mat-slide-toggle>
                 <mat-form-field class="model-sort-order" subscriptSizing="dynamic">
                   <mat-label>Sort Order</mat-label>
                   <input matInput type="number" min="0" [(ngModel)]="form.sortOrder">

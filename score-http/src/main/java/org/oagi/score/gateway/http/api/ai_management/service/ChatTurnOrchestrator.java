@@ -17,6 +17,7 @@ import org.oagi.score.gateway.http.api.ai_management.model.AiCompactCommand;
 import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPersistentWorkflowCommand;
+import org.oagi.score.gateway.http.api.ai_management.conversation.ConversationTitleGenerator;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.repository.AiChatConversationRepository;
 import org.oagi.score.gateway.http.api.ai_management.trajectory.AiTrajectoryRecorder;
@@ -33,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /** Applies shared turn admission, then routes manual compaction away from regular execution. */
@@ -54,6 +56,7 @@ final class ChatTurnOrchestrator {
     private final ChatResultCommitter results;
     private final ChatResponseFinalizer responses;
     private final ManualCompactionHandler manualCompactions;
+    private final ConversationTitleGenerator titleGenerator;
 
     ChatTurnOrchestrator(AgentIdentityProvider rootAgentIdentity,
                          ChatPromptAssembler prompts,
@@ -67,7 +70,8 @@ final class ChatTurnOrchestrator {
                          ChatOutputDiscloser outputDiscloser,
                          ChatTurnExecutor executor, ChatTurnCommitter committer,
                          ChatResultCommitter results, ChatResponseFinalizer responses,
-                         ManualCompactionHandler manualCompactions) {
+                         ManualCompactionHandler manualCompactions,
+                         ConversationTitleGenerator titleGenerator) {
         this.rootAgentIdentity = rootAgentIdentity;
         this.prompts = prompts;
         this.conversations = conversations;
@@ -84,6 +88,7 @@ final class ChatTurnOrchestrator {
         this.results = results;
         this.responses = responses;
         this.manualCompactions = manualCompactions;
+        this.titleGenerator = titleGenerator;
     }
 
     ChatResponse chat(ChatRequest request, ScoreUser requester,
@@ -117,6 +122,18 @@ final class ChatTurnOrchestrator {
         final UserMessage acceptedUserMessage = userMessage;
         List<Message> initialHistory = conversations.history(
                 requester, prepared.conversationId());
+        boolean isFirstTurn = initialHistory.isEmpty();
+        if (isFirstTurn && titleGenerator != null) {
+            String promptText = prompts.visiblePrompt(prepared);
+            ExecutionScope titlingScope = turnScope;
+            CompletableFuture.runAsync(() -> {
+                try {
+                    String summarizedTitle = titleGenerator.generateTitle(promptText, titlingScope);
+                    repository.updateTitle(prepared.conversationId(), summarizedTitle);
+                } catch (Exception ignored) {
+                }
+            });
+        }
         Optional<AiContextBudget> budget = contextBudgets.budget(prepared.modelName());
         long projectedInputTokens = compactions.projectedInputTokens(
                 requester, prepared, initialHistory, acceptedUserMessage, budget);

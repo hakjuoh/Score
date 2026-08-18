@@ -175,9 +175,15 @@ public class JooqAiDatabaseCatalogRepository extends JooqBaseRepository
                 .and(AI_MODEL.ENABLED.eq((byte) 1))
                 .fetchOptional(AI_MODEL.MODEL_KEY)
                 .orElseGet(() -> models.keySet().stream().findFirst().orElse(null));
+        String lightweightKey = dslContext().select(AI_MODEL.MODEL_KEY).from(AI_MODEL)
+                .where(AI_MODEL.LIGHTWEIGHT_MODEL.eq((byte) 1))
+                .and(AI_MODEL.ENABLED.eq((byte) 1))
+                .fetchOptional(AI_MODEL.MODEL_KEY)
+                .orElse(null);
         properties.setProviders(providers);
         properties.setModels(models);
         properties.setModelName(defaultKey);
+        properties.setLightweightModelName(lightweightKey);
     }
 
     private Map<String, Object> jsonObject(String json) {

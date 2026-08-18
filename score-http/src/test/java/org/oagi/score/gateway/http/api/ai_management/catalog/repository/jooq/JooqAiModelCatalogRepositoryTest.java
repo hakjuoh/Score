@@ -42,7 +42,7 @@ class JooqAiModelCatalogRepositoryTest {
         var repository = new JooqAiModelCatalogRepository(
                 dsl, mock(RepositoryFactory.class), new ObjectMapper());
 
-        var response = repository.search("claude", "anthropic", true, false,
+        var response = repository.search("claude", "anthropic", true, false, true,
                 "high", "medium", List.of("admin"),
                 Instant.parse("2026-07-01T00:00:00Z"),
                 Instant.parse("2026-08-01T00:00:00Z"), new PageRequest(0, 10,
@@ -54,6 +54,7 @@ class JooqAiModelCatalogRepositoryTest {
                 .contains("`ai_provider`.`provider_name`")
                 .contains("`ai_model`.`enabled` = ?")
                 .contains("`ai_model`.`default_model` is null")
+                .contains("`ai_model`.`lightweight_model` = ?")
                 .contains("`effort_filter`.`default_effort` = ?")
                 .contains("`effort_filter`.`display_name`")
                 .contains("`updater`.`login_id` in (?)")

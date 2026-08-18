@@ -29,6 +29,7 @@ describe('AI administration list URL state', () => {
     const request = new AiModelListRequest();
     request.filters.enabled = [true, false];
     request.filters.defaultModel = [false];
+    request.filters.lightweightModel = [true];
     request.filters.defaultEffort = 'high';
     request.filters.effort = 'medium';
 

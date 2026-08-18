@@ -34,6 +34,7 @@ class StaticAgentContractTest {
         assertThat(ResponseOnlyAgent.class).isAssignableTo(Agent.class);
         assertThat(DefinitionGeneratorAgent.class).isAssignableTo(Agent.class);
         assertThat(NameSuggesterAgent.class).isAssignableTo(Agent.class);
+        assertThat(ConversationTitlerAgent.class).isAssignableTo(Agent.class);
         assertThat(SynthesizerAgent.class).isAssignableTo(Agent.class);
         assertThat(Agent.class.isAssignableFrom(AgentSession.class)).isFalse();
         List.of(GatewayAgent.class, AssistantAgent.class, PlannerAgent.class,
@@ -47,6 +48,7 @@ class StaticAgentContractTest {
 
         List.of(GatewayAgent.class, ResponseOnlyAgent.class,
                 DefinitionGeneratorAgent.class, NameSuggesterAgent.class,
+                ConversationTitlerAgent.class,
                 SynthesizerAgent.class, PlannerAgent.class,
                 EvaluatorAgent.class, ConversationCompactor.class).forEach(type -> {
             String registration = type.getAnnotation(Component.class).value();

@@ -7,7 +7,7 @@ import java.time.Instant;
 public record AiModelCatalogView(AiModelId aiModelId, AiProviderId providerId, String provider,
                                  String modelKey, String providerModelName,
                                  String displayName, String description, boolean enabled,
-                                 boolean defaultModel, int sortOrder, Integer maxTokens,
+                                 boolean defaultModel, boolean lightweightModel, int sortOrder, Integer maxTokens,
                                  long contextWindow, Long outputReserveTokens,
                                  Long autoCompactThresholdTokens, long emergencyHeadroomTokens,
                                  long toolOutputTokenLimit, boolean providerCompactionEnabled,

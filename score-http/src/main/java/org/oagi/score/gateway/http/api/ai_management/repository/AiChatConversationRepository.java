@@ -92,6 +92,11 @@ public interface AiChatConversationRepository {
     void markExpanded(String conversationId);
 
     /**
+     * Updates the title of an owned conversation.
+     */
+    void updateTitle(String conversationId, String title);
+
+    /**
      * Deletes an owned conversation and its dependent records.
      */
     boolean delete(String conversationId);
