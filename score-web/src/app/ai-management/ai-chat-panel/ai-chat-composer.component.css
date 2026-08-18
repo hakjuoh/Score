@@ -15,6 +15,13 @@
   background: #f8fdff;
 }
 
+.attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 4px;
+}
+
 .command-suggestions {
   display: flex;
   flex-direction: column;
@@ -109,6 +116,7 @@
 .command-box {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;
   flex: 1 1 auto;
   min-height: 28px;
   box-sizing: border-box;
@@ -117,6 +125,21 @@
   border-radius: 0;
   background: transparent;
   color: #18181b;
+}
+
+.command-box .attachment-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px 2px 0;
+  padding: 0;
+}
+
+.command-box .attachment-chip {
+  height: 22px;
+  margin: 0;
+  border-radius: 3px;
 }
 
 .command-box:focus-within {
@@ -139,8 +162,8 @@
 }
 
 .command-box textarea {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1 1 80px;
+  min-width: 60px;
   height: 18px;
   max-height: 72px;
   margin: 2px 0 0;

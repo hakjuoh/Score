@@ -242,23 +242,6 @@
         </div>
       </div>
     }
-
-    @if (attachments.length > 0) {
-      <div class="attachment-list">
-        @for (attachment of attachments; track attachment.name + attachment.size; let i = $index) {
-          <span class="attachment-chip">
-            <mat-icon>attach_file</mat-icon>
-            <span>{{ attachment.name }}</span>
-            <button type="button"
-                    [attr.aria-label]="'Remove attachment ' + attachment.name"
-                    [disabled]="pending"
-                    (click)="attachmentRemoved.emit(i)">
-              <mat-icon>close</mat-icon>
-            </button>
-          </span>
-        }
-      </div>
-    }
   </div>
 </div>
 

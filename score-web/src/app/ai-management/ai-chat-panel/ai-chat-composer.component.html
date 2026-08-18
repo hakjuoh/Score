@@ -24,13 +24,37 @@
            multiple
            [attr.accept]="attachmentAccept"
            (change)="fileInputChanged.emit($event)">
+    @if (attachments.length > 0 || loadingAttachments.length > 0) {
+      <div class="attachment-list">
+        @for (attachment of attachments; track attachment.name + attachment.size; let i = $index) {
+          <span class="attachment-chip">
+            <mat-icon>attach_file</mat-icon>
+            <span>{{ attachment.name }}</span>
+            <button type="button"
+                    [attr.aria-label]="'Remove attachment ' + attachment.name"
+                    [disabled]="pending"
+                    (click)="attachmentRemoved.emit(i); $event.stopPropagation()">
+              <mat-icon>close</mat-icon>
+            </button>
+          </span>
+        }
+        @for (loading of loadingAttachments; track loading.name + $index) {
+          <span class="attachment-chip loading" role="status" [attr.aria-label]="'Loading attachment ' + loading.name">
+            <mat-progress-spinner class="message-progress-spinner"
+                                  mode="indeterminate"
+                                  [diameter]="12"></mat-progress-spinner>
+            <span>{{ loading.name }}</span>
+          </span>
+        }
+      </div>
+    }
     <textarea #commandInput
               rows="1"
               aria-label="Message to connectCenter Assistant"
               [ngModel]="prompt"
               (ngModelChange)="updatePrompt($event)"
               [disabled]="blocked"
-              (keydown)="keydownEvent.emit($event)"
+              (keydown)="onKeydown($event)"
               [placeholder]="placeholder"></textarea>
     @if (pending) {
       <button class="composer-stop-button"
