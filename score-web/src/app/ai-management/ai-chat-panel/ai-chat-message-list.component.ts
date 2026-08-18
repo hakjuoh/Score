@@ -19,7 +19,6 @@ import {
   agentActivitySummary
 } from './domain/ai-agent-activity';
 import {
-  AiChatAttachment,
   AiChatMessage,
   AiChatModelInfo,
   AiMcpStatus,
@@ -66,7 +65,6 @@ type AiChatMessageDisplayItem =
     './ai-chat-message-content.css',
     './ai-chat-agent-message.css',
     './ai-chat-agent-row.css',
-    './ai-chat-message-attachments.css',
     './ai-chat-settings-panel.css',
     './ai-chat-progress-spinner.css'
   ]
@@ -74,7 +72,6 @@ type AiChatMessageDisplayItem =
 export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
 
   @Input() messages: AiChatMessage[] = [];
-  @Input() attachments: AiChatAttachment[] = [];
   @Input() pending = false;
   @Input() modelSettingsOpen = false;
   @Input() permissionSettingsOpen = false;
@@ -94,8 +91,6 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
   @Input() changeApprovalBatchBusy = false;
   @Input() elicitation?: AiElicitationNotice;
   @Input() elicitationBusy = false;
-
-  @Output() attachmentRemoved = new EventEmitter<number>();
 
   get showRequestPendingIndicator(): boolean {
     if (!this.pending || this.elicitation || this.changeApprovalBatch) {

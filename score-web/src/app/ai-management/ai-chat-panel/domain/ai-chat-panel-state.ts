@@ -38,6 +38,7 @@ export class AiChatPanelState {
   popoutActive = false;
   prompt = '';
   attachments: AiChatAttachment[] = [];
+  loadingAttachments: Array<{name: string}> = [];
   dragActive = false;
   conversationId?: string;
   availableModels: AiChatModelInfo[] = [];
@@ -87,6 +88,7 @@ export class AiChatPanelState {
     this.cancellation = this.idleCancellation();
     this.prompt = '';
     this.attachments = [];
+    this.loadingAttachments = [];
     this.chatScrollTop = 0;
     this.historyScrollTop = 0;
     this.conversationId = undefined;

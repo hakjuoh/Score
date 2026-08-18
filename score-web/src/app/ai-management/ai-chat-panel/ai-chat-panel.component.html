@@ -78,7 +78,6 @@
           } @else {
             <score-ai-chat-message-list
               [messages]="state.messages"
-              [attachments]="state.attachments"
               [pending]="state.pending"
               [modelSettingsOpen]="state.modelSettingsOpen"
               [permissionSettingsOpen]="state.permissionSettingsOpen"
@@ -98,7 +97,6 @@
               [changeApprovalBatchBusy]="changeApprovalControlsBusy"
               [elicitation]="state.elicitation"
               [elicitationBusy]="state.elicitationBusy"
-              (attachmentRemoved)="removeAttachment($event)"
               (modelDraftNameChange)="changeModelDraft($event)"
               (modelDraftReasoningEffortChange)="state.modelDraftReasoningEffort = $event"
               (modelSettingsApplied)="applyModelSettings()"
@@ -124,6 +122,8 @@
             @if (policyNotice) {<div class="ai-policy-notice" role="status">{{policyNotice}}</div>}
             <score-ai-chat-composer
               [prompt]="state.prompt"
+              [attachments]="state.attachments"
+              [loadingAttachments]="state.loadingAttachments"
               [trajectoryUrl]="trajectoryUrl"
               [pending]="state.pending"
               [blocked]="commandInputBlocked"
@@ -138,6 +138,7 @@
               (commandSuggestionSelected)="applyCommandSuggestion($event)"
               (fileInputChanged)="onFileInputChange($event)"
               (filePickerRequested)="openFilePicker($event)"
+              (attachmentRemoved)="removeAttachment($event)"
               (stopRequested)="cancelActiveRequest()"
               (cancellationRetryRequested)="retryCancellation()"
               (forceSafeStopRequested)="forceSafeStop()">
