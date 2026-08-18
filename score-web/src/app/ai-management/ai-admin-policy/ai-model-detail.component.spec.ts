@@ -136,7 +136,7 @@ describe('AiModelDetailComponent', () => {
     aiModelId: 9, provider: provider.providerName, providerId: provider.aiProviderId,
     modelKey: openAiProfile.modelKey, providerModelName: openAiProfile.providerModelName,
     displayName: openAiProfile.displayName, description: openAiProfile.description,
-    enabled: true, defaultModel: true, sortOrder: 0, maxTokens: openAiProfile.maxTokens,
+    enabled: true, defaultModel: true, lightweightModel: false, sortOrder: 0, maxTokens: openAiProfile.maxTokens,
     contextWindow: openAiProfile.contextWindow,
     outputReserveTokens: openAiProfile.outputReserveTokens,
     autoCompactThresholdTokens: openAiProfile.autoCompactThresholdTokens,
@@ -242,11 +242,24 @@ describe('AiModelDetailComponent', () => {
     component.setOptionValue(haikuProfile.options.find(
       option => option.key === 'citationsEnabled')!, true);
     component.save();
-
     expect(service.updateModel.mock.calls[0][1]).toMatchObject({providerId: 2,
-      modelKey: 'claude-haiku-4_5', enabled: true, defaultModel: true,
+      modelKey: 'claude-haiku-4_5', enabled: true, defaultModel: true, lightweightModel: false,
       contextWindow: 200000, reasoningEfforts: [],
       modelOptions: expect.objectContaining({citationsEnabled: true})});
+  });
+
+  it('saves lightweight model toggle changes', () => {
+    const service = {providers: () => of([provider]), model: () => of(model),
+      modelProfiles: () => of([openAiProfile]), updateModel: vi.fn().mockReturnValue(of({...model, lightweightModel: true}))};
+    configure(service, {open: vi.fn()}, '9');
+    const component = TestBed.runInInjectionContext(() => new AiModelDetailComponent());
+    component.ngOnInit();
+    component.form.lightweightModel = true;
+    component.save();
+
+    expect(service.updateModel).toHaveBeenCalledWith(9, expect.objectContaining({
+      lightweightModel: true
+    }));
   });
 
   it('resets option search and expansion state when the provider changes', () => {

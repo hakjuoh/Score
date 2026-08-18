@@ -31,7 +31,7 @@ public record ExecutionScope(String requestId, String conversationId, String req
 
     public enum Purpose {
         USER_RESPONSE, GATEWAY_ROUTING, GUARDRAIL_EVALUATION, WORKFLOW_PLANNING,
-        WORKER, EVALUATION, SYNTHESIS, COMPACTION, RESPONSE_ONLY_RETRY
+        WORKER, EVALUATION, SYNTHESIS, COMPACTION, RESPONSE_ONLY_RETRY, CONVERSATION_TITLING
     }
 
     private static String required(String value, String label) {

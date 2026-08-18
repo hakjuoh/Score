@@ -88,6 +88,25 @@ class AiCatalogSecretAvailabilityTest {
     }
 
     @Test
+    void bootstrapsDefaultModelGpt56SolAndLightweightModelGpt56Luna() {
+        RecordingProvider database = new RecordingProvider(false);
+        DSLContext dsl = DSL.using(new MockConnection(database), SQLDialect.MARIADB);
+        ApplicationSecretService secrets = mock(ApplicationSecretService.class);
+        when(secrets.isEncryptionConfigured()).thenReturn(true);
+        when(secrets.create(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any())).thenReturn(ULong.valueOf(99));
+
+        ScoreAiProperties properties = bootstrapProperties();
+        new AiCatalogBootstrap(new RepositoryFactory(dsl), properties, secrets).bootstrapNow();
+
+        assertThat(properties.getModelName()).isEqualTo("gpt-5_6-sol");
+        assertThat(properties.getLightweightModelName()).isEqualTo("gpt-5_6-luna");
+        assertThat(database.sql).anyMatch(statement -> statement.contains("`default_model` = ?"));
+        assertThat(database.sql).anyMatch(statement -> statement.contains("`lightweight_model` = ?"));
+    }
+
+    @Test
     void waitsForDatabaseInitializationBeforeCatalogAccess() {
         assertThat(AiCatalogBootstrap.class.isAnnotationPresent(
                 DependsOnDatabaseInitialization.class)).isTrue();

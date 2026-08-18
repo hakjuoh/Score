@@ -1,5 +1,6 @@
 .status-pill,
-.default-badge {
+.default-badge,
+.lightweight-badge {
   display: inline-block;
   border-radius: 999px;
   padding: .2rem .65rem;
@@ -14,12 +15,21 @@
   color: #b42318;
 }
 
-.default-badge {
+.default-badge,
+.lightweight-badge {
   margin-left: .5rem;
   margin-right: 0;
+  vertical-align: middle;
+}
+
+.default-badge {
   background: #eef2ff;
   color: #3730a3;
-  vertical-align: middle;
+}
+
+.lightweight-badge {
+  background: #ecfdf5;
+  color: #065f46;
 }
 
 .admin-fieldset {
