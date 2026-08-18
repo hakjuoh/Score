@@ -61,3 +61,15 @@
   font-size: 14px;
   line-height: 14px;
 }
+
+.attachment-chip.loading {
+  background: #f4f4f5;
+  color: #71717a;
+  border-style: dashed;
+}
+
+.attachment-chip.loading .message-progress-spinner {
+  flex: 0 0 auto;
+  margin-right: 4px;
+}
+

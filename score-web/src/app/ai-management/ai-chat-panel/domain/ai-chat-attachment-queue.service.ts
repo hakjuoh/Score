@@ -13,8 +13,9 @@ import {AiChatAttachment} from './ai-chat-panel.model';
 
 export interface AiChatAttachmentQueueCallbacks {
   active(): boolean;
-  added(): void;
-  rejected(message: string): void;
+  started?(file: File): void;
+  added(file?: File): void;
+  rejected(message: string, file?: File): void;
 }
 
 @Injectable()
@@ -39,21 +40,22 @@ export class AiChatAttachmentQueueService {
     const mediaType = this.attachmentService.attachmentMediaType(file);
     const rejection = this.rejectionMessage(file, mediaType, attachments);
     if (rejection) {
-      callbacks.rejected(rejection);
+      callbacks.rejected(rejection, file);
       return;
     }
 
     const readGeneration = this.generation;
     this.pendingReads += 1;
     this.pendingBytes += file.size;
+    callbacks.started?.(file);
     this.attachmentService.readAttachment(file, mediaType).then(attachment => {
       if (callbacks.active() && readGeneration === this.generation) {
         attachments.push(attachment);
-        callbacks.added();
+        callbacks.added(file);
       }
     }).catch(() => {
       if (callbacks.active() && readGeneration === this.generation) {
-        callbacks.rejected('Could not read attachment: ' + file.name);
+        callbacks.rejected('Could not read attachment: ' + file.name, file);
       }
     }).finally(() => {
       if (readGeneration === this.generation) {
