@@ -1,4 +1,4 @@
-import { Injectable, OnInit, inject } from '@angular/core';
+import { Injectable, OnDestroy, OnInit, inject } from '@angular/core';
 import {
   HttpClient,
   HttpContextToken,
@@ -13,7 +13,7 @@ import {
 import {environment} from '../../environments/environment';
 import {ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot, UrlTree} from '@angular/router';
 import {catchError, map} from 'rxjs/operators';
-import {Observable, of, throwError} from 'rxjs';
+import {Observable, Subject, of, throwError} from 'rxjs';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {
   AiProperties,
@@ -32,10 +32,13 @@ import {SCORE_REQUEST_TYPE} from '../common/score-request';
 import {projectVersion} from '../../environments/version';
 
 @Injectable()
-export class AuthService implements OnInit, CanActivate {
+export class AuthService implements OnInit, OnDestroy, CanActivate {
   private http = inject(HttpClient);
   private router = inject(Router);
   private logoutInProgress = false;
+  private readonly sessionIdentitySubject = new Subject<string | undefined>();
+
+  readonly sessionIdentityChanges$ = this.sessionIdentitySubject.asObservable();
 
 
   RESTRICTED_NEXT_PARAMS = ['login', 'pending', 'reject'];
@@ -44,7 +47,15 @@ export class AuthService implements OnInit, CanActivate {
   ROLE_END_USER = 'end-user';
   ROLE_ADMIN = 'admin';
 
+  constructor() {
+    window.addEventListener('storage', this.handleSessionStorageChange);
+  }
+
   ngOnInit() {
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('storage', this.handleSessionStorageChange);
   }
 
   isServiceUnavailableFailure(error: any, url?: string): boolean {
@@ -127,7 +138,12 @@ export class AuthService implements OnInit, CanActivate {
   }
 
   storeUserInfo(res: UserToken) {
+    const previousUsername = this.storedAuthenticatedUsername();
     localStorage.setItem(this.USER_INFO_KEY, btoa(JSON.stringify(res)));
+    const username = this.authenticatedUsername(res);
+    if (username !== previousUsername) {
+      this.sessionIdentitySubject.next(username);
+    }
   }
 
   getUserToken(): UserToken {
@@ -228,8 +244,7 @@ export class AuthService implements OnInit, CanActivate {
   }
 
   logout(url?) {
-    this.logoutInProgress = true;
-    localStorage.removeItem(this.USER_INFO_KEY);
+    this.beginLogout();
 
     this.http.get('/api/' + environment.logoutPath)
       .subscribe(resp => {
@@ -244,6 +259,14 @@ export class AuthService implements OnInit, CanActivate {
         }
         this.redirectToLogin(url);
       });
+  }
+
+  beginLogout(): void {
+    if (!this.logoutInProgress) {
+      this.sessionIdentitySubject.next(undefined);
+    }
+    this.logoutInProgress = true;
+    localStorage.removeItem(this.USER_INFO_KEY);
   }
 
   logoutPath(): string {
@@ -286,6 +309,38 @@ export class AuthService implements OnInit, CanActivate {
 
   getOAuth2AppInfos(): Observable<OAuth2AppInfo[]> {
     return this.http.get<OAuth2AppInfo[]>('/api/info/oauth2-providers');
+  }
+
+  private storedAuthenticatedUsername(): string | undefined {
+    return this.authenticatedUsernameFromStorage(localStorage.getItem(this.USER_INFO_KEY));
+  }
+
+  private readonly handleSessionStorageChange = (event: StorageEvent): void => {
+    if (event.key !== this.USER_INFO_KEY ||
+      (event.storageArea !== null && event.storageArea !== localStorage)) {
+      return;
+    }
+
+    const previousUsername = this.authenticatedUsernameFromStorage(event.oldValue);
+    const username = this.authenticatedUsernameFromStorage(event.newValue);
+    if (username !== previousUsername) {
+      this.sessionIdentitySubject.next(username);
+    }
+  };
+
+  private authenticatedUsernameFromStorage(encoded: string | null): string | undefined {
+    try {
+      return encoded
+        ? this.authenticatedUsername(JSON.parse(atob(encoded)) as UserToken)
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private authenticatedUsername(token: UserToken | undefined): string | undefined {
+    return token?.enabled === true && token.username && token.username !== 'unknown'
+      ? token.username : undefined;
   }
 }
 

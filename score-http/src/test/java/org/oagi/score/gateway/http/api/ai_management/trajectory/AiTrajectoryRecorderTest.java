@@ -1345,7 +1345,7 @@ class AiTrajectoryRecorderTest {
     }
 
     @Test
-    void keepsCompleteProviderPromptTokensWhenTheContextFloorIsHigher() {
+    void replacesAHigherEstimateFloorWithCompleteProviderPromptTokens() {
         Map<String, Object> anthropic = recordedMetrics(
                 "anthropic", new DefaultUsage(2, 4, 6, null, 100L, 5L), 5_000L);
         Map<String, Object> openAi = recordedMetrics(
@@ -1354,14 +1354,14 @@ class AiTrajectoryRecorderTest {
         assertThat(anthropic)
                 .containsEntry("prompt_tokens", 107L)
                 .containsEntry("prompt_tokens_complete", true)
-                .containsEntry("context_input_tokens", 5_000L)
-                .containsEntry("context_estimated", true)
+                .containsEntry("context_input_tokens", 107L)
+                .containsEntry("context_estimated", false)
                 .doesNotContainKey("provider_reported_prompt_tokens");
         assertThat(openAi)
                 .containsEntry("prompt_tokens", 107L)
                 .containsEntry("prompt_tokens_complete", true)
-                .containsEntry("context_input_tokens", 5_000L)
-                .containsEntry("context_estimated", true)
+                .containsEntry("context_input_tokens", 107L)
+                .containsEntry("context_estimated", false)
                 .doesNotContainKey("provider_reported_prompt_tokens");
     }
 

@@ -20,6 +20,7 @@ import org.oagi.score.gateway.http.api.ai_management.agent.AiMessage;
 import org.oagi.score.gateway.http.api.ai_management.agent.AiModel;
 import org.oagi.score.gateway.http.api.ai_management.agent.ExecutionScope;
 import org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl;
+import org.oagi.score.gateway.http.api.ai_management.model.AiApprovedExecution;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeApprovalResolution;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChangeConfirmationNotice;
 import org.oagi.score.gateway.http.api.ai_management.model.AiPendingChangeApproval;
@@ -79,6 +80,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -394,7 +396,7 @@ class AiChatExecutorTest {
         when(stalled.changeCompleted()).thenReturn(true);
         when(stalled.confirmationRequired()).thenReturn(false);
         when(stalled.readAfterLastChange()).thenReturn(false);
-        when(stalled.completedChanges()).thenReturn(List.of());
+        when(stalled.completedChanges()).thenReturn(approvedChanges(1));
         assertThatThrownBy(() -> runner.run(
                 "changed", mock(ChatClient.class), mock(ChatOptions.class), context,
                 List.of(context.userMessage()), context.recorder(),
@@ -403,10 +405,117 @@ class AiChatExecutorTest {
                         ExecutionScope.Purpose.USER_RESPONSE, List.of()),
                 new ExecutionState(), TEST_INSTRUCTION, () -> { },
                 org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP, 0L))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("without completing read-back");
+                .isInstanceOfSatisfying(AiChangeReadBackException.class, failure -> {
+                    assertThat(failure.completedChangeCount()).isEqualTo(1);
+                    assertThat(failure).hasMessageContaining("without completing read-back");
+                });
         verify(invoker, times(3)).invoke(any(), any(), any(), anyList(), any(),
                 anyBoolean(), any(), any(), any(), any());
+    }
+
+    @Test
+    void allowsProductiveChangeContinuationsBeforeFinalReadBack() {
+        AiChatModelInvoker invoker = mock(AiChatModelInvoker.class);
+        AiChatContinuationRunner runner = new AiChatContinuationRunner(
+                null, AiExecutionInstructions.bundled(), invoker);
+        AiChangeToolGuard.GuardedToolSession guarded =
+                mock(AiChangeToolGuard.GuardedToolSession.class);
+        AtomicInteger completedChanges = new AtomicInteger(1);
+        AtomicInteger invocations = new AtomicInteger();
+        AtomicBoolean readBackCompleted = new AtomicBoolean();
+        when(guarded.changeCompleted()).thenReturn(true);
+        when(guarded.confirmationRequired()).thenReturn(false);
+        when(guarded.readAfterLastChange()).thenAnswer(ignored -> readBackCompleted.get());
+        when(guarded.completedChanges()).thenAnswer(ignored -> approvedChanges(
+                completedChanges.get()));
+        when(invoker.invoke(any(), any(), any(), anyList(), any(), anyBoolean(),
+                any(), any(), any(), any())).thenAnswer(ignored -> {
+            int invocation = invocations.incrementAndGet();
+            if (invocation <= 5) {
+                completedChanges.incrementAndGet();
+                return "Another requested change completed.";
+            }
+            readBackCompleted.set(true);
+            return "All requested changes were read back.";
+        });
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.limitToolOutput(anyString(), anyLong(), anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        AiChatExecutor.Context context = new AiChatExecutor.Context(request("Update"), List.of(),
+                new UserMessage("Update"), null, recorder,
+                false, false, AiChatExecutor.ToolPolicy.NONE, 0);
+
+        AiChatContinuationRunner.Outcome outcome = runner.run(
+                "First change completed.", mock(ChatClient.class), mock(ChatOptions.class), context,
+                List.of(context.userMessage()), recorder,
+                new AiChatToolSetup(guarded, null, ""), Long.MAX_VALUE, false,
+                new ExecutionScope("request-1", "conversation-1", "user", 0,
+                        ExecutionScope.Purpose.USER_RESPONSE, List.of()),
+                new ExecutionState(), TEST_INSTRUCTION, () -> { },
+                WorkflowRunControl.NOOP, 0L);
+
+        assertThat(outcome.answer()).isEqualTo("All requested changes were read back.");
+        assertThat(invocations).hasValue(6);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void continuesThroughOneThousandProductiveChangesDespiteInterleavedStalls() {
+        AiChatModelInvoker invoker = mock(AiChatModelInvoker.class);
+        AiChatContinuationRunner runner = new AiChatContinuationRunner(
+                null, AiExecutionInstructions.bundled(), invoker);
+        AiChangeToolGuard.GuardedToolSession guarded =
+                mock(AiChangeToolGuard.GuardedToolSession.class);
+        AtomicInteger completedChanges = new AtomicInteger(1);
+        AtomicInteger invocations = new AtomicInteger();
+        AtomicBoolean readBackCompleted = new AtomicBoolean();
+        when(guarded.changeCompleted()).thenReturn(true);
+        when(guarded.confirmationRequired()).thenReturn(false);
+        when(guarded.readAfterLastChange()).thenAnswer(ignored -> readBackCompleted.get());
+        // This test isolates continuation policy from approved-history reconstruction,
+        // which is exercised with real snapshots in the preceding test.
+        List<AiApprovedExecution> completedChangeSnapshot = mock(List.class);
+        when(completedChangeSnapshot.size()).thenAnswer(ignored -> completedChanges.get());
+        when(guarded.completedChanges()).thenReturn(completedChangeSnapshot);
+        when(invoker.invoke(any(), any(), any(), anyList(), any(), anyBoolean(),
+                any(), any(), any(), any())).thenAnswer(ignored -> {
+            int invocation = invocations.incrementAndGet();
+            if (invocation <= 2_000) {
+                if (invocation % 2 == 0) {
+                    completedChanges.incrementAndGet();
+                    return "Another requested change completed.";
+                }
+                return "Preparing the next requested change.";
+            }
+            readBackCompleted.set(true);
+            return "All requested changes were read back.";
+        });
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.limitToolOutput(anyString(), anyLong(), anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        AiChatExecutor.Context context = new AiChatExecutor.Context(request("Update"), List.of(),
+                new UserMessage("Update"), null, recorder,
+                false, false, AiChatExecutor.ToolPolicy.NONE, 0);
+
+        AiChatContinuationRunner.Outcome outcome = runner.run(
+                "First change completed.", mock(ChatClient.class), mock(ChatOptions.class), context,
+                List.of(context.userMessage()), recorder,
+                new AiChatToolSetup(guarded, null, ""), Long.MAX_VALUE, false,
+                new ExecutionScope("request-1", "conversation-1", "user", 0,
+                        ExecutionScope.Purpose.USER_RESPONSE, List.of()),
+                new ExecutionState(), TEST_INSTRUCTION, () -> { },
+                WorkflowRunControl.NOOP, 0L);
+
+        assertThat(outcome.answer()).isEqualTo("All requested changes were read back.");
+        assertThat(completedChanges).hasValue(1_001);
+        assertThat(invocations).hasValue(2_001);
+    }
+
+    private static List<AiApprovedExecution> approvedChanges(int count) {
+        return java.util.stream.IntStream.range(0, count)
+                .mapToObj(index -> new AiApprovedExecution(
+                        "change_" + index, "{\"index\":" + index + "}", "{\"ok\":true}"))
+                .toList();
     }
 
     @Test

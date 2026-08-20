@@ -1,5 +1,6 @@
 import {
   HttpContext,
+  HttpClient,
   HttpErrorResponse,
   HttpHandler,
   HttpRequest
@@ -18,6 +19,79 @@ import {
 import {of} from 'rxjs';
 import {SCORE_REQUEST_TYPE} from '../common/score-request';
 import {projectVersion} from '../../environments/version';
+import {UserToken} from './domain/auth';
+
+describe('AuthService session identity lifecycle', () => {
+  let service: AuthService;
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({providers: [
+      AuthService,
+      {provide: HttpClient, useValue: {get: vi.fn(() => of({}))}},
+      {provide: Router, useValue: {navigate: vi.fn(), parseUrl: vi.fn()}}
+    ]});
+    service = TestBed.inject(AuthService);
+  });
+
+  afterEach(() => localStorage.clear());
+
+  it('emits only real signed-in identity changes and clears the identity on logout', () => {
+    const identities: Array<string | undefined> = [];
+    service.sessionIdentityChanges$.subscribe(identity => identities.push(identity));
+
+    service.storeUserInfo(authenticatedToken('oagis'));
+    service.storeUserInfo(authenticatedToken('oagis'));
+    service.storeUserInfo(authenticatedToken('test_dev'));
+    service.storeUserInfo(new UserToken());
+    service.storeUserInfo(authenticatedToken('test_dev'));
+    service.beginLogout();
+
+    expect(identities).toEqual([
+      'oagis', 'test_dev', undefined, 'test_dev', undefined
+    ]);
+  });
+
+  it('propagates account changes made by another browser window', () => {
+    const identities: Array<string | undefined> = [];
+    service.sessionIdentityChanges$.subscribe(identity => identities.push(identity));
+    const oagis = encodedToken('oagis');
+    const testDev = encodedToken('test_dev');
+
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: service.USER_INFO_KEY,
+      oldValue: oagis,
+      newValue: null,
+      storageArea: localStorage
+    }));
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: service.USER_INFO_KEY,
+      oldValue: null,
+      newValue: testDev,
+      storageArea: localStorage
+    }));
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: service.USER_INFO_KEY,
+      oldValue: testDev,
+      newValue: encodedToken('test_dev'),
+      storageArea: localStorage
+    }));
+
+    expect(identities).toEqual([undefined, 'test_dev']);
+  });
+});
+
+function authenticatedToken(username: string): UserToken {
+  const token = new UserToken();
+  token.username = username;
+  token.enabled = true;
+  token.roles = ['developer'];
+  return token;
+}
+
+function encodedToken(username: string): string {
+  return btoa(JSON.stringify(authenticatedToken(username)));
+}
 
 describe('XhrInterceptor SCORE request correlation', () => {
   it('adds a unique request identity, timestamp, and semantic request type', async () => {

@@ -3,6 +3,7 @@ package org.oagi.score.gateway.http.api.ai_management.controller;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiCancellationResponse;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChatSocketEvent;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiChangeReadBackException;
 import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +18,11 @@ import java.util.Set;
 final class AiChatTransport {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiChatTransport.class);
+    private static final String GENERIC_FAILURE_MESSAGE =
+            "The assistant could not finish this request. Some steps may have completed before "
+                    + "it stopped. Review the conversation and affected records, then retry only "
+                    + "the unfinished part. If the problem continues, contact an administrator "
+                    + "with the conversation and approximate failure time.";
     private static final Set<String> WORKFLOW_LIFECYCLE_EVENT_TYPES = Set.of(
             "workflow_started", "workflow_completed", "workflow_failed", "workflow_cancelled",
             "workflow_refused", "workflow_stalled", "workflow_output_retry_handoff",
@@ -98,13 +104,19 @@ final class AiChatTransport {
 
     static String safeMessage(Throwable throwable) {
         if (throwable == null) {
-            return "The assistant request failed. Details were recorded in the server log.";
+            return GENERIC_FAILURE_MESSAGE;
         }
-        for (Throwable candidate = throwable; candidate != null; candidate = candidate.getCause()) {
-            if (candidate instanceof org.oagi.score.gateway.http.api.ai_management.provider.AiProviderException provider) {
-                LOGGER.warn("AI chat request failed at the model provider", provider);
-                return provider.getMessage();
-            }
+        var provider = findCause(throwable,
+                org.oagi.score.gateway.http.api.ai_management.provider.AiProviderException.class);
+        if (provider != null) {
+            LOGGER.warn("AI chat request failed at the model provider", provider);
+            return provider.getMessage();
+        }
+        AiChangeReadBackException readBack = findCause(
+                throwable, AiChangeReadBackException.class);
+        if (readBack != null) {
+            LOGGER.warn("AI chat request ended without post-change verification", readBack);
+            return readBackMessage(readBack.completedChangeCount());
         }
         Throwable current = rootCause(throwable);
         LOGGER.warn("AI chat request failed", current);
@@ -116,7 +128,10 @@ final class AiChatTransport {
             }
         }
         if (current instanceof java.util.concurrent.TimeoutException) {
-            return "The assistant operation timed out before it reported further progress.";
+            return "The assistant did not report further progress before the operation timed out, "
+                    + "so it was stopped. Any changes already reported as completed remain "
+                    + "applied. Review the conversation and affected records, then retry only "
+                    + "the unfinished part.";
         }
         String failureClass = current.getClass().getName();
         if (failureClass.startsWith("io.modelcontextprotocol.")) {
@@ -131,7 +146,7 @@ final class AiChatTransport {
                 || failureClass.startsWith("org.springframework.web.client.")) {
             return "The assistant's model provider could not complete the request. Please retry.";
         }
-        return "The assistant request failed. Details were recorded in the server log.";
+        return GENERIC_FAILURE_MESSAGE;
     }
 
     static String failureClass(Throwable throwable) {
@@ -143,7 +158,10 @@ final class AiChatTransport {
             if (throwable != null) {
                 LOGGER.warn("AI chat request stopped after its inactivity lease expired", throwable);
             }
-            return "The assistant request stopped after no observable activity.";
+            return "No further assistant activity was received before the inactivity timeout, so "
+                    + "the request was stopped. Any changes already reported as completed remain "
+                    + "applied. Review the conversation and affected records, then retry only "
+                    + "the unfinished part.";
         }
         return safeMessage(throwable);
     }
@@ -188,5 +206,21 @@ final class AiChatTransport {
         Throwable current = throwable;
         while (current.getCause() != null) current = current.getCause();
         return current;
+    }
+
+    private static String readBackMessage(int completedChangeCount) {
+        String operations = completedChangeCount == 1
+                ? "1 change operation" : completedChangeCount + " change operations";
+        return "The assistant completed " + operations
+                + " but could not verify the final state. Any changes that succeeded remain "
+                + "applied. Refresh or inspect the affected records, then ask the assistant to "
+                + "verify them and complete any remaining work.";
+    }
+
+    private static <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
+        for (Throwable candidate = throwable; candidate != null; candidate = candidate.getCause()) {
+            if (type.isInstance(candidate)) return type.cast(candidate);
+        }
+        return null;
     }
 }

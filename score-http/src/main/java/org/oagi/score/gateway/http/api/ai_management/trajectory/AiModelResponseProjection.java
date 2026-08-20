@@ -41,7 +41,7 @@ final class AiModelResponseProjection {
                 SpringAiResponseContent.visibleStored(generations), calls, audited);
     }
 
-    /** Normalizes provider usage and monotonically advances the caller's input estimate floor. */
+    /** Normalizes provider usage and reconciles the caller's input estimate. */
     static AiMetricsSnapshot metrics(ChatResponse response, boolean streaming,
                                      ProviderPromptTokenNormalizer normalizer,
                                      AtomicLong estimatedInputFloor, boolean subagentScope) {
@@ -49,9 +49,10 @@ final class AiModelResponseProjection {
         if (usage == null) return null;
         Map<String, Object> metrics = new LinkedHashMap<>();
         ProviderPromptTokenNormalizer.Snapshot prompt = normalizer.normalize(usage, streaming);
-        long contextInputTokens = Math.max(prompt.inclusiveTokens(), estimatedInputFloor.get());
-        boolean contextEstimated = !prompt.complete()
-                || contextInputTokens > prompt.inclusiveTokens();
+        long contextInputTokens = prompt.complete()
+                ? prompt.inclusiveTokens()
+                : Math.max(prompt.inclusiveTokens(), estimatedInputFloor.get());
+        boolean contextEstimated = !prompt.complete();
         if (!prompt.complete()) {
             metrics.put("provider_reported_prompt_tokens", prompt.providerReportedTokens());
             metrics.put("prompt_tokens_complete", false);
@@ -70,7 +71,13 @@ final class AiModelResponseProjection {
             metrics.put("extra", Map.of(
                     "cache_creation_input_tokens", usage.getCacheWriteInputTokens()));
         }
-        estimatedInputFloor.accumulateAndGet(contextInputTokens, Math::max);
+        if (prompt.complete()) {
+            // A cache-normalized provider measurement describes the actual prompt sent for this
+            // call. It supersedes the temporary floor grown from preceding tool-output bytes.
+            estimatedInputFloor.set(contextInputTokens);
+        } else {
+            estimatedInputFloor.accumulateAndGet(contextInputTokens, Math::max);
+        }
         metrics.put("context_input_tokens", contextInputTokens);
         metrics.put("context_estimated", contextEstimated);
         if (subagentScope) metrics.put("context_scope", "subagent");

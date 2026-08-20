@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.trajectory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.oagi.score.gateway.http.api.ai_management.model.AiContextBudget;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.DefaultUsage;
@@ -85,5 +86,47 @@ class AiModelResponseProjectionTest {
                 .containsEntry("context_scope", "subagent");
         assertThat(metrics.contextInputTokens()).isEqualTo(100L);
         assertThat(floor).hasValue(100L);
+    }
+
+    @Test
+    void replacesAConservativeFloorWithCompleteProviderPromptUsage() {
+        ChatResponse response = new ChatResponse(
+                List.of(new Generation(new AssistantMessage("done"))),
+                ChatResponseMetadata.builder()
+                        .usage(new DefaultUsage(107, 3, 110, null, 100L, 0L))
+                        .build());
+        AtomicLong floor = new AtomicLong(5_000L);
+
+        var metrics = AiModelResponseProjection.metrics(response, false,
+                ProviderPromptTokenNormalizer.forProvider("openai"), floor, false);
+
+        assertThat(metrics.metrics())
+                .containsEntry("prompt_tokens", 107L)
+                .containsEntry("prompt_tokens_complete", true)
+                .containsEntry("context_input_tokens", 107L)
+                .containsEntry("context_estimated", false);
+        assertThat(metrics.contextInputTokens()).isEqualTo(107L);
+        assertThat(floor).hasValue(107L);
+    }
+
+    @Test
+    void completeProviderUsageRestoresCapacityForTheNextToolResult() {
+        AtomicLong floor = new AtomicLong(100L);
+        AiToolOutputLimiter limiter = new AiToolOutputLimiter(
+                new AiContextBudget("model", 120L, 10L, 90L, 10L, 100L, false),
+                floor, false);
+        ChatResponse response = new ChatResponse(
+                List.of(new Generation(new AssistantMessage("continue"))),
+                ChatResponseMetadata.builder()
+                        .usage(new DefaultUsage(20, 3, 23))
+                        .build());
+
+        AiModelResponseProjection.metrics(response, false,
+                ProviderPromptTokenNormalizer.forProvider("openai"), floor, false);
+        var bounded = limiter.reserve("read-back payload", 100L);
+
+        assertThat(bounded.truncated()).isFalse();
+        assertThat(bounded.value()).isEqualTo("read-back payload");
+        assertThat(floor).hasValue(26L);
     }
 }

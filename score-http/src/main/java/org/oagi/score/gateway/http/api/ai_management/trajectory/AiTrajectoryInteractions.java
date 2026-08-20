@@ -90,7 +90,7 @@ final class AiTrajectoryInteractions {
         extra.put("execution_kind", Objects.requireNonNullElse(executionKind, "multi_agent"));
         extra.put("agents", settled.stream().map(this::usageItem).toList());
         persist(new AiChatTrajectoryStep(
-                        requestId, "system", AiTrajectoryRecorder.FANOUT_USAGE_STEP_KIND, "debug",
+                        requestId, "system", AiTrajectoryRecorder.FANOUT_USAGE_STEP_KIND, "visible",
                         "parallel".equals(executionKind)
                                 ? "Parallel workflow usage settled."
                                 : "Multi-agent fan-out usage settled.",
@@ -110,7 +110,7 @@ final class AiTrajectoryInteractions {
         lifecycle.put("lifecycle_subtype", subtype);
         Map<String, Object> extra = trace(lifecycle);
         persist(new AiChatTrajectoryStep(
-                        requestId, "agent", "agent_lifecycle", "debug", content, null,
+                        requestId, "agent", "agent_lifecycle", "visible", content, null,
                         modelName, reasoningEffort, null, null, null, extra, 0, null, null),
                 AiExecutionEvent.detail(subtype, content, extra), true);
     }
@@ -175,7 +175,7 @@ final class AiTrajectoryInteractions {
     void progress(String content) {
         if (sealed.getAsBoolean() || !StringUtils.hasText(content)) return;
         persist(new AiChatTrajectoryStep(
-                        requestId, "system", "progress", "debug", content, null,
+                        requestId, "system", "progress", "visible", content, null,
                         null, null, null, null, null,
                         trace(Map.of("event_sequence", eventSequence.incrementAndGet())),
                         0, null, null),

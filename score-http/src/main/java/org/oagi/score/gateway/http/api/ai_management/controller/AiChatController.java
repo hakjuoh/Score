@@ -222,10 +222,14 @@ public class AiChatController {
             try {
                 finalizer.clear(prepared.requestId());
                 if ("FAILED".equals(status) || "TIMED_OUT".equals(status)) {
+                    String message = AiChatTransport.terminalMessage(status, throwable);
                     chatService.recordFailure(prepared, requester,
-                            AiChatTransport.terminalMessage(status, throwable),
+                            message,
                             AiChatTransport.failureClass(throwable),
                             entry.generation());
+                    responseEvents.add(AiChatSocketEvent.terminalError(prepared.requestId(),
+                            prepared.conversationId(), sequence.incrementAndGet(),
+                            entry.generation(), status, message));
                 }
                 if ("COMPLETED".equals(status)) {
                     return ResponseEntity.ok(response);

@@ -2,7 +2,7 @@
  * Wraps STOMP subscriptions, publishing, connection recovery, and bounded reconnect attempts.
  */
 
-import {Injectable, inject} from '@angular/core';
+import {Injectable, NgZone, inject} from '@angular/core';
 import {Message} from '@stomp/stompjs';
 import {RxStompState} from '@stomp/rx-stomp';
 import {Observable, Subscription} from 'rxjs';
@@ -28,11 +28,21 @@ export interface AiChatPublishWhenConnectedOptions {
 export class AiChatTransportService {
 
   private stompService = inject(RxStompService);
+  private ngZone = inject(NgZone);
   private publishSubscription?: Subscription;
   private reconnectGeneration = 0;
 
   watch(destination: string): Observable<Message> {
-    return this.stompService.watch(destination);
+    const messages = this.stompService.watch(destination);
+    return new Observable<Message>(subscriber => messages.subscribe({
+      next: message => this.deliver(() => subscriber.next(message)),
+      error: error => this.deliver(() => subscriber.error(error)),
+      complete: () => this.deliver(() => subscriber.complete())
+    }));
+  }
+
+  private deliver(delivery: () => void): void {
+    this.ngZone.run(delivery);
   }
 
   publish(destination: string, body: unknown): void {
