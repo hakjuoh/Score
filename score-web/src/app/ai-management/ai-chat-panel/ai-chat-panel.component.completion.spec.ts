@@ -263,6 +263,33 @@ describe('AiChatPanelComponent request completion and recovery', () => {
     expect((component as any).changeRepeatDraft).toBeUndefined();
   });
 
+  it('shows a trusted REST terminal explanation without a generic duplicate', () => {
+    const chat = new Subject<AiChatRestResponse>();
+    api.sendChat.mockReturnValueOnce(chat);
+    component.state.conversationId = 'conversation-1';
+    component.state.prompt = 'Change the attached record';
+    component.state.attachments = [{
+      name: 'sample.txt', mediaType: 'text/plain', size: 4, data: 'test'
+    }];
+    component.send();
+    const explanation = 'The assistant completed 2 change operations but could not verify '
+      + 'the final state. Refresh the affected records, then complete any remaining work.';
+
+    chat.error(new HttpErrorResponse({
+      status: 500,
+      error: {events: [{
+        requestId: 'request-1', conversationId: 'conversation-1', sequence: 1,
+        type: 'system', subtype: 'request_error', content: explanation,
+        metadata: {generation: 4, status: 'FAILED', terminal: true,
+          recoverable: false, retryable: false}
+      }]}
+    }));
+
+    expect(component.state.pending).toBe(false);
+    expect(component.state.messages.filter(message => message.role === 'error'))
+      .toEqual([expect.objectContaining({content: explanation})]);
+  });
+
   it('does not expose an arbitrary server error through the attachment message header', () => {
     const message = (component as any).attachmentFailureMessage(new HttpErrorResponse({
       status: 500,
@@ -271,9 +298,11 @@ describe('AiChatPanelComponent request completion and recovery', () => {
       })
     }));
 
-    expect(message).toBe(
-      'The attachment request could not be completed. Check the backend log for details.'
-    );
+    expect(message).toContain('attachment request could not be completed');
+    expect(message).toContain('retry only the unfinished part');
+    expect(message).toContain('contact an administrator');
+    expect(message).not.toContain('backend log');
+    expect(message).not.toContain('internal-secret');
   });
 
   it.each([

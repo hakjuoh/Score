@@ -107,7 +107,13 @@ public record AiChatSocketEvent(
 
     public static AiChatSocketEvent terminalError(String requestId, String conversationId,
                                                   long generation, String status, String message) {
-        return system(requestId, conversationId, 1L, "request_error", message, Map.of(
+        return terminalError(requestId, conversationId, 1L, generation, status, message);
+    }
+
+    public static AiChatSocketEvent terminalError(String requestId, String conversationId,
+                                                  long sequence, long generation,
+                                                  String status, String message) {
+        return system(requestId, conversationId, sequence, "request_error", message, Map.of(
                 "generation", generation, "status", status, "terminal", true,
                 "recoverable", false, "retryable", false));
     }
@@ -141,7 +147,7 @@ public record AiChatSocketEvent(
                                            String subtype, String content, Map<String, Object> metadata) {
         return new AiChatSocketEvent(requestId, conversationId, "system", content, null, null,
                 false, List.of(), null, null, null, List.of(), null, requestId, sequence,
-                subtype, "debug", content, null, null, metadata);
+                subtype, "visible", content, null, null, metadata);
     }
 
     public static AiChatSocketEvent changeConfirmationRequired(
@@ -177,7 +183,7 @@ public record AiChatSocketEvent(
         }
         return new AiChatSocketEvent(requestId, conversationId, "tool_call", content, null, null,
                 false, List.of(), null, null, null, List.of(), null, requestId, sequence,
-                subtype, "debug", content, requestId, toolCallId, metadata);
+                subtype, "visible", content, requestId, toolCallId, metadata);
     }
 
     public static AiChatSocketEvent historyFinal(String requestId, String conversationId,

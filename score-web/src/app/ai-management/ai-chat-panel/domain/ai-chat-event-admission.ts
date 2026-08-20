@@ -26,7 +26,8 @@ const RECOGNIZED_SYSTEM_SUBTYPES = new Set([
   'data_changed', 'data_change_rejected', 'audit_failed', 'cancelled',
   'authentication_failed', 'error', 'model_fallback', 'provider_error',
   'provider_retry', 'workflow_result', 'context_usage', 'context_compacted',
-  'guide', 'policy_notice', 'workflow_started'
+  'guide', 'policy_notice', 'workflow_started', 'progress', 'starting', 'started',
+  'completed', 'agent_lifecycle', 'fanout_usage', 'agent_status'
 ]);
 
 export type RequestEventAdmission =
@@ -110,13 +111,17 @@ export function requestEventAdmission(event: AiChatSocketEvent): RequestEventAdm
       || !!workflowTerminalStatus(event.subtype)
       || isExecutionActivityEvent(event)
       || event.visibility === 'debug'
-      || event.metadata?.['inProgress'] === true ? 'admit' : 'reject';
+      || event.metadata?.['inProgress'] === true
+      || (!!event.content && event.visibility === 'visible') ? 'admit' : 'reject';
   }
   return event.type === 'UI_FORMATTED' && !!event.response ? 'admit' : 'reject';
 }
 
 export function restReplayDisposition(event: AiChatSocketEvent): RestReplayDisposition {
   if (event.type === 'system') {
+    if (event.subtype === 'request_error') {
+      return terminalRequestErrorStatus(event) ? 'socket' : 'ignore';
+    }
     const interaction = INTERACTION_POLICIES.get(event.subtype || '');
     if (interaction) return interaction.replay;
   }

@@ -19,6 +19,43 @@ describe('AiChatPanelComponent tool events', () => {
   beforeEach(setupAiChatPanelSpec);
   afterEach(teardownAiChatPanelSpec);
 
+  it('publishes a new message-array identity after a live event', () => {
+    component.state.prompt = 'Inspect a library';
+    component.send();
+    const beforeEvent = component.state.messages;
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', type: 'tool_call', subtype: 'started',
+      groupId: 'request-1', toolCallId: 'call-1', content: 'Calling get_libraries.',
+      metadata: {toolName: 'get_libraries'}
+    });
+
+    expect(component.state.messages).not.toBe(beforeEvent);
+    expect(component.state.messages.at(-1)).toMatchObject({
+      role: 'progress', content: 'Calling get_libraries.'
+    });
+  });
+
+  it('hides debug events by default and renders exactly one row when debug is enabled', () => {
+    component.state.prompt = 'Inspect a library';
+    component.send();
+    const debugEvent = {
+      requestId: 'request-1', type: 'system', subtype: 'provider_trace',
+      visibility: 'debug', content: 'Internal provider trace'
+    } as const;
+
+    (component as any).handleSocketEvent(debugEvent);
+    expect(component.state.messages.some(message =>
+      message.content === debugEvent.content)).toBe(false);
+
+    component.state.debugEnabled = true;
+    (component as any).handleSocketEvent(debugEvent);
+    expect(component.state.messages.filter(message =>
+      message.role === 'debug' && message.content === debugEvent.content)).toHaveLength(1);
+    expect(component.state.messages.some(message =>
+      message.role === 'progress' && message.content === debugEvent.content)).toBe(false);
+  });
+
   it('keeps the request active after a recoverable tool failure and later accepts the final answer', () => {
     component.state.prompt = 'Recover from a tool failure';
     component.send();

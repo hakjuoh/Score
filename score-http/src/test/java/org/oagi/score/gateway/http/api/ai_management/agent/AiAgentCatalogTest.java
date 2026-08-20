@@ -66,6 +66,9 @@ class AiAgentCatalogTest {
                 "execution-revised-change-continuation",
                 "execution-textual-tool-call-recovery",
                 "execution-ui-route-manifest-context");
+        assertThat(catalog.executionInstruction("execution-read-back-continuation").value())
+                .contains("Complete all safely executable remaining changes",
+                        "Only after successful read-back may you finalize");
         assertThat(catalog.workflowInstruction("workflow-worker-assignment").value())
                 .contains("${assignment}");
         assertThatThrownBy(() -> catalog.workflowInstruction("missing"))
