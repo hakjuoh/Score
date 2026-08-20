@@ -22,10 +22,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-/** Drives bounded textual-call recovery, approval waves, and post-change read-back. */
+/** Drives textual-call recovery, approval waves, and progress-aware post-change read-back. */
 final class AiChatContinuationRunner {
 
-    private static final int MAX_READ_BACK_CONTINUATIONS = 2;
+    // Productive continuations may legitimately complete any number of requested changes.
+    // Stop only after consecutive continuations make no objective change progress.
+    private static final int MAX_STALLED_READ_BACK_CONTINUATIONS = 2;
     private static final int MAX_TEXTUAL_TOOL_CALL_RECOVERIES = 2;
     private static final Pattern TEXTUAL_TOOL_CALL_PLACEHOLDER = Pattern.compile(
             "(?is)\\*{0,2}\\[\\s*tool(?:[ -]call)?\\s*:\\s*[^\\]\\r\\n]+]\\*{0,2}"
@@ -151,10 +153,10 @@ final class AiChatContinuationRunner {
                                     boolean internalPersona, ExecutionScope scope,
                                     ExecutionState state, Agent.Instruction instruction,
                                     Runnable progress) {
-        int continuation = 0;
-        while (guarded != null && guarded.changeCompleted() && !guarded.confirmationRequired()
-                && !guarded.readAfterLastChange()
-                && continuation++ < MAX_READ_BACK_CONTINUATIONS) {
+        int stalledContinuations = 0;
+        while (readBackRequired(guarded)
+                && stalledContinuations < MAX_STALLED_READ_BACK_CONTINUATIONS) {
+            int completedChangesBefore = guarded.completedChanges().size();
             List<Message> messages = new ArrayList<>(context.history());
             messages.add(context.userMessage());
             guarded.completedChanges().forEach(execution -> AiApprovedChangeMessages.append(
@@ -164,13 +166,18 @@ final class AiChatContinuationRunner {
                     AiExecutionInstructions.Template.READ_BACK_CONTINUATION).value()));
             answer = modelInvoker.invoke(assistant, options, context.request(), messages, recorder,
                     internalPersona, scope, state, instruction, progress);
+            stalledContinuations = guarded.completedChanges().size() > completedChangesBefore
+                    ? 0 : stalledContinuations + 1;
         }
-        if (guarded != null && guarded.changeCompleted() && !guarded.confirmationRequired()
-                && !guarded.readAfterLastChange()) {
-            throw new IllegalStateException(
-                    "The assistant stopped after a change without completing read-back.");
+        if (readBackRequired(guarded)) {
+            throw new AiChangeReadBackException(guarded.completedChanges().size());
         }
         return answer;
+    }
+
+    private boolean readBackRequired(AiChangeToolGuard.GuardedToolSession guarded) {
+        return guarded != null && guarded.changeCompleted() && !guarded.confirmationRequired()
+                && !guarded.readAfterLastChange();
     }
 
     private boolean isTextualToolCallPlaceholder(String answer) {

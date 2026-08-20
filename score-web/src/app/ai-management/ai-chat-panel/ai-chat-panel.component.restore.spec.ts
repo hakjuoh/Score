@@ -228,6 +228,29 @@ describe('AiChatPanelComponent conversation restore and attachments', () => {
       .toEqual(['new replay']);
   });
 
+  it('publishes each asynchronous restore update to the message-list view', () => {
+    const requestViewRefresh = vi.spyOn(component as any, 'requestViewRefresh');
+    const callbacks = (component as any).conversationRestoreCallbacks();
+    const initialMessages = component.state.messages;
+
+    const restoredIndex = callbacks.pushMessage({
+      role: 'assistant', content: 'First restored paragraph.'
+    });
+
+    expect(restoredIndex).toBe(0);
+    expect(component.state.messages).not.toBe(initialMessages);
+    const messagesAfterPush = component.state.messages;
+
+    callbacks.setMessage(restoredIndex, {
+      role: 'assistant', content: 'First restored paragraph.\n\nSecond restored paragraph.'
+    });
+
+    expect(component.state.messages).not.toBe(messagesAfterPush);
+    expect(component.state.messages[restoredIndex].content)
+      .toContain('Second restored paragraph.');
+    expect(requestViewRefresh).toHaveBeenCalledTimes(2);
+  });
+
   it('subscribes chat responses through the authenticated user queue', () => {
     component.state.prompt = 'Who am I?';
 

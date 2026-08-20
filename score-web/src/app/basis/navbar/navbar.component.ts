@@ -16,6 +16,7 @@ import {DomSanitizer, SafeHtml} from '@angular/platform-browser';
 import {AboutService} from '../about/domain/about.service';
 import {WebPageInfoService} from '../basis.service';
 import {LibraryService} from '../../library-management/domain/library.service';
+import {EMPTY, Subscription, distinctUntilChanged, startWith, switchMap} from 'rxjs';
 
 @Component({
   standalone: false,
@@ -40,6 +41,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
   translate = inject(TranslateService);
 
   private resizeObserver?: ResizeObserver;
+  private readonly subscriptions = new Subscription();
   public navbarWidth = 1400;
   public isDrawerOpen = false;
 
@@ -58,9 +60,9 @@ export class NavbarComponent implements OnInit, OnDestroy {
     const savedLang = localStorage.getItem('score.lang');
     translate.use((savedLang && savedLang.match(/ccts|oagis/)) ? savedLang
         : (browserLang && browserLang.match(/ccts|oagis/) ? browserLang : 'ccts'));
-    translate.onLangChange.subscribe((event: LangChangeEvent) => {
+    this.subscriptions.add(translate.onLangChange.subscribe((event: LangChangeEvent) => {
       localStorage.setItem('score.lang', event.lang);
-    });
+    }));
 
     this.refreshBranding();
   }
@@ -127,9 +129,9 @@ export class NavbarComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.ensureDefaultLibrarySelection();
-    this.webPageInfo.load().subscribe(_ => {
+    this.subscriptions.add(this.webPageInfo.load().subscribe(_ => {
       this.refreshBranding();
-    });
+    }));
     this.reloadNotiCount();
 
     if (typeof ResizeObserver !== 'undefined' && this.elementRef?.nativeElement) {
@@ -152,26 +154,31 @@ export class NavbarComponent implements OnInit, OnDestroy {
       });
     }
 
-    // subscribe an event
     const userToken = this.auth.getUserToken();
-    if (userToken) {
-      this.stompService.watch('/topic/message/' + userToken.username).subscribe((message: Message) => {
-        const data = JSON.parse(message.body);
-        if (!!data.messageId || !!data.messageIdList) {
-          this.reloadNotiCount();
-        }
-      });
-    }
+    const initialUsername = userToken?.enabled === true ? userToken.username : undefined;
+    this.subscriptions.add(this.auth.sessionIdentityChanges$.pipe(
+      startWith(initialUsername),
+      distinctUntilChanged(),
+      switchMap(username => username
+        ? this.stompService.watch('/topic/message/' + username)
+        : EMPTY)
+    ).subscribe((message: Message) => {
+      const data = JSON.parse(message.body);
+      if (!!data.messageId || !!data.messageIdList) {
+        this.reloadNotiCount();
+      }
+    }));
 
-    this.stompService.watch('/topic/webpage/info').subscribe((message: Message) => {
-      this.webPageInfo.load().subscribe(_ => {
-        this.refreshBranding();
-      });
-    });
+    this.subscriptions.add(this.stompService.watch('/topic/webpage/info').pipe(
+      switchMap(() => this.webPageInfo.load())
+    ).subscribe(() => {
+      this.refreshBranding();
+    }));
   }
 
   ngOnDestroy() {
     this.resizeObserver?.disconnect();
+    this.subscriptions.unsubscribe();
   }
 
   refreshBranding() {
@@ -249,7 +256,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
   logout() {
     const userToken = this.userToken;
     if (!!userToken && userToken.authentication === 'oauth2') {
-      localStorage.removeItem(this.auth.USER_INFO_KEY);
+      this.auth.beginLogout();
       window.location.href = '/api/oauth2/logout';
     } else {
       this.auth.logout();

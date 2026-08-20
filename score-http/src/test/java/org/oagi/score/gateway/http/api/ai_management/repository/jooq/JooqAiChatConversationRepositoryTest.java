@@ -18,6 +18,7 @@ import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationSettings;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationId;
+import org.oagi.score.gateway.http.api.ai_management.model.AiChatLatestUsage;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStoredStep;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatStepId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatTrajectoryData;
@@ -48,6 +49,52 @@ import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.A
 import static org.oagi.score.gateway.http.common.repository.jooq.entity.Tables.AI_CHAT_STEP;
 
 class JooqAiChatConversationRepositoryTest {
+
+    @Test
+    void restoresTheLastPublishedRootContextInsteadOfOneProviderCall() {
+        Instant measuredAt = Instant.parse("2026-08-18T14:19:52Z");
+
+        AiChatLatestUsage usage = JooqAiChatConversationQueries.latestUsage("gpt-5.6-sol",
+                Map.of("prompt_tokens", 12_624L, "prompt_tokens_complete", true,
+                        "context_input_tokens", 913_808L, "context_estimated", true),
+                measuredAt);
+
+        assertThat(usage).isEqualTo(new AiChatLatestUsage(
+                "gpt-5.6-sol", 913_808L, true, measuredAt));
+    }
+
+    @Test
+    void preservesTheConservativeFloorForIncompleteProviderUsage() {
+        Instant measuredAt = Instant.parse("2026-08-18T14:19:52Z");
+
+        AiChatLatestUsage usage = JooqAiChatConversationQueries.latestUsage("custom",
+                Map.of("provider_reported_prompt_tokens", 12_624L,
+                        "prompt_tokens_complete", false,
+                        "context_input_tokens", 913_808L, "context_estimated", true),
+                measuredAt);
+
+        assertThat(usage).isEqualTo(new AiChatLatestUsage(
+                "custom", 913_808L, true, measuredAt));
+    }
+
+    @Test
+    void latestUsageIncludesTheLastPublishedFanOutContextSnapshot() {
+        UsageProvider provider = new UsageProvider();
+        ScoreUser requester = new ScoreUser(new UserId(BigInteger.ONE), "tester", "Test User",
+                null, false, List.of());
+        JooqAiChatConversationRepository repository = new JooqAiChatConversationRepository(
+                DSL.using(new MockConnection(provider), SQLDialect.MYSQL), requester, null,
+                AiChatJsonSerializer.getInstance());
+
+        AiChatLatestUsage usage = repository.latestUsage("conversation-1").orElseThrow();
+
+        assertThat(usage.inputTokens()).isEqualTo(913_808L);
+        assertThat(usage.estimated()).isTrue();
+        assertThat(provider.sql).anySatisfy(sql -> assertThat(sql)
+                .contains("ai_chat_step"));
+        assertThat(provider.bindings).allSatisfy(bindings ->
+                assertThat(bindings).doesNotContain("fanout_usage"));
+    }
 
     @Test
     void keepsEveryTransactionAtThePublicFacadeAfterRepositorySeparation() throws Exception {
@@ -440,6 +487,45 @@ class JooqAiChatConversationRepositoryTest {
             DSLContext create = DSL.using(SQLDialect.MYSQL);
             if (query.contains("from `oagi`.`ai_chat_conversation`")
                     && query.contains("for update")) {
+                Result<Record1<ULong>> result = create.newResult(
+                        AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+                Record1<ULong> record = create.newRecord(
+                        AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
+                record.value1(ULong.valueOf(42));
+                result.add(record);
+                return new MockResult[]{new MockResult(1, result)};
+            }
+            return new MockResult[]{new MockResult(0, create.newResult())};
+        }
+    }
+
+    private static final class UsageProvider implements MockDataProvider {
+
+        private final java.util.ArrayList<String> sql = new java.util.ArrayList<>();
+        private final java.util.ArrayList<List<Object>> bindings = new java.util.ArrayList<>();
+
+        @Override
+        public MockResult[] execute(MockExecuteContext context) {
+            String query = context.sql().toLowerCase(Locale.ROOT);
+            sql.add(query);
+            bindings.add(java.util.Arrays.asList(context.bindings()));
+            DSLContext create = DSL.using(SQLDialect.MYSQL);
+            if (query.contains("from `oagi`.`ai_chat_step`")) {
+                Field<?>[] fields = {AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.METRICS_JSON,
+                        AI_CHAT_STEP.CREATION_TIMESTAMP};
+                Result<Record> result = create.newResult(fields);
+                Record record = create.newRecord(fields);
+                record.set(AI_CHAT_STEP.MODEL_NAME, "gpt-5.6-sol");
+                record.set(AI_CHAT_STEP.METRICS_JSON,
+                        "{\"fanout_prompt_tokens\":565170,"
+                                + "\"context_input_tokens\":913808,"
+                                + "\"context_estimated\":true}");
+                record.set(AI_CHAT_STEP.CREATION_TIMESTAMP,
+                        LocalDateTime.parse("2026-08-18T14:19:52"));
+                result.add(record);
+                return new MockResult[]{new MockResult(1, result)};
+            }
+            if (query.contains("from `oagi`.`ai_chat_conversation`")) {
                 Result<Record1<ULong>> result = create.newResult(
                         AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
                 Record1<ULong> record = create.newRecord(
