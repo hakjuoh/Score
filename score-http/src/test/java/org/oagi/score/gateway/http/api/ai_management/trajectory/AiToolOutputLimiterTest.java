@@ -43,6 +43,27 @@ class AiToolOutputLimiterTest {
     }
 
     @Test
+    void distinguishesPerToolAndRemainingContextTruncation() {
+        AiToolOutputLimiter configured = new AiToolOutputLimiter(
+                new AiContextBudget("model", 1_000L, 10L, 900L, 10L, 100L, false),
+                new AtomicLong(10L), false);
+        AiToolOutputLimiter.Reservation perTool =
+                configured.reserveWithCause("x".repeat(1000), 10L);
+        AiToolOutputLimiter context = new AiToolOutputLimiter(
+                new AiContextBudget("model", 120L, 10L, 90L, 10L, 100L, false),
+                new AtomicLong(95L), false);
+        AiToolOutputLimiter.Reservation remaining =
+                context.reserveWithCause("x".repeat(1000), 100L);
+
+        assertThat(perTool.truncationCause())
+                .isEqualTo(AiToolOutputLimiter.TruncationCause.TOOL_OUTPUT_LIMIT);
+        assertThat(perTool.effectiveTokenLimit()).isEqualTo(10L);
+        assertThat(remaining.truncationCause())
+                .isEqualTo(AiToolOutputLimiter.TruncationCause.REMAINING_CONTEXT);
+        assertThat(remaining.effectiveTokenLimit()).isEqualTo(5L);
+    }
+
+    @Test
     void clampsAResetFloorBeforeReservingTheNextOutput() {
         AtomicLong floor = new AtomicLong(50L);
         AiToolOutputLimiter limiter = new AiToolOutputLimiter(

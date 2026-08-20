@@ -212,8 +212,10 @@ final class AiTrajectoryToolCalls {
     String limitOutput(String output, long configuredLimit, String toolName) {
         synchronized (monitor) {
             long reservationLimit = configuredLimit > 0 ? configuredLimit : Long.MAX_VALUE;
-            AiBoundedToolOutput bounded = outputLimiter.reserve(output, reservationLimit);
-            emitTruncated(bounded, configuredLimit, toolName);
+            AiToolOutputLimiter.Reservation reservation =
+                    outputLimiter.reserveWithCause(output, reservationLimit);
+            AiBoundedToolOutput bounded = reservation.output();
+            emitTruncated(reservation, configuredLimit, toolName);
             emitUsage(bounded);
             return bounded.value();
         }
@@ -391,16 +393,30 @@ final class AiTrajectoryToolCalls {
         return metadata;
     }
 
-    private void emitTruncated(AiBoundedToolOutput bounded, long configuredLimit,
+    private void emitTruncated(AiToolOutputLimiter.Reservation reservation, long configuredLimit,
                                String toolName) {
+        AiBoundedToolOutput bounded = reservation.output();
         if (!bounded.truncated()) return;
         String safeName = StringUtils.hasText(toolName) ? toolName : "tool";
         eventWriter.emit(AiExecutionEvent.detail("tool_output_truncated",
-                safeName + " returned more data than the active context budget allows.", Map.of(
+                truncationMessage(safeName, reservation.truncationCause()), Map.of(
                         "toolName", safeName, "mcp", mcpToolNames.contains(safeName),
                         "originalUtf8Bytes", bounded.originalBytes(),
                         "returnedUtf8Bytes", bounded.returnedBytes(),
-                        "toolOutputTokenLimit", configuredLimit)));
+                        "toolOutputTokenLimit", configuredLimit,
+                        "effectiveToolOutputTokenLimit", reservation.effectiveTokenLimit(),
+                        "truncationCause", reservation.truncationCause().wireName())));
+    }
+
+    private String truncationMessage(String toolName,
+                                     AiToolOutputLimiter.TruncationCause cause) {
+        if (cause == AiToolOutputLimiter.TruncationCause.REMAINING_CONTEXT) {
+            return toolName + " returned more data than the remaining safe context capacity. "
+                    + "The result was truncated; compact the conversation or use narrower "
+                    + "filters or pagination.";
+        }
+        return toolName + " returned more data than the configured per-tool output limit. "
+                + "The result was truncated; use narrower filters or pagination.";
     }
 
     private void emitUsage(AiBoundedToolOutput bounded) {
@@ -456,8 +472,10 @@ final class AiTrajectoryToolCalls {
             try (var ignored = observationContext.makeToolCurrent(requestId, pending.id())) {
                 String output = delegate.call(input, context);
                 synchronized (monitor) {
-                    AiBoundedToolOutput bounded = outputLimiter.reserve(output, outputTokenLimit);
-                    emitTruncated(bounded, outputTokenLimit, pending.name());
+                    AiToolOutputLimiter.Reservation reservation =
+                            outputLimiter.reserveWithCause(output, outputTokenLimit);
+                    AiBoundedToolOutput bounded = reservation.output();
+                    emitTruncated(reservation, outputTokenLimit, pending.name());
                     emitUsage(bounded);
                     completed(pending, output, null, Duration.between(started, Instant.now()),
                             bounded.truncated());

@@ -63,6 +63,13 @@ export abstract class AiChatPanelMessageController extends AiChatPanelViewContro
       this.applyAgentActivity(event);
       return;
     }
+    if (event.subtype === 'tool_output_truncated' && content
+      && isSpecialistActivityEvent(event) && !this.liveExecution.isPlainEvent(event)) {
+      // A worker-scoped output notice belongs beside that worker's Tool rows.
+      // Never leak it into the root conversation when lifecycle delivery races.
+      upsertAgentGuideEvent(this.agentActivitiesFor(event), event);
+      return;
+    }
     if (event.subtype === 'guide' && content) {
       if (event.metadata?.['workflow_preference'] === true) {
         // Keep the session-settings region in sync when a natural-language

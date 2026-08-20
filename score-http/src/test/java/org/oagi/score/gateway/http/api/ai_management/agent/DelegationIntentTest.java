@@ -19,6 +19,14 @@ class DelegationIntentTest {
     }
 
     @Test
+    void clampsRequestedAgentCountToThePolicyMaximum() {
+        assertThat(DelegationIntent.boundedRequestedAgentCount(
+                "Spawn exactly 4 sub-agents in parallel.", 2)).isEqualTo(2);
+        assertThat(DelegationIntent.boundedRequestedAgentCount(
+                "Use sub-agents.", 4)).isEqualTo(2);
+    }
+
+    @Test
     void recognizesLocalizedDelegationAndNegation() {
         assertThat(DelegationIntent.explicitlyRequestsAgents(
                 "이 요청에는 sub-agent를 사용해.")).isTrue();
