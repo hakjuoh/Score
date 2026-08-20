@@ -105,12 +105,21 @@ final class JooqAiChatConversationQueries {
                 .fetchOptional(record -> {
                     Map<String, Object> metrics = serializer.deserializeMapOrEmpty(
                             record.get(AI_CHAT_STEP.METRICS_JSON));
-                    long inputTokens = number(metrics.get("context_input_tokens"));
-                    if (inputTokens <= 0) inputTokens = number(metrics.get("prompt_tokens"));
-                    return new AiChatLatestUsage(record.get(AI_CHAT_STEP.MODEL_NAME), inputTokens,
-                            Boolean.TRUE.equals(metrics.get("context_estimated")),
+                    return latestUsage(record.get(AI_CHAT_STEP.MODEL_NAME), metrics,
                             instant(record.get(AI_CHAT_STEP.CREATION_TIMESTAMP)));
                 });
+    }
+
+    static AiChatLatestUsage latestUsage(String modelName, Map<String, Object> metrics,
+                                         Instant measuredAt) {
+        // Restore the same root-context snapshot that was last published to the UI. A complete
+        // provider prompt is useful evidence, but it may describe one isolated model call rather
+        // than the conversation-wide estimate represented by context_input_tokens.
+        long promptTokens = number(metrics.get("prompt_tokens"));
+        long inputTokens = number(metrics.get("context_input_tokens"));
+        if (inputTokens <= 0) inputTokens = promptTokens;
+        boolean estimated = Boolean.TRUE.equals(metrics.get("context_estimated"));
+        return new AiChatLatestUsage(modelName, inputTokens, estimated, measuredAt);
     }
 
     List<ChatConversationSummary> list() {
@@ -364,7 +373,7 @@ final class JooqAiChatConversationQueries {
         if (value != null) target.put(key, value);
     }
 
-    private long number(Object value) {
+    private static long number(Object value) {
         return value instanceof Number number ? number.longValue() : 0L;
     }
 

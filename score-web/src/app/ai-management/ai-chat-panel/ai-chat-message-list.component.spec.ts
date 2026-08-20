@@ -127,6 +127,49 @@ describe('AiChatMessageListComponent', () => {
     expect(toolRow.textContent).toContain('get_context_schemes completed.');
   });
 
+  it('keeps intermediate tool calls and guides expanded while the request is in progress and collapses when finished', async () => {
+    fixture.componentRef.setInput('pending', true);
+    fixture.componentRef.setInput('messages', [
+      {role: 'user', content: 'Compare components'},
+      {role: 'guide', content: 'Comparing Address components...'},
+      {
+        role: 'tool_call', content: 'get_libraries completed.',
+        toolStatus: 'completed', toolName: 'get_libraries'
+      },
+      {
+        role: 'progress', content: 'Comparing the component details...',
+        eventType: 'assistant_update', inProgress: true
+      }
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    fixture.detectChanges();
+
+    const userRow = fixture.nativeElement.querySelector('.message-row.user') as HTMLElement;
+    const toggle = userRow.querySelector('.message-history-toggle') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(fixture.nativeElement.querySelector('.message-history-panel')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.message-row.tool_call')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Comparing Address components...');
+
+    const previousMessages = fixture.componentInstance.messages;
+    fixture.componentRef.setInput('pending', false);
+    fixture.componentRef.setInput('messages', [
+      ...previousMessages.slice(0, -1),
+      {role: 'assistant', content: 'Comparison complete.'}
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.isHistoryExpanded(0)).toBe(false);
+    const updatedToggle = fixture.nativeElement.querySelector('.message-history-toggle') as HTMLButtonElement;
+    expect(updatedToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(fixture.nativeElement.querySelector('.message-history-panel')).toBeNull();
+  });
+
   it('announces and visually distinguishes a failed tool row', () => {
     fixture.componentInstance.messages = [{
       role: 'tool_call',

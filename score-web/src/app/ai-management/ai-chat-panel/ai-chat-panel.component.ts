@@ -3,13 +3,15 @@
  */
 
 import {
+  ChangeDetectorRef,
   Component,
   DoCheck,
   ElementRef,
   HostListener,
   OnDestroy,
   OnInit,
-  ViewChild
+  ViewChild,
+  inject
 } from '@angular/core';
 import {AiChatComposerComponent} from './ai-chat-composer.component';
 import {AiChatPanelLifecycleController} from './ai-chat-panel-lifecycle.controller';
@@ -76,6 +78,8 @@ export {
 export class AiChatPanelComponent extends AiChatPanelLifecycleController
   implements DoCheck, OnDestroy, OnInit {
 
+  private readonly changeDetectorRef = inject(ChangeDetectorRef, {optional: true});
+
   @ViewChild(AiChatComposerComponent) override composer?: AiChatComposerComponent;
   @ViewChild('chatTerminalPane') override chatTerminalPane?: ElementRef<HTMLDivElement>;
 
@@ -91,5 +95,9 @@ export class AiChatPanelComponent extends AiChatPanelLifecycleController
 
   ngDoCheck(): void {
     this.persistWorkspaceIfChanged();
+  }
+
+  protected override requestViewRefresh(): void {
+    this.changeDetectorRef?.detectChanges();
   }
 }

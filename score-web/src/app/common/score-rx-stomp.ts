@@ -17,6 +17,7 @@ export class RxStompService extends RxStomp {
   private healthPingSubscription?: Subscription;
   private connectionStateSubscription?: Subscription;
   private shouldReconnect = false;
+  private sessionIdentityGeneration = 0;
 
   public constructor (private http: HttpClient, private auth: AuthService) {
     super();
@@ -31,6 +32,8 @@ export class RxStompService extends RxStomp {
       }
     });
     this.stompErrors$.subscribe(frame => this.handleStompError(frame));
+    this.auth.sessionIdentityChanges$.subscribe(username =>
+      this.restartForSessionIdentity(username));
   }
 
   override activate(): void {
@@ -64,6 +67,15 @@ export class RxStompService extends RxStomp {
   private stopHealthPingLoop(): void {
     this.healthPingSubscription?.unsubscribe();
     this.healthPingSubscription = undefined;
+  }
+
+  private restartForSessionIdentity(username: string | undefined): void {
+    const generation = ++this.sessionIdentityGeneration;
+    this.deactivate({force: true}).finally(() => {
+      if (username && generation === this.sessionIdentityGeneration) {
+        this.activate();
+      }
+    });
   }
 
   private checkGatewayHealth() {

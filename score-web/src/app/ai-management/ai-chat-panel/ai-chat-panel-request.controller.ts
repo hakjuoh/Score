@@ -220,7 +220,16 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
           this.completeUnknownConfirmedRequest(requestId);
           return;
         }
-        replayRestEvents(errorEvents(error));
+        const restEvents = errorEvents(error);
+        replayRestEvents(restEvents);
+        if (restEvents.some(event => event.requestId === requestId
+          && event.subtype === 'request_error')
+          && this.activeRequestId !== requestId) {
+          // A validated terminal event already settled the request and rendered
+          // the backend's safe, failure-specific recovery guidance.
+          this.scrollToBottom();
+          return;
+        }
         const confirmationConversationId =
           this.pendingChangeConfirmation?.conversationId;
         this.transitionActiveRequest({
@@ -291,7 +300,10 @@ export abstract class AiChatPanelRequestController extends AiChatPanelController
   }
 
   protected attachmentFailureMessage(error: unknown): string {
-    const fallback = 'The attachment request could not be completed. Check the backend log for details.';
+    const fallback = 'The attachment request could not be completed. Some steps may have '
+      + 'completed before it stopped. Review the conversation and affected records, then retry '
+      + 'only the unfinished part. If the problem continues, contact an administrator with the '
+      + 'conversation and approximate failure time.';
     if (!(error instanceof HttpErrorResponse)) {
       return fallback;
     }

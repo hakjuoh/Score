@@ -13,11 +13,12 @@ import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChange
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.AiChangeConfirmationDecisionRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatRequest;
 import org.oagi.score.gateway.http.api.ai_management.controller.payload.ChatResponse;
-import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
+import org.oagi.score.gateway.http.api.ai_management.execution.AiChangeReadBackException;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiExecutionLifecycle;
 import org.oagi.score.gateway.http.api.ai_management.execution.AiSharedStateUnavailableException;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObservation;
 import org.oagi.score.gateway.http.api.ai_management.execution.ExecutionObserver;
+import org.oagi.score.gateway.http.api.ai_management.model.AiExecutionEvent;
 import org.oagi.score.gateway.http.api.ai_management.observability.ScoreAiObservability;
 import org.oagi.score.gateway.http.api.ai_management.service.AiChangeConfirmationService;
 import org.oagi.score.gateway.http.api.ai_management.service.AiChangeApprovalCoordinator;
@@ -610,11 +611,24 @@ class AiChatControllerTest {
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.REQUEST_TIMEOUT);
             assertThat(response.getBody()).isNotNull();
             assertThat(response.getBody().agent()).isEqualTo("configured-root-agent");
-            assertThat(response.getBody().events()).singleElement()
-                    .extracting(event -> event.metadata().get("confirmationRequestId"))
-                    .isEqualTo("confirmation-1");
+            assertThat(response.getBody().events()).hasSize(2);
+            assertThat(response.getBody().events().getFirst().metadata())
+                    .containsEntry("confirmationRequestId", "confirmation-1");
+            assertThat(response.getBody().events().getLast()).satisfies(event -> {
+                assertThat(event.subtype()).isEqualTo("request_error");
+                assertThat(event.sequence()).isEqualTo(2L);
+                assertThat(event.content()).contains(
+                        "No further assistant activity was received",
+                        "retry only the unfinished part");
+                assertThat(event.metadata())
+                        .containsEntry("status", "TIMED_OUT")
+                        .containsEntry("terminal", true);
+            });
             verify(chatService, timeout(1_000)).recordFailure(any(ChatRequest.class), eq(user),
-                    eq("The assistant request stopped after no observable activity."),
+                    eq("No further assistant activity was received before the inactivity timeout, "
+                            + "so the request was stopped. Any changes already reported as "
+                            + "completed remain applied. Review the conversation and affected "
+                            + "records, then retry only the unfinished part."),
                     eq(CancellationException.class.getName()), anyLong());
         }
     }
@@ -744,7 +758,74 @@ class AiChatControllerTest {
     }
 
     @Test
-    void surfacesTheProviderErrorMessageWhenRetriesAreExhausted() {
+    void explainsUnverifiedChangesAndRecoveryOnTheRequesterQueue() {
+        AiChatController controller = controller(
+                new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
+        Principal wsPrincipal = mock(Principal.class);
+        SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
+        when(webSocketUsers.resolve(eq(wsPrincipal), any())).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong()))
+                .thenThrow(new AiChangeReadBackException(3));
+
+        controller.chat(new AiChatSocketRequest("request-readback", "Help", null,
+                "conversation-readback", null, List.of(), null), wsPrincipal, headers);
+
+        ArgumentCaptor<AiChatSocketEvent> sent =
+                ArgumentCaptor.forClass(AiChatSocketEvent.class);
+        verify(messagingTemplate, times(2)).convertAndSendToUser(
+                eq("tester"), eq("/queue/ai/chat/request-readback"), sent.capture());
+        AiChatSocketEvent terminal = sent.getAllValues().get(1);
+        assertThat(terminal.type()).isEqualTo("system");
+        assertThat(terminal.subtype()).isEqualTo("request_error");
+        assertThat(terminal.content())
+                .contains("completed 3 change operations")
+                .contains("could not verify the final state")
+                .contains("Refresh or inspect the affected records")
+                .doesNotContain("server log");
+        assertThat(terminal.metadata())
+                .containsEntry("status", "FAILED")
+                .containsEntry("terminal", true);
+        verify(chatService).recordFailure(any(ChatRequest.class), eq(user),
+                eq(terminal.content()), eq(AiChangeReadBackException.class.getName()), anyLong());
+    }
+
+    @Test
+    void explainsUnverifiedChangesInARestErrorWithoutPriorEvents() throws Exception {
+        AiChatController controller = controller(
+                new AiRequestRegistry(), new ScoreAiProperties(), Runnable::run);
+        ChatRequest request = request("request-rest-readback", "conversation-rest-readback");
+        when(sessionService.asScoreUser(principal)).thenReturn(user);
+        when(chatService.prepare(any(ChatRequest.class), eq(user), anyLong()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(chatService.rootAgentId()).thenReturn("configured-root-agent");
+        when(chatService.chat(any(ChatRequest.class), eq(user), any(), anyLong()))
+                .thenThrow(new AiChangeReadBackException(2));
+
+        ResponseEntity<ChatResponse> response = controller.chat(principal, request).get();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().events()).singleElement().satisfies(event -> {
+            assertThat(event.type()).isEqualTo("system");
+            assertThat(event.subtype()).isEqualTo("request_error");
+            assertThat(event.content())
+                    .contains("completed 2 change operations")
+                    .contains("could not verify the final state")
+                    .contains("complete any remaining work")
+                    .doesNotContain("server log");
+            assertThat(event.metadata())
+                    .containsEntry("status", "FAILED")
+                    .containsEntry("terminal", true);
+        });
+        verify(chatService).recordFailure(any(ChatRequest.class), eq(user),
+                eq(response.getBody().events().getFirst().content()),
+                eq(AiChangeReadBackException.class.getName()), anyLong());
+    }
+
+    @Test
+    void surfacesTheProviderErrorMessageWhenRetriesAreExhausted() throws Exception {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             AiChatController controller = controller(
                     new AiRequestRegistry(), new ScoreAiProperties(), executor);
@@ -761,11 +842,19 @@ class AiChatControllerTest {
                                     providerMessage, true, null),
                             10, new IllegalStateException("429: rate_limit_error")));
 
-            assertThatThrownBy(() -> controller.chat(principal, request).get(5, TimeUnit.SECONDS))
-                    .hasMessageContaining("rate limit tier");
+            ResponseEntity<ChatResponse> response = controller.chat(principal, request)
+                    .get(5, TimeUnit.SECONDS);
 
-            // The provider's own message reaches the persisted error step while the
-            // diagnostic failure class keeps the original provider exception.
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().events()).singleElement().satisfies(event -> {
+                assertThat(event.subtype()).isEqualTo("request_error");
+                assertThat(event.content())
+                        .isEqualTo(providerMessage + " (failed after 10 attempts)");
+            });
+
+            // The provider's own message reaches both the REST terminal event and
+            // persisted error step while diagnostics keep the original root cause.
             verify(chatService, timeout(1_000)).recordFailure(any(ChatRequest.class), eq(user),
                     eq(providerMessage + " (failed after 10 attempts)"),
                     eq(IllegalStateException.class.getName()), anyLong());

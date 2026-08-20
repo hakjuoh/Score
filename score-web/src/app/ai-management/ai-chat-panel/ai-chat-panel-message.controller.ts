@@ -171,7 +171,7 @@ export abstract class AiChatPanelMessageController extends AiChatPanelViewContro
     if (event.subtype === 'provider_retry' && this.handleProviderRetryEvent(event)) {
       return;
     }
-    if (event.visibility === 'debug') {
+    if (event.visibility === 'debug' || event.type === 'debug') {
       if (this.state.debugEnabled && content) {
         this.state.messages.push({role: 'debug', content});
       }
@@ -184,12 +184,8 @@ export abstract class AiChatPanelMessageController extends AiChatPanelViewContro
       this.showStatus(WORKING_STATUS_LABEL, true);
       return;
     }
-    if (content && event.metadata?.['inProgress'] === true) {
-      this.showStatus(content, true);
-      return;
-    }
     if (content) {
-      this.showStatus(content, false);
+      this.showStatus(content, event.metadata?.['inProgress'] !== false);
     }
   }
 
@@ -464,10 +460,17 @@ export abstract class AiChatPanelMessageController extends AiChatPanelViewContro
       setCurrentStatus: status => this.state.currentStatus = status,
       clearStatus: () => this.clearStatusMessage(),
       pushMessage: message => {
-        this.state.messages.push(message);
-        return this.state.messages.length - 1;
+        const index = this.state.messages.length;
+        this.state.messages = [...this.state.messages, message];
+        this.requestViewRefresh();
+        return index;
       },
-      setMessage: (index, message) => this.state.messages[index] = message,
+      setMessage: (index, message) => {
+        this.state.messages = this.state.messages.map((current, currentIndex) =>
+          currentIndex === index ? message : current
+        );
+        this.requestViewRefresh();
+      },
       hasMessage: index => !!this.state.messages[index],
       scrollTop: () => this.scrollChatPaneToTop(),
       updateScrollButton: () => this.updateScrollToBottomButton(),

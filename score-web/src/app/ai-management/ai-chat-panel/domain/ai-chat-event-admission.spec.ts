@@ -31,6 +31,14 @@ describe('AI chat event admission', () => {
     expect(requestEventAdmission(event('system', 'unknown'))).toBe('reject');
   });
 
+  it('admits unknown debug system events for the optional debug transcript', () => {
+    expect(requestEventAdmission({
+      ...event('system', 'provider_trace'),
+      visibility: 'debug',
+      content: 'Internal provider trace'
+    })).toBe('admit');
+  });
+
   it('requires visible content for assistant stream and final events', () => {
     expect(requestEventAdmission({...event('assistant_update'), content: 'part'})).toBe('admit');
     expect(requestEventAdmission({...event('assistant_update'), content: ''})).toBe('reject');
@@ -63,6 +71,11 @@ describe('AI chat event admission', () => {
 
   it('routes replay-only system and tool events deliberately', () => {
     expect(restReplayDisposition(event('system', 'provider_retry'))).toBe('system');
+    expect(restReplayDisposition({
+      ...event('system', 'request_error'), sequence: 1,
+      metadata: {terminal: true, recoverable: false, retryable: false, status: 'FAILED'}
+    })).toBe('socket');
+    expect(restReplayDisposition(event('system', 'request_error'))).toBe('ignore');
     expect(restReplayDisposition(event('tool_group', 'started'))).toBe('tool');
     expect(restReplayDisposition(event('assistant_final'))).toBe('ignore');
   });

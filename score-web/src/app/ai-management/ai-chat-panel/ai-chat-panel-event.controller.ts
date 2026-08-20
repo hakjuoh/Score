@@ -27,6 +27,21 @@ import {interactionEventDisposition} from './domain/ai-chat-event-admission';
 
 export abstract class AiChatPanelEventController extends AiChatPanelUiController {
   protected handleSocketEvent(event: AiChatSocketEvent): void {
+    try {
+      this.routeSocketEvent(event);
+    } finally {
+      // Most live events mutate the transcript in place. Publish a new input
+      // identity so the message list sees them immediately. Final events also
+      // change the pending input and may only settle agent activity, so retain
+      // the transcript identity promised by the multi-agent lifecycle.
+      if (event.type !== 'assistant_final') {
+        this.state.messages = [...this.state.messages];
+      }
+      this.requestViewRefresh();
+    }
+  }
+
+  private routeSocketEvent(event: AiChatSocketEvent): void {
     const activeRestoreEvent = !!this.activeRestoreRequestId
       && event.requestId === this.activeRestoreRequestId;
     if (this.conversationRestoreService.isRestoreEvent(event)

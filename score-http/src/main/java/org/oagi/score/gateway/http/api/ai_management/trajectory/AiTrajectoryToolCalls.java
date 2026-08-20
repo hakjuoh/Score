@@ -242,7 +242,7 @@ final class AiTrajectoryToolCalls {
                         "tool_name", pending.name()), false));
         Map<String, Object> extra = toolExtra(pending, "started");
         eventWriter.persist(new AiChatTrajectoryStep(
-                        requestId, "agent", "tool_call_update", "debug",
+                        requestId, "agent", "tool_call_update", "visible",
                         "Calling " + pending.name() + ".", null, modelName, reasoningEffort,
                         null, null, null, eventWriter.traceMetadata(extra), 0, null, null),
                 AiExecutionEvent.tool("started", "Calling " + pending.name() + ".",
@@ -277,7 +277,7 @@ final class AiTrajectoryToolCalls {
         event.put("read_only", readOnlyToolNames.contains(pending.name()));
         if (failure != null) event.put("failure_type", failure.getClass().getName());
         eventWriter.persist(new AiChatTrajectoryStep(
-                        requestId, "agent", "tool_call", "debug", detail, null,
+                        requestId, "agent", "tool_call", "visible", detail, null,
                         modelName, reasoningEffort, null, null, null,
                         eventWriter.traceMetadata(extra), 0, null, null),
                 AiExecutionEvent.tool(status, statusMessage(status, pending.name()),

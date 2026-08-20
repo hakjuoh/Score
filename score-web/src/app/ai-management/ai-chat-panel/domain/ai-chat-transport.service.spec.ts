@@ -2,7 +2,9 @@
  * Verifies the AI Chat Transport service contract, failure handling, and edge cases.
  */
 
+import {NgZone} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
+import {Message} from '@stomp/stompjs';
 import {RxStompState} from '@stomp/rx-stomp';
 import {Subject, of} from 'rxjs';
 import {RxStompService} from '../../../common/score-rx-stomp';
@@ -21,14 +23,17 @@ class FakeRxStompService {
 describe('AiChatTransportService', () => {
   let service: AiChatTransportService;
   let stompService: FakeRxStompService;
+  let ngZone: {run: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     vi.useFakeTimers();
     stompService = new FakeRxStompService();
+    ngZone = {run: vi.fn(callback => callback())};
     TestBed.configureTestingModule({
       providers: [
         AiChatTransportService,
-        {provide: RxStompService, useValue: stompService}
+        {provide: RxStompService, useValue: stompService},
+        {provide: NgZone, useValue: ngZone}
       ]
     });
     service = TestBed.inject(AiChatTransportService);
@@ -37,6 +42,56 @@ describe('AiChatTransportService', () => {
   afterEach(() => {
     service.cancelReconnect();
     vi.useRealTimers();
+  });
+
+  it('delivers STOMP messages inside Angular', () => {
+    const messages = new Subject<Message>();
+    stompService.watch.mockReturnValue(messages);
+    const receivedInAngularZone = vi.fn();
+
+    service.watch('/user/queue/ai/chat/request-1').subscribe(() => {
+      receivedInAngularZone();
+    });
+    messages.next({body: '{}'} as Message);
+
+    expect(ngZone.run).toHaveBeenCalledOnce();
+    expect(receivedInAngularZone).toHaveBeenCalledOnce();
+  });
+
+  it('delivers terminal notifications inside Angular', () => {
+    const failedMessages = new Subject<Message>();
+    const failure = new Error('socket failed');
+    const error = vi.fn();
+    stompService.watch.mockReturnValue(failedMessages);
+    service.watch('/user/queue/ai/chat/request-1').subscribe({error});
+
+    failedMessages.error(failure);
+
+    expect(error).toHaveBeenCalledWith(failure);
+    expect(ngZone.run).toHaveBeenCalledOnce();
+
+    ngZone.run.mockClear();
+    const completedMessages = new Subject<Message>();
+    const complete = vi.fn();
+    stompService.watch.mockReturnValue(completedMessages);
+    service.watch('/user/queue/ai/chat/request-2').subscribe({complete});
+
+    completedMessages.complete();
+
+    expect(complete).toHaveBeenCalledOnce();
+    expect(ngZone.run).toHaveBeenCalledOnce();
+  });
+
+  it('tears down the source STOMP subscription when the watcher unsubscribes', () => {
+    const messages = new Subject<Message>();
+    stompService.watch.mockReturnValue(messages);
+
+    const subscription = service.watch('/user/queue/ai/chat/request-1').subscribe();
+    expect(messages.observed).toBe(true);
+
+    subscription.unsubscribe();
+
+    expect(messages.observed).toBe(false);
   });
 
   it('publishes after a shared reconnect flow reaches OPEN', async () => {

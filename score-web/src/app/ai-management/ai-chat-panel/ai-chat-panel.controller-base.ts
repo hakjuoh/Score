@@ -434,6 +434,7 @@ export abstract class AiChatPanelControllerBase {
   protected abstract matchesTerminalIdentity(event: AiChatSocketEvent): boolean;
   protected abstract nextContextUpdate(): AiChatContextUpdate;
   protected abstract recoverActiveRequest(onIdle?: () => void): void;
+  protected abstract requestViewRefresh(): void;
   protected abstract refreshBranding(): void;
   protected abstract resizePromptInput(): void;
   protected abstract restoreChatScrollPosition(consumePending?: boolean): void;

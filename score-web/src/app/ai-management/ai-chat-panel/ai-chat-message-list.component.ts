@@ -52,7 +52,7 @@ type AiChatMessageDisplayItem =
       userIndex: number;
       userMessage: AiChatMessage;
       historyMessages: AiChatMessage[];
-      finalMessage: AiChatMessage;
+      finalMessage?: AiChatMessage;
       trailingMessages: AiChatMessage[];
     };
 
@@ -151,6 +151,7 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
   ];
 
   private expandedHistoryUserIndexes = new Set<number>();
+  private collapsedHistoryUserIndexes = new Set<number>();
   private focusAgentBackButton = false;
   private focusAgentRowId?: string;
 
@@ -165,7 +166,13 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['messages']) {
-      this.expandedHistoryUserIndexes.clear();
+      if (!this.messages || this.messages.length === 0) {
+        this.expandedHistoryUserIndexes.clear();
+        this.collapsedHistoryUserIndexes.clear();
+      }
+    }
+    if (changes['pending'] && !this.pending) {
+      this.collapsedHistoryUserIndexes.clear();
     }
     const focusChange = changes['agentFocus'];
     if (focusChange) {
@@ -227,8 +234,11 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
       const turnMessages = this.messages.slice(index + 1, nextUserIndex);
       const finalRelativeIndex = this.finalMessageIndex(turnMessages);
 
-      if (finalRelativeIndex > 0) {
-        const workingMessages = turnMessages.slice(0, finalRelativeIndex);
+      const pendingLatestTurn = this.pending && nextUserIndex === this.messages.length
+        && turnMessages.length > 0;
+      if (finalRelativeIndex > 0 || pendingLatestTurn) {
+        const workingMessages = !pendingLatestTurn && finalRelativeIndex > 0
+          ? turnMessages.slice(0, finalRelativeIndex) : turnMessages;
         items.push({
           kind: 'turn',
           trackKey: `turn-${index}`,
@@ -238,8 +248,10 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
           // particular, moving the agent group outside the folded history
           // makes a completed turn appear to have run tools before agents.
           historyMessages: workingMessages,
-          finalMessage: turnMessages[finalRelativeIndex],
-          trailingMessages: turnMessages.slice(finalRelativeIndex + 1)
+          ...(!pendingLatestTurn && finalRelativeIndex > 0
+            ? {finalMessage: turnMessages[finalRelativeIndex]} : {}),
+          trailingMessages: !pendingLatestTurn && finalRelativeIndex > 0
+            ? turnMessages.slice(finalRelativeIndex + 1) : []
         });
       } else {
         for (let messageIndex = index; messageIndex < nextUserIndex; messageIndex++) {
@@ -258,6 +270,9 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
   }
 
   isHistoryExpanded(userIndex: number): boolean {
+    if (this.pending && this.isLatestUserIndex(userIndex)) {
+      return !this.collapsedHistoryUserIndexes.has(userIndex);
+    }
     return this.expandedHistoryUserIndexes.has(userIndex);
   }
 
@@ -265,10 +280,23 @@ export class AiChatMessageListComponent implements OnChanges, AfterViewChecked {
     event.preventDefault();
     event.stopPropagation();
     if (this.isHistoryExpanded(userIndex)) {
+      if (this.pending && this.isLatestUserIndex(userIndex)) {
+        this.collapsedHistoryUserIndexes.add(userIndex);
+      }
       this.expandedHistoryUserIndexes.delete(userIndex);
       return;
     }
+    if (this.pending && this.isLatestUserIndex(userIndex)) {
+      this.collapsedHistoryUserIndexes.delete(userIndex);
+    }
     this.expandedHistoryUserIndexes.add(userIndex);
+  }
+
+  private isLatestUserIndex(userIndex: number): boolean {
+    if (typeof userIndex !== 'number' || Number.isNaN(userIndex) || userIndex < 0) {
+      return false;
+    }
+    return this.nextUserIndex(userIndex + 1) === this.messages.length;
   }
 
   isLiveProgressStatus(message: AiChatMessage): boolean {

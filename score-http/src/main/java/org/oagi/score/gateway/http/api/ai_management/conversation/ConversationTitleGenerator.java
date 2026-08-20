@@ -56,11 +56,12 @@ public class ConversationTitleGenerator {
         }
         try {
             String modelId = models.lightweightModelName();
-            ExecutionScope scope = parentScope != null
-                    ? parentScope.withPurpose(ExecutionScope.Purpose.CONVERSATION_TITLING)
-                    : new ExecutionScope("title-" + java.util.UUID.randomUUID(),
-                            "title-gen", "system", 0L,
-                            ExecutionScope.Purpose.CONVERSATION_TITLING, List.of());
+            String titleRequestId = "title-" + java.util.UUID.randomUUID();
+            String conversationId = parentScope != null ? parentScope.conversationId() : "title-gen";
+            String requesterId = parentScope != null ? parentScope.requesterId() : "system";
+            ExecutionScope scope = new ExecutionScope(
+                    titleRequestId, conversationId, requesterId, 0L,
+                    ExecutionScope.Purpose.CONVERSATION_TITLING, List.of());
 
             AiMessage.User userMessage = new AiMessage.User(prompt.strip());
 

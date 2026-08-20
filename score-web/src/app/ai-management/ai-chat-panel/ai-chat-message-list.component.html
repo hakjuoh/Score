@@ -94,8 +94,10 @@
             </div>
           }
 
-          <ng-container [ngTemplateOutlet]="messageRow"
-                        [ngTemplateOutletContext]="{ message: item.finalMessage }"></ng-container>
+          @if (item.finalMessage; as finalMessage) {
+            <ng-container [ngTemplateOutlet]="messageRow"
+                          [ngTemplateOutletContext]="{ message: finalMessage }"></ng-container>
+          }
 
           @for (trailingMessage of item.trailingMessages; track $index) {
             <ng-container [ngTemplateOutlet]="messageRow"

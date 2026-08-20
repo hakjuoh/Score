@@ -101,6 +101,10 @@ final class AiChatModelInvoker {
                         // Text before a Tool call is interim narration. The first substantive
                         // post-Tool chunk starts the answer segment that may reach the user.
                         if (boundary != toolBoundary[0] && StringUtils.hasText(content)) {
+                            String preToolNarration = answer.toString().strip();
+                            if (StringUtils.hasText(preToolNarration)) {
+                                recorder.guide(preToolNarration, Map.of());
+                            }
                             toolBoundary[0] = boundary;
                             answer.setLength(0);
                         }
