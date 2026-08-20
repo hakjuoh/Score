@@ -25,7 +25,8 @@ final class WorkflowPlanPolicy {
 
     void validate(AiWorkflowPlan plan, AgentWorkflowContext.Request request) {
         if (request.explicitDelegationRequested()) {
-            int requiredAgents = DelegationIntent.requestedAgentCount(request.prompt()).orElse(2);
+            int requiredAgents = DelegationIntent.boundedRequestedAgentCount(
+                    request.prompt(), request.maximumAgents());
             validator.validateExactAgentCalls(plan, requiredAgents, agents::assignable);
             return;
         }

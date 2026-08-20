@@ -35,7 +35,9 @@ public final class AiExecutionInstructions {
 
     public enum Template {
         TEXTUAL_TOOL_CALL_RECOVERY("execution-textual-tool-call-recovery"),
+        INCOMPLETE_TOOL_NARRATION_RECOVERY("execution-incomplete-tool-narration-recovery"),
         READ_BACK_CONTINUATION("execution-read-back-continuation"),
+        SEMANTIC_DISCOVERY("execution-semantic-discovery"),
         APPROVAL_CONTINUATION("execution-approval-continuation"),
         REVISED_CHANGE_CONTINUATION("execution-revised-change-continuation"),
         REQUEST_SCOPED_INPUT("execution-request-scoped-input"),

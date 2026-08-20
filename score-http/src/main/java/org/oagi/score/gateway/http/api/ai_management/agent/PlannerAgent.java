@@ -20,6 +20,8 @@ import java.util.function.Predicate;
 @Component("workflow-planner")
 public final class PlannerAgent implements Agent {
 
+    public static final Agent.AgentId PLANNER_ID = new Agent.AgentId("workflow-planner");
+
     private static final int MAX_INSTRUCTION_LENGTH = 4_000;
     private static final int MAX_HISTORY_MESSAGES = 8;
     private static final int MAX_HISTORY_MESSAGE_LENGTH = 1_500;
@@ -203,13 +205,8 @@ public final class PlannerAgent implements Agent {
     private Optional<Integer> requiredAgentCount(AgentWorkflowContext context) {
         String prompt = planningPrompt(context);
         if (!DelegationIntent.explicitlyRequestsAgents(prompt)) return Optional.empty();
-        int requested = DelegationIntent.requestedAgentCount(prompt)
-                .orElse(2);
-        if (requested > context.request().maximumAgents()) {
-            throw new IllegalArgumentException(
-                    "Requested Agent count exceeds the current request limit.");
-        }
-        return Optional.of(requested);
+        return Optional.of(DelegationIntent.boundedRequestedAgentCount(
+                prompt, context.request().maximumAgents()));
     }
 
     private String requiredGuide(String value, String label, int maximumLength) {

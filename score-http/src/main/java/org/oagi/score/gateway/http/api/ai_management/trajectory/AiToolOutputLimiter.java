@@ -11,6 +11,26 @@ import java.util.concurrent.atomic.AtomicLong;
 /** Owns UTF-8-safe tool-output limits and their estimated context reservation. */
 final class AiToolOutputLimiter {
 
+    enum TruncationCause {
+        NONE("none"),
+        TOOL_OUTPUT_LIMIT("tool_output_limit"),
+        REMAINING_CONTEXT("remaining_context");
+
+        private final String wireName;
+
+        TruncationCause(String wireName) {
+            this.wireName = wireName;
+        }
+
+        String wireName() {
+            return wireName;
+        }
+    }
+
+    record Reservation(AiBoundedToolOutput output, TruncationCause truncationCause,
+                       long effectiveTokenLimit) {
+    }
+
     private static final String TRUNCATION_SUFFIX =
             "\n[TOOL OUTPUT TRUNCATED: rerun the tool with narrower filters or pagination.]";
 
@@ -26,15 +46,24 @@ final class AiToolOutputLimiter {
     }
 
     synchronized AiBoundedToolOutput reserve(String output, long configuredLimit) {
+        return reserveWithCause(output, configuredLimit).output();
+    }
+
+    synchronized Reservation reserveWithCause(String output, long configuredLimit) {
         long effectiveLimit = configuredLimit;
+        boolean constrainedByRemainingContext = false;
         if (contextBudget != null) {
             long remaining = Math.max(0L,
                     contextBudget.safeInputLimit() - estimatedInputFloor.get());
+            constrainedByRemainingContext = remaining < configuredLimit;
             effectiveLimit = Math.min(effectiveLimit, remaining);
         }
         AiBoundedToolOutput bounded = bounded(output, effectiveLimit);
         growEstimatedInputFloor(bounded.returnedBytes());
-        return bounded;
+        TruncationCause cause = !bounded.truncated() ? TruncationCause.NONE
+                : constrainedByRemainingContext ? TruncationCause.REMAINING_CONTEXT
+                : TruncationCause.TOOL_OUTPUT_LIMIT;
+        return new Reservation(bounded, cause, effectiveLimit);
     }
 
     void resetEstimatedInputFloor(long inputTokens) {

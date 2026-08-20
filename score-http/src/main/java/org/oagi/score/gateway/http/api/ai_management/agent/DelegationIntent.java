@@ -8,6 +8,8 @@ import java.util.regex.Pattern;
 /** Language-level delegation facts extracted from the current accepted user turn. */
 public final class DelegationIntent {
 
+    public static final int DEFAULT_REQUESTED_AGENT_COUNT = 2;
+
     private static final String LATIN_AGENT = "(?:sub[\\s-]?agents?|agents?)";
     private static final String KOREAN_AGENT = "(?:서브[\\s-]?)?에이전트(?:들)?";
     private static final Pattern AGENT_TERM = Pattern.compile(
@@ -84,6 +86,15 @@ public final class DelegationIntent {
         }
         return firstLocalizedWordCount(
                 prompt, LOCALIZED_PREFIX_WORD_AGENT_COUNT, LOCALIZED_SUFFIX_WORD_AGENT_COUNT);
+    }
+
+    /** Resolves an explicit count without allowing user wording to exceed policy. */
+    public static int boundedRequestedAgentCount(String prompt, int maximumAgents) {
+        if (maximumAgents < 1) {
+            throw new IllegalArgumentException("Maximum Agent count must be positive.");
+        }
+        return Math.min(requestedAgentCount(prompt).orElse(DEFAULT_REQUESTED_AGENT_COUNT),
+                maximumAgents);
     }
 
     private static Optional<Integer> firstNumericCount(String prompt, Pattern... patterns) {

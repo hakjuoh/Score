@@ -91,6 +91,59 @@ class PlannerAgentTest {
     }
 
     @Test
+    void preservesOutcomeBasedCheckpointPhasesAndTheirDependency() {
+        Fixture fixture = fixture("""
+                {
+                  "root": {
+                    "id": "root",
+                    "members": [
+                      {
+                        "id": "establish-state",
+                        "agent": {
+                          "agentId": "evidence-researcher",
+                          "label": "Establish requested state",
+                          "instruction": "Create the requested foundational state and read it back to verify completion.",
+                          "guideMessage": "I’m establishing and checking the requested foundation.",
+                          "activeVerb": "Establishing",
+                          "completedVerb": "Established",
+                          "toolAccess": "FULL"
+                        },
+                        "workflow": null
+                      },
+                      {
+                        "id": "extend-state",
+                        "agent": {
+                          "agentId": "evidence-researcher",
+                          "label": "Extend verified state",
+                          "instruction": "Use the established-state result, verify the saved state with Tools, then apply and validate the dependent configuration.",
+                          "guideMessage": "I’m verifying the saved foundation before applying the dependent configuration.",
+                          "activeVerb": "Configuring",
+                          "completedVerb": "Configured",
+                          "toolAccess": "FULL"
+                        },
+                        "workflow": null
+                      }
+                    ],
+                    "edges": [{"from":"establish-state","to":"extend-state"}]
+                  },
+                  "guideMessage": "I’m handling the request in two verified stages.",
+                  "synthesisGuideMessage": "I’m confirming the results from both stages."
+                }
+                """, 2, "Establish a resource, then configure and validate its dependent behavior.");
+
+        AiWorkflowPlan plan = ((AgentDecision.Delegate)
+                fixture.runner.run(fixture.planner.callId(), fixture.context)).workflow();
+
+        assertThat(plan.root().members()).hasSize(2);
+        assertThat(plan.root().members()).extracting(member -> member.agent().agentId())
+                .containsExactly("evidence-researcher", "evidence-researcher");
+        assertThat(plan.root().predecessors("extend-state"))
+                .containsExactly("establish-state");
+        assertThat(plan.root().members().getLast().agent().instruction())
+                .contains("verify the saved state with Tools");
+    }
+
+    @Test
     void plannerOutputWithoutExplicitDependencyEdgesUsesTheBoundedFallback() {
         Fixture fixture = fixture("""
                 {
@@ -298,7 +351,7 @@ class PlannerAgentTest {
     }
 
     @Test
-    void nestedPlanningCannotExceedTheRootRequestsAgentLimit() {
+    void nestedPlanningClampsItsRequestedCountToTheRootAgentLimit() {
         Fixture fixture = fixture("unused", 2, "Inspect it");
         AiWorkflowPlan.AgentTask assignment = new AiWorkflowPlan.AgentTask(
                 "evidence-researcher", "Nested checks",
@@ -313,9 +366,15 @@ class PlannerAgentTest {
                         "outer", "main:1:outer", "main", 1, AiWorkflowType.SEQUENTIAL))
                 .withAssignment(outer, "owner", assignment, List.of());
 
-        assertThatThrownBy(() -> fixture.runner.run(fixture.planner.callId(), nested))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("exceeds the current request limit");
+        AiWorkflowPlan plan = ((AgentDecision.Delegate)
+                fixture.runner.run(fixture.planner.callId(), nested)).workflow();
+
+        assertThat(plan.root().members()).hasSize(2);
+        org.mockito.ArgumentCaptor<AgentInvocation> invocation =
+                org.mockito.ArgumentCaptor.forClass(AgentInvocation.class);
+        verify(fixture.execution).execute(invocation.capture());
+        assertThat(invocation.getValue().request().content())
+                .contains("\"requiredAgentCount\":2");
     }
 
     @Test

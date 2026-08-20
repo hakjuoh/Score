@@ -108,6 +108,47 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     });
   });
 
+  it('keeps working after an agent-count policy notice and renders the terminal answer', () => {
+    startPublishedRequest(false);
+    const workflowNodeId = 'main:1:policy-limited';
+
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'policy_notice',
+      content: 'You requested 4 agents, but your AI policy allows up to 2. '
+        + 'I’ll continue this request with 2 agents.',
+      metadata: {code: 'AI_MULTI_AGENT_LIMITED', requested: 4, effective: 2, guideMessage: true}
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'workflow_started', content: 'I’ll complete this with two agents.',
+      metadata: {
+        nodeId: workflowNodeId, parentNodeId: 'main', depth: 1,
+        member_count: 2, workflowType: 'parallel'
+      }
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1', type: 'system',
+      subtype: 'workflow_completed', content: 'Two-agent workflow completed.',
+      metadata: {nodeId: workflowNodeId, parentNodeId: 'main', depth: 1}
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'assistant_final', content: 'The request completed with two agents.'
+    });
+
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      role: 'guide', content: expect.stringContaining('continue this request with 2 agents')
+    }));
+    expect(component.state.messages).toContainEqual(expect.objectContaining({
+      role: 'workflow_group', workflowNodeId, workflowStatus: 'completed'
+    }));
+    expect(component.state.messages.at(-1)).toMatchObject({
+      role: 'assistant', content: 'The request completed with two agents.'
+    });
+    expect(component.state.pending).toBe(false);
+  });
+
   it('updates an unknown workflow type as one ordinary chat message', () => {
     startPublishedRequest(false);
     const started = {
@@ -629,6 +670,27 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
     });
     (component as any).handleSocketEvent({
       requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'guide', content: 'Checking the related context definitions.',
+      metadata: {
+        nodeId: 'request-1:composed:worker:find-extenders', parentNodeId: 'fanout-1',
+        agentId: 'request-1:composed:worker:find-extenders', executionScope: 'worker',
+        conversationKind: 'SUBAGENT', workflowType: 'sequential'
+      }
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
+      type: 'system', subtype: 'tool_output_truncated',
+      content: 'get_acc returned more data than the configured per-tool output limit. '
+        + 'The result was truncated; use narrower filters or pagination.',
+      metadata: {
+        nodeId: 'request-1:composed:worker:find-extenders', parentNodeId: 'fanout-1',
+        agentId: 'request-1:composed:worker:find-extenders', executionScope: 'worker',
+        conversationKind: 'SUBAGENT', workflowType: 'sequential', toolName: 'get_acc',
+        truncationCause: 'tool_output_limit'
+      }
+    });
+    (component as any).handleSocketEvent({
+      requestId: 'request-1', conversationId: 'conversation-1',
       type: 'tool_call', subtype: 'completed',
       groupId: 'request-1', toolCallId: 'call-1', content: 'get_acc completed.',
       metadata: {
@@ -640,12 +702,26 @@ describe('AiChatPanelComponent multi-agent lifecycle', () => {
 
     expect(component.state.messages.some(message =>
       message.content === 'Inspecting the ACC associations.')).toBe(false);
+    expect(component.state.messages.some(message =>
+      message.content?.includes('configured per-tool output limit'))).toBe(false);
     expect(component.state.messages.some(message => message.role === 'tool_call')).toBe(false);
     expect(component.state.agentActivities
       .find(candidate => candidate.agentId === 'request-1:composed:worker:find-extenders')?.events)
       .toEqual(expect.arrayContaining([
         expect.objectContaining({content: 'Inspecting the ACC associations.'}),
+        expect.objectContaining({content: 'Checking the related context definitions.'}),
+        expect.objectContaining({content: expect.stringContaining(
+          'configured per-tool output limit')}),
         expect.objectContaining({status: 'tool', content: 'get_acc completed.'})
+      ]));
+    expect(component.state.agentActivities
+      .find(candidate => candidate.agentId === 'request-1:composed:worker:find-extenders')
+      ?.messages?.filter(message => message.role === 'guide').map(message => message.content))
+      .toEqual(expect.arrayContaining([
+        'Listing every extending ACC.',
+        'Inspecting the ACC associations.',
+        'Checking the related context definitions.',
+        expect.stringContaining('configured per-tool output limit')
       ]));
 
     (component as any).handleSocketEvent({

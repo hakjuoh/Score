@@ -20,12 +20,14 @@ const REPLAY_SYSTEM_SUBTYPES = new Set([
   'provider_error', 'provider_retry'
 ]);
 const LIVE_SYSTEM_SUBTYPES = new Set([
-  'guide', 'policy_notice', 'workflow_result', 'provider_error', 'provider_retry'
+  'guide', 'policy_notice', 'workflow_result', 'provider_error', 'provider_retry',
+  'tool_output_truncated'
 ]);
 const RECOGNIZED_SYSTEM_SUBTYPES = new Set([
   'data_changed', 'data_change_rejected', 'audit_failed', 'cancelled',
   'authentication_failed', 'error', 'model_fallback', 'provider_error',
   'provider_retry', 'workflow_result', 'context_usage', 'context_compacted',
+  'tool_output_truncated',
   'guide', 'policy_notice', 'workflow_started', 'progress', 'starting', 'started',
   'completed', 'agent_lifecycle', 'fanout_usage', 'agent_status'
 ]);

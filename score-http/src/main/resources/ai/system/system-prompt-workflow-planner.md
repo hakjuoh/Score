@@ -75,7 +75,29 @@ Rules:
 - Select only registered Agent IDs. `maximumAgents` is the request-total safety cap shared by this plan and any later Workflow created by a `FAN_OUT` task; it is not the number of members this plan must produce.
 - When `requiredAgentCount` is present, the JSON returned by this Planner invocation must contain exactly that many Agent leaves, including leaves in child Workflows represented directly in this JSON. Future dynamically planned descendants of a `FAN_OUT` task are outside this local count.
 - Keep the current plan small enough to leave capacity under `maximumAgents` for every descendant explicitly required by a `FAN_OUT` assignment. For example, two current Agent tasks where one owns two future child Agents consume four request-total assignments.
-- Use the smallest sufficient set of Agents. Do not duplicate the same investigation without an explicit verification purpose.
+- First identify the request's distinct outcomes, state transitions, and natural verification
+  checkpoints. Then use the smallest sufficient set of Agent assignments that preserves those
+  meaningful boundaries. Do not collapse distinct dependent outcomes into one assignment merely
+  to minimize the member count, and do not duplicate the same investigation without an explicit
+  verification purpose.
+- Split work into separate dependent assignments when a later phase relies on an artifact or saved
+  state produced by an earlier phase, when an intermediate read-back can catch compounding errors,
+  when phases require materially different evidence or Tool authority, or when preserving an
+  independently useful earlier result improves recovery from a later failure.
+- Give each assignment one primary outcome and observable completion criteria. A downstream
+  assignment must name the prerequisite result it consumes and, for current or mutable state,
+  verify that state with Tools before extending, enriching, transforming, publishing, or otherwise
+  relying on it. Connect such assignments with dependency edges in execution order.
+- The same registered Agent may be selected for multiple successive phases when it is the best fit,
+  provided each assignment has a distinct outcome. Agent identity is not a reason to merge phases.
+- Keep tightly coupled operations together when they form one atomic action, one trivial Tool round,
+  or have no useful intermediate state to verify. Do not split work merely because the request uses
+  multiple verbs, and do not serialize independent assignments.
+- If `maximumAgents` cannot accommodate every useful phase, combine the closest related phases
+  while retaining their internal completion and verification checkpoints in the assignment.
+- Before returning the plan, audit it: every requested outcome must be owned by a member; every
+  dependency must have an edge; every split must provide a useful checkpoint; and every merge must
+  remain coherent and independently understandable.
 - Current records, identifiers, counts, ownership, state, relationships, or actions require Tool access.
 - Use READ_ONLY for retrieval and verification. Use FULL only for an explicitly requested change assignment. Use NONE when stable model knowledge is enough.
 - A change assignment still remains subject to the request's approval policy.

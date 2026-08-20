@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class GatewayAgentTest {
@@ -101,6 +102,100 @@ class GatewayAgentTest {
                 .hasMessage("request stopped");
     }
 
+    @Test
+    void complexRequestsWithSuggestedAgentsWorkflowAreHandedToThePlanner() {
+        GatewayAgent gateway = gateway();
+        AgentExecutionService execution = TestAgentExecutionService.model(invocation -> result(invocation, """
+                {"policyAction":"ALLOW","route":"HANDOFF","intent":null,
+                 "confidence":0.95,"candidate":null,"suggestedWorkflow":"agents"}
+                """));
+
+        AgentDecision decision = runner(execution, gateway).run(gateway.callId(),
+                workflowContext("Create and profile a BIE with multiple elements"));
+
+        assertThat(decision).isEqualTo(new AgentDecision.Handoff(PlannerAgent.PLANNER_ID));
+    }
+
+    @Test
+    void simpleRequestsWithSuggestedAssistantWorkflowAreHandedToTheAssistant() {
+        GatewayAgent gateway = gateway();
+        AgentExecutionService execution = TestAgentExecutionService.model(invocation -> result(invocation, """
+                {"policyAction":"ALLOW","route":"HANDOFF","intent":null,
+                 "confidence":0.95,"candidate":null,"suggestedWorkflow":"assistant"}
+                """));
+
+        AgentDecision decision = runner(execution, gateway).run(gateway.callId(),
+                workflowContext("What is the state of Invoice BIE?"));
+
+        assertThat(decision).isEqualTo(new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
+    }
+
+    @Test
+    void complexRequestsWithPolicyDisabledMultiAgentAreHandedToTheAssistant() {
+        GatewayAgent gateway = gateway();
+        AgentExecutionService execution = TestAgentExecutionService.model(invocation -> result(invocation, """
+                {"policyAction":"ALLOW","route":"HANDOFF","intent":null,
+                 "confidence":0.95,"candidate":null,"suggestedWorkflow":"agents"}
+                """));
+
+        AgentDecision decision = runner(execution, gateway).run(gateway.callId(),
+                workflowContextWithMaxAgents("Create and profile a BIE", 1));
+
+        assertThat(decision).isEqualTo(new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
+    }
+
+    @Test
+    void explicitNegationTakesPrecedenceOverSuggestedAgentsWorkflow() {
+        GatewayAgent gateway = gateway();
+        AgentExecutionService execution = mock(AgentExecutionService.class);
+
+        AgentDecision decision = runner(execution, gateway).run(gateway.callId(),
+                workflowContext("Create a BIE without subagents"));
+
+        assertThat(decision).isEqualTo(new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
+        verifyNoInteractions(execution);
+    }
+
+    @Test
+    void explicitDelegationTakesPrecedenceAndHandsOffToPlanner() {
+        GatewayAgent gateway = gateway();
+        AgentExecutionService execution = TestAgentExecutionService.model(invocation -> result(invocation, """
+                {"policyAction":"ALLOW","route":"HANDOFF","intent":null,
+                 "confidence":0.95,"candidate":null,"suggestedWorkflow":"assistant"}
+                """));
+
+        ChatRequest chatRequest = new ChatRequest("Create a BIE", "request", "gateway-agent",
+                "conversation", null, List.of(), null, model.id().value(), null, null);
+        AgentWorkflowContext.Request request = new AgentWorkflowContext.Request(
+                "request", "conversation", "user", model.id().value(), "Create a BIE",
+                false, false, 4, "balanced", null, true, true, false);
+        AgentWorkflowContext context = AgentWorkflowContext.root(ChatExecutionContext.fromRequest(chatRequest, List.of(),
+                new UserMessage("Create a BIE"), null, null, false, false), request, 3);
+
+        AgentDecision decision = runner(execution, gateway).run(gateway.callId(), context);
+
+        assertThat(decision).isEqualTo(new AgentDecision.Handoff(PlannerAgent.PLANNER_ID));
+    }
+
+    @Test
+    void explicitDelegationFactDoesNotDependOnPersistentWorkflowActivation() {
+        GatewayAgent gateway = gateway();
+        AgentExecutionService execution = mock(AgentExecutionService.class);
+
+        ChatRequest chatRequest = new ChatRequest("Use sub-agents", "request", "gateway-agent",
+                "conversation", null, List.of(), null, model.id().value(), null, null);
+        AgentWorkflowContext.Request request = new AgentWorkflowContext.Request(
+                "request", "conversation", "user", model.id().value(), "Use sub-agents",
+                false, false, 4, "balanced", null, false, true, false);
+        AgentWorkflowContext context = AgentWorkflowContext.root(ChatExecutionContext.fromRequest(chatRequest, List.of(),
+                new UserMessage("Use sub-agents"), null, null, false, false), request, 3);
+
+        AgentDecision decision = runner(execution, gateway).run(gateway.callId(), context);
+
+        assertThat(decision).isEqualTo(new AgentDecision.Handoff(PlannerAgent.PLANNER_ID));
+        verifyNoInteractions(execution);
+    }
+
     private GatewayAgent gateway() {
         ScoreAiProperties properties = new ScoreAiProperties();
         properties.getGateway().setDirectConfidenceThreshold(0.9);
@@ -115,11 +210,15 @@ class GatewayAgentTest {
     }
 
     private AgentWorkflowContext workflowContext(String content) {
+        return workflowContextWithMaxAgents(content, 4);
+    }
+
+    private AgentWorkflowContext workflowContextWithMaxAgents(String content, int maxAgents) {
         ChatRequest chatRequest = new ChatRequest(content, "request", "gateway-agent",
                 "conversation", null, List.of(), null, model.id().value(), null, null);
         AgentWorkflowContext.Request request = new AgentWorkflowContext.Request(
                 "request", "conversation", "user", model.id().value(), content,
-                false, false, 4, "balanced", null, false, false, false);
+                false, false, maxAgents, "balanced", null, false, false, false);
         return AgentWorkflowContext.root(ChatExecutionContext.fromRequest(chatRequest, List.of(),
                 new UserMessage(content), null, null, false, false), request, 3);
     }

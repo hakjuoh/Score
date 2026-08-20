@@ -29,6 +29,7 @@ public final class AgentInstructions {
     public enum Template {
         WORKER_FULL("workflow-worker-full"),
         WORKER_RESTRICTED("workflow-worker-restricted"),
+        WORKER_PROGRESS("workflow-worker-progress"),
         UPSTREAM_RESULTS("workflow-upstream-results"),
         ORIGINAL_REQUEST_REFERENCE("workflow-original-request-reference"),
         WORKER_ASSIGNMENT("workflow-worker-assignment");

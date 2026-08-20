@@ -388,7 +388,8 @@ class AiChatExecutorTest {
                 new ExecutionScope("request-1", "conversation-1", "user", 0,
                         ExecutionScope.Purpose.USER_RESPONSE, List.of()),
                 new ExecutionState(), TEST_INSTRUCTION, () -> { },
-                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP, 0L);
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP,
+                0L, 0L);
         assertThat(outcome.answer()).isEqualTo("verified answer");
 
         AiChangeToolGuard.GuardedToolSession stalled =
@@ -404,7 +405,8 @@ class AiChatExecutorTest {
                 new ExecutionScope("request-1", "conversation-1", "user", 0,
                         ExecutionScope.Purpose.USER_RESPONSE, List.of()),
                 new ExecutionState(), TEST_INSTRUCTION, () -> { },
-                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP, 0L))
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP,
+                0L, 0L))
                 .isInstanceOfSatisfying(AiChangeReadBackException.class, failure -> {
                     assertThat(failure.completedChangeCount()).isEqualTo(1);
                     assertThat(failure).hasMessageContaining("without completing read-back");
@@ -452,7 +454,7 @@ class AiChatExecutorTest {
                 new ExecutionScope("request-1", "conversation-1", "user", 0,
                         ExecutionScope.Purpose.USER_RESPONSE, List.of()),
                 new ExecutionState(), TEST_INSTRUCTION, () -> { },
-                WorkflowRunControl.NOOP, 0L);
+                WorkflowRunControl.NOOP, 0L, 0L);
 
         assertThat(outcome.answer()).isEqualTo("All requested changes were read back.");
         assertThat(invocations).hasValue(6);
@@ -504,7 +506,7 @@ class AiChatExecutorTest {
                 new ExecutionScope("request-1", "conversation-1", "user", 0,
                         ExecutionScope.Purpose.USER_RESPONSE, List.of()),
                 new ExecutionState(), TEST_INSTRUCTION, () -> { },
-                WorkflowRunControl.NOOP, 0L);
+                WorkflowRunControl.NOOP, 0L, 0L);
 
         assertThat(outcome.answer()).isEqualTo("All requested changes were read back.");
         assertThat(completedChanges).hasValue(1_001);
@@ -560,9 +562,109 @@ class AiChatExecutorTest {
                 new ExecutionScope("request-1", "conversation-1", "user", 0,
                         ExecutionScope.Purpose.USER_RESPONSE, List.of()),
                 new ExecutionState(), TEST_INSTRUCTION, () -> { },
-                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP, 0L))
+                org.oagi.score.gateway.http.api.ai_management.agent.WorkflowRunControl.NOOP,
+                0L, 0L))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("textual tool-call placeholder");
+        verify(invoker, times(2)).invoke(any(), any(), any(), anyList(), any(),
+                anyBoolean(), any(), any(), any(), any());
+    }
+
+    @Test
+    void recoversWhenAToolEnabledTurnEndsWithOnlyGuideNarration() {
+        AiChatModelInvoker invoker = mock(AiChatModelInvoker.class);
+        AtomicInteger successfulDomainTools = new AtomicInteger();
+        when(invoker.invoke(any(), any(), any(), anyList(), any(), anyBoolean(),
+                any(), any(), any(), any())).thenAnswer(ignored -> {
+            successfulDomainTools.incrementAndGet();
+            return "The Invoice BIE was created and profiled.";
+        });
+        AiChatContinuationRunner runner = new AiChatContinuationRunner(
+                null, AiExecutionInstructions.bundled(), invoker);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.successfulDomainToolCallCount())
+                .thenAnswer(ignored -> (long) successfulDomainTools.get());
+        AiChatExecutor.Context context = new AiChatExecutor.Context(
+                request("Create and profile the Invoice BIE."), List.of(),
+                new UserMessage("Create and profile the Invoice BIE."), null, recorder,
+                true, false, AiChatExecutor.ToolPolicy.FULL, 0);
+
+        AiChatContinuationRunner.Outcome outcome = runner.run(
+                "I’ll locate the Invoice core component, inspect its structure, and check "
+                        + "the active user and working release before creating the BIE.",
+                mock(ChatClient.class), mock(ChatOptions.class), context,
+                List.of(context.userMessage()), recorder, AiChatToolSetup.empty(),
+                Long.MAX_VALUE, false,
+                new ExecutionScope("request-1", "conversation-1", "user", 0,
+                        ExecutionScope.Purpose.USER_RESPONSE, List.of()),
+                new ExecutionState(), TEST_INSTRUCTION, () -> { }, WorkflowRunControl.NOOP,
+                0L, 0L);
+
+        assertThat(outcome.answer()).isEqualTo("The Invoice BIE was created and profiled.");
+        org.mockito.ArgumentCaptor<List<Message>> messages =
+                org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(invoker).invoke(any(), any(), any(), messages.capture(), any(), anyBoolean(),
+                any(), any(), any(), any());
+        assertThat(messages.getValue().getLast().getText())
+                .contains("only announced an intended", "structured tool API");
+    }
+
+    @Test
+    void rejectsClaimedSuccessWhenGuideRecoveryExecutesNoTool() {
+        AiChatModelInvoker invoker = mock(AiChatModelInvoker.class);
+        when(invoker.invoke(any(), any(), any(), anyList(), any(), anyBoolean(),
+                any(), any(), any(), any())).thenReturn("The current release was verified.");
+        AiChatContinuationRunner runner = new AiChatContinuationRunner(
+                null, AiExecutionInstructions.bundled(), invoker);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        AiChatExecutor.Context context = new AiChatExecutor.Context(request("Check the release"),
+                List.of(), new UserMessage("Check the release"), null, recorder,
+                true, false, AiChatExecutor.ToolPolicy.FULL, 0);
+
+        assertThatThrownBy(() -> runner.run(
+                "I’ll check the current release now.", mock(ChatClient.class),
+                mock(ChatOptions.class), context, List.of(context.userMessage()), recorder,
+                AiChatToolSetup.empty(), Long.MAX_VALUE, false,
+                new ExecutionScope("request-1", "conversation-1", "user", 0,
+                        ExecutionScope.Purpose.USER_RESPONSE, List.of()),
+                new ExecutionState(), TEST_INSTRUCTION, () -> { }, WorkflowRunControl.NOOP,
+                0L, 0L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("without completing domain work");
+        verify(invoker, times(2)).invoke(any(), any(), any(), anyList(), any(),
+                anyBoolean(), any(), any(), any(), any());
+    }
+
+    @Test
+    void rejectsToolSearchOnlyProgressDuringGuideRecovery() {
+        AiChatModelInvoker invoker = mock(AiChatModelInvoker.class);
+        AtomicInteger completedTools = new AtomicInteger();
+        when(invoker.invoke(any(), any(), any(), anyList(), any(), anyBoolean(),
+                any(), any(), any(), any())).thenAnswer(ignored -> {
+            completedTools.incrementAndGet();
+            return "The Invoice BIE was created and profiled.";
+        });
+        AiChatContinuationRunner runner = new AiChatContinuationRunner(
+                null, AiExecutionInstructions.bundled(), invoker);
+        AiTrajectoryRecorder recorder = mock(AiTrajectoryRecorder.class);
+        when(recorder.completedToolCallCount())
+                .thenAnswer(ignored -> (long) completedTools.get());
+        when(recorder.successfulDomainToolCallCount()).thenReturn(0L);
+        AiChatExecutor.Context context = new AiChatExecutor.Context(
+                request("Create and profile the Invoice BIE."), List.of(),
+                new UserMessage("Create and profile the Invoice BIE."), null, recorder,
+                true, false, AiChatExecutor.ToolPolicy.FULL, 0);
+
+        assertThatThrownBy(() -> runner.run(
+                "I’ll locate the Invoice core component first.", mock(ChatClient.class),
+                mock(ChatOptions.class), context, List.of(context.userMessage()), recorder,
+                AiChatToolSetup.empty(), Long.MAX_VALUE, false,
+                new ExecutionScope("request-1", "conversation-1", "user", 0,
+                        ExecutionScope.Purpose.USER_RESPONSE, List.of()),
+                new ExecutionState(), TEST_INSTRUCTION, () -> { }, WorkflowRunControl.NOOP,
+                0L, 0L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("without completing domain work");
         verify(invoker, times(2)).invoke(any(), any(), any(), anyList(), any(),
                 anyBoolean(), any(), any(), any(), any());
     }
@@ -646,7 +748,10 @@ class AiChatExecutorTest {
                 new Agent.Instruction("First external instruction."));
 
         assertThat(first.traceMetadata()).containsEntry("agentId", "external-root-agent");
-        verify(fixture.systemSpec).text("First external instruction.");
+        assertThat(fixture.systemText).hasValueSatisfying(text -> assertThat(text)
+                .startsWith("First external instruction.")
+                .contains("Semantic discovery and recommendation")
+                .contains("literal wording match is a candidate"));
 
         AiChatExecutor.Result second = executor.execute(new AiChatExecutor.Context(
                 request("Second request"), List.of(), new UserMessage("Second request"),
@@ -656,7 +761,10 @@ class AiChatExecutorTest {
                 new Agent.Instruction("Reloaded external instruction."));
 
         assertThat(second.traceMetadata()).containsEntry("agentId", "reloaded-root-agent");
-        verify(fixture.systemSpec).text("Reloaded external instruction.");
+        assertThat(fixture.systemText).hasValueSatisfying(text -> assertThat(text)
+                .startsWith("Reloaded external instruction.")
+                .contains("Semantic discovery and recommendation")
+                .contains("successful Tool evidence for the comparison"));
     }
 
     @ParameterizedTest
@@ -683,7 +791,16 @@ class AiChatExecutorTest {
                 new Agent.Instruction("Internal Agent instruction."));
 
         assertThat(result.answer()).isEqualTo("Internal result.");
-        verify(fixture.systemSpec).text("Internal Agent instruction.");
+        assertThat(fixture.systemText).hasValueSatisfying(text -> {
+            assertThat(text).startsWith("Internal Agent instruction.");
+            if (purpose == ExecutionScope.Purpose.WORKER) {
+                assertThat(text)
+                        .contains("Semantic discovery and recommendation")
+                        .contains("report the remaining ambiguity instead of", "guessing");
+            } else {
+                assertThat(text).doesNotContain("Semantic discovery and recommendation");
+            }
+        });
     }
 
     @Test
