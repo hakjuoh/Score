@@ -754,6 +754,23 @@ class WorkflowTest {
     }
 
     @Test
+    void explicitAgentCountIsClampedToThePolicyMaximum() {
+        Agent gateway = agent("gateway-agent", new ArrayList<>(),
+                ignored -> new AgentDecision.Delegate(new AiWorkflowPlan(
+                        new AiWorkflowPlan.WorkflowDefinition("requested", List.of(
+                                member("first", "worker"),
+                                member("second", "worker"))), null, null)));
+        Agent worker = publicAgent("worker", ignored -> complete("requested result"));
+        AgentExecutionContext execution = context(mock(AgentExecutionRecorder.class),
+                "Spawn exactly 4 sub-agents in parallel.");
+
+        AgentOutput result = workflow(gateway, worker).execute(
+                workflowContext(execution, true, 2));
+
+        assertThat(result.content()).isEqualTo("requested result");
+    }
+
+    @Test
     void childWorkflowFailsWhenEveryMemberFails() {
         Agent gateway = agent("gateway-agent", new ArrayList<>(),
                 ignored -> handoff("connectcenter-assistant"));
@@ -1714,7 +1731,13 @@ class WorkflowTest {
 
     private AgentWorkflowContext workflowContext(AgentExecutionContext execution,
                                                  boolean explicitDelegationRequested) {
-        int maximumAgents = explicitDelegationRequested ? 3 : 4;
+        return workflowContext(execution, explicitDelegationRequested,
+                explicitDelegationRequested ? 3 : 4);
+    }
+
+    private AgentWorkflowContext workflowContext(AgentExecutionContext execution,
+                                                 boolean explicitDelegationRequested,
+                                                 int maximumAgents) {
         return AgentWorkflowContext.root(execution,
                 new AgentWorkflowContext.Request("request-1", "conversation-1", "user-1",
                         "model", execution.userMessage().content(), false, false,

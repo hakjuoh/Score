@@ -45,6 +45,8 @@ class AssignedAgentTest {
         AgentInstructions instructions = mock(AgentInstructions.class);
         when(instructions.render(any(AgentInstructions.Template.class), anyMap()))
                 .thenReturn(new Agent.Instruction("Bounded assignment context."));
+        when(instructions.render(eq(AgentInstructions.Template.WORKER_PROGRESS), eq(Map.of())))
+                .thenReturn(new Agent.Instruction("Write a guide before every Tool round."));
         when(executor.executeChat(any(AgentChatSession.class))).thenReturn(new AgentChatResult(
                 "verified", Map.of("modelId", "model")));
 
@@ -91,6 +93,9 @@ class AssignedAgentTest {
         var child = org.mockito.ArgumentCaptor.forClass(AgentChatSession.class);
         verify(executor).executeChat(child.capture());
         ChatExecutionContext childContext = (ChatExecutionContext) child.getValue().context();
+        assertThat(child.getValue().instruction().value())
+                .contains("Bounded assignment context.",
+                        "Write a guide before every Tool round.");
         assertThat(childContext.conversationId())
                 .isEqualTo("durable-child-42");
         assertThat(childContext.toolPolicy()).isEqualTo(AgentToolPolicy.READ_ONLY);
@@ -102,6 +107,8 @@ class AssignedAgentTest {
         verify(instructions).render(eq(AgentInstructions.Template.WORKER_RESTRICTED),
                 org.mockito.ArgumentMatchers.argThat(parameters ->
                         !parameters.containsKey("assignment")));
+        verify(instructions).render(eq(AgentInstructions.Template.WORKER_PROGRESS),
+                eq(Map.of()));
         verify(instructions).render(eq(AgentInstructions.Template.UPSTREAM_RESULTS),
                 org.mockito.ArgumentMatchers.argThat(parameters ->
                         parameters.get("results").toString().contains("earlier evidence")));

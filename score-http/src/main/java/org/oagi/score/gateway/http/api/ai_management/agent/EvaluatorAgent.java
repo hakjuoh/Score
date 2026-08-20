@@ -73,7 +73,7 @@ public final class EvaluatorAgent implements Agent {
                 AiWorkflowFeedback feedback = new AiWorkflowFeedback(context.iteration(),
                         context.workflow().root().id(), boundedResult(context.candidate().content()),
                         evaluation.feedback(), evaluation.nextObjective());
-                return new AgentDecision.Handoff(AssistantAgent.PLANNER_ID, feedback);
+                return new AgentDecision.Handoff(PlannerAgent.PLANNER_ID, feedback);
             }
 
             @Override

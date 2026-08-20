@@ -132,6 +132,7 @@ class AiChatAdmissionServiceTest {
                 null, null, null, List.of(), null, "model", null, "ask");
         ChatRequest prepared = requested.withMultiAgent(three).withActiveWorkflow("verification");
         when(policy.multiAgentEnabled()).thenReturn(true);
+        when(policy.allowsMultiAgentRouting()).thenReturn(true);
         when(policy.maxActiveRequests()).thenReturn(8);
         when(policy.constrain(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(chatService.resolvePolicy(requester)).thenReturn(policy);
@@ -147,21 +148,54 @@ class AiChatAdmissionServiceTest {
     }
 
     @Test
-    void reportsAClampWhenPolicyReducesAnExplicitRequestToOneAgent() {
+    void preservesAutomaticWorkflowWhenPolicyAllowsDynamicRouting() {
         ChatService chatService = mock(ChatService.class);
         AiRequestRegistry requests = mock(AiRequestRegistry.class);
         ScoreAiObservability observability = mock(ScoreAiObservability.class);
         ScoreUser requester = mock(ScoreUser.class);
         EffectiveAiPolicy policy = mock(EffectiveAiPolicy.class);
         AiRequestRegistry.Entry entry = mock(AiRequestRegistry.Entry.class);
-        var single = org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions.single();
+        var automatic = new org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions(
+                false, 2, "balanced");
+        ChatRequest requested = new ChatRequest("Create and profile related records.",
+                "request-auto", null, null, null, List.of(), null, "model", null, "ask");
+        ChatRequest prepared = requested.withMultiAgent(automatic);
+        when(policy.multiAgentEnabled()).thenReturn(true);
+        when(policy.allowsMultiAgentRouting()).thenReturn(true);
+        when(policy.maxActiveRequests()).thenReturn(8);
+        when(policy.constrain(any())).thenReturn(automatic);
+        when(chatService.resolvePolicy(requester)).thenReturn(policy);
+        when(entry.generation()).thenReturn(8L);
+        when(requests.register(eq("request-auto"), eq(null), eq(requester),
+                any(Instant.class), eq(8))).thenReturn(entry);
+        when(chatService.prepare(any(ChatRequest.class), eq(requester), eq(8L), eq(true)))
+                .thenReturn(prepared);
+
+        AiChatAdmissionService.Admission admission = new AiChatAdmissionService(
+                chatService, requests, observability, Duration.ofMinutes(1))
+                .prepare(requested, requester, null, null);
+
+        assertThat(admission.request().activeWorkflow()).isNull();
+        assertThat(admission.request().multiAgent()).isEqualTo(automatic);
+    }
+
+    @Test
+    void reportsAClampAndContinuesWhenPolicyReducesFourRequestedAgentsToTwo() {
+        ChatService chatService = mock(ChatService.class);
+        AiRequestRegistry requests = mock(AiRequestRegistry.class);
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        EffectiveAiPolicy policy = mock(EffectiveAiPolicy.class);
+        AiRequestRegistry.Entry entry = mock(AiRequestRegistry.Entry.class);
+        var two = new org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions(true, 2, "balanced");
         var four = new org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions(true, 4, "balanced");
-        ChatRequest requested = new ChatRequest("Spawn exactly 3 agents in parallel.", "request-5",
+        ChatRequest requested = new ChatRequest("Spawn exactly 4 agents in parallel.", "request-5",
                 null, null, null, List.of(), null, "model", null, "ask");
         ChatRequest prepared = requested.withMultiAgent(four).withActiveWorkflow("agents");
         when(policy.multiAgentEnabled()).thenReturn(true);
+        when(policy.allowsMultiAgentRouting()).thenReturn(true);
         when(policy.maxActiveRequests()).thenReturn(8);
-        when(policy.constrain(any())).thenReturn(single);
+        when(policy.constrain(any())).thenReturn(two);
         when(chatService.resolvePolicy(requester)).thenReturn(policy);
         when(entry.generation()).thenReturn(7L);
         when(requests.register(eq("request-5"), eq(null), eq(requester), any(Instant.class), eq(8))).thenReturn(entry);
@@ -171,8 +205,146 @@ class AiChatAdmissionServiceTest {
                 chatService, requests, observability, Duration.ofMinutes(1))
                 .prepare(requested, requester, null, null);
 
-        assertThat(admission.policyNotice().metadata()).containsEntry("requested", 3).containsEntry("effective", 1);
+        assertThat(admission.policyNotice().content())
+                .isEqualTo("You requested 4 agents, but your AI policy allows up to 2. "
+                        + "I’ll continue this request with 2 agents.");
+        assertThat(admission.policyNotice().metadata())
+                .containsEntry("requested", 4)
+                .containsEntry("effective", 2)
+                .containsEntry("guideMessage", true);
+        assertThat(admission.request().activeWorkflow()).isEqualTo("agents");
+        assertThat(admission.request().multiAgent()).isEqualTo(two);
+    }
+
+    @Test
+    void explicitAgentNegationDoesNotProduceAFalsePolicyClampGuide() {
+        ChatService chatService = mock(ChatService.class);
+        AiRequestRegistry requests = mock(AiRequestRegistry.class);
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        EffectiveAiPolicy policy = mock(EffectiveAiPolicy.class);
+        AiRequestRegistry.Entry entry = mock(AiRequestRegistry.Entry.class);
+        var four = new org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions(true, 4, "balanced");
+        var single = org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions.single();
+        ChatRequest requested = new ChatRequest(
+                "Do not use agents for this request.", "request-negated", null, null,
+                null, List.of(), null, "model", null, "ask", four, "agents", null);
+        ChatRequest prepared = requested.withMultiAgent(single).withActiveWorkflow("assistant");
+        when(policy.multiAgentEnabled()).thenReturn(true);
+        when(policy.allowsMultiAgentRouting()).thenReturn(true);
+        when(policy.maxActiveRequests()).thenReturn(8);
+        when(policy.constrain(any())).thenReturn(single);
+        when(chatService.resolvePolicy(requester)).thenReturn(policy);
+        when(entry.generation()).thenReturn(9L);
+        when(requests.register(eq("request-negated"), eq(null), eq(requester),
+                any(Instant.class), eq(8))).thenReturn(entry);
+        when(chatService.prepare(any(ChatRequest.class), eq(requester), eq(9L), eq(true)))
+                .thenReturn(prepared);
+
+        AiChatAdmissionService.Admission admission = new AiChatAdmissionService(
+                chatService, requests, observability, Duration.ofMinutes(1))
+                .prepare(requested, requester, null, null);
+
+        assertThat(admission.policyNotice()).isNull();
         assertThat(admission.request().activeWorkflow()).isEqualTo("assistant");
+    }
+
+    @Test
+    void explicitAgentNegationDoesNotProduceADisabledPolicyGuide() {
+        ChatService chatService = mock(ChatService.class);
+        AiRequestRegistry requests = mock(AiRequestRegistry.class);
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        EffectiveAiPolicy policy = mock(EffectiveAiPolicy.class);
+        AiRequestRegistry.Entry entry = mock(AiRequestRegistry.Entry.class);
+        var four = new org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions(true, 4, "balanced");
+        var single = org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions.single();
+        ChatRequest requested = new ChatRequest(
+                "Without agents, inspect this directly.", "request-disabled-negated", null,
+                null, null, List.of(), null, "model", null, "ask", four, "agents", null);
+        ChatRequest prepared = requested.withMultiAgent(single).withActiveWorkflow("assistant");
+        when(policy.multiAgentEnabled()).thenReturn(false);
+        when(policy.maxActiveRequests()).thenReturn(8);
+        when(policy.constrain(any())).thenReturn(single);
+        when(chatService.resolvePolicy(requester)).thenReturn(policy);
+        when(entry.generation()).thenReturn(10L);
+        when(requests.register(eq("request-disabled-negated"), eq(null), eq(requester),
+                any(Instant.class), eq(8))).thenReturn(entry);
+        when(chatService.prepare(any(ChatRequest.class), eq(requester), eq(10L), eq(false)))
+                .thenReturn(prepared);
+
+        AiChatAdmissionService.Admission admission = new AiChatAdmissionService(
+                chatService, requests, observability, Duration.ofMinutes(1))
+                .prepare(requested, requester, null, null);
+
+        assertThat(admission.policyNotice()).isNull();
+        assertThat(admission.request().activeWorkflow()).isEqualTo("assistant");
+    }
+
+    @Test
+    void oneAgentPolicyUsesTheAssistantOnlyGuide() {
+        ChatService chatService = mock(ChatService.class);
+        AiRequestRegistry requests = mock(AiRequestRegistry.class);
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        EffectiveAiPolicy policy = mock(EffectiveAiPolicy.class);
+        AiRequestRegistry.Entry entry = mock(AiRequestRegistry.Entry.class);
+        var single = org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions.single();
+        ChatRequest requested = new ChatRequest(
+                "Spawn exactly 4 agents in parallel.", "request-one-agent", null, null,
+                null, List.of(), null, "model", null, "ask");
+        ChatRequest prepared = requested.withMultiAgent(single).withActiveWorkflow("assistant");
+        when(policy.multiAgentEnabled()).thenReturn(true);
+        when(policy.allowsMultiAgentRouting()).thenReturn(false);
+        when(policy.maxActiveRequests()).thenReturn(8);
+        when(policy.constrain(any())).thenReturn(single);
+        when(chatService.resolvePolicy(requester)).thenReturn(policy);
+        when(entry.generation()).thenReturn(11L);
+        when(requests.register(eq("request-one-agent"), eq(null), eq(requester),
+                any(Instant.class), eq(8))).thenReturn(entry);
+        when(chatService.prepare(any(ChatRequest.class), eq(requester), eq(11L), eq(true)))
+                .thenReturn(prepared);
+
+        AiChatAdmissionService.Admission admission = new AiChatAdmissionService(
+                chatService, requests, observability, Duration.ofMinutes(1))
+                .prepare(requested, requester, null, null);
+
+        assertThat(admission.policyNotice().content()).contains("assistant only");
+        assertThat(admission.policyNotice().metadata())
+                .containsEntry("effective", "assistant");
+        assertThat(admission.request().activeWorkflow()).isEqualTo("assistant");
+    }
+
+    @Test
+    void unnumberedDelegationUsesTheSharedTwoAgentDefaultWithoutAClampGuide() {
+        ChatService chatService = mock(ChatService.class);
+        AiRequestRegistry requests = mock(AiRequestRegistry.class);
+        ScoreAiObservability observability = mock(ScoreAiObservability.class);
+        ScoreUser requester = mock(ScoreUser.class);
+        EffectiveAiPolicy policy = mock(EffectiveAiPolicy.class);
+        AiRequestRegistry.Entry entry = mock(AiRequestRegistry.Entry.class);
+        var two = new org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions(true, 2, "balanced");
+        ChatRequest requested = new ChatRequest(
+                "Use sub-agents to inspect this.", "request-default-agents", null, null,
+                null, List.of(), null, "model", null, "ask");
+        ChatRequest prepared = requested.withMultiAgent(two).withActiveWorkflow("agents");
+        when(policy.multiAgentEnabled()).thenReturn(true);
+        when(policy.allowsMultiAgentRouting()).thenReturn(true);
+        when(policy.maxActiveRequests()).thenReturn(8);
+        when(policy.constrain(any())).thenReturn(two);
+        when(chatService.resolvePolicy(requester)).thenReturn(policy);
+        when(entry.generation()).thenReturn(12L);
+        when(requests.register(eq("request-default-agents"), eq(null), eq(requester),
+                any(Instant.class), eq(8))).thenReturn(entry);
+        when(chatService.prepare(any(ChatRequest.class), eq(requester), eq(12L), eq(true)))
+                .thenReturn(prepared);
+
+        AiChatAdmissionService.Admission admission = new AiChatAdmissionService(
+                chatService, requests, observability, Duration.ofMinutes(1))
+                .prepare(requested, requester, null, null);
+
+        assertThat(admission.policyNotice()).isNull();
+        assertThat(admission.request().multiAgent()).isEqualTo(two);
     }
 
     private ChatRequest request() {

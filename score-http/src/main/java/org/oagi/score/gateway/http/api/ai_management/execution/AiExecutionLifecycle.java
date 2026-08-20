@@ -26,8 +26,10 @@ public record AiExecutionLifecycle(String eventType, String subtype,
             "toolName", "mcp", "mcp_server_name", "mcp_protocol_version",
             "server_address", "server_port", "network_protocol_name", "network_transport",
             "duration_ms", "result_truncated",
+            "truncationCause",
             "failure_type",
             "originalUtf8Bytes", "returnedUtf8Bytes", "toolOutputTokenLimit",
+            "effectiveToolOutputTokenLimit",
             "contextUsage", "reason", "automatic", "batchId", "approved", "denied",
             "elicitationId",
             "workflow", "workflow_type", "node_id", "parent_node_id", "fanout_id", "depth", "member_count",
@@ -44,6 +46,7 @@ public record AiExecutionLifecycle(String eventType, String subtype,
     private static final Set<String> NUMERIC_METADATA = Set.of(
             "attempt", "max_attempts", "delay_millis", "status_code", "duration_ms", "server_port",
             "originalUtf8Bytes", "returnedUtf8Bytes", "toolOutputTokenLimit",
+            "effectiveToolOutputTokenLimit",
             "approved", "denied", "depth", "member_count", "agent_count", "max_agents", "worker_count",
             "completed",
             "workflow_iteration", "iteration", "failed", "failed_count", "failure_count",
@@ -128,6 +131,7 @@ public record AiExecutionLifecycle(String eventType, String subtype,
         if (ID_METADATA.contains(name)) return safeIdentifier(value.toString(), 256);
         return switch (name) {
             case "toolName" -> safeIdentifier(value.toString(), 160);
+            case "truncationCause" -> truncationCause(value);
             case "mcp_server_name", "server_address" -> safeIdentifier(value.toString(), 160);
             case "mcp_protocol_version", "network_protocol_name", "network_transport" ->
                     safeIdentifier(value.toString(), 80);
@@ -165,6 +169,14 @@ public record AiExecutionLifecycle(String eventType, String subtype,
         String normalized = value.toString().strip().toLowerCase(java.util.Locale.ROOT);
         return switch (normalized) {
             case "direct", "sequential", "parallel" -> normalized;
+            default -> "unknown";
+        };
+    }
+
+    private static String truncationCause(Object value) {
+        String normalized = value.toString().strip().toLowerCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "tool_output_limit", "remaining_context" -> normalized;
             default -> "unknown";
         };
     }

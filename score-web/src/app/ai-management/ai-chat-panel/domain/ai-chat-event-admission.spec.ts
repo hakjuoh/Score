@@ -39,6 +39,15 @@ describe('AI chat event admission', () => {
     })).toBe('admit');
   });
 
+  it('admits live Tool output truncation notices', () => {
+    const notice = {
+      ...event('system', 'tool_output_truncated'),
+      content: 'get_acc exceeded the configured per-tool output limit.'
+    };
+    expect(requestEventAdmission(notice)).toBe('admit');
+    expect(admitsRestLiveSideChannel(notice)).toBe(true);
+  });
+
   it('requires visible content for assistant stream and final events', () => {
     expect(requestEventAdmission({...event('assistant_update'), content: 'part'})).toBe('admit');
     expect(requestEventAdmission({...event('assistant_update'), content: ''})).toBe('reject');

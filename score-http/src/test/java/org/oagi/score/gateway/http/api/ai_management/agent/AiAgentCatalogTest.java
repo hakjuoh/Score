@@ -34,6 +34,11 @@ class AiAgentCatalogTest {
         assertThat(catalog.require("workflow-planner").instruction())
                 .startsWith("You are the Planner Agent")
                 .contains("Every workflow-level and Agent-level guideMessage")
+                .contains("distinct outcomes, state transitions, and natural verification")
+                .contains("Do not collapse distinct dependent outcomes")
+                .contains("The same registered Agent may be selected for multiple successive phases")
+                .contains("Do not split work merely because the request uses")
+                .contains("must have an edge; every split must provide a useful checkpoint")
                 .doesNotContain("role: PLANNER");
         assertThat(catalog.require("workflow-synthesizer").instruction())
                 .contains("Return the synthesized result to the parent workflow");
@@ -55,15 +60,17 @@ class AiAgentCatalogTest {
         assertThat(catalog.workflowInstructionIds()).containsExactly(
                 "workflow-original-request-reference", "workflow-upstream-results",
                 "workflow-worker-assignment", "workflow-worker-full",
-                "workflow-worker-restricted");
+                "workflow-worker-progress", "workflow-worker-restricted");
         assertThat(catalog.all()).extracting(AiAgentDefinition::id)
                 .doesNotContainAnyElementsOf(catalog.workflowInstructionIds())
                 .doesNotContainAnyElementsOf(catalog.executionInstructionIds());
         assertThat(catalog.executionInstructionIds()).containsExactly(
                 "execution-approval-continuation",
+                "execution-incomplete-tool-narration-recovery",
                 "execution-read-back-continuation",
                 "execution-request-scoped-input",
                 "execution-revised-change-continuation",
+                "execution-semantic-discovery",
                 "execution-textual-tool-call-recovery",
                 "execution-ui-route-manifest-context");
         assertThat(catalog.executionInstruction("execution-read-back-continuation").value())

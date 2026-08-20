@@ -58,8 +58,11 @@ public final class GatewayAgent implements Agent {
         if (context.request().changeConfirmation()
                 || !enabled()
                 || context.request().hasAttachments()
-                || context.request().prompt().length() > configuration.getMaximumInputCharacters()) {
-            return new AgentRunRequest.Skip(new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID));
+                || context.request().prompt().length() > configuration.getMaximumInputCharacters()
+                || context.request().delegationRequested()
+                || context.request().explicitDelegationRequested()
+                || DelegationIntent.explicitlyNegatesAgents(context.request().prompt())) {
+            return new AgentRunRequest.Skip(resolveHandoff(context, null));
         }
         ExecutionScope scope = context.executionScope(ExecutionScope.Purpose.GATEWAY_ROUTING);
         AiMessage.User input = context.execution().userMessage();
@@ -81,18 +84,18 @@ public final class GatewayAgent implements Agent {
                             "GATEWAY_POLICY_REFUSAL", "ai.policy.refused"),
                             response.agent().id());
                 }
-                if (!"ALLOW".equals(policy)) return handoff();
+                if (!"ALLOW".equals(policy)) return resolveHandoff(response.workflow(), null);
                 double confidence = root.path("confidence").asDouble(Double.NaN);
                 if (!Double.isFinite(confidence) || confidence < 0.0d || confidence > 1.0d
                         || confidence < configuration.getDirectConfidenceThreshold()) {
-                    return handoff();
+                    return resolveHandoff(response.workflow(), text(root, "suggestedWorkflow"));
                 }
                 String route = text(root, "route");
-                if (!"DIRECT".equals(route)) return handoff();
+                if (!"DIRECT".equals(route)) return resolveHandoff(response.workflow(), text(root, "suggestedWorkflow"));
                 String intent = text(root, "intent");
-                if (!"THANKS".equals(intent)) return handoff();
+                if (!"THANKS".equals(intent)) return resolveHandoff(response.workflow(), text(root, "suggestedWorkflow"));
                 String candidate = nullableText(root, "candidate");
-                if (!StringUtils.hasText(candidate)) return handoff();
+                if (!StringUtils.hasText(candidate)) return resolveHandoff(response.workflow(), text(root, "suggestedWorkflow"));
                 Map<String, Object> metadata = new LinkedHashMap<>();
                 metadata.put("gateway", true);
                 metadata.put("intent", intent);
@@ -109,12 +112,25 @@ public final class GatewayAgent implements Agent {
                         || failure.exception() instanceof AgentGuardrailRefusedException) {
                     throw failure.exception();
                 }
-                return handoff();
+                return resolveHandoff(failure.workflow(), null);
             }
         };
     }
 
-    private AgentDecision handoff() {
+    private AgentDecision resolveHandoff(AgentWorkflowContext context, String suggestedWorkflow) {
+        if (context == null || context.request().maximumAgents() <= 1) {
+            return new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID);
+        }
+        if (DelegationIntent.explicitlyNegatesAgents(context.request().prompt())) {
+            return new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID);
+        }
+        if (context.request().delegationRequested()
+                || context.request().explicitDelegationRequested()) {
+            return new AgentDecision.Handoff(PlannerAgent.PLANNER_ID);
+        }
+        if ("AGENTS".equalsIgnoreCase(suggestedWorkflow)) {
+            return new AgentDecision.Handoff(PlannerAgent.PLANNER_ID);
+        }
         return new AgentDecision.Handoff(AssistantAgent.ASSISTANT_ID);
     }
 

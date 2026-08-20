@@ -230,7 +230,53 @@ class ScoreAiConfigurationTest {
         assertThat(gateway).contains(
                 "DIRECT is allowed only for thanks",
                 "Greetings and capability/help questions are HANDOFF",
-                "requester-scoped tool catalog");
+                "requester-scoped tool catalog",
+                "set suggestedWorkflow to exactly `assistant` or",
+                "decomposition into multiple independently executable assignments",
+                "multi-step or",
+                "batch work",
+                "multiple records or resource types",
+                "cross-record comparison",
+                "one focused lookup",
+                "one atomic action")
+                .doesNotContain("BIE");
+    }
+
+    @Test
+    void assistantCannotEndARequiredToolRoundWithOnlyAGuideSentence() throws Exception {
+        String assistant = new ClassPathResource(
+                "ai/system/system-prompt-connect-center-assistant.md")
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(assistant).contains(
+                "A guide sentence is not a final answer",
+                "follow it with the Tool call it introduces",
+                "never stop after only announcing an intended lookup or action");
+    }
+
+    @Test
+    void assistantSemanticallyComparesCandidatesBeforeMakingARecommendation() throws Exception {
+        String instruction = new ClassPathResource(
+                "ai/execution/execution-semantic-discovery.md")
+                .getContentAsString(StandardCharsets.UTF_8);
+        String normalized = instruction.replaceAll("\\s+", " ");
+
+        assertThat(normalized)
+                .contains("Semantic discovery and recommendation", "exact-name lookup")
+                .contains("meaningful naming variants and related concepts")
+                .contains("literal wording match is a candidate, not proof of best fit")
+                .contains("definitions, entity types, lifecycle state, intended use")
+                .contains("searches already performed")
+                .contains("function-based alternative that uses different terminology")
+                .contains("common abbreviation when applicable")
+                .contains("definition itself explicitly establishes the requested function")
+                .contains("broad candidate and a more function-specific candidate")
+                .contains("definition most directly matches the requested purpose")
+                .contains("related operations, counterpart messages, or relationships")
+                .contains("same applicable scope before naming them")
+                .contains("successful Tool evidence for the comparison")
+                .contains("report the remaining ambiguity instead of guessing")
+                .doesNotContain("noun", "Noun", "BOD", "WIP Status", "Work Order");
     }
 
     @Test
