@@ -68,6 +68,17 @@ class EffectiveAiPolicyTest {
                 .isFalse();
     }
 
+    @Test
+    void preservesAutomaticRoutingCapacityWithoutForcingDelegation() {
+        EffectiveAiPolicy policy = policy(true, List.of(model(1, "allowed", true)), Map.of());
+
+        AiMultiAgentOptions constrained = policy.constrain(AiMultiAgentOptions.single());
+
+        assertThat(policy.allowsMultiAgentRouting()).isTrue();
+        assertThat(constrained.active()).isFalse();
+        assertThat(constrained.maxAgents()).isEqualTo(2);
+    }
+
     private static EffectiveAiPolicy policy(boolean enabled, List<AiCatalogModel> models,
                                             Map<AiModelId, Set<String>> efforts) {
         return new EffectiveAiPolicy(new UserId(BigInteger.ONE), false, enabled,

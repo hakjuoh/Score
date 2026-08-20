@@ -29,4 +29,12 @@ class AgentInstructionsTest {
                 AgentInstructions.Template.WORKER_ASSIGNMENT, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void workerProgressRequiresVisibleGuidanceBeforeEveryToolRound() {
+        assertThat(instructions.render(AgentInstructions.Template.WORKER_PROGRESS).value())
+                .contains("Immediately before each Tool-use round",
+                        "A guide sentence is not a final result",
+                        "Never retry silently");
+    }
 }

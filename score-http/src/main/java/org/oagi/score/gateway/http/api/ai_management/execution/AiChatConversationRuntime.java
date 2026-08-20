@@ -78,9 +78,14 @@ final class AiChatConversationRuntime {
         builder.defaultAdvisors(new TrajectoryRecordingAdvisor(recorder, observability));
         AiChatToolSetup tools = toolSessions.prepare(context, mcp, executionState, progress,
                 runControl, recorder, builder, toolOutputTokenLimit, scope);
-        Agent.Instruction runtimeInstruction = tools.directToolCatalog().isEmpty()
-                ? instruction
-                : new Agent.Instruction(instruction.value() + tools.directToolCatalog());
+        String executionInstruction = instruction.value();
+        if (scope.purpose() == ExecutionScope.Purpose.USER_RESPONSE
+                || scope.purpose() == ExecutionScope.Purpose.WORKER) {
+            executionInstruction += "\n\n" + instructions.render(
+                    AiExecutionInstructions.Template.SEMANTIC_DISCOVERY).value();
+        }
+        Agent.Instruction runtimeInstruction = new Agent.Instruction(
+                executionInstruction + tools.directToolCatalog());
         List<Message> messages = initialMessages(context);
         if (tools.guardedSession() != null && tools.executableTools() != null) {
             tools.guardedSession().executeApproved(tools.executableTools())
@@ -92,12 +97,14 @@ final class AiChatConversationRuntime {
         boolean internalPersona =
                 context.executionPurpose() != ExecutionScope.Purpose.USER_RESPONSE;
         long completedToolCallsBeforeAnswer = recorder.completedToolCallCount();
+        long successfulDomainToolCallsBeforeAnswer = recorder.successfulDomainToolCallCount();
         String answer = modelInvoker.invoke(assistant, options, request, messages, recorder,
                 internalPersona, scope, executionState, runtimeInstruction, progress);
         AiChatContinuationRunner.Outcome outcome = continuations.run(
                 answer, assistant, options, context, messages, recorder, tools,
                 toolOutputTokenLimit, internalPersona, scope, executionState,
-                runtimeInstruction, progress, runControl, completedToolCallsBeforeAnswer);
+                runtimeInstruction, progress, runControl, completedToolCallsBeforeAnswer,
+                successfulDomainToolCallsBeforeAnswer);
         return outcome.barrierCount() > 0 ? new AiChatExecutor.Result(outcome.answer(), Map.of(
                 "approvalBarrierResolved", true,
                 "approvalBarrierCount", outcome.barrierCount(),

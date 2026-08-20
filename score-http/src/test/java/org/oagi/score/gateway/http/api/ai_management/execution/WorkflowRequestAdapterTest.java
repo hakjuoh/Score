@@ -36,11 +36,48 @@ class WorkflowRequestAdapterTest {
         assertThat(unknown.delegationRequested()).isFalse();
     }
 
+    @Test
+    void policyDisabledMultiAgentCannotBecomeExplicitDelegation() {
+        var disabled = WorkflowRequestAdapter.from(context(
+                "Spawn exactly 3 sub-agents in parallel.", "assistant", false, 3));
+
+        assertThat(disabled.maximumAgents()).isEqualTo(1);
+        assertThat(disabled.delegationRequested()).isFalse();
+        assertThat(disabled.explicitDelegationRequested()).isFalse();
+    }
+
+    @Test
+    void automaticModeExposesPolicyCapacityWithoutForcingDelegation() {
+        var automatic = WorkflowRequestAdapter.from(context(
+                "Create and profile several related records.", null, false, 2));
+
+        assertThat(automatic.maximumAgents()).isEqualTo(2);
+        assertThat(automatic.delegationRequested()).isFalse();
+        assertThat(automatic.explicitDelegationRequested()).isFalse();
+    }
+
+    @Test
+    void activeUiSelectionOverridesAStoredAssistantPreference() {
+        var active = WorkflowRequestAdapter.from(context(
+                "Inspect related records.", "assistant", true, 2));
+
+        assertThat(active.maximumAgents()).isEqualTo(2);
+        assertThat(active.delegationRequested()).isTrue();
+    }
+
     private ChatExecutionContext context(String prompt, String activeWorkflow,
                                          boolean multiAgentActive) {
+        return context(prompt, activeWorkflow, multiAgentActive, 3);
+    }
+
+    private ChatExecutionContext context(String prompt, String activeWorkflow,
+                                         boolean multiAgentActive, int maximumAgents) {
+        AiMultiAgentOptions options = maximumAgents == 1
+                ? AiMultiAgentOptions.single()
+                : new AiMultiAgentOptions(multiAgentActive, maximumAgents, "balanced");
         ChatRequest request = new ChatRequest(prompt, "request-1", null,
                 "conversation-1", null, List.of(), null, "model", null, null,
-                new AiMultiAgentOptions(multiAgentActive, 3, "balanced"), activeWorkflow, null);
+                options, activeWorkflow, null);
         return ChatExecutionContext.fromCoreMessages(request, List.of(),
                 new AiMessage.User(prompt), null, null, false, false,
                 AgentToolPolicy.NONE, 0);

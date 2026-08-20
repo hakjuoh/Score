@@ -17,8 +17,9 @@ import java.util.Map;
 public final class AssistantAgent implements Agent {
 
     public static final Agent.AgentId ASSISTANT_ID = new Agent.AgentId("connectcenter-assistant");
-    public static final Agent.AgentId PLANNER_ID = new Agent.AgentId("workflow-planner");
-
+    /** @deprecated use {@link PlannerAgent#PLANNER_ID}. */
+    @Deprecated(forRemoval = false)
+    public static final Agent.AgentId PLANNER_ID = PlannerAgent.PLANNER_ID;
     private final AiAgentCatalog agents;
     private final AgentOutputGuardrailChain outputGuardrails;
     private final ScoreAiObservability observability;
@@ -60,8 +61,10 @@ public final class AssistantAgent implements Agent {
     }
 
     private AgentRunRequest prepare(Agent agent, AgentWorkflowContext context) {
-        if (context.request().delegationRequested()) {
-            return new AgentRunRequest.Skip(new AgentDecision.Handoff(PLANNER_ID));
+        if (context.request().delegationRequested()
+                || context.request().explicitDelegationRequested()) {
+            return new AgentRunRequest.Skip(
+                    new AgentDecision.Handoff(PlannerAgent.PLANNER_ID));
         }
         return new AgentRunRequest.Chat(context.execution().withWorkflowObservationContext(
                 context.observationContext()));

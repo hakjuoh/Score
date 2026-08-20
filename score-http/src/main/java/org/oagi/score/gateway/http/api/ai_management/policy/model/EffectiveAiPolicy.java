@@ -92,11 +92,15 @@ public record EffectiveAiPolicy(
 
     public AiMultiAgentOptions constrain(AiMultiAgentOptions requested) {
         AiMultiAgentOptions value = requested != null ? requested : AiMultiAgentOptions.single();
-        if (!multiAgentEnabled || !value.active()) return AiMultiAgentOptions.single();
+        if (!allowsMultiAgentRouting()) return AiMultiAgentOptions.single();
         int maximum = Math.min(Math.min(value.maxAgents(), maxAgentsPerRequest),
                 AiMultiAgentOptions.MAX_AGENTS);
-        if (maximum < AiMultiAgentOptions.MIN_AGENTS) return AiMultiAgentOptions.single();
-        return new AiMultiAgentOptions(true, maximum, value.strategy());
+        return new AiMultiAgentOptions(value.active(), maximum, value.strategy());
+    }
+
+    /** Whether automatic routing may create a multi-Agent Workflow for this user. */
+    public boolean allowsMultiAgentRouting() {
+        return multiAgentEnabled && maxAgentsPerRequest >= AiMultiAgentOptions.MIN_AGENTS;
     }
 
     public OptionalLong maxOutputTokensPerCallLimit() {

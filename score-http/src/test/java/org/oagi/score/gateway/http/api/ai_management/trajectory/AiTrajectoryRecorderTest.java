@@ -2106,6 +2106,12 @@ class AiTrajectoryRecorderTest {
         assertThat(output).contains("TOOL OUTPUT TRUNCATED").doesNotContain("�");
         assertThat(events).extracting(AiExecutionEvent::subtype)
                 .containsExactly("started", "tool_output_truncated", "completed");
+        assertThat(events.get(1).content())
+                .contains("configured per-tool output limit")
+                .doesNotContain("active context budget");
+        assertThat(events.get(1).metadata())
+                .containsEntry("truncationCause", "tool_output_limit")
+                .containsEntry("effectiveToolOutputTokenLimit", 96L);
         assertThat(events.getLast().metadata()).containsEntry("result_truncated", true);
     }
 
@@ -2118,14 +2124,24 @@ class AiTrajectoryRecorderTest {
         when(callback.call(anyString(), any(ToolContext.class))).thenReturn("x".repeat(1000));
         AiContextBudget budget = new AiContextBudget(
                 "model", 120L, 10L, 90L, 10L, 100L, false);
+        List<AiExecutionEvent> events = new ArrayList<>();
         AiTrajectoryRecorder recorder = new AiTrajectoryRecorder(repository, new ObjectMapper(),
                 mock(ScoreUser.class), "conversation-1", "request-1", "model", "high",
-                ignored -> {}, budget, 90L);
+                events::add, budget, 90L);
 
         String output = recorder.recordingTools(() -> new ToolCallback[]{callback}, 100L)
                 .getToolCallbacks()[0].call("{}", new ToolContext(Map.of()));
 
         assertThat(output.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(10 * 3);
+        AiExecutionEvent truncated = events.stream()
+                .filter(event -> "tool_output_truncated".equals(event.subtype()))
+                .findFirst().orElseThrow();
+        assertThat(truncated.content())
+                .contains("remaining safe context capacity")
+                .doesNotContain("configured per-tool output limit");
+        assertThat(truncated.metadata())
+                .containsEntry("truncationCause", "remaining_context")
+                .containsEntry("effectiveToolOutputTokenLimit", 10L);
     }
 
     @Test

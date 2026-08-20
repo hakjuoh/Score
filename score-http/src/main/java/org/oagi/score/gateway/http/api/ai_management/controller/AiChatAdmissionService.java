@@ -26,8 +26,6 @@ final class AiChatAdmissionService {
     private static final String MULTI_AGENT_DISABLED_NOTICE =
             "Multi-agent execution was requested but is disabled by your AI policy. "
                     + "This request will continue with the assistant only.";
-    private static final String MULTI_AGENT_LIMITED_NOTICE =
-            "The requested agent count exceeds your AI policy limit and was reduced.";
 
     private final ChatService chatService;
     private final AiRequestRegistry requests;
@@ -53,9 +51,11 @@ final class AiChatAdmissionService {
                 request.permissionMode(), request.multiAgent(), request.activeWorkflow(),
                 request.routeManifest());
         boolean requestedMultiAgent = requestsMultiAgent(correlated);
+        boolean explicitlyDisabledMultiAgent = correlated.changeConfirmation() != null
+                || DelegationIntent.explicitlyNegatesAgents(correlated.prompt());
         int requestedAgentCount = AiWorkflowIntent.explicitlyRequestsAgents(correlated.prompt())
                 ? DelegationIntent.requestedAgentCount(correlated.prompt()).orElse(
-                org.oagi.score.gateway.http.api.ai_management.controller.payload.AiMultiAgentOptions.MAX_AGENTS)
+                DelegationIntent.DEFAULT_REQUESTED_AGENT_COUNT)
                 : correlated.multiAgent().maxAgents();
         EffectiveAiPolicy policy = chatService.resolvePolicy(requester);
         if (policy != null) {
@@ -89,7 +89,9 @@ final class AiChatAdmissionService {
                     ? chatService.prepare(correlated, requester, entry.generation(),
                     policy.multiAgentEnabled())
                     : chatService.prepare(correlated, requester, entry.generation());
-            boolean policyDisabledMultiAgent = policy != null && !policy.multiAgentEnabled()
+            boolean policyDisabledMultiAgent = policy != null
+                    && !policy.allowsMultiAgentRouting()
+                    && !explicitlyDisabledMultiAgent
                     && (requestedMultiAgent || requestsMultiAgent(prepared));
             if (policy != null) {
                 policy.requireModelAllowed(prepared.modelName());
@@ -99,12 +101,14 @@ final class AiChatAdmissionService {
                         prepared.conversationId(), prepared.pageContext(), prepared.attachments(),
                         prepared.changeConfirmation(), prepared.modelName(), prepared.reasoningEffort(),
                         prepared.permissionMode(), constrainedMultiAgent,
-                        policy.multiAgentEnabled() && constrainedMultiAgent.active()
+                        policy.allowsMultiAgentRouting()
                                 ? prepared.activeWorkflow() : "assistant",
                         prepared.routeManifest());
             }
-            boolean policyLimitedMultiAgent = policy != null && policy.multiAgentEnabled()
+            boolean policyLimitedMultiAgent = policy != null
+                    && policy.allowsMultiAgentRouting()
                     && requestedMultiAgent
+                    && !explicitlyDisabledMultiAgent
                     && effectiveAgentCount(prepared) < requestedAgentCount;
             if (policyDisabledMultiAgent || policyLimitedMultiAgent) {
                 observability.multiAgentPolicyDowngrade();
@@ -117,8 +121,10 @@ final class AiChatAdmissionService {
                     Map.of("policyNotice", true, "code", "AI_MULTI_AGENT_DISABLED",
                             "requested", "agents", "effective", "assistant"))
                     : policyLimitedMultiAgent
-                    ? AiExecutionEvent.detail("policy_notice", MULTI_AGENT_LIMITED_NOTICE,
-                    Map.of("policyNotice", true, "code", "AI_MULTI_AGENT_LIMITED",
+                    ? AiExecutionEvent.detail("policy_notice",
+                    limitedAgentGuide(requestedAgentCount, effectiveAgentCount(prepared)),
+                    Map.of("policyNotice", true, "guideMessage", true,
+                            "code", "AI_MULTI_AGENT_LIMITED",
                             "requested", requestedAgentCount,
                             "effective", effectiveAgentCount(prepared))) : null;
             if (policyNotice != null) chatService.snapshotPolicyNotice(requestId, policyNotice);
@@ -142,6 +148,11 @@ final class AiChatAdmissionService {
 
     private int effectiveAgentCount(ChatRequest request) {
         return request.multiAgent().active() ? request.multiAgent().maxAgents() : 1;
+    }
+
+    private String limitedAgentGuide(int requested, int effective) {
+        return "You requested " + requested + " agents, but your AI policy allows up to "
+                + effective + ". I’ll continue this request with " + effective + " agents.";
     }
 
     private void settleRejected(AiRequestRegistry.Entry entry, Throwable failure) {

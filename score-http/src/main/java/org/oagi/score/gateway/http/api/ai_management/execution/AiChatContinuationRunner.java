@@ -29,9 +29,15 @@ final class AiChatContinuationRunner {
     // Stop only after consecutive continuations make no objective change progress.
     private static final int MAX_STALLED_READ_BACK_CONTINUATIONS = 2;
     private static final int MAX_TEXTUAL_TOOL_CALL_RECOVERIES = 2;
+    private static final int MAX_INCOMPLETE_TOOL_NARRATION_RECOVERIES = 2;
     private static final Pattern TEXTUAL_TOOL_CALL_PLACEHOLDER = Pattern.compile(
             "(?is)\\*{0,2}\\[\\s*tool(?:[ -]call)?\\s*:\\s*[^\\]\\r\\n]+]\\*{0,2}"
                     + "(?:\\s*(?:→|->).*?)?\\s*$");
+    private static final Pattern INCOMPLETE_TOOL_NARRATION = Pattern.compile(
+            "(?is)^\\s*(?:[-*]\\s*)?(?:I(?:['’]ll|\\s+will|\\s+am\\s+going\\s+to)"
+                    + "|Let\\s+me)\\s+(?:first\\s+)?(?:locate|find|search|look\\s+up|"
+                    + "inspect|check|retrieve|review|verify|create|update|delete|add|enable|"
+                    + "disable|profile|compare|gather|load|open)\\b.*$");
 
     private final AiChangeApprovalCoordinator approvals;
     private final AiExecutionInstructions instructions;
@@ -50,10 +56,14 @@ final class AiChatContinuationRunner {
                 AiTrajectoryRecorder recorder, AiChatToolSetup tools, long tokenLimit,
                 boolean internalPersona, ExecutionScope scope, ExecutionState state,
                 Agent.Instruction instruction, Runnable progress,
-                WorkflowRunControl runControl, long completedToolCallsBeforeAnswer) {
+                WorkflowRunControl runControl, long completedToolCallsBeforeAnswer,
+                long successfulDomainToolCallsBeforeAnswer) {
         answer = recoverTextualToolCalls(answer, assistant, options, context, initial, recorder,
                 internalPersona, scope, state, instruction, progress,
                 completedToolCallsBeforeAnswer);
+        answer = recoverIncompleteToolNarration(answer, assistant, options, context, initial,
+                recorder, internalPersona, scope, state, instruction, progress,
+                successfulDomainToolCallsBeforeAnswer);
         Outcome approval = resolveApprovals(answer, assistant, options, context, initial,
                 recorder, tools, tokenLimit, internalPersona, scope, state,
                 instruction, progress, runControl);
@@ -84,6 +94,32 @@ final class AiChatContinuationRunner {
                     "The assistant repeatedly returned a textual tool-call placeholder.");
         }
         return answer;
+    }
+
+    private String recoverIncompleteToolNarration(
+            String answer, ChatClient assistant, ChatOptions options,
+            AiChatExecutor.Context context, List<Message> messages,
+            AiTrajectoryRecorder recorder, boolean internalPersona, ExecutionScope scope,
+            ExecutionState state, Agent.Instruction instruction, Runnable progress,
+            long successfulDomainBefore) {
+        if (!isIncompleteToolNarration(answer, context)) {
+            return answer;
+        }
+        int recovery = 0;
+        while (recovery++ < MAX_INCOMPLETE_TOOL_NARRATION_RECOVERIES) {
+            List<Message> retry = new ArrayList<>(messages);
+            retry.add(new AssistantMessage(answer));
+            retry.add(new UserMessage(instructions.render(
+                    AiExecutionInstructions.Template.INCOMPLETE_TOOL_NARRATION_RECOVERY).value()));
+            answer = modelInvoker.invoke(assistant, options, context.request(), retry, recorder,
+                    internalPersona, scope, state, instruction, progress);
+            if (recorder.successfulDomainToolCallCount() > successfulDomainBefore
+                    && !isIncompleteToolNarration(answer, context)) {
+                return answer;
+            }
+        }
+        throw new IllegalStateException(
+                "The assistant repeatedly announced Tool work without completing domain work.");
     }
 
     private Outcome resolveApprovals(String answer, ChatClient assistant, ChatOptions options,
@@ -182,6 +218,11 @@ final class AiChatContinuationRunner {
 
     private boolean isTextualToolCallPlaceholder(String answer) {
         return StringUtils.hasText(answer) && TEXTUAL_TOOL_CALL_PLACEHOLDER.matcher(answer).find();
+    }
+
+    private boolean isIncompleteToolNarration(String answer, AiChatExecutor.Context context) {
+        return context.toolsEnabled() && StringUtils.hasText(answer)
+                && INCOMPLETE_TOOL_NARRATION.matcher(answer).matches();
     }
 
     record Outcome(String answer, int barrierCount, int approved, int denied, int failed) {

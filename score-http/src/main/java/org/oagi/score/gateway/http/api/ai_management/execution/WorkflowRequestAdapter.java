@@ -16,7 +16,10 @@ public final class WorkflowRequestAdapter {
         var request = context.request();
         var accepted = context.userMessage();
         String requesterId = context.requesterId();
-        int maximumAgents = request.multiAgent() != null
+        boolean assistantOnly = StringUtils.hasText(request.activeWorkflow())
+                && "assistant".equalsIgnoreCase(request.activeWorkflow().strip())
+                && (request.multiAgent() == null || !request.multiAgent().active());
+        int maximumAgents = !assistantOnly && request.multiAgent() != null
                 ? request.multiAgent().maxAgents() : 1;
         String strategy = request.multiAgent() != null
                 ? request.multiAgent().strategy() : "balanced";
@@ -25,6 +28,7 @@ public final class WorkflowRequestAdapter {
                 || StringUtils.hasText(request.activeWorkflow())
                 && "agents".equalsIgnoreCase(request.activeWorkflow().strip()));
         boolean explicitDelegation = request.changeConfirmation() == null
+                && maximumAgents > 1
                 && DelegationIntent.explicitlyRequestsAgents(
                         accepted != null ? accepted.content() : request.prompt());
         return new AgentWorkflowContext.Request(request.requestId(),

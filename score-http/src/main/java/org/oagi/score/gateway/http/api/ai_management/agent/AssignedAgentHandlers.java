@@ -38,7 +38,7 @@ public final class AssignedAgentHandlers {
                 context.assignment(), "Agent assignment");
         if (task.delegation() == AiWorkflowPlan.Delegation.FAN_OUT) {
             return new AgentRunRequest.Skip(
-                    new AgentDecision.Handoff(AssistantAgent.PLANNER_ID));
+                    new AgentDecision.Handoff(PlannerAgent.PLANNER_ID));
         }
         AgentExecutionContext parent = context.execution();
         AgentToolPolicy policy = toolPolicy(parent, task.toolAccess());
@@ -50,8 +50,12 @@ public final class AssignedAgentHandlers {
         AgentInstructions.Template template = policy == AgentToolPolicy.FULL
                 ? AgentInstructions.Template.WORKER_FULL
                 : AgentInstructions.Template.WORKER_RESTRICTED;
-        Agent.Instruction workerInstruction = instructions.render(template, Map.of(
+        Agent.Instruction workerBase = instructions.render(template, Map.of(
                 "agentInstruction", agent.definition().instruction().value()));
+        Agent.Instruction progressGuidance = instructions.render(
+                AgentInstructions.Template.WORKER_PROGRESS, Map.of());
+        Agent.Instruction workerInstruction = new Agent.Instruction(
+                workerBase.value() + "\n\n" + progressGuidance.value());
         List<AiMessage> history = workerHistory(parent, context.inputs(), task);
         AiMessage.User assignment = new AiMessage.User(
                 instructions.render(AgentInstructions.Template.WORKER_ASSIGNMENT,
