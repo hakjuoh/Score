@@ -6,6 +6,14 @@ variants and related concepts, and compare candidate definitions, entity types, 
 intended use, and applicability to the user's scenario. A literal wording match is a candidate,
 not proof of best fit; do not stop at the first plausible result.
 
+Before searching, separate the request into every distinct intent-bearing facet, including the
+subject, requested action or purpose, and any state, outcome, or other qualifier. Preserve all of
+those facets during discovery: search useful combinations as well as each facet independently when
+the combined wording is too restrictive. Do not reduce the request to only its most concrete subject term
+or discard action and qualifier terms merely because the first search returns a plausible match.
+For each facet, also search functionally equivalent terms when the user's wording may differ from
+the catalog's terminology.
+
 Before finalizing a recommendation, inspect the searches already performed. If they only repeat
 terms from the user's wording, derive and search at least one function-based alternative that uses
 different terminology, including a common abbreviation when applicable. The only exception is
