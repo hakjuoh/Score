@@ -11,6 +11,8 @@ import org.openqa.selenium.*;
 import org.openqa.selenium.interactions.Actions;
 
 import java.math.BigInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
@@ -97,12 +99,7 @@ public class UpliftBIEVerificationPageImpl extends BasePageImpl implements Uplif
             };
         });
 
-        String[] nodes = nodePath.split("/");
-        String nodeName = nodes[nodes.length - 1];
-
-        WebElement node = retry(() -> visibilityOfElementLocated(getDriver(), By.xpath(
-                "//mat-card-content[contains(@class, \"mat-mdc-card-content\")]" +
-                        "/div[2]/div[1]//div[contains(@class, \"mat-tree-node\")]//*[contains(text(), \"" + nodeName + "\")]")));
+        WebElement node = retry(() -> visibilityOfElementLocated(getDriver(), nodeLocator(1, nodePath)));
         click(getDriver(), node);
         clear(getSearchInputOfSourceTree());
         return node;
@@ -124,16 +121,23 @@ public class UpliftBIEVerificationPageImpl extends BasePageImpl implements Uplif
             };
         });
 
-        String[] nodes = nodePath.split("/");
-        String nodeName = nodes[nodes.length - 1];
-
-        WebElement node = retry(() -> visibilityOfElementLocated(getDriver(), By.xpath(
-                "//mat-card-content[contains(@class, \"mat-mdc-card-content\")]" +
-                        "/div[2]/div[2]//div[contains(@class, \"mat-tree-node\")]//*[contains(text(), \"" + nodeName + "\")]")));
+        WebElement node = retry(() -> visibilityOfElementLocated(getDriver(), nodeLocator(2, nodePath)));
 
         click(getDriver(), node);
         clear(getSearchInputOfTargetTree());
         return node;
+    }
+
+    private By nodeLocator(int treeIndex, String nodePath) {
+        String[] pathParts = nodePath.split("/");
+        String nodeName = pathParts[pathParts.length - 1];
+        int dataLevel = Math.max(0, pathParts.length - 2);
+        int paddingPixels = dataLevel * 12;
+        String tree = "//mat-card-content[contains(@class, \"mat-mdc-card-content\")]/div[2]/div[" + treeIndex + "]";
+        return By.xpath(tree + "//div[contains(@class, \"mat-tree-node\")][" +
+                "@data-path='" + nodePath + "' or " +
+                "((@data-level='" + dataLevel + "' or contains(@style, 'padding-left: " + paddingPixels + "px'))" +
+                " and .//*[normalize-space(text())='" + nodeName + "'])]");
     }
 
     @Override
@@ -156,11 +160,15 @@ public class UpliftBIEVerificationPageImpl extends BasePageImpl implements Uplif
     public SelectProfileBIEToReuseDialog reuseBIEOnNode(String path, String nodeName) {
         WebElement nodeInTargetBIE = goToNodeInTargetBIE(path);
         try {
-            click(getReusedIconOfNodeInTargetBIE(nodeName));
-        } catch (TimeoutException e) {
+            click(nodeInTargetBIE.findElement(By.xpath(
+                    "./ancestor-or-self::div[contains(@class, \"mat-tree-node\")][1]" +
+                            "//fa-icon[@mattooltip=\"Select BIE\"]")));
+        } catch (TimeoutException | NoSuchElementException e) {
             click(nodeInTargetBIE);
             new Actions(getDriver()).sendKeys("O").perform();
-            click(getReusedIconOfNodeInTargetBIE(nodeName));
+            click(nodeInTargetBIE.findElement(By.xpath(
+                    "./ancestor-or-self::div[contains(@class, \"mat-tree-node\")][1]" +
+                            "//fa-icon[@mattooltip=\"Select BIE\"]")));
         }
         waitFor(ofMillis(1000L));
 
@@ -206,11 +214,12 @@ public class UpliftBIEVerificationPageImpl extends BasePageImpl implements Uplif
      */
     private EditBIEPage openUpliftedBIE() {
         invisibilityOfLoadingContainerElement(PageHelper.wait(getDriver(), ofSeconds(900L), ofMillis(500L)));
-        waitFor(ofMillis(1000L));
-
-        String currentUrl = getDriver().getCurrentUrl();
-        BigInteger topLevelAsbiepId = new BigInteger(currentUrl.substring(
-                currentUrl.indexOf("/profile_bie/") + "/profile_bie/".length()));
+        String topLevelAsbiepIdText = PageHelper.wait(getDriver(), ofSeconds(120L), ofMillis(500L)).until(driver -> {
+            Matcher matcher = Pattern.compile(".*/profile_bie/(\\d+)(?:[?#].*)?$")
+                    .matcher(driver.getCurrentUrl());
+            return matcher.matches() ? matcher.group(1) : null;
+        });
+        BigInteger topLevelAsbiepId = new BigInteger(topLevelAsbiepIdText);
         TopLevelASBIEPObject topLevelASBIEP = getAPIFactory().getBusinessInformationEntityAPI()
                 .getTopLevelASBIEPByID(topLevelAsbiepId);
 

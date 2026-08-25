@@ -495,7 +495,12 @@ public class BieUpliftingService {
 
         private Queue<AsccpSummaryRecord> targetAsccpQueue = new LinkedBlockingQueue();
         private Queue<AccSummaryRecord> targetAccQueue = new LinkedBlockingQueue();
-        private Bbie previousBbie;
+        // These fields bind the immediately surrounding depth-first visitor callbacks to one
+        // target occurrence. The source-ID maps below remain available for source-model lookup.
+        private WrappedAsbie pendingAsbie;
+        private WrappedAsbiep currentAsbiep;
+        private WrappedBbie currentBbie;
+        private List<DtScSummaryRecord> currentTargetDtScList = Collections.emptyList();
         private Queue<BccpSummaryRecord> targetBccpQueue = new LinkedBlockingQueue();
 
         private String currentSourcePath;
@@ -503,7 +508,6 @@ public class BieUpliftingService {
 
         private Map<AbieId, List<Association>> abieSourceAssociationsMap = new HashMap();
         private Map<AbieId, List<Association>> abieTargetAssociationsMap = new HashMap();
-        private Map<BbieId, List<DtScSummaryRecord>> bbieTargetDtScMap = new HashMap();
 
         private List<XbtSummaryRecord> sourceXbtList;
         private List<XbtSummaryRecord> targetXbtList;
@@ -519,13 +523,13 @@ public class BieUpliftingService {
         private Map<DtScAwdPriId, DtScAwdPriSummaryRecord> sourceDtScAwdPriMap = new HashMap();
         private Map<DtScId, List<DtScAwdPriSummaryRecord>> targetDtScAwdPriByDtScIdMap = new HashMap();
 
-        private Map<AsbiepId, WrappedAsbiep> asbiepMap;
-        private Map<AbieId, WrappedAsbiep> roleOfAbieToAsbiepMap;
-        private Map<AbieId, Abie> abieIdToAbieMap;
+        private Map<AsbiepId, List<WrappedAsbiep>> asbiepMap;
+        private Map<AbieId, List<WrappedAsbiep>> roleOfAbieToAsbiepMap;
+        private Map<AbieId, List<Abie>> abieIdToAbieMap;
         private Map<AsbiepId, List<WrappedAsbie>> toAsbiepToAsbieMap;
-        private Map<BbiepId, WrappedBbie> toBbiepToBbieMap;
-        private Map<BbieId, Bbie> bbieMap;
-        private List<WrappedBbieSc> bbieScList;
+        private Map<BbiepId, List<WrappedBbie>> toBbiepToBbieMap;
+        private Map<BbieId, List<Bbie>> bbieMap;
+        private Map<BbieScId, List<WrappedBbieSc>> bbieScMap;
 
         private TopLevelAsbiepId targetTopLevelAsbiepId;
 
@@ -552,13 +556,13 @@ public class BieUpliftingService {
             this.targetCcDocument = targetCcDocument;
             this.targetAsccpManifestId = targetAsccpManifestId;
 
-            this.asbiepMap = new HashMap();
-            this.roleOfAbieToAsbiepMap = new HashMap();
-            this.abieIdToAbieMap = new HashMap();
-            this.toAsbiepToAsbieMap = new HashMap();
-            this.toBbiepToBbieMap = new HashMap();
-            this.bbieMap = new HashMap();
-            this.bbieScList = new ArrayList();
+            this.asbiepMap = new LinkedHashMap<>();
+            this.roleOfAbieToAsbiepMap = new LinkedHashMap<>();
+            this.abieIdToAbieMap = new LinkedHashMap<>();
+            this.toAsbiepToAsbieMap = new LinkedHashMap<>();
+            this.toBbiepToBbieMap = new LinkedHashMap<>();
+            this.bbieMap = new LinkedHashMap<>();
+            this.bbieScMap = new LinkedHashMap<>();
 
             this.sourceDtAwdPriMap = sourceDtAwdPriMap;
             this.targetDtAwdPriByDtIdMap = targetDtAwdPriByDtIdMap;
@@ -578,6 +582,19 @@ public class BieUpliftingService {
         public TopLevelAsbiepId uplift() {
             this.sourceBieDocument.accept(this);
             return targetTopLevelAsbiepId;
+        }
+
+        private <K, V> void addMapping(Map<K, List<V>> map, K key, V value) {
+            map.computeIfAbsent(key, ignored -> new ArrayList<>()).add(value);
+        }
+
+        private <K, V> V getLastMapping(Map<K, List<V>> map, K key) {
+            List<V> values = map.get(key);
+            return values == null || values.isEmpty() ? null : values.get(values.size() - 1);
+        }
+
+        private <K, V> Stream<V> streamMappings(Map<K, List<V>> map) {
+            return map.values().stream().flatMap(Collection::stream);
         }
 
         @Override
@@ -632,7 +649,7 @@ public class BieUpliftingService {
             List<WrappedBbieSc> emptySourceBbieScList = new ArrayList();
 
             Function<String, Abie> getAbieIfExist = (path) -> {
-                Abie abie = abieIdToAbieMap.values().stream()
+                Abie abie = streamMappings(abieIdToAbieMap)
                         .filter(e -> e.getPath().equals(path))
                         .findAny().orElse(null);
                 if (abie == null) {
@@ -644,7 +661,7 @@ public class BieUpliftingService {
             };
 
             Function<String, Bbie> getBbieIfExist = (path) -> {
-                Bbie bbie = bbieMap.values().stream()
+                Bbie bbie = streamMappings(bbieMap)
                         .filter(e -> e.getPath().equals(path))
                         .findAny().orElse(null);
                 if (bbie == null) {
@@ -812,14 +829,9 @@ public class BieUpliftingService {
             createBieRequest.setBizCtxIds(bizCtxIds);
             createBieRequest.setStatus(topLevelAsbiep.status());
             createBieRequest.setVersion(topLevelAsbiep.version());
-            createBieRequest.setTopLevelAsbiep(this.asbiepMap.get(topLevelAsbiep.asbiepId()));
-            List<WrappedAsbie> wrappedAsbieList = new ArrayList<WrappedAsbie>();
-            toAsbiepToAsbieMap.values().forEach(list -> {
-                wrappedAsbieList.addAll(list);
-            });
-            wrappedAsbieList.addAll(emptySourceAsbieList);
+            createBieRequest.setTopLevelAsbiep(getLastMapping(this.asbiepMap, topLevelAsbiep.asbiepId()));
             createBieRequest.setAsbieList(
-                    wrappedAsbieList.stream()
+                    Stream.concat(streamMappings(toAsbiepToAsbieMap), emptySourceAsbieList.stream())
                             .map(asbie -> {
                                 if (asbie.getFromAbie() == null) {
                                     String targetFromAbiePath = extractAbiePath(asbie.getAsbie().getPath());
@@ -858,7 +870,7 @@ public class BieUpliftingService {
                             .filter(e -> e != null)
                             .collect(Collectors.toList()));
             createBieRequest.setBbieList(
-                    Stream.concat(toBbiepToBbieMap.values().stream(),
+                    Stream.concat(streamMappings(toBbiepToBbieMap),
                                     emptySourceBbieList.stream())
                             .map(bbie -> {
                                 if (bbie.getFromAbie() == null) {
@@ -874,7 +886,7 @@ public class BieUpliftingService {
                             })
                             .collect(Collectors.toList()));
             createBieRequest.setBbieScList(
-                    Stream.concat(bbieScList.stream(),
+                    Stream.concat(streamMappings(bbieScMap),
                                     emptySourceBbieScList.stream())
                             .map(bbieSc -> {
                                 if (bbieSc.getBbie() == null) {
@@ -898,10 +910,10 @@ public class BieUpliftingService {
                     .getTopLevelAsbiepId();
 
             // Issue #1659
-            for (Map.Entry<AsbiepId, WrappedAsbiep> asbiepEntry : this.asbiepMap.entrySet()) {
-                repositoryFactory.asbiepCommandRepository(requester)
-                        .copyAsbiepSupportingDocumentation(asbiepEntry.getKey(), asbiepEntry.getValue().getAsbiep().getAsbiepId());
-            }
+            this.asbiepMap.forEach((sourceAsbiepId, targetAsbieps) -> targetAsbieps.forEach(targetAsbiep ->
+                    repositoryFactory.asbiepCommandRepository(requester)
+                            .copyAsbiepSupportingDocumentation(
+                                    sourceAsbiepId, targetAsbiep.getAsbiep().getAsbiepId())));
         }
 
         @Override
@@ -934,8 +946,17 @@ public class BieUpliftingService {
                 targetAbie.setRemark(abie.getRemark());
                 targetAbie.setBizTerm(abie.getBizTerm());
 
-                this.roleOfAbieToAsbiepMap.get(abie.getAbieId()).setRoleOfAbie(targetAbie);
-                this.abieIdToAbieMap.put(abie.getAbieId(), targetAbie);
+                // The role map is list-valued because one source role ABIE can occur at
+                // multiple target paths. The last entry is the current depth-first occurrence.
+                WrappedAsbiep targetAsbiep = getLastMapping(
+                        this.roleOfAbieToAsbiepMap, abie.getAbieId());
+                if (targetAsbiep == null) {
+                    targetAsbiep = this.currentAsbiep;
+                }
+                if (targetAsbiep != null) {
+                    targetAsbiep.setRoleOfAbie(targetAbie);
+                }
+                addMapping(this.abieIdToAbieMap, abie.getAbieId(), targetAbie);
             }
             return BieVisitResult.CONTINUE;
         }
@@ -979,11 +1000,10 @@ public class BieUpliftingService {
                 // Issue #1735: when the ASBIE is uplifted as a reuse reference
                 // (the user mapped it to another top-level BIE via the reuse '!'),
                 // create the reference ASBIE but do NOT descend into its subtree.
-                // The subtree lives in the referenced BIE; re-traversing it both
-                // corrupts the source-id-keyed maps (duplicate visits -> orphaned
-                // BBIE with null from_abie_id) and overwrites the reference with a
-                // private copy. Skipping the queue offer keeps the target-path queues
-                // balanced, since the matching visitAsbiep poll will not run.
+                // The subtree lives in the referenced BIE; re-traversing it would
+                // create an inline copy in addition to the selected reference.
+                // Skipping the queue offer keeps the target-path queues balanced,
+                // since the matching visitAsbiep poll will not run.
                 boolean reuseReference =
                         (targetAsccMapping != null && targetAsccMapping.getRefTopLevelAsbiepId() != null);
                 if (!reuseReference) {
@@ -1006,36 +1026,33 @@ public class BieUpliftingService {
                 targetAsbie.setUsed(asbie.isUsed());
 
                 WrappedAsbie upliftingAsbie = new WrappedAsbie();
-                Abie fromAbie = this.abieIdToAbieMap.get(asbie.getFromAbieId());
-
-                if (fromAbie != null && currentTargetPath.contains(fromAbie.getPath())) {
-                    upliftingAsbie.setFromAbie(fromAbie);
+                Abie fromAbie = getLastMapping(this.abieIdToAbieMap, asbie.getFromAbieId());
+                if (fromAbie == null) {
+                    throw new IllegalStateException(
+                            "Cannot resolve target ABIE for source ABIE " + asbie.getFromAbieId());
                 }
+                upliftingAsbie.setFromAbie(fromAbie);
 
                 upliftingAsbie.setAsbie(targetAsbie);
 
                 if (targetAsccMapping != null) {
                     upliftingAsbie.setRefTopLevelAsbiepId(targetAsccMapping.getRefTopLevelAsbiepId());
                 }
-                List<WrappedAsbie> wrappedAsbieList = this.toAsbiepToAsbieMap.get(asbie.getToAsbiepId());
-                if (wrappedAsbieList != null && wrappedAsbieList.size() > 0) {
-                    wrappedAsbieList.add(upliftingAsbie);
-                    this.toAsbiepToAsbieMap.put(asbie.getToAsbiepId(), wrappedAsbieList);
-                } else {
-                    List<WrappedAsbie> newWrappedAsbieList = new ArrayList<>();
-                    newWrappedAsbieList.add(upliftingAsbie);
-                    this.toAsbiepToAsbieMap.put(asbie.getToAsbiepId(), newWrappedAsbieList);
-                }
+                this.pendingAsbie = reuseReference ? null : upliftingAsbie;
+                addMapping(this.toAsbiepToAsbieMap, asbie.getToAsbiepId(), upliftingAsbie);
 
                 // Skip descent into the reuse target's subtree; descend otherwise.
                 return reuseReference ? BieVisitResult.SKIP_SUBTREE : BieVisitResult.CONTINUE;
             }
 
+            this.pendingAsbie = null;
             return BieVisitResult.CONTINUE;
         }
 
         @Override
         public BieVisitResult visitBbie(Bbie bbie, BieVisitContext context) {
+            this.currentBbie = null;
+            this.currentTargetDtScList = Collections.emptyList();
             CcDocument sourceCcDocument = context.getBieDocument().getCcDocument();
             BccSummaryRecord sourceBcc = sourceCcDocument.getBcc(bbie.getBasedBccManifestId());
             List<Association> sourceAssociations =
@@ -1074,7 +1091,6 @@ public class BieUpliftingService {
             if (targetBcc != null) {
                 BccpSummaryRecord toBccp = targetCcDocument.getBccp(
                         targetBcc.toBccpManifestId());
-                this.previousBbie = bbie;
                 targetBccpQueue.offer(toBccp);
 
                 Bbie targetBbie = new Bbie();
@@ -1102,15 +1118,17 @@ public class BieUpliftingService {
                         sourceAgencyIdListList);
 
                 WrappedBbie upliftingBbie = new WrappedBbie();
-                Abie fromAbie = this.abieIdToAbieMap.get(bbie.getFromAbieId());
-
-                if (fromAbie != null && currentTargetPath.contains(fromAbie.getPath())) {
-                    upliftingBbie.setFromAbie(fromAbie);
+                Abie fromAbie = getLastMapping(this.abieIdToAbieMap, bbie.getFromAbieId());
+                if (fromAbie == null) {
+                    throw new IllegalStateException(
+                            "Cannot resolve target ABIE for source ABIE " + bbie.getFromAbieId());
                 }
+                upliftingBbie.setFromAbie(fromAbie);
                 upliftingBbie.setBbie(targetBbie);
 
-                this.toBbiepToBbieMap.put(bbie.getToBbiepId(), upliftingBbie);
-                this.bbieMap.put(bbie.getBbieId(), targetBbie);
+                this.currentBbie = upliftingBbie;
+                addMapping(this.toBbiepToBbieMap, bbie.getToBbiepId(), upliftingBbie);
+                addMapping(this.bbieMap, bbie.getBbieId(), targetBbie);
             }
             return BieVisitResult.CONTINUE;
         }
@@ -1118,9 +1136,11 @@ public class BieUpliftingService {
         @Override
         public BieVisitResult visitAsbiep(Asbiep asbiep, BieVisitContext context) {
             CcDocument sourceCcDocument = context.getBieDocument().getCcDocument();
+            this.currentAsbiep = null;
             // Defensive: no ASBIEP to descend into (getAsbiep returned null). Poll the
             // matching target ASCCP to keep the queue balanced, then continue.
             if (asbiep == null) {
+                this.pendingAsbie = null;
                 targetAsccpQueue.poll();
                 return BieVisitResult.CONTINUE;
             }
@@ -1152,14 +1172,14 @@ public class BieUpliftingService {
                 WrappedAsbiep upliftingAsbiep = new WrappedAsbiep();
                 upliftingAsbiep.setAsbiep(targetAsbiep);
 
-                List<WrappedAsbie> upliftingAsbieList = this.toAsbiepToAsbieMap.get(asbiep.getAsbiepId());
-                if (upliftingAsbieList != null) {
-                    upliftingAsbieList.forEach(upliftingAsbie -> {
-                        upliftingAsbie.setToAsbiep(upliftingAsbiep);
-                    });
+                WrappedAsbie parentAsbie = this.pendingAsbie;
+                this.pendingAsbie = null;
+                if (parentAsbie != null) {
+                    parentAsbie.setToAsbiep(upliftingAsbiep);
                 }
-                this.asbiepMap.put(asbiep.getAsbiepId(), upliftingAsbiep);
-                this.roleOfAbieToAsbiepMap.put(asbiep.getRoleOfAbieId(), upliftingAsbiep);
+                this.currentAsbiep = upliftingAsbiep;
+                addMapping(this.asbiepMap, asbiep.getAsbiepId(), upliftingAsbiep);
+                addMapping(this.roleOfAbieToAsbiepMap, asbiep.getRoleOfAbieId(), upliftingAsbiep);
             }
             return BieVisitResult.CONTINUE;
         }
@@ -1176,8 +1196,7 @@ public class BieUpliftingService {
 
                 DtManifestId targetBdtManifestId = targetBccp.dtManifestId();
                 DtSummaryRecord targetDt = targetCcDocument.getDt(targetBdtManifestId);
-                bbieTargetDtScMap.put(previousBbie.getBbieId(),
-                        targetCcDocument.getDtScList(targetDt.dtManifestId()));
+                this.currentTargetDtScList = targetCcDocument.getDtScList(targetDt.dtManifestId());
 
                 Bbiep targetBbiep = new Bbiep();
                 targetBbiep.setGuid(ScoreGuidUtils.randomGuid());
@@ -1189,7 +1208,9 @@ public class BieUpliftingService {
                 targetBbiep.setBizTerm(bbiep.getBizTerm());
                 targetBbiep.setDisplayName(bbiep.getDisplayName());
 
-                this.toBbiepToBbieMap.get(bbiep.getBbiepId()).setToBbiep(targetBbiep);
+                if (this.currentBbie != null) {
+                    this.currentBbie.setToBbiep(targetBbiep);
+                }
             }
             return BieVisitResult.CONTINUE;
         }
@@ -1212,7 +1233,7 @@ public class BieUpliftingService {
                 targetPath = targetDtScMapping.getTargetPath();
             } else {
                 CcMatchingScore matchingScore =
-                        bbieTargetDtScMap.getOrDefault(bbieSc.getBbieId(), Collections.emptyList()).stream()
+                        currentTargetDtScList.stream()
                                 .map(e -> ccMatchingService.score(
                                         sourceCcDocument,
                                         sourceDtSc,
@@ -1257,10 +1278,11 @@ public class BieUpliftingService {
                         sourceAgencyIdListList);
 
                 WrappedBbieSc upliftingBbieSc = new WrappedBbieSc();
-                upliftingBbieSc.setBbie(this.bbieMap.get(bbieSc.getBbieId()));
+                upliftingBbieSc.setBbie(this.currentBbie != null ?
+                        this.currentBbie.getBbie() : getLastMapping(this.bbieMap, bbieSc.getBbieId()));
                 upliftingBbieSc.setBbieSc(targetBbieSc);
 
-                this.bbieScList.add(upliftingBbieSc);
+                addMapping(this.bbieScMap, bbieSc.getBbieScId(), upliftingBbieSc);
             }
             return BieVisitResult.CONTINUE;
         }
@@ -1660,19 +1682,14 @@ public class BieUpliftingService {
     public XbtSummaryRecord getTargetXbtManifest(
             XbtSummaryRecord sourceXbt,
             List<XbtSummaryRecord> targetXbtList) {
-        if (sourceXbt == null) {
+        if (sourceXbt == null || sourceXbt.xbtId() == null || targetXbtList == null) {
             return null;
         }
 
-        XbtSummaryRecord targetXbt = targetXbtList.stream()
-                .filter(e -> e.guid().equals(sourceXbt.guid()))
-                .findFirst().orElse(null);
-        if (targetXbt == null) {
-            return null;
-        }
-
+        // XBT_MANIFEST_ID is release-scoped. The stable identity that must be
+        // carried across releases is the shared XBT_ID.
         return targetXbtList.stream()
-                .filter(e -> e.xbtId().equals(targetXbt.xbtId()))
+                .filter(e -> e != null && sourceXbt.xbtId().equals(e.xbtId()))
                 .findFirst().orElse(null);
     }
 

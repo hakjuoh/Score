@@ -25,14 +25,47 @@ public interface BusinessInformationEntityAPI {
     void deleteTopLevelASBIEPByTopLevelASBIEPId(TopLevelASBIEPObject topLevelAsbiep);
 
     /**
-     * Materialize the first-level child BBIEP/BBIE rows of the given top-level BIE from the element
-     * BCCs declared on its root ABIE's ACC. {@link #generateRandomTopLevelASBIEP} creates only the
-     * root ABIE + ASBIEP (no child nodes), so this is required before {@link #seedAllBbieProfiling}
-     * has anything to update and before a single controlled per-element backward-compatibility diff
-     * can be seeded (issue #1733). Each created BBIE starts {@code is_used = 1} with the BCC's own
-     * cardinality; call {@link #seedAllBbieProfiling} afterwards to set a deterministic profiling.
+     * Create BBIEP/BBIE nodes for the element BCCs used by the root ABIE of the given top-level BIE,
+     * including elements inherited through the ACC base chain. {@link #generateRandomTopLevelASBIEP}
+     * creates only the root ABIE + ASBIEP (no child nodes), so this is required before
+     * {@link #seedAllBbieProfiling} has anything to update and before a single controlled
+     * per-element backward-compatibility diff can be seeded (issue #1733). Each created BBIE starts
+     * {@code is_used = 1} with the BCC's own cardinality; call {@link #seedAllBbieProfiling}
+     * afterwards to set deterministic profiling.
      */
-    void materializeUsedBbieChildren(BigInteger topLevelAsbiepId, BigInteger createdByUserId);
+    void createBbieNodesForUsedElements(BigInteger topLevelAsbiepId, BigInteger createdByUserId);
+
+    /**
+     * Create one deterministic BBIE_SC under the first BBIE of the given top-level BIE. This is
+     * used by uplift regression fixtures that need to exercise BBIE_SC copying.
+     */
+    void createBbieScForFirstBbie(BigInteger topLevelAsbiepId, BigInteger createdByUserId);
+
+    List<BigInteger> getReusedTopLevelAsbiepIds(BigInteger topLevelAsbiepId);
+
+    int countBbieSc(BigInteger topLevelAsbiepId);
+
+    /**
+     * Return the BBIE paths that own BBIE_SC records under the given output BIE.
+     * This verifies that inline BBIE_SC records are attached to distinct copied BBIEs.
+     */
+    List<String> getBbiePathsHavingBbieSc(BigInteger topLevelAsbiepId);
+
+    /**
+     * Return the stable XBT ID referenced by the BBIE primitive manifest at the given BIE path.
+     * The join through XBT_MANIFEST verifies the persisted manifest points to that XBT.
+     */
+    BigInteger getBbieXbtIdByPath(BigInteger topLevelAsbiepId, String bbiePath);
+
+    /**
+     * Return the stable XBT ID referenced by the BBIE_SC primitive manifest belonging to the BBIE
+     * at the given BIE path.
+     */
+    BigInteger getBbieScXbtIdByBbiePathAndPropertyTerm(BigInteger topLevelAsbiepId,
+                                                       String bbiePath,
+                                                       String propertyTerm);
+
+    boolean hasValidBbieOwnership(BigInteger topLevelAsbiepId);
 
     /**
      * Directly set the used flag, cardinality, and optional max-length facet of every BBIE under

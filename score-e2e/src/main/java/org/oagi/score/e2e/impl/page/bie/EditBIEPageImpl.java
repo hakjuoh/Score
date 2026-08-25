@@ -171,8 +171,8 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
         return retry(() -> {
             goToNode(path);
             String[] nodes = path.split("/");
-            String nodeName = nodes[nodes.length - 1];
-            WebElement node = getNodeByNameAndDataLevel(nodeName, dataLevel);
+            int effectiveDataLevel = dataLevel >= 0 ? dataLevel : nodes.length - 2;
+            WebElement node = getNodeByNameAndDataLevel(nodes[nodes.length - 1], effectiveDataLevel);
             clickTreeNode(node);
             new Actions(getDriver()).sendKeys("O").perform();
             try {
@@ -184,7 +184,8 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
             }
             click(getDriver().findElement(By.tagName("body"))); // To close overlay-container
 
-            WebElement contextMenuIcon = getContextMenuIconByNodeName(nodeName);
+            WebElement contextMenuIcon = node.findElement(By.xpath(
+                    ".//mat-icon[contains(text(), \"more_vert\")]"));
             click(getDriver(), contextMenuIcon);
             assert visibilityOfElementLocated(getDriver(),
                     By.xpath("//div[contains(@class, \"cdk-overlay-pane\")]")).isDisplayed();
@@ -454,9 +455,8 @@ public class EditBIEPageImpl extends BasePageImpl implements EditBIEPage {
             int dataLevel = nodes.length - 2;
             if (dataLevel > 0) {
                 return getNodeByNameAndDataLevel(nodes[nodes.length - 1], dataLevel);
-            } else {
-                return getNodeByName(nodes[nodes.length - 1]);
             }
+            return getNodeByName(nodes[nodes.length - 1]);
         });
     }
 

@@ -326,7 +326,8 @@
                       <mat-checkbox
                         [checked]="node.source !== undefined"
                         (change)="checkMatch($event, node)"
-                      [disabled]="!canMatch(node)"></mat-checkbox>
+                        [disabled]="!canMatch(node)"
+                        [attr.aria-label]="canMatch(node) ? 'Map ' + node.name : getMatchDisabledReason(node)"></mat-checkbox>
                     }
 
                     <div class="d-inline-flex align-items-center flex-grow-1">

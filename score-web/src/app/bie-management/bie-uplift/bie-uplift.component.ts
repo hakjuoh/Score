@@ -110,6 +110,9 @@ export class BieUpliftComponent implements OnInit {
 
   sourceSelectedNode: BieUpliftSourceFlatNode;
   targetSelectedNode: BieUpliftTargetFlatNode;
+  private mappedTargetBySource = new Map<BieUpliftSourceFlatNode, BieUpliftTargetFlatNode>();
+  private sourceWrapperByRawNode = new Map<BieFlatNode, BieUpliftSourceFlatNode>();
+  private targetWrapperByRawNode = new Map<BieFlatNode, BieUpliftTargetFlatNode>();
 
   paddingPixel = 12;
   innerY: number = window.innerHeight;
@@ -347,6 +350,7 @@ export class BieUpliftComponent implements OnInit {
           source.target = target;
           source.fixed = true;
           target.source = source;
+          this.registerMapping(source, target);
         }
       }
     }
@@ -365,6 +369,7 @@ export class BieUpliftComponent implements OnInit {
           source.target = target;
           source.fixed = true;
           target.source = source;
+          this.registerMapping(source, target);
         }
       }
     }
@@ -383,6 +388,7 @@ export class BieUpliftComponent implements OnInit {
           source.target = target;
           source.fixed = true;
           target.source = source;
+          this.registerMapping(source, target);
         }
       }
     }
@@ -522,18 +528,29 @@ export class BieUpliftComponent implements OnInit {
   }
 
   canMatch(node: BieUpliftTargetFlatNode): boolean {
+    return this.getMatchDisabledReason(node) === '';
+  }
+
+  getMatchDisabledReason(node: BieUpliftTargetFlatNode): string {
     if (node.reuseMapped) {
-      return false;
+      return 'Already mapped by the selected reuse BIE';
     }
-    if (!this.sourceSelectedNode || this.sourceSelectedNode.fixed) {
-      return false;
+    if (!this.sourceSelectedNode) {
+      return 'Select a source node first';
     }
-    if (this.sourceSelectedNode.type.toUpperCase() === node.type.toUpperCase()) {
-      if (node.source === undefined || node.source === this.sourceSelectedNode) {
-        return true;
-      }
+    if (this.sourceSelectedNode.fixed) {
+      return 'Fixed source nodes cannot be remapped';
     }
-    return false;
+    if (!this.hasMappedParentPair(this.sourceSelectedNode, node)) {
+      return 'Map the parent node first';
+    }
+    if (this.sourceSelectedNode.type.toUpperCase() !== node.type.toUpperCase()) {
+      return 'Source and target node types must match';
+    }
+    if (node.source && node.source !== this.sourceSelectedNode) {
+      return 'Target node is already mapped';
+    }
+    return '';
   }
 
   checkMatch(event, node: BieUpliftTargetFlatNode) {
@@ -542,32 +559,156 @@ export class BieUpliftComponent implements OnInit {
     }
 
     if (node.source) {
-      node.source = undefined;
-      node.reuseMapped = false;
-      node.reusedTopLevelAsbiepId = undefined;
-      this.sourceSelectedNode.target = undefined;
+      this.detachTargetMappings(node);
     } else {
-      if (this.sourceSelectedNode.target) {
-        this.sourceSelectedNode.target.reusedTopLevelAsbiepId = undefined;
-        this.sourceSelectedNode.target.source = undefined;
-        this.sourceSelectedNode.target.reuseMapped = false;
-      }
-      this.sourceSelectedNode.target = undefined;
-      node.source = this.sourceSelectedNode;
-      node.reuseMapped = false;
-      this.sourceSelectedNode.target = node;
+      this.attachMapping(this.sourceSelectedNode, node, false);
     }
   }
 
-  private collectLoadedDescendants<T extends BieFlatNode>(node: T): T[] {
-    const result: T[] = [];
-    let stack = [...node.children] as T[];
-    while (stack.length > 0) {
-      const item = stack.shift();
-      result.push(item);
-      stack = (item.children as T[]).concat(stack);
+  private getStructuralParent(node: BieFlatNode, candidates: BieFlatNode[] = [],
+                              wrapperByRawNode?: Map<BieFlatNode, BieFlatNode>): BieFlatNode | undefined {
+    let parent = node?.parent as BieFlatNode;
+    while (parent?.isGroup) {
+      parent = parent.parent as BieFlatNode;
     }
-    return result;
+    if (!parent) {
+      return undefined;
+    }
+    return wrapperByRawNode?.get(parent) || candidates.find(candidate => candidate === parent || candidate.self === parent) || parent;
+  }
+
+  private indexSourceWrappers(nodes: BieFlatNode[]) {
+    if (!this.sourceWrapperByRawNode) {
+      this.sourceWrapperByRawNode = new Map<BieFlatNode, BieUpliftSourceFlatNode>();
+    }
+    nodes.forEach(node => {
+      this.sourceWrapperByRawNode.set(node.self, node as BieUpliftSourceFlatNode);
+      this.indexSourceWrappers(node.children as BieFlatNode[]);
+    });
+  }
+
+  private indexTargetWrappers(nodes: BieFlatNode[]) {
+    if (!this.targetWrapperByRawNode) {
+      this.targetWrapperByRawNode = new Map<BieFlatNode, BieUpliftTargetFlatNode>();
+    }
+    nodes.forEach(node => {
+      this.targetWrapperByRawNode.set(node.self, node as BieUpliftTargetFlatNode);
+      this.indexTargetWrappers(node.children as BieFlatNode[]);
+    });
+  }
+
+  /**
+   * A child can only be mapped beneath corresponding mapped source/target ancestors. The tree
+   * wrappers expose raw parents, so the indexes restore the wrapper that owns each raw node before
+   * checking its mapping fields. Group nodes are presentation containers and are skipped; level
+   * zero is the implicitly mapped BIE root.
+   */
+  private hasMappedParentPair(sourceNode: BieUpliftSourceFlatNode,
+                               targetNode: BieUpliftTargetFlatNode,
+                               sourceCandidates?: BieFlatNode[],
+                               targetCandidates?: BieFlatNode[]): boolean {
+    const sourceParentCandidates = sourceCandidates || this.sourceDataSource?.data || [];
+    const targetParentCandidates = targetCandidates || this.targetDataSource?.data || [];
+    this.indexSourceWrappers(sourceParentCandidates);
+    this.indexTargetWrappers(targetParentCandidates);
+    let sourceParent = this.getStructuralParent(sourceNode, sourceParentCandidates,
+      this.sourceWrapperByRawNode) as BieUpliftSourceFlatNode;
+    let targetParent = this.getStructuralParent(targetNode, targetParentCandidates,
+      this.targetWrapperByRawNode) as BieUpliftTargetFlatNode;
+    while (sourceParent || targetParent) {
+      if (!sourceParent || !targetParent) {
+        return false;
+      }
+      if (sourceParent.level === 0 || targetParent.level === 0) {
+        return sourceParent.level === 0 && targetParent.level === 0;
+      }
+      if (sourceParent.target !== targetParent || targetParent.source !== sourceParent) {
+        return false;
+      }
+      sourceParent = this.getStructuralParent(sourceParent, sourceParentCandidates,
+        this.sourceWrapperByRawNode) as BieUpliftSourceFlatNode;
+      targetParent = this.getStructuralParent(targetParent, targetParentCandidates,
+        this.targetWrapperByRawNode) as BieUpliftTargetFlatNode;
+    }
+    return true;
+  }
+
+  private clearDescendantMappings(node: BieUpliftTargetFlatNode) {
+    if (!this.mappedTargetBySource) {
+      return;
+    }
+    for (const [source, target] of this.mappedTargetBySource) {
+      if ((node.source && this.isLogicalDescendant(source, node.source)) ||
+          this.isLogicalDescendant(target, node)) {
+        this.clearMappingPair(source, target);
+      }
+    }
+  }
+
+  private isLogicalDescendant(node: BieFlatNode, ancestor: BieFlatNode): boolean {
+    let parent = node.parent as BieFlatNode;
+    while (parent) {
+      if (parent === ancestor || parent === ancestor.self) {
+        return true;
+      }
+      parent = parent.parent as BieFlatNode;
+    }
+    return false;
+  }
+
+  private registerMapping(source: BieUpliftSourceFlatNode, target: BieUpliftTargetFlatNode) {
+    if (!this.mappedTargetBySource) {
+      this.mappedTargetBySource = new Map<BieUpliftSourceFlatNode, BieUpliftTargetFlatNode>();
+    }
+    this.mappedTargetBySource.set(source, target);
+  }
+
+  private attachMapping(source: BieUpliftSourceFlatNode, target: BieUpliftTargetFlatNode,
+                        reuseMapped: boolean) {
+    if (source.target && source.target !== target) {
+      this.detachTargetMappings(source.target);
+    }
+    if (target.source && target.source !== source) {
+      this.detachTargetMappings(target);
+    }
+    source.target = target;
+    target.source = source;
+    target.reuseMapped = reuseMapped;
+    this.registerMapping(source, target);
+  }
+
+  private clearMappingPair(source: BieUpliftSourceFlatNode, target: BieUpliftTargetFlatNode) {
+    if (source.target === target) {
+      source.target = undefined;
+    }
+    if (target.source === source) {
+      target.source = undefined;
+    }
+    if (this.mappedTargetBySource?.get(source) === target) {
+      this.mappedTargetBySource.delete(source);
+    }
+    if (target.reusedTopLevelAsbiepId && this.targetDataSource) {
+      this.clearTargetReuseNode(target);
+    }
+    target.reuseMapped = false;
+    target.reusedTopLevelAsbiepId = undefined;
+  }
+
+  private detachTargetMappings(node: BieUpliftTargetFlatNode) {
+    const source = node.source;
+    this.clearDescendantMappings(node);
+    if (node.reusedTopLevelAsbiepId) {
+      this.clearTargetReuseNode(node);
+    }
+    node.source = undefined;
+    node.reuseMapped = false;
+    node.reusedTopLevelAsbiepId = undefined;
+    if (source?.target === node) {
+      source.target = undefined;
+    }
+    if (source && this.mappedTargetBySource?.get(source) === node) {
+      this.mappedTargetBySource.delete(source);
+    }
   }
 
   private collectUsedDescendants<T extends BieFlatNode>(dataSource: BieFlatNodeDataSource<T>, node: T): T[] {
@@ -596,14 +737,7 @@ export class BieUpliftComponent implements OnInit {
   }
 
   private clearReuseDescendantMatches(node: BieUpliftTargetFlatNode) {
-    this.collectLoadedDescendants(node).forEach(target => {
-      if (target.source) {
-        target.source.target = undefined;
-        target.source = undefined;
-      }
-      target.reuseMapped = false;
-      target.reusedTopLevelAsbiepId = undefined;
-    });
+    this.clearDescendantMappings(node);
   }
 
   private prepareTargetReuseNode(node: BieUpliftTargetFlatNode, selectedTopLevelAsbiepId: number,
@@ -643,7 +777,11 @@ export class BieUpliftComponent implements OnInit {
 
   private matchReuseDescendants(sourceRoot: BieUpliftSourceFlatNode, targetRoot: BieUpliftTargetFlatNode) {
     const targetsByKey = new Map<string, BieUpliftTargetFlatNode[]>();
-    this.collectUsedDescendants(this.targetDataSource, targetRoot).forEach(target => {
+    const targetDescendants = this.collectUsedDescendants(this.targetDataSource, targetRoot);
+    const sourceDescendants = this.collectUsedDescendants(this.sourceDataSource, sourceRoot);
+    const targetCandidates = [targetRoot, ...targetDescendants];
+    const sourceCandidates = [sourceRoot, ...sourceDescendants];
+    targetDescendants.forEach(target => {
       const key = this.getReuseMappingKey(targetRoot, target);
       if (!targetsByKey.has(key)) {
         targetsByKey.set(key, []);
@@ -651,25 +789,17 @@ export class BieUpliftComponent implements OnInit {
       targetsByKey.get(key).push(target);
     });
 
-    this.collectUsedDescendants(this.sourceDataSource, sourceRoot).forEach(source => {
+    sourceDescendants.forEach(source => {
       const candidates = targetsByKey.get(this.getReuseMappingKey(sourceRoot, source)) || [];
       const target = candidates.find(e => !e.source || e.source === source);
       if (!target) {
         return;
       }
-
-      if (source.target && source.target !== target) {
-        source.target.source = undefined;
-        source.target.reuseMapped = false;
-        source.target.reusedTopLevelAsbiepId = undefined;
-      }
-      if (target.source && target.source !== source) {
-        target.source.target = undefined;
+      if (!this.hasMappedParentPair(source, target, sourceCandidates, targetCandidates)) {
+        return;
       }
 
-      source.target = target;
-      target.source = source;
-      target.reuseMapped = true;
+      this.attachMapping(source, target, true);
     });
   }
 
@@ -772,7 +902,7 @@ export class BieUpliftComponent implements OnInit {
   }
 
   matchReused(node: BieUpliftTargetFlatNode) {
-    if (node.source && node.source.reused) {
+    if (node.source && node.source.reused && this.hasMappedParentPair(node.source, node)) {
       const dialogRef = this.dialog.open(ReuseBieDialogComponent, {
         data: {
           title: 'Select Profile BIE to reuse',

@@ -970,6 +970,351 @@ public class TC_29_1_BIEUplifting extends BaseTest {
         homePage.logout();
     }
 
+    @Test
+    public void all_selected_and_unselected_combinations_of_two_bom_item_data_reuses_are_uplifted() {
+        String sourceRelease = "10.8.7.1";
+        String targetRelease = "10.9";
+        LibraryObject library = getAPIFactory().getLibraryAPI().getLibraryByName("connectSpec");
+
+        AppUserObject firstChildOwner = getAPIFactory().getAppUserAPI().createRandomEndUserAccount(false);
+        AppUserObject secondChildOwner = getAPIFactory().getAppUserAPI().createRandomEndUserAccount(false);
+        AppUserObject parentOwner = getAPIFactory().getAppUserAPI().createRandomEndUserAccount(false);
+        AppUserObject developer = getAPIFactory().getAppUserAPI().createRandomDeveloperAccount(false);
+        Arrays.asList(firstChildOwner, secondChildOwner, parentOwner, developer)
+                .forEach(this::thisAccountWillBeDeletedAfterTests);
+
+        ASCCPObject bomAsccp = getAPIFactory().getCoreComponentAPI()
+                .getASCCPByDENAndReleaseNum(library, "BOM. BOM", sourceRelease);
+        ASCCPObject bomItemDataAsccp = getAPIFactory().getCoreComponentAPI()
+                .getASCCPByDENAndReleaseNum(library, "BOM Item Data. BOM Item Data", sourceRelease);
+
+        TopLevelASBIEPObject firstSourceChild = createAndPublishBOMReuseBIE(
+                firstChildOwner, bomItemDataAsccp);
+        TopLevelASBIEPObject secondSourceChild = createAndPublishBOMReuseBIE(
+                secondChildOwner, bomItemDataAsccp);
+
+        TopLevelASBIEPObject firstTargetChild = upliftAndPublishBOMReuseBIE(
+                developer, firstChildOwner, firstSourceChild, sourceRelease, targetRelease, false);
+        TopLevelASBIEPObject secondTargetChild = upliftAndPublishBOMReuseBIE(
+                developer, secondChildOwner, secondSourceChild, sourceRelease, targetRelease, false);
+
+        TopLevelASBIEPObject sourceParent = createBOMParentWithTwoReuses(
+                parentOwner, bomAsccp, firstSourceChild, secondSourceChild);
+
+        List<BOMReuseCombination> combinations = Arrays.asList(
+                new BOMReuseCombination(true, true),
+                new BOMReuseCombination(false, true),
+                new BOMReuseCombination(true, false),
+                new BOMReuseCombination(false, false));
+        for (BOMReuseCombination combination : combinations) {
+            upliftBOMParentForCombination(
+                    developer,
+                    parentOwner,
+                    sourceParent,
+                    firstTargetChild,
+                    secondTargetChild,
+                    sourceRelease,
+                    targetRelease,
+                    combination);
+        }
+    }
+
+    @Test
+    public void the_same_bom_item_data_reuse_with_a_nested_party_is_inlined_at_both_target_paths() {
+        String sourceRelease = "10.8.7.1";
+        String targetRelease = "10.9";
+        LibraryObject library = getAPIFactory().getLibraryAPI().getLibraryByName("connectSpec");
+
+        AppUserObject partyOwner = getAPIFactory().getAppUserAPI().createRandomEndUserAccount(false);
+        AppUserObject childOwner = getAPIFactory().getAppUserAPI().createRandomEndUserAccount(false);
+        AppUserObject parentOwner = getAPIFactory().getAppUserAPI().createRandomEndUserAccount(false);
+        AppUserObject developer = getAPIFactory().getAppUserAPI().createRandomDeveloperAccount(false);
+        Arrays.asList(partyOwner, childOwner, parentOwner, developer)
+                .forEach(this::thisAccountWillBeDeletedAfterTests);
+
+        ASCCPObject bomAsccp = getAPIFactory().getCoreComponentAPI()
+                .getASCCPByDENAndReleaseNum(library, "BOM. BOM", sourceRelease);
+        ASCCPObject bomItemDataAsccp = getAPIFactory().getCoreComponentAPI()
+                .getASCCPByDENAndReleaseNum(library, "BOM Item Data. BOM Item Data", sourceRelease);
+        ASCCPObject partyAsccp = getAPIFactory().getCoreComponentAPI()
+                .getASCCPByDENAndReleaseNum(library, "Party. Party", sourceRelease);
+
+        TopLevelASBIEPObject nestedParty = createAndPublishBOMReuseBIE(partyOwner, partyAsccp);
+        TopLevelASBIEPObject sourceChild = createAndPublishBOMReuseBIEWithNestedParty(
+                childOwner, bomItemDataAsccp, nestedParty);
+        assertEquals(Collections.singletonList(nestedParty.getTopLevelAsbiepId()),
+                getAPIFactory().getBusinessInformationEntityAPI()
+                        .getReusedTopLevelAsbiepIds(sourceChild.getTopLevelAsbiepId()),
+                "The source BOM Item Data must retain its nested Party reuse");
+        TopLevelASBIEPObject targetChild = upliftAndPublishBOMReuseBIE(
+                developer, childOwner, sourceChild, sourceRelease, targetRelease, true);
+        assertTrue(getAPIFactory().getBusinessInformationEntityAPI()
+                        .getReusedTopLevelAsbiepIds(targetChild.getTopLevelAsbiepId()).isEmpty(),
+                "The unselected nested Party reuse must be inlined in the uplifted BOM Item Data");
+        int nestedBOMItemDataBbieScCount = getAPIFactory().getBusinessInformationEntityAPI()
+                .countBbieSc(targetChild.getTopLevelAsbiepId());
+        TopLevelASBIEPObject sourceParent = createBOMParentWithTwoReuses(
+                parentOwner, bomAsccp, sourceChild, sourceChild);
+        List<BigInteger> sourceParentReuseIds = getAPIFactory().getBusinessInformationEntityAPI()
+                .getReusedTopLevelAsbiepIds(sourceParent.getTopLevelAsbiepId());
+        assertEquals(2, sourceParentReuseIds.size(),
+                "The source BOM must contain two reuse occurrences");
+        assertEquals(2, Collections.frequency(sourceParentReuseIds, sourceChild.getTopLevelAsbiepId()),
+                "Both source BOM occurrences must reuse the same BOM Item Data");
+
+        // Both target occurrences reference the same source BIE, and the nested Party is also
+        // reused. This reproduces the duplicate source occurrence from the reported failure.
+        // Exercise all four choices. Every unselected occurrence must inline an independent
+        // copy of the already-inlined BOM Item Data, including its nested Party.
+        List<BOMReuseCombination> combinations = Arrays.asList(
+                new BOMReuseCombination(true, true),
+                new BOMReuseCombination(false, true),
+                new BOMReuseCombination(true, false),
+                new BOMReuseCombination(false, false));
+        for (BOMReuseCombination combination : combinations) {
+            int inlineOccurrenceCount = (combination.firstSelected ? 0 : 1)
+                    + (combination.secondSelected ? 0 : 1);
+            upliftBOMParentForCombination(
+                    developer, parentOwner, sourceParent, targetChild, targetChild,
+                    sourceRelease, targetRelease, combination,
+                    inlineOccurrenceCount * nestedBOMItemDataBbieScCount,
+                    true);
+        }
+    }
+
+    private TopLevelASBIEPObject createAndPublishBOMReuseBIE(
+            AppUserObject owner, ASCCPObject asccp) {
+        BusinessContextObject context = getAPIFactory().getBusinessContextAPI()
+                .createRandomBusinessContext(owner);
+        TopLevelASBIEPObject bie = getAPIFactory().getBusinessInformationEntityAPI()
+                .generateRandomTopLevelASBIEP(Collections.singletonList(context), asccp, owner, "WIP");
+        getAPIFactory().getBusinessInformationEntityAPI().createBbieNodesForUsedElements(
+                bie.getTopLevelAsbiepId(), owner.getAppUserId());
+        getAPIFactory().getBusinessInformationEntityAPI().createBbieScForFirstBbie(
+                bie.getTopLevelAsbiepId(), owner.getAppUserId());
+        String sourceVersion = "source-" + owner.getLoginId();
+        bie.setVersion(sourceVersion);
+        setBIEToProduction(bie);
+        return bie;
+    }
+
+    private TopLevelASBIEPObject createAndPublishBOMReuseBIEWithNestedParty(
+            AppUserObject owner, ASCCPObject asccp, TopLevelASBIEPObject nestedParty) {
+        BusinessContextObject context = getAPIFactory().getBusinessContextAPI()
+                .createRandomBusinessContext(owner);
+        TopLevelASBIEPObject bie = getAPIFactory().getBusinessInformationEntityAPI()
+                .generateRandomTopLevelASBIEP(Collections.singletonList(context), asccp, owner, "WIP");
+        getAPIFactory().getBusinessInformationEntityAPI().createBbieNodesForUsedElements(
+                bie.getTopLevelAsbiepId(), owner.getAppUserId());
+        getAPIFactory().getBusinessInformationEntityAPI().createBbieScForFirstBbie(
+                bie.getTopLevelAsbiepId(), owner.getAppUserId());
+
+        HomePage homePage = loginPage().signIn(owner.getLoginId(), owner.getPassword());
+        EditBIEPage editBIEPage = homePage.getBIEMenu().openViewEditBIESubMenu().openEditBIEPage(bie);
+        SelectProfileBIEToReuseDialog dialog = editBIEPage.reuseBIEOnNode(
+                "/" + asccp.getPropertyTerm() + "/Party");
+        dialog.selectBIEToReuse(nestedParty);
+        homePage.logout();
+
+        bie.setVersion("source-" + owner.getLoginId());
+        setBIEToProduction(bie);
+        return bie;
+    }
+
+    private TopLevelASBIEPObject upliftAndPublishBOMReuseBIE(
+            AppUserObject developer,
+            AppUserObject sourceOwner,
+            TopLevelASBIEPObject sourceBIE,
+            String sourceRelease,
+            String targetRelease,
+            boolean confirmUnselectedReuse) {
+        HomePage homePage = loginPage().signIn(developer.getLoginId(), developer.getPassword());
+        UpliftBIEPage upliftBIEPage = homePage.getBIEMenu().openUpliftBIESubMenu();
+        upliftBIEPage.showAdvancedSearchPanel();
+        upliftBIEPage.setSourceBranch(sourceRelease);
+        upliftBIEPage.setTargetBranch(targetRelease);
+        upliftBIEPage.setState("Production");
+        upliftBIEPage.setOwner(sourceOwner.getLoginId());
+        upliftBIEPage.setDEN(sourceBIE.getDen());
+        upliftBIEPage.hitSearchButton();
+        WebElement row = upliftBIEPage.getTableRecordAtIndex(1);
+        click(getDriver(), upliftBIEPage.getColumnByName(row, "select"));
+        UpliftBIEVerificationPage verificationPage = upliftBIEPage.next();
+        EditBIEPage editBIEPage;
+        if (confirmUnselectedReuse) {
+            verificationPage.submitUpliftReport();
+            editBIEPage = verificationPage.confirmUnselectedReuseAndUplift();
+        } else {
+            editBIEPage = verificationPage.uplift();
+        }
+        TopLevelASBIEPObject upliftedBIE = editBIEPage.getTopLevelASBIEP();
+        editBIEPage.moveToQA();
+        editBIEPage.moveToProduction();
+        homePage.logout();
+        return upliftedBIE;
+    }
+
+    private TopLevelASBIEPObject createBOMParentWithTwoReuses(
+            AppUserObject owner,
+            ASCCPObject bomAsccp,
+            TopLevelASBIEPObject firstSourceChild,
+            TopLevelASBIEPObject secondSourceChild) {
+        BusinessContextObject context = getAPIFactory().getBusinessContextAPI()
+                .createRandomBusinessContext(owner);
+        TopLevelASBIEPObject parent = getAPIFactory().getBusinessInformationEntityAPI()
+                .generateRandomTopLevelASBIEP(Collections.singletonList(context), bomAsccp, owner, "WIP");
+
+        HomePage homePage = loginPage().signIn(owner.getLoginId(), owner.getPassword());
+        ViewEditBIEPage viewEditBIEPage = homePage.getBIEMenu().openViewEditBIESubMenu();
+        EditBIEPage editBIEPage = viewEditBIEPage.openEditBIEPage(parent);
+        SelectProfileBIEToReuseDialog selectProfileBIEToReuseDialog = editBIEPage.reuseBIEOnNode(
+                "/BOM/BOM Item Data");
+        selectProfileBIEToReuseDialog.selectBIEToReuse(firstSourceChild);
+        editBIEPage.openPage();
+        selectProfileBIEToReuseDialog = editBIEPage.reuseBIEOnNode(
+                "/BOM/BOM Option/BOM Item Data");
+        selectProfileBIEToReuseDialog.selectBIEToReuse(secondSourceChild);
+        editBIEPage.moveToQA();
+        editBIEPage.moveToProduction();
+        homePage.logout();
+        return parent;
+    }
+
+    private void upliftBOMParentForCombination(
+            AppUserObject developer,
+            AppUserObject sourceOwner,
+            TopLevelASBIEPObject sourceParent,
+            TopLevelASBIEPObject firstTargetChild,
+            TopLevelASBIEPObject secondTargetChild,
+            String sourceRelease,
+            String targetRelease,
+            BOMReuseCombination combination) {
+        int expectedBbieScCount = (combination.firstSelected ? 0 : 1)
+                + (combination.secondSelected ? 0 : 1);
+        upliftBOMParentForCombination(
+                developer,
+                sourceOwner,
+                sourceParent,
+                firstTargetChild,
+                secondTargetChild,
+                sourceRelease,
+                targetRelease,
+                combination,
+                expectedBbieScCount,
+                false);
+    }
+
+    private void upliftBOMParentForCombination(
+            AppUserObject developer,
+            AppUserObject sourceOwner,
+            TopLevelASBIEPObject sourceParent,
+            TopLevelASBIEPObject firstTargetChild,
+            TopLevelASBIEPObject secondTargetChild,
+            String sourceRelease,
+            String targetRelease,
+            BOMReuseCombination combination,
+            int expectedBbieScCount,
+            boolean assertNestedParty) {
+        HomePage homePage = loginPage().signIn(developer.getLoginId(), developer.getPassword());
+        UpliftBIEPage upliftBIEPage = homePage.getBIEMenu().openUpliftBIESubMenu();
+        upliftBIEPage.showAdvancedSearchPanel();
+        upliftBIEPage.setSourceBranch(sourceRelease);
+        upliftBIEPage.setTargetBranch(targetRelease);
+        upliftBIEPage.setState("Production");
+        upliftBIEPage.setOwner(sourceOwner.getLoginId());
+        upliftBIEPage.setDEN(sourceParent.getDen());
+        upliftBIEPage.hitSearchButton();
+        WebElement row = upliftBIEPage.getTableRecordAtIndex(1);
+        click(getDriver(), upliftBIEPage.getColumnByName(row, "select"));
+        UpliftBIEVerificationPage verificationPage = upliftBIEPage.next();
+
+        if (combination.firstSelected) {
+            SelectProfileBIEToReuseDialog dialog = verificationPage.reuseBIEOnNode(
+                    "/BOM/BOM Item Data", "BOM Item Data");
+            dialog.selectBIEToReuse(firstTargetChild);
+        }
+        if (combination.secondSelected) {
+            SelectProfileBIEToReuseDialog dialog = verificationPage.reuseBIEOnNode(
+                    "/BOM/BOM Option/BOM Item Data", "BOM Item Data");
+            dialog.selectBIEToReuse(secondTargetChild);
+        }
+
+        EditBIEPage editBIEPage;
+        if (combination.firstSelected && combination.secondSelected) {
+            editBIEPage = verificationPage.uplift();
+        } else {
+            verificationPage.submitUpliftReport();
+            assertTrue(getText(verificationPage.getUnselectedReuseWarning())
+                    .contains("Proceed without selecting reuse BIEs"));
+            editBIEPage = verificationPage.confirmUnselectedReuseAndUplift();
+        }
+
+        assertBOMReuseReference(editBIEPage, "/BOM/BOM Item Data", combination.firstSelected,
+                firstTargetChild.getVersion());
+        assertBOMReuseReference(editBIEPage, "/BOM/BOM Option/BOM Item Data", combination.secondSelected,
+                secondTargetChild.getVersion());
+        if (!combination.firstSelected && assertNestedParty) {
+            assertInlinedBOMItemDataParty(editBIEPage, "/BOM/BOM Item Data");
+        }
+        if (!combination.secondSelected && assertNestedParty) {
+            assertInlinedBOMItemDataParty(editBIEPage, "/BOM/BOM Option/BOM Item Data");
+        }
+        List<BigInteger> expectedReferences = new ArrayList<>();
+        if (combination.firstSelected) {
+            expectedReferences.add(firstTargetChild.getTopLevelAsbiepId());
+        }
+        if (combination.secondSelected) {
+            expectedReferences.add(secondTargetChild.getTopLevelAsbiepId());
+        }
+        List<BigInteger> actualReferences = new ArrayList<>(getAPIFactory().getBusinessInformationEntityAPI()
+                .getReusedTopLevelAsbiepIds(editBIEPage.getTopLevelASBIEP().getTopLevelAsbiepId()));
+        Collections.sort(expectedReferences);
+        Collections.sort(actualReferences);
+        assertEquals(expectedReferences, actualReferences);
+        BigInteger upliftedTopLevelAsbiepId = editBIEPage.getTopLevelASBIEP().getTopLevelAsbiepId();
+        assertEquals(expectedBbieScCount, getAPIFactory().getBusinessInformationEntityAPI()
+                .countBbieSc(upliftedTopLevelAsbiepId));
+        List<String> bbiePathsHavingBbieSc = getAPIFactory().getBusinessInformationEntityAPI()
+                .getBbiePathsHavingBbieSc(upliftedTopLevelAsbiepId);
+        assertEquals(expectedBbieScCount, bbiePathsHavingBbieSc.size());
+        assertEquals(expectedBbieScCount, new HashSet<>(bbiePathsHavingBbieSc).size());
+        assertTrue(getAPIFactory().getBusinessInformationEntityAPI()
+                .hasValidBbieOwnership(upliftedTopLevelAsbiepId));
+        homePage.logout();
+    }
+
+    private void assertBOMReuseReference(
+            EditBIEPage editBIEPage, String path, boolean expected, String expectedVersion) {
+        WebElement node = editBIEPage.getNodeByPath(path);
+        boolean hasReuseIcon = !node.findElements(By.xpath(".//fa-icon[@mattooltip=\"Reused\"]")).isEmpty();
+        assertEquals(expected, hasReuseIcon, path);
+        if (expected) {
+            EditBIEPage.ReusedASBIEPanel reusedPanel = editBIEPage.getReusedASBIEPanel(node);
+            assertEquals(expectedVersion, getText(reusedPanel.getVersionField()), path);
+        }
+    }
+
+    private void assertInlinedBOMItemDataParty(EditBIEPage editBIEPage, String bomItemDataPath) {
+        WebElement partyNode = editBIEPage.getNodeByPath(bomItemDataPath + "/Party");
+        assertTrue(partyNode.findElements(By.xpath(
+                ".//fa-icon[@mattooltip=\"Reused\"]")).isEmpty(), bomItemDataPath);
+    }
+
+    private void setBIEToProduction(TopLevelASBIEPObject bie) {
+        bie.setState("Production");
+        getAPIFactory().getBusinessInformationEntityAPI().updateTopLevelASBIEP(bie);
+    }
+
+    private static final class BOMReuseCombination {
+        private final boolean firstSelected;
+        private final boolean secondSelected;
+
+        private BOMReuseCombination(boolean firstSelected, boolean secondSelected) {
+            this.firstSelected = firstSelected;
+            this.secondSelected = secondSelected;
+        }
+    }
+
     private Preconditions_TA_29_1_5d_BIEReusedChild preconditions_ta_29_1_5d_ReusedChild(
             AppUserObject usera, LibraryObject library, String prevRelease) {
         Preconditions_TA_29_1_5d_BIEReusedChild preconditionsTa2915d = new Preconditions_TA_29_1_5d_BIEReusedChild(usera, library, prevRelease);
@@ -1359,6 +1704,16 @@ public class TC_29_1_BIEUplifting extends BaseTest {
         bbiePanel.toggleUsed();
         editBIEPage.hitUpdateButton();
 
+        BigInteger sourceRequestLanguageCodeXbtId = getAPIFactory().getBusinessInformationEntityAPI()
+                .getBbieXbtIdByPath(
+                        preconditionsTa2919TOPBIEGETBOM.topLevelASBIEP.getTopLevelAsbiepId(),
+                        "/Get BOM/Data Area/BOM/BOM Option/Extension/Request Language Code");
+        BigInteger sourceRequestLanguageCodeListVersionXbtId = getAPIFactory().getBusinessInformationEntityAPI()
+                .getBbieScXbtIdByBbiePathAndPropertyTerm(
+                        preconditionsTa2919TOPBIEGETBOM.topLevelASBIEP.getTopLevelAsbiepId(),
+                        "/Get BOM/Data Area/BOM/BOM Option/Extension/Request Language Code",
+                        "List Version Identifier");
+
         //Uplift TOPBIEGETBOM
         UpliftBIEPage upliftBIEPage = bieMenu.openUpliftBIESubMenu();
         upliftBIEPage.showAdvancedSearchPanel();
@@ -1474,6 +1829,17 @@ public class TC_29_1_BIEUplifting extends BaseTest {
         waitFor(ofMillis(1000L));
         bbiescPanel = editBIEPage.getBBIESCPanel(bbiescNode);
         assertEquals("token", getText(bbiescPanel.getValueDomainField()));
+
+        BigInteger upliftedTopLevelAsbiepId = editBIEPage.getTopLevelASBIEP().getTopLevelAsbiepId();
+        assertEquals(sourceRequestLanguageCodeXbtId,
+                getAPIFactory().getBusinessInformationEntityAPI().getBbieXbtIdByPath(
+                        upliftedTopLevelAsbiepId,
+                        "/Get BOM/Data Area/BOM/BOM Header/Attachment/File Type Code"));
+        assertEquals(sourceRequestLanguageCodeListVersionXbtId,
+                getAPIFactory().getBusinessInformationEntityAPI().getBbieScXbtIdByBbiePathAndPropertyTerm(
+                        upliftedTopLevelAsbiepId,
+                        "/Get BOM/Data Area/BOM/BOM Header/Attachment/File Type Code",
+                        "List Version Identifier"));
 
         editBIEPage.openPage();
         bbieNode = editBIEPage.getNodeByPath("/Get BOM/Application Area/Sender/Logical Identifier", 3);
