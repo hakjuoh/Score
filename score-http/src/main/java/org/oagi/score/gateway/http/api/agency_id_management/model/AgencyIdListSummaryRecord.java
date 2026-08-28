@@ -4,6 +4,7 @@ import jakarta.annotation.Nullable;
 import org.oagi.score.gateway.http.api.account_management.model.UserSummaryRecord;
 import org.oagi.score.gateway.http.api.cc_management.model.CcState;
 import org.oagi.score.gateway.http.api.cc_management.model.Definition;
+import org.oagi.score.gateway.http.api.cc_management.model.CoreComponent;
 import org.oagi.score.gateway.http.api.namespace_management.model.NamespaceId;
 import org.oagi.score.gateway.http.common.model.Guid;
 
@@ -26,5 +27,10 @@ public record AgencyIdListSummaryRecord(
         AgencyIdListManifestId prevAgencyIdListManifestId,
         AgencyIdListManifestId nextAgencyIdListManifestId,
 
-        List<AgencyIdListValueSummaryRecord> valueList) {
+        List<AgencyIdListValueSummaryRecord> valueList) implements CoreComponent<AgencyIdListId> {
+
+    @Override
+    public AgencyIdListId getId() {
+        return agencyIdListId;
+    }
 }

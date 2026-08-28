@@ -11,5 +11,6 @@ public class BieUpliftingValidation {
     private BigInteger bieId;
     private boolean isValid;
     private String message;
+    private String status;
 
 }

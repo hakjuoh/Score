@@ -29,6 +29,9 @@ public class BieUpliftingCustomMappingTable {
     private Map<String, BieUpliftingMapping> targetBccMappingMap;
     private Map<String, BccpManifestId> targetBccpManifestIdBySourcePathMap;
     private Map<String, BieUpliftingMapping> targetDtScMappingMap;
+    private Map<String, BieUpliftingMapping> targetAsccMappingLegacyPathMap;
+    private Map<String, BieUpliftingMapping> targetBccMappingLegacyPathMap;
+    private Map<String, BieUpliftingMapping> targetDtScMappingLegacyPathMap;
 
     public BieUpliftingCustomMappingTable(CcDocument sourceCcDocument,
                                           CcDocument targetCcDocument,
@@ -43,6 +46,7 @@ public class BieUpliftingCustomMappingTable {
                 .filter(e -> hasLength(e.getSourcePath()))
                 .filter(e -> getLastTag(e.getSourcePath()).contains("ASCC"))
                 .collect(Collectors.toMap(BieUpliftingMapping::getSourcePath, Function.identity(), (a1, a2) -> a2));
+        targetAsccMappingLegacyPathMap = buildLegacyPathMap(targetAsccMappingMap);
 
         targetAsccMappingByTargetPathMap = mappingList.stream()
                 .filter(e -> hasLength(e.getSourcePath()) && hasLength(e.getTargetPath()))
@@ -80,6 +84,7 @@ public class BieUpliftingCustomMappingTable {
                 .filter(e -> hasLength(e.getSourcePath()))
                 .filter(e -> getLastTag(e.getSourcePath()).contains("BCC"))
                 .collect(Collectors.toMap(BieUpliftingMapping::getSourcePath, Function.identity(), (a1, a2) -> a2));
+        targetBccMappingLegacyPathMap = buildLegacyPathMap(targetBccMappingMap);
 
         targetBccpManifestIdBySourcePathMap = targetBccMappingMap.values().stream()
                 .filter(e -> hasLength(e.getSourcePath()) && hasLength(e.getTargetPath()))
@@ -97,6 +102,47 @@ public class BieUpliftingCustomMappingTable {
                 .filter(e -> hasLength(e.getSourcePath()))
                 .filter(e -> getLastTag(e.getSourcePath()).contains("DT_SC"))
                 .collect(Collectors.toMap(BieUpliftingMapping::getSourcePath, Function.identity(), (a1, a2) -> a2));
+        targetDtScMappingLegacyPathMap = buildLegacyPathMap(targetDtScMappingMap);
+    }
+
+    private Map<String, BieUpliftingMapping> buildLegacyPathMap(
+            Map<String, BieUpliftingMapping> mappingMap) {
+        return mappingMap.values().stream()
+                .collect(Collectors.toMap(e -> legacySourcePath(e.getSourcePath()), Function.identity(), (a1, a2) -> a2));
+    }
+
+    /**
+     * Returns the path shape emitted by clients before reused subtrees used the full visitor path.
+     * A legacy path starts at the nearest ASCCP and omits its role ACC; intermediate ACC nodes
+     * remain because they identify the association's actual structural location.
+     */
+    public static String legacySourcePath(String path) {
+        if (!hasLength(path)) {
+            return path;
+        }
+
+        String[] tags = path.split(">");
+        int lastAsccpIndex = -1;
+        for (int i = 0; i < tags.length; i++) {
+            if (tags[i].startsWith("ASCCP-")) {
+                lastAsccpIndex = i;
+            }
+        }
+        if (lastAsccpIndex <= 0) {
+            return path;
+        }
+
+        StringBuilder legacyPath = new StringBuilder();
+        for (int i = lastAsccpIndex; i < tags.length; i++) {
+            if (i == lastAsccpIndex + 1 && tags[i].startsWith("ACC-")) {
+                continue;
+            }
+            if (legacyPath.length() > 0) {
+                legacyPath.append('>');
+            }
+            legacyPath.append(tags[i]);
+        }
+        return legacyPath.toString();
     }
 
     public static String getLastTag(String path) {
@@ -124,7 +170,7 @@ public class BieUpliftingCustomMappingTable {
     }
 
     public BieUpliftingMapping getTargetAsccMappingBySourcePath(String sourcePath) {
-        return targetAsccMappingMap.get(sourcePath);
+        return getMapping(targetAsccMappingMap, targetAsccMappingLegacyPathMap, sourcePath);
     }
 
     public BieUpliftingMapping getTargetAsccMappingByTargetPath(String targetPath) {
@@ -132,11 +178,18 @@ public class BieUpliftingCustomMappingTable {
     }
 
     public BieUpliftingMapping getTargetBccMappingBySourcePath(String sourcePath) {
-        return targetBccMappingMap.get(sourcePath);
+        return getMapping(targetBccMappingMap, targetBccMappingLegacyPathMap, sourcePath);
     }
 
     public BieUpliftingMapping getTargetDtScMappingBySourcePath(String sourcePath) {
-        return targetDtScMappingMap.get(sourcePath);
+        return getMapping(targetDtScMappingMap, targetDtScMappingLegacyPathMap, sourcePath);
+    }
+
+    private BieUpliftingMapping getMapping(Map<String, BieUpliftingMapping> mappingMap,
+                                           Map<String, BieUpliftingMapping> legacyPathMap,
+                                           String sourcePath) {
+        BieUpliftingMapping mapping = mappingMap.get(sourcePath);
+        return mapping != null ? mapping : legacyPathMap.get(legacySourcePath(sourcePath));
     }
 
     public List<BieUpliftingMapping> getMappingList() {

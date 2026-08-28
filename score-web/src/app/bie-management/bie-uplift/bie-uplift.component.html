@@ -154,7 +154,7 @@
                       <button mat-icon-button disabled></button>
                     }
 
-                    @if ((node.level > 0 && !node.fixed)) {
+                    @if (isSourceNodeCheckable(node)) {
                       <mat-checkbox
                         [checked]="node.target !== undefined"
                       [disabled]="true"></mat-checkbox>

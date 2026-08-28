@@ -4,6 +4,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.jooq.DSLContext;
 import org.jooq.types.ULong;
 import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListSummaryRecord;
+import org.oagi.score.gateway.http.api.agency_id_management.model.AgencyIdListManifestId;
 import org.oagi.score.gateway.http.api.bie_management.controller.payload.*;
 import org.oagi.score.gateway.http.api.bie_management.model.*;
 import org.oagi.score.gateway.http.api.bie_management.model.abie.Abie;
@@ -40,9 +41,11 @@ import org.oagi.score.gateway.http.api.cc_management.model.dt.*;
 import org.oagi.score.gateway.http.api.cc_management.model.dt_sc.*;
 import org.oagi.score.gateway.http.api.cc_management.service.CcMatchingService;
 import org.oagi.score.gateway.http.api.code_list_management.model.CodeListSummaryRecord;
+import org.oagi.score.gateway.http.api.code_list_management.model.CodeListManifestId;
 import org.oagi.score.gateway.http.api.context_management.business_context.model.BusinessContextId;
 import org.oagi.score.gateway.http.api.release_management.model.ReleaseId;
 import org.oagi.score.gateway.http.api.xbt_management.model.XbtSummaryRecord;
+import org.oagi.score.gateway.http.api.xbt_management.model.XbtManifestId;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
 import org.oagi.score.gateway.http.common.model.base.ScoreDataAccessException;
 import org.oagi.score.gateway.http.common.repository.jooq.RepositoryFactory;
@@ -85,8 +88,16 @@ public class BieUpliftingService {
     @Autowired
     private BieReadService bieReadService;
 
+    private final CcMatchingService ccMatchingService;
+
+    BieUpliftingService() {
+        this.ccMatchingService = new CcMatchingService();
+    }
+
     @Autowired
-    private CcMatchingService ccMatchingService;
+    BieUpliftingService(CcMatchingService ccMatchingService) {
+        this.ccMatchingService = Objects.requireNonNull(ccMatchingService);
+    }
 
     @Autowired
     private DSLContext dslContext;
@@ -755,9 +766,10 @@ public class BieUpliftingService {
                                 DtSummaryRecord targetDtManifest =
                                         targetCcDocument.getDt(targetBccp.dtManifestId());
                                 DtAwdPriSummaryRecord targetDefaultDtAwdPri =
-                                        targetCcDocument.getDtAwdPriList(targetDtManifest.dtManifestId()).stream()
+                                targetCcDocument.getDtAwdPriList(targetDtManifest.dtManifestId()).stream()
+                                                .filter(Objects::nonNull)
                                                 .filter(e -> e.isDefault())
-                                                .findFirst().get();
+                                                .findFirst().orElseThrow(() -> new IllegalStateException("Target DT has no default primitive."));
 
                                 Bbie targetBbie = new Bbie();
                                 targetBbie.setGuid(ScoreGuidUtils.randomGuid());
@@ -796,9 +808,10 @@ public class BieUpliftingService {
                                 DtScSummaryRecord targetDtSc =
                                         targetCcDocument.getDtSc(new DtScManifestId(mapping.getTargetManifestId()));
                                 DtScAwdPriSummaryRecord targetDefaultDtScAwdPri =
-                                        targetCcDocument.getDtScAwdPriList(targetDtSc.dtScManifestId()).stream()
+                                targetCcDocument.getDtScAwdPriList(targetDtSc.dtScManifestId()).stream()
+                                                .filter(Objects::nonNull)
                                                 .filter(e -> e.isDefault())
-                                                .findFirst().get();
+                                                .findFirst().orElseThrow(() -> new IllegalStateException("Target DT_SC has no default primitive."));
 
                                 BbieSc targetBbieSc = new BbieSc();
                                 targetBbieSc.setGuid(ScoreGuidUtils.randomGuid());
@@ -1298,27 +1311,38 @@ public class BieUpliftingService {
             DtSummaryRecord targetDt = targetCcDocument.getDt(targetDtManifestId);
 
             if (sourceBbie.getXbtManifestId() != null) {
-                XbtSummaryRecord sourceXbt = sourceXbtList.stream().filter(e -> e.xbtManifestId().equals(sourceBbie.getXbtManifestId())).findAny().orElse(null);
+                XbtSummaryRecord sourceXbt = sourceXbtList.stream().filter(Objects::nonNull).filter(e -> Objects.equals(e.xbtManifestId(), sourceBbie.getXbtManifestId())).findAny().orElse(null);
                 XbtSummaryRecord targetXbt = getTargetXbtManifest(sourceXbt, targetXbtList);
                 // Only carry the source primitive if it is ALLOWED on the target node (its DT approved-primitive
                 // list); otherwise leave it null so the default-primitive block below assigns the target node's
                 // default. See the BBIE_SC branch for rationale (#29.1.9.c "default disallowed values").
                 if (targetXbt != null &&
                         targetCcDocument.getDtAwdPriList(targetDt.dtManifestId()).stream()
-                                .anyMatch(e -> targetXbt.xbtManifestId().equals(e.xbtManifestId()))) {
+                                .filter(Objects::nonNull)
+                                .anyMatch(e -> Objects.equals(targetXbt.xbtManifestId(), e.xbtManifestId()))) {
                     targetBbie.setXbtManifestId(targetXbt.xbtManifestId());
                 }
             } else if (sourceBbie.getCodeListManifestId() != null) {
-                CodeListSummaryRecord sourceCodeList = sourceCodeListList.stream().filter(e -> e.codeListManifestId().equals(sourceBbie.getCodeListManifestId())).findAny().orElse(null);
-                CodeListSummaryRecord targetCodeList = getTargetCodeListManifest(
-                        sourceCodeList, targetCodeListList);
+                CodeListSummaryRecord sourceCodeList = sourceCodeListList.stream().filter(Objects::nonNull).filter(e -> Objects.equals(e.codeListManifestId(), sourceBbie.getCodeListManifestId())).findAny().orElse(null);
+                Set<CodeListManifestId> allowedCodeListManifestIds = targetCcDocument.getDtAwdPriList(targetDt.dtManifestId()).stream()
+                        .filter(Objects::nonNull)
+                        .map(DtAwdPriSummaryRecord::codeListManifestId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+                CodeListSummaryRecord targetCodeList = findTargetCodeListMatch(
+                        sourceCodeList, targetCodeListList, allowedCodeListManifestIds).target();
                 if (targetCodeList != null) {
                     targetBbie.setCodeListManifestId(targetCodeList.codeListManifestId());
                 }
             } else if (sourceBbie.getAgencyIdListManifestId() != null) {
-                AgencyIdListSummaryRecord sourceAgencyIdList = sourceAgencyIdListList.stream().filter(e -> e.agencyIdListManifestId().equals(sourceBbie.getAgencyIdListManifestId())).findFirst().orElse(null);
-                AgencyIdListSummaryRecord targetAgencyIdList = getTargetAgencyIdListManifest(
-                        sourceAgencyIdList, targetAgencyIdListList);
+                AgencyIdListSummaryRecord sourceAgencyIdList = sourceAgencyIdListList.stream().filter(Objects::nonNull).filter(e -> Objects.equals(e.agencyIdListManifestId(), sourceBbie.getAgencyIdListManifestId())).findFirst().orElse(null);
+                Set<AgencyIdListManifestId> allowedAgencyIdListManifestIds = targetCcDocument.getDtAwdPriList(targetDt.dtManifestId()).stream()
+                        .filter(Objects::nonNull)
+                        .map(DtAwdPriSummaryRecord::agencyIdListManifestId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+                AgencyIdListSummaryRecord targetAgencyIdList = findTargetAgencyIdListMatch(
+                        sourceAgencyIdList, targetAgencyIdListList, allowedAgencyIdListManifestIds).target();
                 if (targetAgencyIdList != null) {
                     targetBbie.setAgencyIdListManifestId(targetAgencyIdList.agencyIdListManifestId());
                 }
@@ -1328,25 +1352,29 @@ public class BieUpliftingService {
                     targetBbie.getCodeListManifestId() == null &&
                     targetBbie.getAgencyIdListManifestId() == null) {
                 if ("Date Time".equals(targetDt.dataTypeTerm())) {
-                    targetDefaultDtAwdPri =
+                            targetDefaultDtAwdPri =
                             targetCcDocument.getDtAwdPriList(targetDt.dtManifestId()).stream()
-                                    .filter(e -> targetCcDocument.getXbt(e.xbtManifestId()).name().equalsIgnoreCase("date time"))
-                                    .findFirst().get();
+                                    .filter(Objects::nonNull)
+                                    .filter(e -> isXbtNamed(targetCcDocument, e.xbtManifestId(), "date time"))
+                                    .findFirst().orElseThrow(() -> new IllegalStateException("Target DT has no compatible default primitive."));
                 } else if ("Date".equals(targetDt.dataTypeTerm())) {
-                    targetDefaultDtAwdPri =
+                            targetDefaultDtAwdPri =
                             targetCcDocument.getDtAwdPriList(targetDt.dtManifestId()).stream()
-                                    .filter(e -> targetCcDocument.getXbt(e.xbtManifestId()).name().equalsIgnoreCase("date"))
-                                    .findFirst().get();
+                                    .filter(Objects::nonNull)
+                                    .filter(e -> isXbtNamed(targetCcDocument, e.xbtManifestId(), "date"))
+                                    .findFirst().orElseThrow(() -> new IllegalStateException("Target DT has no compatible default primitive."));
                 } else if ("Time".equals(targetDt.dataTypeTerm())) {
-                    targetDefaultDtAwdPri =
+                            targetDefaultDtAwdPri =
                             targetCcDocument.getDtAwdPriList(targetDt.dtManifestId()).stream()
-                                    .filter(e -> targetCcDocument.getXbt(e.xbtManifestId()).name().equalsIgnoreCase("time"))
-                                    .findFirst().get();
+                                    .filter(Objects::nonNull)
+                                    .filter(e -> isXbtNamed(targetCcDocument, e.xbtManifestId(), "time"))
+                                    .findFirst().orElseThrow(() -> new IllegalStateException("Target DT has no compatible default primitive."));
                 } else {
-                    targetDefaultDtAwdPri =
+                            targetDefaultDtAwdPri =
                             targetCcDocument.getDtAwdPriList(targetDt.dtManifestId()).stream()
+                                    .filter(Objects::nonNull)
                                     .filter(e -> e.isDefault())
-                                    .findFirst().get();
+                                    .findFirst().orElseThrow(() -> new IllegalStateException("Target DT has no default primitive."));
                 }
                 targetBbie.setXbtManifestId(targetDefaultDtAwdPri.xbtManifestId());
             }
@@ -1364,7 +1392,7 @@ public class BieUpliftingService {
             DtScSummaryRecord targetDtSc = targetCcDocument.getDtSc(dtScManifestId);
 
             if (sourceBbieSc.getXbtManifestId() != null) {
-                XbtSummaryRecord sourceXbt = sourceXbtList.stream().filter(e -> e.xbtManifestId().equals(sourceBbieSc.getXbtManifestId())).findAny().orElse(null);
+                XbtSummaryRecord sourceXbt = sourceXbtList.stream().filter(Objects::nonNull).filter(e -> Objects.equals(e.xbtManifestId(), sourceBbieSc.getXbtManifestId())).findAny().orElse(null);
                 XbtSummaryRecord targetXbt = getTargetXbtManifest(sourceXbt, targetXbtList);
                 // Only carry the source primitive if it is ALLOWED on the target node (its DT_SC approved-primitive
                 // list). If it is not allowed (or absent in the target release), leave it null so the default-primitive
@@ -1373,20 +1401,31 @@ public class BieUpliftingService {
                 // allowed on this specific node, so without this gate a disallowed primitive would be carried verbatim.
                 if (targetXbt != null &&
                         targetCcDocument.getDtScAwdPriList(targetDtSc.dtScManifestId()).stream()
-                                .anyMatch(e -> targetXbt.xbtManifestId().equals(e.xbtManifestId()))) {
+                                .filter(Objects::nonNull)
+                                .anyMatch(e -> Objects.equals(targetXbt.xbtManifestId(), e.xbtManifestId()))) {
                     targetBbieSc.setXbtManifestId(targetXbt.xbtManifestId());
                 }
             } else if (sourceBbieSc.getCodeListManifestId() != null) {
-                CodeListSummaryRecord sourceCodeList = sourceCodeListList.stream().filter(e -> e.codeListManifestId().equals(sourceBbieSc.getCodeListManifestId())).findAny().orElse(null);
-                CodeListSummaryRecord targetCodeList = getTargetCodeListManifest(
-                        sourceCodeList, targetCodeListList);
+                CodeListSummaryRecord sourceCodeList = sourceCodeListList.stream().filter(Objects::nonNull).filter(e -> Objects.equals(e.codeListManifestId(), sourceBbieSc.getCodeListManifestId())).findAny().orElse(null);
+                Set<CodeListManifestId> allowedCodeListManifestIds = targetCcDocument.getDtScAwdPriList(targetDtSc.dtScManifestId()).stream()
+                        .filter(Objects::nonNull)
+                        .map(DtScAwdPriSummaryRecord::codeListManifestId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+                CodeListSummaryRecord targetCodeList = findTargetCodeListMatch(
+                        sourceCodeList, targetCodeListList, allowedCodeListManifestIds).target();
                 if (targetCodeList != null) {
                     targetBbieSc.setCodeListManifestId(targetCodeList.codeListManifestId());
                 }
             } else if (sourceBbieSc.getAgencyIdListManifestId() != null) {
-                AgencyIdListSummaryRecord sourceAgencyIdList = sourceAgencyIdListList.stream().filter(e -> e.agencyIdListManifestId().equals(sourceBbieSc.getAgencyIdListManifestId())).findFirst().orElse(null);
-                AgencyIdListSummaryRecord targetAgencyIdListManifest = getTargetAgencyIdListManifest(
-                        sourceAgencyIdList, targetAgencyIdListList);
+                AgencyIdListSummaryRecord sourceAgencyIdList = sourceAgencyIdListList.stream().filter(Objects::nonNull).filter(e -> Objects.equals(e.agencyIdListManifestId(), sourceBbieSc.getAgencyIdListManifestId())).findFirst().orElse(null);
+                Set<AgencyIdListManifestId> allowedAgencyIdListManifestIds = targetCcDocument.getDtScAwdPriList(targetDtSc.dtScManifestId()).stream()
+                        .filter(Objects::nonNull)
+                        .map(DtScAwdPriSummaryRecord::agencyIdListManifestId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+                AgencyIdListSummaryRecord targetAgencyIdListManifest = findTargetAgencyIdListMatch(
+                        sourceAgencyIdList, targetAgencyIdListList, allowedAgencyIdListManifestIds).target();
                 if (targetAgencyIdListManifest != null) {
                     targetBbieSc.setAgencyIdListManifestId(targetAgencyIdListManifest.agencyIdListManifestId());
                 }
@@ -1396,25 +1435,29 @@ public class BieUpliftingService {
                     targetBbieSc.getCodeListManifestId() == null &&
                     targetBbieSc.getAgencyIdListManifestId() == null) {
                 if ("Date Time".equals(targetDtSc.representationTerm())) {
-                    targetDefaultDtScAwdPri =
+                            targetDefaultDtScAwdPri =
                             targetCcDocument.getDtScAwdPriList(targetDtSc.dtScManifestId()).stream()
-                                    .filter(e -> targetCcDocument.getXbt(e.xbtManifestId()).name().equalsIgnoreCase("date time"))
-                                    .findFirst().get();
+                                    .filter(Objects::nonNull)
+                                    .filter(e -> isXbtNamed(targetCcDocument, e.xbtManifestId(), "date time"))
+                                    .findFirst().orElseThrow(() -> new IllegalStateException("Target DT_SC has no compatible default primitive."));
                 } else if ("Date".equals(targetDtSc.representationTerm())) {
-                    targetDefaultDtScAwdPri =
+                            targetDefaultDtScAwdPri =
                             targetCcDocument.getDtScAwdPriList(targetDtSc.dtScManifestId()).stream()
-                                    .filter(e -> targetCcDocument.getXbt(e.xbtManifestId()).name().equalsIgnoreCase("date"))
-                                    .findFirst().get();
+                                    .filter(Objects::nonNull)
+                                    .filter(e -> isXbtNamed(targetCcDocument, e.xbtManifestId(), "date"))
+                                    .findFirst().orElseThrow(() -> new IllegalStateException("Target DT_SC has no compatible default primitive."));
                 } else if ("Time".equals(targetDtSc.representationTerm())) {
-                    targetDefaultDtScAwdPri =
+                            targetDefaultDtScAwdPri =
                             targetCcDocument.getDtScAwdPriList(targetDtSc.dtScManifestId()).stream()
-                                    .filter(e -> targetCcDocument.getXbt(e.xbtManifestId()).name().equalsIgnoreCase("time"))
-                                    .findFirst().get();
+                                    .filter(Objects::nonNull)
+                                    .filter(e -> isXbtNamed(targetCcDocument, e.xbtManifestId(), "time"))
+                                    .findFirst().orElseThrow(() -> new IllegalStateException("Target DT_SC has no compatible default primitive."));
                 } else {
-                    targetDefaultDtScAwdPri =
+                            targetDefaultDtScAwdPri =
                             targetCcDocument.getDtScAwdPriList(targetDtSc.dtScManifestId()).stream()
+                                    .filter(Objects::nonNull)
                                     .filter(e -> e.isDefault())
-                                    .findFirst().get();
+                                    .findFirst().orElseThrow(() -> new IllegalStateException("Target DT_SC has no default primitive."));
                 }
                 targetBbieSc.setXbtManifestId(targetDefaultDtScAwdPri.xbtManifestId());
             }
@@ -1525,20 +1568,6 @@ public class BieUpliftingService {
         List<AgencyIdListSummaryRecord> sourceAgencyIdListList = agencyIdListQuery.getAgencyIdListSummaryList(new ReleaseId(sourceRelease.getReleaseId().toBigInteger()));
         List<AgencyIdListSummaryRecord> targetAgencyIdListList = agencyIdListQuery.getAgencyIdListSummaryList(request.getTargetReleaseId());
 
-        ReleaseId sourceReleaseId = new ReleaseId(sourceRelease.getReleaseId().toBigInteger());
-        ReleaseId targetReleaseId = request.getTargetReleaseId();
-
-        var dtQuery = repositoryFactory.dtQueryRepository(requester);
-        Map<DtAwdPriId, DtAwdPriSummaryRecord> sourceDtAwdPriMap = dtQuery.getDtAwdPriSummaryList(sourceReleaseId).stream()
-                .collect(Collectors.toMap(DtAwdPriSummaryRecord::dtAwdPriId, Function.identity()));
-        Map<DtId, List<DtAwdPriSummaryRecord>> targetDtAwdPriByDtIdMap = dtQuery.getDtAwdPriSummaryList(targetReleaseId).stream()
-                .collect(groupingBy(DtAwdPriSummaryRecord::dtId));
-
-        Map<DtScAwdPriId, DtScAwdPriSummaryRecord> sourceDtScAwdPriMap = dtQuery.getDtScAwdPriSummaryList(sourceReleaseId).stream()
-                .collect(Collectors.toMap(DtScAwdPriSummaryRecord::dtScAwdPriId, Function.identity()));
-        Map<DtScId, List<DtScAwdPriSummaryRecord>> targetDtScAwdPriByDtScIdMap = dtQuery.getDtScAwdPriSummaryList(targetReleaseId).stream()
-                .collect(groupingBy(DtScAwdPriSummaryRecord::dtScId));
-
         request.getMappingList().forEach(mapping -> {
             BieUpliftingValidation validation = new BieUpliftingValidation();
             validation.setBieId(mapping.getBieId());
@@ -1562,20 +1591,24 @@ public class BieUpliftingService {
                     DtSummaryRecord dt = targetCcDocument.getDt(bccp.dtManifestId());
 
                     if (bbie.getXbtManifestId() != null) {
-                        XbtSummaryRecord sourceXbt = sourceXbtList.stream().filter(xbt -> xbt.xbtManifestId().equals(bbie.getXbtManifestId())).findFirst().orElse(null);
+                        XbtSummaryRecord sourceXbt = sourceXbtList.stream().filter(Objects::nonNull).filter(xbt -> Objects.equals(xbt.xbtManifestId(), bbie.getXbtManifestId())).findFirst().orElse(null);
                         validation.setMessage(checkBdtPriRestriIdMappable(
-                                sourceXbt, dt.dtManifestId(), targetDtAwdPriByDtIdMap, targetXbtList));
+                                sourceXbt, targetCcDocument.getDtAwdPriList(dt.dtManifestId()), targetXbtList));
                         validation.setValid(validation.getMessage().isEmpty());
                     } else if (bbie.getCodeListManifestId() != null) {
-                        CodeListSummaryRecord sourceCodeList = sourceCodeListList.stream().filter(codeList -> codeList.codeListManifestId().equals(bbie.getCodeListManifestId())).findFirst().orElse(null);
-                        validation.setMessage(checkBdtCodeListManifestIdMappable(
-                                sourceCodeList, dt.dtManifestId(), targetDtAwdPriByDtIdMap, targetCodeListList));
-                        validation.setValid(validation.getMessage().isEmpty());
+                        CodeListSummaryRecord sourceCodeList = sourceCodeListList.stream().filter(Objects::nonNull).filter(codeList -> Objects.equals(codeList.codeListManifestId(), bbie.getCodeListManifestId())).findFirst().orElse(null);
+                        ValueDomainValidationResult result = checkBdtCodeListManifestIdMappable(
+                                sourceCodeList, targetCcDocument.getDtAwdPriList(dt.dtManifestId()), targetCodeListList);
+                        validation.setMessage(result.issue());
+                        validation.setStatus(result.status());
+                        validation.setValid(result.valid());
                     } else {
-                        AgencyIdListSummaryRecord sourceAgencyIdList = sourceAgencyIdListList.stream().filter(agencyIdList -> agencyIdList.agencyIdListManifestId().equals(bbie.getAgencyIdListManifestId())).findFirst().orElse(null);
-                        validation.setMessage(checkBdtAgencyIdListManifestIdMappable(
-                                sourceAgencyIdList, dt.dtManifestId(), targetDtAwdPriByDtIdMap, targetAgencyIdListList));
-                        validation.setValid(validation.getMessage().isEmpty());
+                        AgencyIdListSummaryRecord sourceAgencyIdList = sourceAgencyIdListList.stream().filter(Objects::nonNull).filter(agencyIdList -> Objects.equals(agencyIdList.agencyIdListManifestId(), bbie.getAgencyIdListManifestId())).findFirst().orElse(null);
+                        ValueDomainValidationResult result = checkBdtAgencyIdListManifestIdMappable(
+                                sourceAgencyIdList, targetCcDocument.getDtAwdPriList(dt.dtManifestId()), targetAgencyIdListList);
+                        validation.setMessage(result.issue());
+                        validation.setStatus(result.status());
+                        validation.setValid(result.valid());
                     }
                     break;
                 case "BBIE_SC":
@@ -1588,20 +1621,24 @@ public class BieUpliftingService {
                     DtScSummaryRecord dtSc = targetCcDocument.getDtSc(dtScManifestId);
 
                     if (bbieSc.getXbtManifestId() != null) {
-                        XbtSummaryRecord sourceXbt = sourceXbtList.stream().filter(xbt -> xbt.xbtManifestId().equals(bbieSc.getXbtManifestId())).findFirst().orElse(null);
+                        XbtSummaryRecord sourceXbt = sourceXbtList.stream().filter(Objects::nonNull).filter(xbt -> Objects.equals(xbt.xbtManifestId(), bbieSc.getXbtManifestId())).findFirst().orElse(null);
                         validation.setMessage(checkBdtScPriRestriIdMappable(
-                                sourceXbt, dtSc.dtScManifestId(), targetDtScAwdPriByDtScIdMap, targetXbtList));
+                                sourceXbt, targetCcDocument.getDtScAwdPriList(dtSc.dtScManifestId()), targetXbtList));
                         validation.setValid(validation.getMessage().isEmpty());
                     } else if (bbieSc.getCodeListManifestId() != null) {
-                        CodeListSummaryRecord sourceCodeList = sourceCodeListList.stream().filter(codeList -> codeList.codeListManifestId().equals(bbieSc.getCodeListManifestId())).findFirst().orElse(null);
-                        validation.setMessage(checkBdtScCodeListIdMappable(
-                                sourceCodeList, dtSc.dtScManifestId(), targetDtScAwdPriByDtScIdMap, targetCodeListList));
-                        validation.setValid(validation.getMessage().isEmpty());
+                        CodeListSummaryRecord sourceCodeList = sourceCodeListList.stream().filter(Objects::nonNull).filter(codeList -> Objects.equals(codeList.codeListManifestId(), bbieSc.getCodeListManifestId())).findFirst().orElse(null);
+                        ValueDomainValidationResult result = checkBdtScCodeListIdMappable(
+                                sourceCodeList, targetCcDocument.getDtScAwdPriList(dtSc.dtScManifestId()), targetCodeListList);
+                        validation.setMessage(result.issue());
+                        validation.setStatus(result.status());
+                        validation.setValid(result.valid());
                     } else {
-                        AgencyIdListSummaryRecord sourceAgencyIdList = sourceAgencyIdListList.stream().filter(agencyIdList -> agencyIdList.agencyIdListManifestId().equals(bbieSc.getAgencyIdListManifestId())).findFirst().orElse(null);
-                        validation.setMessage(checkBdtScAgencyIdListIdMappable(
-                                sourceAgencyIdList, dtSc.dtScManifestId(), targetDtScAwdPriByDtScIdMap, targetAgencyIdListList));
-                        validation.setValid(validation.getMessage().isEmpty());
+                        AgencyIdListSummaryRecord sourceAgencyIdList = sourceAgencyIdListList.stream().filter(Objects::nonNull).filter(agencyIdList -> Objects.equals(agencyIdList.agencyIdListManifestId(), bbieSc.getAgencyIdListManifestId())).findFirst().orElse(null);
+                        ValueDomainValidationResult result = checkBdtScAgencyIdListIdMappable(
+                                sourceAgencyIdList, targetCcDocument.getDtScAwdPriList(dtSc.dtScManifestId()), targetAgencyIdListList);
+                        validation.setMessage(result.issue());
+                        validation.setStatus(result.status());
+                        validation.setValid(result.valid());
                     }
                     break;
             }
@@ -1612,71 +1649,115 @@ public class BieUpliftingService {
     }
 
     private String checkBdtPriRestriIdMappable(XbtSummaryRecord sourceXbt,
-                                               DtManifestId targetDtManifestId,
-                                               Map<DtId, List<DtAwdPriSummaryRecord>> targetMap,
+                                               List<DtAwdPriSummaryRecord> targetAllowedPrimitives,
                                                List<XbtSummaryRecord> targetXbtList) {
         XbtSummaryRecord targetXbt = getTargetXbtManifest(sourceXbt, targetXbtList);
-        if (targetXbt != null) {
+        if (targetXbt != null && targetAllowedPrimitives != null && targetAllowedPrimitives.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(e -> targetXbt.xbtManifestId().equals(e.xbtManifestId()))) {
             return "";
         }
-        return "Primitive value '" + sourceXbt.name() + "' is not allowed in the target node. Uplifted node will use its default primitive in the domain value restriction.";
+        return "Primitive value '" + sourceName(sourceXbt) + "' is not allowed in the target node. Uplifted node will use its default primitive in the domain value restriction.";
     }
 
     private String checkBdtScPriRestriIdMappable(XbtSummaryRecord sourceXbt,
-                                                 DtScManifestId targetDtScManifestId,
-                                                 Map<DtScId, List<DtScAwdPriSummaryRecord>> targetMap,
+                                                 List<DtScAwdPriSummaryRecord> targetAllowedPrimitives,
                                                  List<XbtSummaryRecord> targetXbtList) {
         XbtSummaryRecord targetXbt = getTargetXbtManifest(sourceXbt, targetXbtList);
-        if (targetXbt != null) {
+        if (targetXbt != null && targetAllowedPrimitives != null && targetAllowedPrimitives.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(e -> targetXbt.xbtManifestId().equals(e.xbtManifestId()))) {
             return "";
         }
-        return "Primitive value '" + sourceXbt.name() + "' is not allowed in the target node. Uplifted node will use its default primitive in the domain value restriction.";
+        return "Primitive value '" + sourceName(sourceXbt) + "' is not allowed in the target node. Uplifted node will use its default primitive in the domain value restriction.";
     }
 
-    private String checkBdtCodeListManifestIdMappable(CodeListSummaryRecord sourceCodeList,
-                                                      DtManifestId targetBdtManifestId,
-                                                      Map<DtId, List<DtAwdPriSummaryRecord>> targetMap,
-                                                      List<CodeListSummaryRecord> targetCodeListList) {
-        CodeListSummaryRecord targetCodeListManifest = getTargetCodeListManifest(sourceCodeList, targetCodeListList);
-        if (targetCodeListManifest != null) {
-            return "";
+    private ValueDomainValidationResult checkBdtCodeListManifestIdMappable(
+            CodeListSummaryRecord sourceCodeList,
+            List<DtAwdPriSummaryRecord> targetAllowedPrimitives,
+            List<CodeListSummaryRecord> targetCodeListList) {
+        Set<CodeListManifestId> allowedManifestIds = targetAllowedPrimitives == null ? Set.of() : targetAllowedPrimitives.stream()
+                .filter(Objects::nonNull)
+                .map(DtAwdPriSummaryRecord::codeListManifestId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        CodeListMatch targetCodeListMatch = findTargetCodeListMatch(
+                sourceCodeList,
+                targetCodeListList,
+                allowedManifestIds);
+        if (targetCodeListMatch.target() != null) {
+            return ValueDomainValidationResult.matched(
+                    "Target Code List '" + targetCodeListMatch.target().name() + "' selected by " + targetCodeListMatch.matchType().description + ".");
         }
-        return "Code List '" + sourceCodeList.name() + "' is not allowed in the target node or the system cannot find the exact match code list in the target release, uplifted node will use a default primitive in the domain value restriction.";
+        return ValueDomainValidationResult.unmatched(
+                "Target default primitive selected because no matching Code List is available in the target node.",
+                "Code List '" + sourceName(sourceCodeList) + "' is not allowed in the target node or the system cannot find the exact match code list in the target release, uplifted node will use a default primitive in the domain value restriction.");
     }
 
-    private String checkBdtScCodeListIdMappable(CodeListSummaryRecord sourceCodeList,
-                                                DtScManifestId targetBdtScManifestId,
-                                                Map<DtScId, List<DtScAwdPriSummaryRecord>> targetMap,
-                                                List<CodeListSummaryRecord> targetCodeListList) {
-        CodeListSummaryRecord targetCodeListManifest = getTargetCodeListManifest(sourceCodeList, targetCodeListList);
-        if (targetCodeListManifest != null) {
-            return "";
+    private ValueDomainValidationResult checkBdtScCodeListIdMappable(
+            CodeListSummaryRecord sourceCodeList,
+            List<DtScAwdPriSummaryRecord> targetAllowedPrimitives,
+            List<CodeListSummaryRecord> targetCodeListList) {
+        Set<CodeListManifestId> allowedManifestIds = targetAllowedPrimitives == null ? Set.of() : targetAllowedPrimitives.stream()
+                .filter(Objects::nonNull)
+                .map(DtScAwdPriSummaryRecord::codeListManifestId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        CodeListMatch targetCodeListMatch = findTargetCodeListMatch(
+                sourceCodeList,
+                targetCodeListList,
+                allowedManifestIds);
+        if (targetCodeListMatch.target() != null) {
+            return ValueDomainValidationResult.matched(
+                    "Target Code List '" + targetCodeListMatch.target().name() + "' selected by " + targetCodeListMatch.matchType().description + ".");
         }
-        return "Code List '" + sourceCodeList.name() + "' is not allowed in the target node or the system cannot find the exact match code list in the target release, uplifted node will use a default primitive in the domain value restriction.";
+        return ValueDomainValidationResult.unmatched(
+                "Target default primitive selected because no matching Code List is available in the target node.",
+                "Code List '" + sourceName(sourceCodeList) + "' is not allowed in the target node or the system cannot find the exact match code list in the target release, uplifted node will use a default primitive in the domain value restriction.");
     }
 
-    private String checkBdtAgencyIdListManifestIdMappable(AgencyIdListSummaryRecord sourceAgencyIdList,
-                                                          DtManifestId targetBdtManifestId,
-                                                          Map<DtId, List<DtAwdPriSummaryRecord>> targetMap,
-                                                          List<AgencyIdListSummaryRecord> targetAgencyIdListList) {
-        AgencyIdListSummaryRecord targetAgencyIdListManifest = getTargetAgencyIdListManifest(
-                sourceAgencyIdList, targetAgencyIdListList);
-        if (targetAgencyIdListManifest != null) {
-            return "";
+    private ValueDomainValidationResult checkBdtAgencyIdListManifestIdMappable(
+            AgencyIdListSummaryRecord sourceAgencyIdList,
+            List<DtAwdPriSummaryRecord> targetAllowedPrimitives,
+            List<AgencyIdListSummaryRecord> targetAgencyIdListList) {
+        Set<AgencyIdListManifestId> allowedManifestIds = targetAllowedPrimitives == null ? Set.of() : targetAllowedPrimitives.stream()
+                .filter(Objects::nonNull)
+                .map(DtAwdPriSummaryRecord::agencyIdListManifestId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        AgencyIdListMatch targetAgencyIdListMatch = findTargetAgencyIdListMatch(
+                sourceAgencyIdList,
+                targetAgencyIdListList,
+                allowedManifestIds);
+        if (targetAgencyIdListMatch.target() != null) {
+            return ValueDomainValidationResult.matched(
+                    "Target Agency ID List '" + targetAgencyIdListMatch.target().name() + "' selected by " + targetAgencyIdListMatch.matchType().description + ".");
         }
-        return "Agency ID List '" + sourceAgencyIdList.name() + "' is not allowed in the target node or the system cannot find the exact match agency ID list in the target release, uplifted node will use a default primitive in the domain value restriction.";
+        return ValueDomainValidationResult.unmatched(
+                "Target default primitive selected because no matching Agency ID List is available in the target node.",
+                "Agency ID List '" + sourceName(sourceAgencyIdList) + "' is not allowed in the target node or the system cannot find the exact match agency ID list in the target release, uplifted node will use a default primitive in the domain value restriction.");
     }
 
-    private String checkBdtScAgencyIdListIdMappable(AgencyIdListSummaryRecord sourceAgencyIdList,
-                                                    DtScManifestId targetBdtScManifestId,
-                                                    Map<DtScId, List<DtScAwdPriSummaryRecord>> targetMap,
-                                                    List<AgencyIdListSummaryRecord> targetAgencyIdListList) {
-        AgencyIdListSummaryRecord targetAgencyIdListManifest =
-                getTargetAgencyIdListManifest(sourceAgencyIdList, targetAgencyIdListList);
-        if (targetAgencyIdListManifest != null) {
-            return "";
+    private ValueDomainValidationResult checkBdtScAgencyIdListIdMappable(
+            AgencyIdListSummaryRecord sourceAgencyIdList,
+            List<DtScAwdPriSummaryRecord> targetAllowedPrimitives,
+            List<AgencyIdListSummaryRecord> targetAgencyIdListList) {
+        Set<AgencyIdListManifestId> allowedManifestIds = targetAllowedPrimitives == null ? Set.of() : targetAllowedPrimitives.stream()
+                .filter(Objects::nonNull)
+                .map(DtScAwdPriSummaryRecord::agencyIdListManifestId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        AgencyIdListMatch targetAgencyIdListMatch = findTargetAgencyIdListMatch(
+                sourceAgencyIdList,
+                targetAgencyIdListList,
+                allowedManifestIds);
+        if (targetAgencyIdListMatch.target() != null) {
+            return ValueDomainValidationResult.matched(
+                    "Target Agency ID List '" + targetAgencyIdListMatch.target().name() + "' selected by " + targetAgencyIdListMatch.matchType().description + ".");
         }
-        return "Agency ID List '" + sourceAgencyIdList.name() + "' is not allowed in the target node or the system cannot find the exact match agency ID list in the target release, uplifted node will use a default primitive in the domain value restriction.";
+        return ValueDomainValidationResult.unmatched(
+                "Target default primitive selected because no matching Agency ID List is available in the target node.",
+                "Agency ID List '" + sourceName(sourceAgencyIdList) + "' is not allowed in the target node or the system cannot find the exact match agency ID list in the target release, uplifted node will use a default primitive in the domain value restriction.");
     }
 
     public XbtSummaryRecord getTargetXbtManifest(
@@ -1693,70 +1774,162 @@ public class BieUpliftingService {
                 .findFirst().orElse(null);
     }
 
+    private enum MatchType {
+        GUID("GUID"),
+        IDENTIFIERS("name, list ID, and version ID");
+
+        private final String description;
+
+        MatchType(String description) {
+            this.description = description;
+        }
+    }
+
+    private record CodeListMatch(CodeListSummaryRecord target, MatchType matchType) {
+    }
+
+    private record AgencyIdListMatch(AgencyIdListSummaryRecord target, MatchType matchType) {
+    }
+
+    private record ValueDomainValidationResult(boolean valid, String status, String issue) {
+
+        private static ValueDomainValidationResult matched(String status) {
+            return new ValueDomainValidationResult(true, status, "");
+        }
+
+        private static ValueDomainValidationResult unmatched(String status, String issue) {
+            return new ValueDomainValidationResult(false, status, issue);
+        }
+    }
+
     public CodeListSummaryRecord getTargetCodeListManifest(
             CodeListSummaryRecord sourceCodeList,
             List<CodeListSummaryRecord> targetCodeListList) {
-        if (sourceCodeList == null) {
-            return null;
+        return findTargetCodeListMatch(sourceCodeList, targetCodeListList, null).target();
+    }
+
+    CodeListSummaryRecord getTargetCodeListManifest(
+            CodeListSummaryRecord sourceCodeList,
+            List<CodeListSummaryRecord> targetCodeListList,
+            Set<CodeListManifestId> allowedManifestIds) {
+        return findTargetCodeListMatch(sourceCodeList, targetCodeListList, allowedManifestIds).target();
+    }
+
+    private CodeListMatch findTargetCodeListMatch(
+            CodeListSummaryRecord sourceCodeList,
+            List<CodeListSummaryRecord> targetCodeListList,
+            Set<CodeListManifestId> allowedManifestIds) {
+        if (sourceCodeList == null || targetCodeListList == null) {
+            return new CodeListMatch(null, null);
         }
 
-        CodeListSummaryRecord targetCodeList = targetCodeListList.stream()
-                .filter(e -> e.guid().equals(sourceCodeList.guid()))
+        CodeListSummaryRecord targetCandidate = targetCodeListList.stream()
+                .filter(Objects::nonNull)
+                .filter(e -> e.codeListId() != null)
+                .filter(e -> ccMatchingService.score(sourceCodeList, e) == 1.0d)
                 .findFirst().orElse(null);
-        if (targetCodeList == null) {
-            // Issue #1356
-            // End-user code list assigned to a source BIE node can be carried into the uplifted BIE only
-            // if the end-user code list with the same name, list ID, and agency ID exists (or has been uplifted)
-            // in the target release and it is allowed by the target BIE node.
-            targetCodeList = targetCodeListList.stream()
-                    .filter(e -> StringUtils.equals(sourceCodeList.name(), e.name()) &&
-                            StringUtils.equals(sourceCodeList.listId(), e.listId()) &&
-//                            StringUtils.equals(sourceCodeList.agencyIdListValueManifestId(), e.agencyIdListValueManifestId()) &&
-                            StringUtils.equals(sourceCodeList.versionId(), e.versionId()))
-                    .findFirst().orElse(null);
+        if (targetCandidate != null) {
+            return new CodeListMatch(selectTargetCodeListManifest(targetCandidate, targetCodeListList, allowedManifestIds), MatchType.GUID);
         }
 
-        if (targetCodeList == null) {
-            return null;
+        targetCandidate = targetCodeListList.stream()
+                .filter(Objects::nonNull)
+                .filter(e -> e.codeListId() != null)
+                .filter(e -> StringUtils.equals(sourceCodeList.name(), e.name()) &&
+                        StringUtils.equals(sourceCodeList.listId(), e.listId()) &&
+                        StringUtils.equals(sourceCodeList.versionId(), e.versionId()))
+                .findFirst().orElse(null);
+        if (targetCandidate == null) {
+            return new CodeListMatch(null, null);
         }
 
-        CodeListSummaryRecord finalTargetCodeList = targetCodeList;
+        return new CodeListMatch(selectTargetCodeListManifest(targetCandidate, targetCodeListList, allowedManifestIds), MatchType.IDENTIFIERS);
+    }
+
+    private CodeListSummaryRecord selectTargetCodeListManifest(
+            CodeListSummaryRecord targetCandidate,
+            List<CodeListSummaryRecord> targetCodeListList,
+            Set<CodeListManifestId> allowedManifestIds) {
         return targetCodeListList.stream()
-                .filter(e -> e.codeListId().equals(finalTargetCodeList.codeListId()))
+                .filter(Objects::nonNull)
+                .filter(e -> e.codeListManifestId() != null)
+                .filter(e -> Objects.equals(e.codeListId(), targetCandidate.codeListId()))
+                .filter(e -> allowedManifestIds == null || allowedManifestIds.contains(e.codeListManifestId()))
                 .findFirst().orElse(null);
     }
 
     public AgencyIdListSummaryRecord getTargetAgencyIdListManifest(
             AgencyIdListSummaryRecord sourceAgencyIdList,
             List<AgencyIdListSummaryRecord> targetAgencyIdListList) {
-        if (sourceAgencyIdList == null) {
-            return null;
+        return findTargetAgencyIdListMatch(sourceAgencyIdList, targetAgencyIdListList, null).target();
+    }
+
+    AgencyIdListSummaryRecord getTargetAgencyIdListManifest(
+            AgencyIdListSummaryRecord sourceAgencyIdList,
+            List<AgencyIdListSummaryRecord> targetAgencyIdListList,
+            Set<AgencyIdListManifestId> allowedManifestIds) {
+        return findTargetAgencyIdListMatch(sourceAgencyIdList, targetAgencyIdListList, allowedManifestIds).target();
+    }
+
+    private AgencyIdListMatch findTargetAgencyIdListMatch(
+            AgencyIdListSummaryRecord sourceAgencyIdList,
+            List<AgencyIdListSummaryRecord> targetAgencyIdListList,
+            Set<AgencyIdListManifestId> allowedManifestIds) {
+        if (sourceAgencyIdList == null || targetAgencyIdListList == null) {
+            return new AgencyIdListMatch(null, null);
         }
 
-        AgencyIdListSummaryRecord targetAgencyIdList = targetAgencyIdListList.stream()
-                .filter(e -> e.guid().equals(sourceAgencyIdList.guid()))
+        AgencyIdListSummaryRecord targetCandidate = targetAgencyIdListList.stream()
+                .filter(Objects::nonNull)
+                .filter(e -> e.agencyIdListId() != null)
+                .filter(e -> ccMatchingService.score(sourceAgencyIdList, e) == 1.0d)
                 .findFirst().orElse(null);
-        if (targetAgencyIdList == null) {
-            // Issue #1356
-            // End-user agency ID list assigned to a source BIE node can be carried into the uplifted BIE only
-            // if the end-user agency ID list with the list ID, agency ID, and version exists (or has been uplifted)
-            // in the target release and it is allowed by the target BIE node.
-            targetAgencyIdList = targetAgencyIdListList.stream()
-                    .filter(e -> StringUtils.equals(sourceAgencyIdList.name(), e.name()) &&
-                            StringUtils.equals(sourceAgencyIdList.listId(), e.listId()) &&
-                            StringUtils.equals(sourceAgencyIdList.agencyIdListValueName(), e.agencyIdListValueName()) &&
-                            StringUtils.equals(sourceAgencyIdList.versionId(), e.versionId()))
-                    .findFirst().orElse(null);
+        if (targetCandidate != null) {
+            return new AgencyIdListMatch(selectTargetAgencyIdListManifest(targetCandidate, targetAgencyIdListList, allowedManifestIds), MatchType.GUID);
         }
 
-        if (targetAgencyIdList == null) {
-            return null;
+        targetCandidate = targetAgencyIdListList.stream()
+                .filter(Objects::nonNull)
+                .filter(e -> e.agencyIdListId() != null)
+                .filter(e -> StringUtils.equals(sourceAgencyIdList.name(), e.name()) &&
+                        StringUtils.equals(sourceAgencyIdList.listId(), e.listId()) &&
+                        StringUtils.equals(sourceAgencyIdList.agencyIdListValueName(), e.agencyIdListValueName()) &&
+                        StringUtils.equals(sourceAgencyIdList.versionId(), e.versionId()))
+                .findFirst().orElse(null);
+        if (targetCandidate == null) {
+            return new AgencyIdListMatch(null, null);
         }
 
-        AgencyIdListSummaryRecord finalTargetAgencyIdList = targetAgencyIdList;
+        return new AgencyIdListMatch(selectTargetAgencyIdListManifest(targetCandidate, targetAgencyIdListList, allowedManifestIds), MatchType.IDENTIFIERS);
+    }
+
+    private AgencyIdListSummaryRecord selectTargetAgencyIdListManifest(
+            AgencyIdListSummaryRecord targetCandidate,
+            List<AgencyIdListSummaryRecord> targetAgencyIdListList,
+            Set<AgencyIdListManifestId> allowedManifestIds) {
         return targetAgencyIdListList.stream()
-                .filter(e -> e.agencyIdListId().equals(finalTargetAgencyIdList.agencyIdListId()))
+                .filter(Objects::nonNull)
+                .filter(e -> e.agencyIdListManifestId() != null)
+                .filter(e -> Objects.equals(e.agencyIdListId(), targetCandidate.agencyIdListId()))
+                .filter(e -> allowedManifestIds == null || allowedManifestIds.contains(e.agencyIdListManifestId()))
                 .findFirst().orElse(null);
+    }
+
+    private String sourceName(CodeListSummaryRecord sourceCodeList) {
+        return sourceCodeList != null ? sourceCodeList.name() : "unknown";
+    }
+
+    private String sourceName(AgencyIdListSummaryRecord sourceAgencyIdList) {
+        return sourceAgencyIdList != null ? sourceAgencyIdList.name() : "unknown";
+    }
+
+    private String sourceName(XbtSummaryRecord sourceXbt) {
+        return sourceXbt != null ? sourceXbt.name() : "unknown";
+    }
+
+    private boolean isXbtNamed(CcDocument ccDocument, XbtManifestId xbtManifestId, String name) {
+        XbtSummaryRecord xbt = xbtManifestId != null ? ccDocument.getXbt(xbtManifestId) : null;
+        return xbt != null && xbt.name() != null && xbt.name().equalsIgnoreCase(name);
     }
 
 }

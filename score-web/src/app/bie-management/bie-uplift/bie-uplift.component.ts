@@ -338,7 +338,8 @@ export class BieUpliftComponent implements OnInit {
     for (const [asbieId, sourceAsbiePathContext] of Object.entries(bieUpliftMap.sourceAsbiePathMap)) {
       const sourceManifestId = this._getManifestId(this._getLastTag(sourceAsbiePathContext.path));
       const source = (sourceAsbiepList.has(sourceManifestId) ? sourceAsbiepList.get(sourceManifestId) : [])
-        .find(e => (e._node as AsbiepFlatNode).asbiePath === sourceAsbiePathContext.path);
+        .find(e => (e._node as AsbiepFlatNode).asbiePath === sourceAsbiePathContext.path ||
+          e.upliftPath === sourceAsbiePathContext.path);
       if (!!source) {
         source.bieId = Number(asbieId);
         source.context = sourceAsbiePathContext.context;
@@ -357,7 +358,8 @@ export class BieUpliftComponent implements OnInit {
     for (const [bbieId, sourceBbiePathContext] of Object.entries(bieUpliftMap.sourceBbiePathMap)) {
       const sourceManifestId = this._getManifestId(this._getLastTag(sourceBbiePathContext.path));
       const source = (sourceBbiepList.has(sourceManifestId) ? sourceBbiepList.get(sourceManifestId) : [])
-        .find(e => (e._node as BbiepFlatNode).bbiePath === sourceBbiePathContext.path);
+        .find(e => (e._node as BbiepFlatNode).bbiePath === sourceBbiePathContext.path ||
+          e.upliftPath === sourceBbiePathContext.path);
       if (!!source) {
         source.bieId = Number(bbieId);
         source.context = sourceBbiePathContext.context;
@@ -376,7 +378,8 @@ export class BieUpliftComponent implements OnInit {
     for (const [bbieScId, sourceBbieScPathContext] of Object.entries(bieUpliftMap.sourceBbieScPathMap)) {
       const sourceManifestId = this._getManifestId(this._getLastTag(sourceBbieScPathContext.path));
       const source = (sourceBbieScList.has(sourceManifestId) ? sourceBbieScList.get(sourceManifestId) : [])
-        .find(e => (e._node as BbieScFlatNode).bbieScPath === sourceBbieScPathContext.path);
+        .find(e => (e._node as BbieScFlatNode).bbieScPath === sourceBbieScPathContext.path ||
+          e.upliftPath === sourceBbieScPathContext.path);
       if (!!source) {
         source.bieId = Number(bbieScId);
         source.context = sourceBbieScPathContext.context;
@@ -529,6 +532,25 @@ export class BieUpliftComponent implements OnInit {
 
   canMatch(node: BieUpliftTargetFlatNode): boolean {
     return this.getMatchDisabledReason(node) === '';
+  }
+
+  isSourceNodeCheckable(node: BieUpliftSourceFlatNode): boolean {
+    return node.level > 0 && !node.fixed && !this.isSourceNodeCoveredByReuse(node);
+  }
+
+  private isSourceNodeCoveredByReuse(node: BieUpliftSourceFlatNode): boolean {
+    if (node.target?.reuseMapped) {
+      return true;
+    }
+
+    for (const [mappedSource, mappedTarget] of this.mappedTargetBySource || []) {
+      const targetUsesReuse = mappedTarget.reuseMapped ||
+        (mappedTarget.reusedTopLevelAsbiepId !== undefined && mappedTarget.reusedTopLevelAsbiepId !== null);
+      if (targetUsesReuse && mappedSource !== node && this.isLogicalDescendant(node, mappedSource)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   getMatchDisabledReason(node: BieUpliftTargetFlatNode): string {
@@ -814,6 +836,7 @@ export class BieUpliftComponent implements OnInit {
 
     this.sourceDataSource.dataChange.next(this.sourceDataSource.data);
     this.targetDataSource.dataChange.next(this.targetDataSource.data);
+    node.reusedTopLevelAsbiepId = selectedTopLevelAsbiepId;
   }
 
   createUpliftBIE() {
@@ -831,7 +854,7 @@ export class BieUpliftComponent implements OnInit {
     source.forEach(e => {
       let upliftNode;
       if (e.target) {
-        upliftNode = new UpliftNode(e.type, e.bieId, e.path, e.target.path, e.target.reusedTopLevelAsbiepId);
+        upliftNode = new UpliftNode(e.type, e.bieId, e.upliftPath, e.target.path, e.target.reusedTopLevelAsbiepId);
         if (e.type.toUpperCase() === 'ASBIEP') {
           upliftNode.bieType = 'ASBIE';
           upliftNode.sourceManifestId = (e._node as AsbiepFlatNode).asccNode.manifestId;
@@ -852,7 +875,7 @@ export class BieUpliftComponent implements OnInit {
           }
         });
       } else {
-        upliftNode = new UpliftNode(e.type, e.bieId, e.path);
+        upliftNode = new UpliftNode(e.type, e.bieId, e.upliftPath);
         if (e.type.toUpperCase() === 'ASBIEP') {
           upliftNode.bieType = 'ASBIE';
           upliftNode.sourceManifestId = (e._node as AsbiepFlatNode).asccNode.manifestId;
@@ -918,25 +941,21 @@ export class BieUpliftComponent implements OnInit {
         autoFocus: false
       });
       dialogRef.afterClosed().subscribe(selectedTopLevelAsbiepId => {
-        if (!selectedTopLevelAsbiepId) {
-          node.reusedTopLevelAsbiepId = undefined;
-          this.clearReuseDescendantMatches(node);
-          this.clearTargetReuseNode(node);
-        } else {
-          node.reusedTopLevelAsbiepId = selectedTopLevelAsbiepId;
-          this.loading = true;
-          forkJoin([
-            this.bieEditService.getRootNode(selectedTopLevelAsbiepId),
-            this.bieEditService.getUsedBieList(selectedTopLevelAsbiepId),
-            this.bieEditService.getRefBieList(selectedTopLevelAsbiepId)
-          ]).pipe(finalize(() => {
-            this.loading = false;
-          })).subscribe(([rootNode, usedBieList, refBieList]) => {
-            this.targetDataSource.database.appendUsedBieList(usedBieList);
-            this.targetDataSource.database.appendRefBieList(refBieList);
-            this.applyReuseSelection(node, selectedTopLevelAsbiepId, rootNode);
-          });
+        if (selectedTopLevelAsbiepId === undefined || selectedTopLevelAsbiepId === null) {
+          return;
         }
+        this.loading = true;
+        forkJoin([
+          this.bieEditService.getRootNode(selectedTopLevelAsbiepId),
+          this.bieEditService.getUsedBieList(selectedTopLevelAsbiepId),
+          this.bieEditService.getRefBieList(selectedTopLevelAsbiepId)
+        ]).pipe(finalize(() => {
+          this.loading = false;
+        })).subscribe(([rootNode, usedBieList, refBieList]) => {
+          this.targetDataSource.database.appendUsedBieList(usedBieList);
+          this.targetDataSource.database.appendRefBieList(refBieList);
+          this.applyReuseSelection(node, selectedTopLevelAsbiepId, rootNode);
+        });
       });
     }
   }

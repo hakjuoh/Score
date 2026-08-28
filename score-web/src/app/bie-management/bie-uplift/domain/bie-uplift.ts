@@ -1,4 +1,5 @@
 import {AsbiepFlatNode, BbiepFlatNode, BbieScFlatNode, BieFlatNode, WrappedBieFlatNode} from '../../domain/bie-flat-tree';
+import {getKey} from '../../../common/flat-tree';
 
 
 export class BieUpliftSourceFlatNode extends WrappedBieFlatNode {
@@ -37,6 +38,83 @@ export class BieUpliftSourceFlatNode extends WrappedBieFlatNode {
 
   get bbieScPath(): string {
     return (this.type.toUpperCase() === 'BBIE_SC') ? (this._node as BbieScFlatNode).bbieScPath : undefined;
+  }
+
+  /**
+   * Returns the source path used by the uplift visitor.
+   *
+   * The tree intentionally hides an ASCCP segment below a reused ASBIEP so
+   * that the reused subtree is displayed as one logical reference. The
+   * uplift visitor still traverses an unselected reuse inline and therefore
+   * addresses its descendants through the full ASCCP-qualified path.
+   */
+  get upliftPath(): string {
+    return this.canonicalPath(this._node);
+  }
+
+  private canonicalPath(node: BieFlatNode): string {
+    const type = node.bieType.toUpperCase();
+    if (type === 'BBIE_SC') {
+      const bbiep = this.structuralParent(node) as BbiepFlatNode;
+      const bbiePath = this.associationPath(bbiep);
+      return this.joinPath(
+        bbiePath,
+        'BCCP-' + bbiep.bccpNode.manifestId,
+        'DT-' + bbiep.bdtNode.manifestId,
+        'DT_SC-' + (node as BbieScFlatNode).bdtScNode.manifestId);
+    }
+    return this.associationPath(node);
+  }
+
+  private associationPath(node: BieFlatNode): string {
+    const type = node.bieType.toUpperCase();
+    if (type === 'ABIE') {
+      return node.path;
+    }
+
+    const parent = this.structuralParent(node);
+    const ownerPath = parent ? this.ownerPath(parent) : '';
+    if (type === 'ASBIEP') {
+      return this.joinPath(
+        ownerPath,
+        this.intermediateAccPath(node as AsbiepFlatNode),
+        'ASCC-' + (node as AsbiepFlatNode).asccNode.manifestId);
+    }
+    if (type === 'BBIEP') {
+      return this.joinPath(
+        ownerPath,
+        this.intermediateAccPath(node as BbiepFlatNode),
+        'BCC-' + (node as BbiepFlatNode).bccNode.manifestId);
+    }
+    return node.path;
+  }
+
+  private intermediateAccPath(node: AsbiepFlatNode | BbiepFlatNode): string {
+    return (node.intermediateAccNodes || []).map(getKey).join('>');
+  }
+
+  private ownerPath(node: BieFlatNode): string {
+    const type = node.bieType.toUpperCase();
+    if (type === 'ASBIEP') {
+      const asbiep = node as AsbiepFlatNode;
+      return this.joinPath(
+        this.associationPath(asbiep),
+        'ASCCP-' + asbiep.asccpNode.manifestId,
+        'ACC-' + asbiep.accNode.manifestId);
+    }
+    return this.associationPath(node);
+  }
+
+  private structuralParent(node: BieFlatNode): BieFlatNode | undefined {
+    let parent = node.parent as BieFlatNode;
+    while (parent?.isGroup) {
+      parent = parent.parent as BieFlatNode;
+    }
+    return parent;
+  }
+
+  private joinPath(...parts: string[]): string {
+    return parts.filter(part => !!part).join('>');
   }
 
   get isMapped(): boolean {
@@ -210,6 +288,7 @@ export class MatchInfo {
   match: string;
   reuse: string;
   message: string;
+  status: string;
   valid: boolean;
   context: string;
 
@@ -227,7 +306,7 @@ export class MatchInfo {
         this.bieType = 'ASBIE';
         this.ccType = 'ASCCP';
         this.sourceManifestId = (source._node as AsbiepFlatNode).asccNode.manifestId;
-        this.sourcePath = (source._node as AsbiepFlatNode).asbiePath;
+        this.sourcePath = source.upliftPath;
         if (target) {
           this.targetManifestId = (target._node as AsbiepFlatNode).asccNode.manifestId;
           this.targetPath = (target._node as AsbiepFlatNode).asbiePath;
@@ -237,7 +316,7 @@ export class MatchInfo {
         this.bieType = 'BBIE';
         this.ccType = 'BCCP';
         this.sourceManifestId = (source._node as BbiepFlatNode).bccNode.manifestId;
-        this.sourcePath = (source._node as BbiepFlatNode).bbiePath;
+        this.sourcePath = source.upliftPath;
         if (target) {
           this.targetManifestId = (target._node as BbiepFlatNode).bccNode.manifestId;
           this.targetPath = (target._node as BbiepFlatNode).bbiePath;
@@ -247,7 +326,7 @@ export class MatchInfo {
         this.bieType = 'BBIE_SC';
         this.ccType = 'DT_SC';
         this.sourceManifestId = (source._node as BbieScFlatNode).bdtScNode.manifestId;
-        this.sourcePath = (source._node as BbieScFlatNode).bbieScPath;
+        this.sourcePath = source.upliftPath;
         if (target) {
           this.targetManifestId = (target._node as BbieScFlatNode).bdtScNode.manifestId;
           this.targetPath = (target._node as BbieScFlatNode).bbieScPath;
@@ -255,6 +334,7 @@ export class MatchInfo {
         break;
     }
     this.reuse = '';
+    this.status = '';
     this.sourceDisplayPath = '/' + source.parents.map(i => i.name).join('/');
     if (target) {
       this.targetDisplayPath = '/' + target.parents.map(i => i.name).join('/');
@@ -276,6 +356,14 @@ export class MatchInfo {
   }
 }
 
+export interface BieValidation {
+  bieType: string;
+  bieId: number;
+  valid: boolean;
+  message: string;
+  status: string;
+}
+
 export class BieValidationResponse {
-  validations: MatchInfo[];
+  validations: BieValidation[];
 }
