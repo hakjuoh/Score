@@ -108,6 +108,12 @@ class ScoreAiConfigurationTest {
                         "spring.ai.mcp.client.streamable-http.connections"
                                 + ".connect-center-mcp.auth.issuer-url",
                         "logging.level.org.springframework.boot.devtools",
+                        "logging.level.org.springframework",
+                        "logging.level.org.springframework.security",
+                        "logging.level.org.springframework.websocket",
+                        "logging.level.org.springframework.messaging",
+                        "logging.level.org.jooq",
+                        "logging.level.org.oagi.score",
                         "management.tracing.export.enabled",
                         "management.tracing.export.otlp.enabled",
                         "management.opentelemetry.resource-attributes"

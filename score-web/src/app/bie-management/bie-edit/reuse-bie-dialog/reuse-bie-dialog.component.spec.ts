@@ -1,5 +1,6 @@
 import {ReuseBieDialogComponent} from './reuse-bie-dialog.component';
 import {FormControl} from '@angular/forms';
+import {convertToParamMap} from '@angular/router';
 import {MatTableDataSource} from '@angular/material/table';
 import {of, ReplaySubject, Subject} from 'rxjs';
 import {vi} from 'vitest';
@@ -20,7 +21,7 @@ describe('ReuseBieDialogComponent', () => {
 
     Object.assign(component as any, {
       data: {asccpManifestId: 77, libraryId: 3, releaseId: 4, topLevelAsbiepId: 9},
-      route: {snapshot: {queryParamMap: {get: () => undefined}}},
+      route: {snapshot: {queryParamMap: convertToParamMap({})}},
       accountService: {getAccountNames: () => of([])},
       preferencesService: {load: () => of({tableColumnsInfo: {columnsOfBiePage: []}})},
       auth: {getUserToken: () => ({roles: []})},
