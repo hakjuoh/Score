@@ -11,7 +11,11 @@ import org.oagi.score.gateway.http.api.integration_management.github.client.GitH
 import org.oagi.score.gateway.http.api.integration_management.github.config.GitHubIntegrationProperties;
 import org.oagi.score.gateway.http.api.integration_management.github.model.ProjectFieldOptions;
 import org.oagi.score.gateway.http.common.model.ScoreUser;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.redisson.api.RBucket;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.redisson.client.codec.Codec;
+import org.springframework.data.redis.core.RedisTemplate;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -23,6 +27,8 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -47,11 +53,13 @@ class GitHubIntegrationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = spy(new GitHubIntegrationService());
-        ReflectionTestUtils.setField(service, "properties", properties);
-        ReflectionTestUtils.setField(service, "projectFieldOptions", projectFieldOptions);
-        ReflectionTestUtils.setField(service, "gitHubApiClient", gitHubApiClient);
-        ReflectionTestUtils.setField(service, "objectMapper", new ObjectMapper());
+        // Project references are cached through a Redisson bucket guarded by a lock; an empty cache
+        // forces the service to resolve them from the (mocked) GitHub API client.
+        RedissonClient redissonClient = mock(RedissonClient.class);
+        lenient().doReturn(mock(RBucket.class)).when(redissonClient).getBucket(anyString(), any(Codec.class));
+        lenient().doReturn(mock(RLock.class)).when(redissonClient).getLock(anyString());
+        service = spy(new GitHubIntegrationService(properties, projectFieldOptions, gitHubApiClient,
+                mock(RedisTemplate.class), redissonClient, new ObjectMapper()));
         doReturn("token").when(service).getAccessToken(USER);
 
         when(properties.getProjectOwnerType()).thenReturn("org");
