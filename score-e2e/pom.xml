@@ -27,25 +27,25 @@
         <db.user>oagi</db.user>
         <db.password>oagi</db.password>
 
-        <selenium.version>4.33.0</selenium.version>
+        <selenium.version>4.49.0</selenium.version>
         <junit.version>5.14.2</junit.version>
         <junit.platform.version>1.14.2</junit.platform.version>
         <junit4.version>4.13.2</junit4.version>
-        <slf4j.version>2.0.17</slf4j.version>
-        <jackson-bom.version>2.21.4</jackson-bom.version>
+        <slf4j.version>2.0.18</slf4j.version>
+        <jackson-bom.version>2.21.6</jackson-bom.version>
         <commons-lang.version>3.20.0</commons-lang.version>
         <commons-math3.version>3.6.1</commons-math3.version>
         <commons-io.version>2.21.0</commons-io.version>
         <commons-csv.version>1.14.1</commons-csv.version>
-        <lombok.version>1.18.46</lombok.version>
+        <lombok.version>1.18.48</lombok.version>
         <awaitility.version>4.3.0</awaitility.version>
         <snakeyaml.version>2.6</snakeyaml.version>
-        <mariadb-client.version>3.5.9</mariadb-client.version>
+        <mariadb-client.version>3.5.10</mariadb-client.version>
         <!-- Match the HikariCP the Spring Boot 4.1 BOM resolves in score-http (#1750): the Boot 4.1
              upgrade bumped it 6.3.3 → 7.0.2. HikariCP 7 requires Java 17+, satisfied by the Java 21
              bump above. Keeps the e2e connection-pool library identical to the backend. -->
         <hikariCP.version>7.0.2</hikariCP.version>
-        <jOOQ.version>3.20.17</jOOQ.version>
+        <jOOQ.version>3.20.20</jOOQ.version>
         <json.version>20250517</json.version>
         <!-- Matches the score-http poi.version: e2e generates multi-worksheet .xlsx upload
              fixtures at runtime with the same library the production parser reads them with. -->
@@ -53,6 +53,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>1.11.1</version>
+        </dependency>
         <dependency>
             <groupId>org.seleniumhq.selenium</groupId>
             <artifactId>selenium-java</artifactId>
@@ -77,6 +82,13 @@
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
             <version>${poi.version}</version>
+        </dependency>
+        <!-- avro 1.11.1 drags in commons-compress 1.21, which shadows the newer version POI needs
+             (NoSuchMethodError: ZipArchiveOutputStream.putArchiveEntry). Pin it explicitly. -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.28.0</version>
         </dependency>
         <dependency>
             <groupId>org.mariadb.jdbc</groupId>
@@ -160,6 +172,11 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+            <version>${jackson-bom.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
             <version>${jackson-bom.version}</version>
         </dependency>
         <dependency>

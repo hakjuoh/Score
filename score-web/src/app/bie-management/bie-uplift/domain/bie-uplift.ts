@@ -4,6 +4,8 @@ import {getKey} from '../../../common/flat-tree';
 
 export class BieUpliftSourceFlatNode extends WrappedBieFlatNode {
   target: BieUpliftTargetFlatNode;
+  /** The target assigned by the initial system mapping, when one exists. */
+  systemTarget: BieUpliftTargetFlatNode;
   fixed: boolean;
   context: string;
 
@@ -53,12 +55,52 @@ export class BieUpliftSourceFlatNode extends WrappedBieFlatNode {
   }
 
   private canonicalPath(node: BieFlatNode): string {
+    const localPath = this.localPath(node);
+
+    // A reused ASBIEP stores its own subtree with paths rooted at that
+    // ASCCP. The uplift visitor traverses the same subtree at its occurrence
+    // below the parent ASCC association, so restore that occurrence prefix.
+    const reusedAncestor = this.closestReusedAncestor(node);
+    if (reusedAncestor) {
+      const occurrencePrefix = this.fullAssociationPath(reusedAncestor);
+      if (localPath !== occurrencePrefix && !localPath.startsWith(occurrencePrefix + '>')) {
+        return this.joinPath(occurrencePrefix, localPath);
+      }
+    }
+    return localPath;
+  }
+
+  private closestReusedAncestor(node: BieFlatNode): AsbiepFlatNode | undefined {
+    let parent = node.parent as BieFlatNode;
+    while (parent) {
+      if (parent.bieType.toUpperCase() === 'ASBIEP' && parent.reused) {
+        return parent as AsbiepFlatNode;
+      }
+      parent = parent.parent as BieFlatNode;
+    }
+    return undefined;
+  }
+
+  private fullAssociationPath(node: AsbiepFlatNode): string {
+    const localPath = this.associationPath(node);
+    const reusedAncestor = this.closestReusedAncestor(node);
+    if (!reusedAncestor) {
+      return localPath;
+    }
+
+    const occurrencePrefix = this.fullAssociationPath(reusedAncestor);
+    if (localPath === occurrencePrefix || localPath.startsWith(occurrencePrefix + '>')) {
+      return localPath;
+    }
+    return this.joinPath(occurrencePrefix, localPath);
+  }
+
+  private localPath(node: BieFlatNode): string {
     const type = node.bieType.toUpperCase();
     if (type === 'BBIE_SC') {
-      const bbiep = this.structuralParent(node) as BbiepFlatNode;
-      const bbiePath = this.associationPath(bbiep);
+      const bbiep = node.parent as BbiepFlatNode;
       return this.joinPath(
-        bbiePath,
+        this.associationPath(bbiep),
         'BCCP-' + bbiep.bccpNode.manifestId,
         'DT-' + bbiep.bdtNode.manifestId,
         'DT_SC-' + (node as BbieScFlatNode).bdtScNode.manifestId);
@@ -72,7 +114,9 @@ export class BieUpliftSourceFlatNode extends WrappedBieFlatNode {
       return node.path;
     }
 
-    const parent = this.structuralParent(node);
+    // Groups may be hidden in display paths, but the server's occurrence path
+    // includes their ASCC/ASCCP/ACC segments when resolving custom mappings.
+    const parent = node.parent as BieFlatNode;
     const ownerPath = parent ? this.ownerPath(parent) : '';
     if (type === 'ASBIEP') {
       return this.joinPath(
@@ -105,16 +149,23 @@ export class BieUpliftSourceFlatNode extends WrappedBieFlatNode {
     return this.associationPath(node);
   }
 
-  private structuralParent(node: BieFlatNode): BieFlatNode | undefined {
-    let parent = node.parent as BieFlatNode;
-    while (parent?.isGroup) {
-      parent = parent.parent as BieFlatNode;
-    }
-    return parent;
+  private joinPath(...parts: string[]): string {
+    const segments: string[] = [];
+    parts.filter(part => !!part).forEach(part => {
+      part.split('>').filter(segment => !!segment).forEach(segment => {
+        // A reused node can expose an intermediate ACC both through its
+        // parent path and through intermediateAccNodes. The visitor emits
+        // that boundary once, so do the same when composing the request path.
+          if (!this.isRepeatedAccountBoundary(segments[segments.length - 1], segment)) {
+            segments.push(segment);
+          }
+      });
+    });
+    return segments.join('>');
   }
 
-  private joinPath(...parts: string[]): string {
-    return parts.filter(part => !!part).join('>');
+  private isRepeatedAccountBoundary(previousSegment: string, segment: string): boolean {
+    return previousSegment === segment && segment.startsWith('ACC-');
   }
 
   get isMapped(): boolean {
@@ -128,9 +179,19 @@ export class BieUpliftSourceFlatNode extends WrappedBieFlatNode {
       return true;
     }
     if (this.target) {
-      return !this.reused;
+      return !this.reused || this.target.reusedTopLevelAsbiepId !== undefined &&
+        this.target.reusedTopLevelAsbiepId !== null;
     }
     return false;
+  }
+
+  /**
+   * Keep manually mapped descendants materialized when the generic tree data
+   * source collapses a BBIEP. The source node itself is locked under a reused
+   * parent, so the underlying BIE node cannot report a normal edit change.
+   */
+  get isChanged(): boolean {
+    return super.isChanged || !!this.target;
   }
 
   equal(node: BieFlatNode) {
@@ -141,7 +202,6 @@ export class BieUpliftSourceFlatNode extends WrappedBieFlatNode {
 export class BieUpliftTargetFlatNode extends WrappedBieFlatNode {
   source: BieUpliftSourceFlatNode;
   reusedTopLevelAsbiepId: number;
-  reuseMapped: boolean;
   emptyRequired: boolean;
 
   constructor(node: BieFlatNode) {
@@ -195,13 +255,17 @@ export class UpliftNode {
   targetPath: string;
   targetManifestId: number;
   refTopLevelAsbiepId: number;
+  /** Preserve an explicit unmatched choice instead of re-running server auto-mapping. */
+  suppressAutoMapping: boolean;
 
-  constructor(bieType: string, bieId: number, sourcePath: string, targetPath?: string, refBie?: number) {
+  constructor(bieType: string, bieId: number, sourcePath: string, targetPath?: string, refBie?: number,
+              suppressAutoMapping?: boolean) {
     this.bieType = bieType;
     this.bieId = bieId;
     this.sourcePath = sourcePath;
     this.targetPath = targetPath;
     this.refTopLevelAsbiepId = refBie;
+    this.suppressAutoMapping = suppressAutoMapping ?? targetPath === undefined;
   }
 }
 
@@ -210,13 +274,16 @@ export interface BiePathContext {
   context: string;
 }
 
+export interface BiePathMapping {
+  bieId: number;
+  source: BiePathContext;
+  target?: BiePathContext;
+}
+
 export class BieUpliftMap {
-  sourceAsbiePathMap: Map<number, BiePathContext>;
-  targetAsbiePathMap: Map<number, BiePathContext>;
-  sourceBbiePathMap: Map<number, BiePathContext>;
-  targetBbiePathMap: Map<number, BiePathContext>;
-  sourceBbieScPathMap: Map<number, BiePathContext>;
-  targetBbieScPathMap: Map<number, BiePathContext>;
+  asbiePathList: BiePathMapping[];
+  bbiePathList: BiePathMapping[];
+  bbieScPathList: BiePathMapping[];
 
   sourceUsedMap: Map<string, number>;
   targetUsedMap: Map<string, number>;
@@ -225,52 +292,62 @@ export class BieUpliftMap {
   unMatchedMap: Map<string, UpliftNode>;
 
   constructor(obj) {
-    this.sourceAsbiePathMap = new Map<number, BiePathContext>();
-    this.targetAsbiePathMap = new Map<number, BiePathContext>();
-    this.sourceBbiePathMap = new Map<number, BiePathContext>();
-    this.targetBbiePathMap = new Map<number, BiePathContext>();
-    this.sourceBbieScPathMap = new Map<number, BiePathContext>();
-    this.targetBbieScPathMap = new Map<number, BiePathContext>();
     this.sourceUsedMap = new Map<string, number>();
     this.targetUsedMap = new Map<string, number>();
     this.unMatchedMap = new Map<string, UpliftNode>();
     this.unMatchedList = [];
-    for (const k of Object.keys(obj.targetBbieScPathMap)) {
-      this.targetUsedMap.set(obj.targetBbieScPathMap[k], Number(k));
-      this.targetBbieScPathMap.set(Number(k), obj.targetBbieScPathMap[k]);
-    }
-    for (const k of Object.keys(obj.targetBbiePathMap)) {
-      this.targetUsedMap.set(obj.targetBbiePathMap[k], Number(k));
-      this.targetBbiePathMap.set(Number(k), obj.targetBbiePathMap[k]);
-    }
-    for (const k of Object.keys(obj.targetAsbiePathMap)) {
-      this.targetUsedMap.set(obj.targetAsbiePathMap[k], Number(k));
-      this.targetAsbiePathMap.set(Number(k), obj.targetAsbiePathMap[k]);
-    }
 
-    for (const k of Object.keys(obj.sourceAsbiePathMap)) {
-      this.sourceUsedMap.set(obj.sourceAsbiePathMap[k], Number(k));
-      this.sourceAsbiePathMap.set(Number(k), obj.sourceAsbiePathMap[k]);
-      if (!this.targetAsbiePathMap.get(Number(k))) {
-        this.unMatchedList.push(new UpliftNode('ASBIE', Number(k), obj.sourceAsbiePathMap[k], undefined));
+    this.asbiePathList = this.getPathMappings(obj, 'asbie');
+    this.bbiePathList = this.getPathMappings(obj, 'bbie');
+    this.bbieScPathList = this.getPathMappings(obj, 'bbieSc');
+
+    this.asbiePathList.forEach(mapping => {
+      if (!mapping.target) {
+        const node = new UpliftNode('ASBIE', mapping.bieId, mapping.source.path, undefined);
+        this.unMatchedList.push(node);
       }
-    }
-    for (const k of Object.keys(obj.sourceBbiePathMap)) {
-      this.sourceUsedMap.set(obj.sourceBbiePathMap[k], Number(k));
-      this.sourceBbiePathMap.set(Number(k), obj.sourceBbiePathMap[k]);
-      if (!this.targetBbiePathMap.get(Number(k))) {
-        this.unMatchedList.push(new UpliftNode('BBIE', Number(k), obj.sourceBbiePathMap[k], undefined));
+    });
+    this.bbiePathList.forEach(mapping => {
+      if (!mapping.target) {
+        const node = new UpliftNode('BBIE', mapping.bieId, mapping.source.path, undefined);
+        this.unMatchedList.push(node);
       }
-    }
-    for (const k of Object.keys(obj.sourceBbieScPathMap)) {
-      this.sourceUsedMap.set(obj.sourceBbieScPathMap[k], Number(k));
-      this.sourceBbieScPathMap.set(Number(k), obj.sourceBbieScPathMap[k]);
-      if (!this.targetBbieScPathMap.get(Number(k))) {
-        this.unMatchedList.push(new UpliftNode('BBIE_SC', Number(k), obj.sourceBbieScPathMap[k], undefined));
+    });
+    this.bbieScPathList.forEach(mapping => {
+      if (!mapping.target) {
+        const node = new UpliftNode('BBIE_SC', mapping.bieId, mapping.source.path, undefined);
+        this.unMatchedList.push(node);
       }
-    }
+    });
+
     this.unMatchedList = this.unMatchedList.sort((a, b) => a.sourcePath.localeCompare(b.sourcePath));
     this.unMatchedList.map(node => this.unMatchedMap.set(node.sourcePath, node));
+    this.initializePathUsageMaps();
+  }
+
+  private getPathMappings(obj: any, type: string): BiePathMapping[] {
+    const list = obj[type + 'PathList'];
+    if (Array.isArray(list)) {
+      return list;
+    }
+
+    const typeName = type.charAt(0).toUpperCase() + type.slice(1);
+    const sourceMap = obj['source' + typeName + 'PathMap'] || {};
+    const targetMap = obj['target' + typeName + 'PathMap'] || {};
+    return Object.keys(sourceMap).map(key => ({
+      bieId: Number(key),
+      source: sourceMap[key],
+      target: targetMap[key]
+    }));
+  }
+
+  private initializePathUsageMaps() {
+    this.asbiePathList.forEach(mapping => this.sourceUsedMap.set(mapping.source.path, mapping.bieId));
+    this.bbiePathList.forEach(mapping => this.sourceUsedMap.set(mapping.source.path, mapping.bieId));
+    this.bbieScPathList.forEach(mapping => this.sourceUsedMap.set(mapping.source.path, mapping.bieId));
+    this.asbiePathList.forEach(mapping => mapping.target && this.targetUsedMap.set(mapping.target.path, mapping.bieId));
+    this.bbiePathList.forEach(mapping => mapping.target && this.targetUsedMap.set(mapping.target.path, mapping.bieId));
+    this.bbieScPathList.forEach(mapping => mapping.target && this.targetUsedMap.set(mapping.target.path, mapping.bieId));
   }
 }
 
@@ -292,6 +369,17 @@ export class MatchInfo {
   valid: boolean;
   context: string;
 
+  private canonicalTargetPath(target: BieUpliftTargetFlatNode): string {
+    try {
+      return new BieUpliftSourceFlatNode(target._node).upliftPath;
+    } catch (_error) {
+      // Report rows can be built from partially materialized test/legacy
+      // nodes. Preserve their supplied path when the structural metadata
+      // needed for canonicalization is unavailable.
+      return target.path;
+    }
+  }
+
   constructor(source: BieUpliftSourceFlatNode) {
     const target = source.target;
     this.name = source.name;
@@ -309,7 +397,11 @@ export class MatchInfo {
         this.sourcePath = source.upliftPath;
         if (target) {
           this.targetManifestId = (target._node as AsbiepFlatNode).asccNode.manifestId;
-          this.targetPath = (target._node as AsbiepFlatNode).asbiePath;
+          // Reused target descendants hide their outer occurrence in the
+          // display path.  Reports are submitted to the same validation
+          // endpoint as create, so they must use the canonical occurrence
+          // path as well.
+          this.targetPath = this.canonicalTargetPath(target);
         }
         break;
       case 'BBIEP':
@@ -319,7 +411,7 @@ export class MatchInfo {
         this.sourcePath = source.upliftPath;
         if (target) {
           this.targetManifestId = (target._node as BbiepFlatNode).bccNode.manifestId;
-          this.targetPath = (target._node as BbiepFlatNode).bbiePath;
+          this.targetPath = this.canonicalTargetPath(target);
         }
         break;
       case 'BBIE_SC':
@@ -329,7 +421,7 @@ export class MatchInfo {
         this.sourcePath = source.upliftPath;
         if (target) {
           this.targetManifestId = (target._node as BbieScFlatNode).bdtScNode.manifestId;
-          this.targetPath = (target._node as BbieScFlatNode).bbieScPath;
+          this.targetPath = this.canonicalTargetPath(target);
         }
         break;
     }
@@ -362,6 +454,7 @@ export interface BieValidation {
   valid: boolean;
   message: string;
   status: string;
+  sourcePath?: string;
 }
 
 export class BieValidationResponse {

@@ -18,6 +18,13 @@ public interface BusinessInformationEntityAPI {
 
     TopLevelASBIEPObject getTopLevelASBIEPByID(BigInteger topLevelAsbiepId);
 
+    /**
+     * Return the newest inherited BIE created from the given base for the given owner, or
+     * {@code null} while the asynchronous creation command has not produced one yet.
+     */
+    TopLevelASBIEPObject getLatestInheritedTopLevelASBIEP(BigInteger basedTopLevelAsbiepId,
+                                                          BigInteger ownerUserId);
+
     TopLevelASBIEPObject getTopLevelASBIEPByDENAndReleaseNum(String den, String branch);
 
     void updateTopLevelASBIEP(TopLevelASBIEPObject topLevelASBIEP);
@@ -41,6 +48,15 @@ public interface BusinessInformationEntityAPI {
      */
     void createBbieScForFirstBbie(BigInteger topLevelAsbiepId, BigInteger createdByUserId);
 
+    /**
+     * Create one used BBIE_SC under the BBIE and DT_SC identified by their property terms.
+     * This is useful when a fixture must seed a specific supplementary component instead of
+     * relying on database insertion order.
+     */
+    void createBbieScForBbieAndDtSc(BigInteger topLevelAsbiepId, BigInteger createdByUserId,
+                                    String bbiePropertyTerm, String dtScPropertyTerm,
+                                    String dtScRepresentationTerm);
+
     List<BigInteger> getReusedTopLevelAsbiepIds(BigInteger topLevelAsbiepId);
 
     int countBbieSc(BigInteger topLevelAsbiepId);
@@ -59,11 +75,15 @@ public interface BusinessInformationEntityAPI {
 
     /**
      * Return the stable XBT ID referenced by the BBIE_SC primitive manifest belonging to the BBIE
-     * at the given BIE path.
+     * at the given BIE path and supplementary component name.
+     *
+     * <p>The property and representation terms are separate columns in {@code DT_SC}; callers
+     * must provide both rather than the display name produced by concatenating them.</p>
      */
-    BigInteger getBbieScXbtIdByBbiePathAndPropertyTerm(BigInteger topLevelAsbiepId,
-                                                       String bbiePath,
-                                                       String propertyTerm);
+    BigInteger getBbieScXbtIdByBbiePathAndPropertyAndRepresentationTerm(BigInteger topLevelAsbiepId,
+                                                                         String bbiePath,
+                                                                         String propertyTerm,
+                                                                         String representationTerm);
 
     boolean hasValidBbieOwnership(BigInteger topLevelAsbiepId);
 

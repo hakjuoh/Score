@@ -424,7 +424,7 @@ public class ASCCPViewEditPageImpl extends BasePageImpl implements ASCCPViewEdit
 
     private WebElement getNodeByName(String nodeName) {
         By nodeLocator = By.xpath(
-                "//div[contains(@class, \"mat-tree-node\")]//*[text() = \"" + nodeName + "\" or normalize-space(text()) = \"" + nodeName + "\"]//ancestor-or-self::div[contains(@class, \"mat-tree-node\")]");
+                "//div[contains(@class, \"mat-tree-node\")][.//*[normalize-space(.) = \"" + nodeName + "\" or contains(., \"" + nodeName + "\")]]");
         return visibilityOfElementLocated(getDriver(), nodeLocator);
     }
 

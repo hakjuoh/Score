@@ -14,6 +14,7 @@ public record AgencyIdListSummaryRecord(
         AgencyIdListManifestId agencyIdListManifestId,
         AgencyIdListId agencyIdListId,
         Guid guid, String enumTypeGuid,
+        @Nullable AgencyIdListManifestId basedAgencyIdListManifestId,
         String name, String listId, String versionId,
         Definition definition,
         NamespaceId namespaceId,

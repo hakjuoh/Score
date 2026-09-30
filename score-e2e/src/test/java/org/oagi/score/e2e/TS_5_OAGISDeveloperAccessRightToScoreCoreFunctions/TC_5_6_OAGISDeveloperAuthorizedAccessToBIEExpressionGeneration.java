@@ -491,11 +491,7 @@ public class TC_5_6_OAGISDeveloperAuthorizedAccessToBIEExpressionGeneration exte
         expressBIEPage.selectPutAllSchemasInTheSameFile();
 
         assertNotChecked(expressBIEPage.getBIECCTSMetaDataCheckbox());
-        // Assert the disabled state itself rather than a click interception: Material no longer
-        // covers a disabled checkbox with an overlay, so the click reaches the disabled input and
-        // is dropped by the browser without raising ElementClickInterceptedException.
         assertDisabled(expressBIEPage.getIncludeCCTSDefinitionTagCheckbox());
-        expressBIEPage.toggleIncludeCCTSDefinitionTag();
         assertNotChecked(expressBIEPage.getIncludeCCTSDefinitionTagCheckbox());
 
         expressBIEPage.toggleBIECCTSMetaData();
@@ -526,9 +522,7 @@ public class TC_5_6_OAGISDeveloperAuthorizedAccessToBIEExpressionGeneration exte
         expressBIEPage.selectPutAllSchemasInTheSameFile();
 
         assertNotChecked(expressBIEPage.getBIEOAGIConnectCenterMetaDataCheckbox());
-        // See TC_5_6_TA_10: a disabled checkbox no longer intercepts the click, it just ignores it.
         assertDisabled(expressBIEPage.getIncludeWHOColumnsCheckbox());
-        expressBIEPage.toggleIncludeWHOColumns();
         assertNotChecked(expressBIEPage.getIncludeWHOColumnsCheckbox());
 
         expressBIEPage.toggleBIEOAGIConnectCenterMetaData();

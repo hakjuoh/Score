@@ -61,8 +61,10 @@
             <td mat-cell *matCellDef="let row">
               <div class="display-path-content">
                 <span>{{ row.sourceDisplayPath }}</span>
-                <span>&darr;</span>
-                <span>{{ row.targetDisplayPath }}</span>
+                @if (row.targetDisplayPath) {
+                  <span>&darr;</span>
+                  <span>{{ row.targetDisplayPath }}</span>
+                }
               </div>
             </td>
           </ng-container>

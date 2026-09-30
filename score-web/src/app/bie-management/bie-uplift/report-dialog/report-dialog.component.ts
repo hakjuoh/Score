@@ -142,7 +142,7 @@ export class ReportDialogComponent implements OnInit {
     const {topLevelAsbiepId, releaseId, targetAsccpManifestId} = this.data;
     this.matchMap = new Map<string, MatchInfo>();
     this.matches = this.data.matches;
-    this.matches.forEach(m => this.matchMap.set(m.bieType + '-' + m.bieId, m));
+    this.matches.forEach(m => this.matchMap.set(this.validationKey(m), m));
 
     forkJoin([
       this.service.checkValidationMatches(topLevelAsbiepId, releaseId, targetAsccpManifestId, this.matches),
@@ -153,7 +153,7 @@ export class ReportDialogComponent implements OnInit {
       this.preferencesInfo = preferencesInfo;
 
       resp.validations.forEach(v => {
-        const match = this.matchMap.get(v.bieType + '-' + v.bieId);
+        const match = this.matchMap.get(this.validationKey(v));
         if (!match) {
           return;
         }
@@ -171,12 +171,18 @@ export class ReportDialogComponent implements OnInit {
     });
   }
 
+  private validationKey(value: {bieType: string; bieId: number; sourcePath?: string}): string {
+    return value.bieType + '-' + (value.sourcePath || value.bieId);
+  }
+
   show(row: MatchInfo): boolean {
     if (this.hideSystemMatched) {
       if (row.message !== '' || row.status !== '') {
         return true;
       }
-      return row.match === 'Unmatched' || !!(row.reuse) || row.valid === false;
+      // "Issues Only" hides clean system matches, but manual mappings are
+      // user decisions and must remain visible in the uplift report.
+      return row.match !== 'System' || !!(row.reuse) || row.valid === false;
     }
     return true;
   }
