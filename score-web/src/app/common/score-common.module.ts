@@ -24,6 +24,7 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
 import {NgxMatSelectSearchModule} from 'ngx-mat-select-search';
 import {MatCheckboxModule} from '@angular/material/checkbox';
+import {ScoreMatSelectComponent} from './score-mat-select/score-mat-select.component';
 
 @NgModule({
   declarations: [
@@ -41,6 +42,7 @@ import {MatCheckboxModule} from '@angular/material/checkbox';
     TabFilterSelectComponent
   ],
   imports: [
+    ScoreMatSelectComponent,
     MatDialogModule,
     MatCardModule,
     CommonModule,
@@ -55,6 +57,7 @@ import {MatCheckboxModule} from '@angular/material/checkbox';
     MultiActionsSnackBarModule
   ],
   exports: [
+    ScoreMatSelectComponent,
     UnboundedPipe,
     HighlightSearch,
     DateAgoPipe,

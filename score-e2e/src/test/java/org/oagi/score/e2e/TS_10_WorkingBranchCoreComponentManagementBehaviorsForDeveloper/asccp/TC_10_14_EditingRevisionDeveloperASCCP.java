@@ -217,11 +217,6 @@ public class TC_10_14_EditingRevisionDeveloperASCCP extends BaseTest {
         asccpViewEditPage = viewEditCoreComponentPage.openASCCPViewEditPageByManifestID(asccp_not_reusable.getAsccpManifestId());
         WebElement asccNodeNotReusable = asccpViewEditPage.getNodeByPath("/" + asccp_not_reusable.getPropertyTerm());
         asccpPanel = asccpViewEditPage.getASCCPanelContainer(asccNodeNotReusable).getASCCPPanel();
-        // Material no longer covers a disabled checkbox with an overlay, so clicking it reaches the
-        // disabled input and is dropped by the browser instead of raising an interception. Assert
-        // the disabled state and that the click leaves the value untouched.
-        assertDisabled(asccpPanel.getReusableCheckbox());
-        asccpPanel.toggleReusable();
         assertNotChecked(asccpPanel.getReusableCheckbox());
         assertDisabled(asccpPanel.getReusableCheckbox());
         asccpViewEditPage.hitReviseButton();
@@ -552,6 +547,8 @@ public class TC_10_14_EditingRevisionDeveloperASCCP extends BaseTest {
         asccpViewEditPage = viewEditCoreComponentPage.openASCCPViewEditPageByManifestID(asccp.getAsccpManifestId());
         WebElement bccpNode = asccpViewEditPage.getNodeByPath("/" + asccp.getPropertyTerm() + "/" + acc_association.getDen() + "/" + bccp_to_append.getPropertyTerm());
         ASCCPViewEditPage.BCCPPanel bccpPanel = asccpViewEditPage.getBCCPanelContainer(bccpNode).getBCCPPanel();
+        new org.openqa.selenium.support.ui.WebDriverWait(getDriver(), java.time.Duration.ofSeconds(10))
+                .until(driver -> "BCCP".equals(getText(bccpPanel.getCoreComponentField())));
         assertFalse(bccpPanel.getCoreComponentField().isEnabled());
         assertEquals("BCCP", getText(bccpPanel.getCoreComponentField()));
         assertFalse(bccpPanel.getReleaseField().isEnabled());

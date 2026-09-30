@@ -43,7 +43,7 @@
     "crypto-js": "^4.1.1",
     "file-saver": "^2.0.5",
     "github-markdown-css": "^5.9.0",
-    "marked": "^18.0.0",
+    "marked": "^18.0.14",
     "mat-icon-button-sizes": "^1.0.6",
     "ngx-markdown": "^22.0.0",
     "ngx-mat-multi-sort": "^22.0.0",
@@ -76,6 +76,6 @@
     "ts-node": "~8.10.2",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.67.0",
-    "vitest": "^3.2.6"
+    "vitest": "^3.2.7"
   }
 }

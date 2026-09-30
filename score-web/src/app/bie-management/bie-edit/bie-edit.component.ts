@@ -619,18 +619,19 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
       return;
     }
 
-    if (delay) {
-      setTimeout(() => {
-        this.virtualScroll.scrollToOffset(index * this.virtualScrollItemSize, 'smooth');
-      }, delay);
-    } else {
-      this.virtualScroll.scrollToOffset(index * this.virtualScrollItemSize, 'smooth');
-    }
+    setTimeout(() => {
+      if (this.virtualScroll) {
+        this.virtualScroll.scrollToOffset(index * this.virtualScrollItemSize);
+        this.virtualScroll.checkViewportSize();
+      }
+      this.cdr.detectChanges();
+    }, delay);
   }
 
   search(inputKeyword, backward?: boolean, force?: boolean) {
     this.searcher.search(inputKeyword, this.selectedNode, backward, force).subscribe(index => {
-      this.scrollTree(index, 500);
+      this.scrollTree(index);
+      this.cdr.detectChanges();
     });
   }
 
@@ -783,6 +784,9 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
       return false;
     }
     if (node.required && this.used(node)) {
+      return false;
+    }
+    if (node.cardinalityMax === 0) {
       return false;
     }
     return this.canEdit && !node.inherited && !node.locked && !node.isCycle;
@@ -1420,24 +1424,22 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
 
     this.isUpdating = true;
     const nodeItem = node as AsbiepFlatNode;
-    this.service.createLocalAbieExtension(nodeItem).subscribe((resp: BieEditCreateExtensionResponse) => {
-      if (resp.canEdit) {
-        const commands = ['/core_component/extension/' + resp.extensionId];
-        this.router.navigate(commands);
-      } else {
-        if (resp.canView) {
-          this.openConfirmDialog('/core_component/extension/' + resp.extensionId);
+    this.service.createLocalAbieExtension(nodeItem)
+      .pipe(finalize(() => this.isUpdating = false))
+      .subscribe((resp: BieEditCreateExtensionResponse) => {
+        if (resp.canEdit) {
+          const commands = ['/core_component/extension/' + resp.extensionId];
+          this.router.navigate(commands);
         } else {
-          this.snackBar.open('Editing extension already exist.', '', {
-            duration: 3000,
-          });
+          if (resp.canView) {
+            this.openConfirmDialog('/core_component/extension/' + resp.extensionId);
+          } else {
+            this.snackBar.open('Editing extension already exist.', '', {
+              duration: 3000,
+            });
+          }
         }
-      }
-      this.isUpdating = false;
-    }, err => {
-      this.isUpdating = false;
-      this.openStateUpdateErrorDialog(err);
-    });
+      }, err => this.openStateUpdateErrorDialog(err));
   }
 
   private openStateUpdateErrorDialog(error: HttpErrorResponse): void {
@@ -1476,23 +1478,22 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
 
     this.isUpdating = true;
     const nodeItem = node as AsbiepFlatNode;
-    this.service.createGlobalAbieExtension(nodeItem).subscribe((resp: BieEditCreateExtensionResponse) => {
-      if (resp.canEdit) {
-        const commands = ['/core_component/extension/' + resp.extensionId];
-        this.router.navigate(commands);
-      } else {
-        if (resp.canView) {
-          this.openConfirmDialog('/core_component/extension/' + resp.extensionId);
+    this.service.createGlobalAbieExtension(nodeItem)
+      .pipe(finalize(() => this.isUpdating = false))
+      .subscribe((resp: BieEditCreateExtensionResponse) => {
+        if (resp.canEdit) {
+          const commands = ['/core_component/extension/' + resp.extensionId];
+          this.router.navigate(commands);
         } else {
-          this.snackBar.open('Editing extension already exist.', '', {
-            duration: 3000,
-          });
+          if (resp.canView) {
+            this.openConfirmDialog('/core_component/extension/' + resp.extensionId);
+          } else {
+            this.snackBar.open('Editing extension already exist.', '', {
+              duration: 3000,
+            });
+          }
         }
-      }
-      this.isUpdating = false;
-    }, err => {
-      this.isUpdating = false;
-    });
+      }, err => this.openStateUpdateErrorDialog(err));
   }
 
   enableChildren(node: BieFlatNode) {
@@ -1960,7 +1961,7 @@ export class BieEditComponent implements OnInit, ChangeListener<BieFlatNode> {
     this.queueBusinessTermChipGridErrorStateSync();
   }
 
-  startTypeCodeEdit(assigned: AssignedBusinessTermListEntry, editable: boolean, event?: MouseEvent): void {
+  startTypeCodeEdit(assigned: AssignedBusinessTermListEntry, editable: boolean, event?: Event): void {
     if (event) {
       event.preventDefault();
       event.stopPropagation();
