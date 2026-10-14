@@ -40,8 +40,8 @@ class JooqAiChatMemoryStorageRepositoryTest {
         repository.deleteByConversationId("conversation-1");
 
         List<String> conversationQueries = provider.sql.stream()
-                .filter(sql -> sql.contains("from `oagi`.`ai_chat_conversation`")
-                        || sql.contains("join `oagi`.`ai_chat_conversation`"))
+                .filter(sql -> sql.contains("from `ai_chat_conversation`")
+                        || sql.contains("join `ai_chat_conversation`"))
                 .toList();
         assertThat(conversationQueries).hasSizeGreaterThanOrEqualTo(4)
                 .allMatch(sql -> sql.contains("app_user_id"));
@@ -56,7 +56,7 @@ class JooqAiChatMemoryStorageRepositoryTest {
             String query = context.sql().toLowerCase(Locale.ROOT);
             sql.add(query);
             DSLContext create = DSL.using(SQLDialect.MYSQL);
-            if (query.contains("from `oagi`.`ai_chat_conversation`")) {
+            if (query.contains("from `ai_chat_conversation`")) {
                 Result<Record1<ULong>> result = create.newResult(
                         AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
                 Record1<ULong> record = create.newRecord(

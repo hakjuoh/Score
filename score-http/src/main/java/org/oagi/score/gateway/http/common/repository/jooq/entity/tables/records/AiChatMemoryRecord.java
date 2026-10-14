@@ -6,6 +6,7 @@ package org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records
 
 import java.time.LocalDateTime;
 
+import org.jooq.JSON;
 import org.jooq.Record1;
 import org.jooq.impl.UpdatableRecordImpl;
 import org.jooq.types.ULong;
@@ -108,7 +109,7 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
      * Setter for <code>ai_chat_memory.metadata_json</code>. Optional JSON
      * metadata associated with the model-context message.
      */
-    public void setMetadataJson(String value) {
+    public void setMetadataJson(JSON value) {
         set(5, value);
     }
 
@@ -116,8 +117,8 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
      * Getter for <code>ai_chat_memory.metadata_json</code>. Optional JSON
      * metadata associated with the model-context message.
      */
-    public String getMetadataJson() {
-        return (String) get(5);
+    public JSON getMetadataJson() {
+        return (JSON) get(5);
     }
 
     /**
@@ -159,7 +160,7 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     /**
      * Create a detached, initialised AiChatMemoryRecord
      */
-    public AiChatMemoryRecord(ULong aiChatMemoryId, ULong aiChatConversationId, Long memorySequence, String messageType, String content, String metadataJson, LocalDateTime creationTimestamp) {
+    public AiChatMemoryRecord(ULong aiChatMemoryId, ULong aiChatConversationId, Long memorySequence, String messageType, String content, JSON metadataJson, LocalDateTime creationTimestamp) {
         super(AiChatMemory.AI_CHAT_MEMORY);
 
         setAiChatMemoryId(aiChatMemoryId);

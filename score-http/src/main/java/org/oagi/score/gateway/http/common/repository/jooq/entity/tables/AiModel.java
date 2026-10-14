@@ -16,6 +16,7 @@ import org.jooq.ForeignKey;
 import org.jooq.Identity;
 import org.jooq.Index;
 import org.jooq.InverseForeignKey;
+import org.jooq.JSON;
 import org.jooq.Name;
 import org.jooq.Path;
 import org.jooq.PlainSQL;
@@ -168,7 +169,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
      * The column <code>ai_model.model_options_json</code>. Configured Spring AI
      * model options as a JSON object
      */
-    public final TableField<AiModelRecord, String> MODEL_OPTIONS_JSON = createField(DSL.name("model_options_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Configured Spring AI model options as a JSON object");
+    public final TableField<AiModelRecord, JSON> MODEL_OPTIONS_JSON = createField(DSL.name("model_options_json"), SQLDataType.JSON.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.JSON)), this, "Configured Spring AI model options as a JSON object");
 
     /**
      * The column <code>ai_model.created_by</code>. Identifier of the

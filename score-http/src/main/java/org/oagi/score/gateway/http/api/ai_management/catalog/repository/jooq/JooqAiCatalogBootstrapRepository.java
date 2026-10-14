@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq;
 
+import org.jooq.JSON;
 import org.jooq.DSLContext;
 import org.jooq.types.UInteger;
 import org.jooq.types.ULong;
@@ -129,7 +130,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
                             ULong.valueOf(budget.getToolOutputTokenLimit() != null
                                     ? budget.getToolOutputTokenLimit() : 32000L))
                     .set(AI_MODEL.MODEL_OPTIONS_JSON,
-                            AiChatJsonSerializer.getInstance().serialize(modelOptions(model)))
+                            JSON.jsonOrNull(AiChatJsonSerializer.getInstance().serialize(modelOptions(model))))
                     .set(AI_MODEL.CREATED_BY, audit.createdBy())
                     .set(AI_MODEL.LAST_UPDATED_BY, audit.lastUpdatedBy())
                     .set(AI_MODEL.CREATION_TIMESTAMP, audit.creationTimestamp())

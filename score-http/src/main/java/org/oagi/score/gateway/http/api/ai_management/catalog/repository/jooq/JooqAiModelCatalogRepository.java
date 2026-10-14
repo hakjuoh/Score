@@ -1,5 +1,7 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq;
 
+import org.jooq.JSON;
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.AiJsonColumns;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
@@ -302,7 +304,7 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
         record.setAutoCompactThresholdTokens(unsigned(settings.autoCompactThresholdTokens()));
         record.setEmergencyHeadroomTokens(ULong.valueOf(input.emergencyHeadroomTokens()));
         record.setToolOutputTokenLimit(ULong.valueOf(input.toolOutputTokenLimit()));
-        record.setModelOptionsJson(json(AiModelOptions.persisted(profile, input, settings)));
+        record.setModelOptionsJson(JSON.jsonOrNull(json(AiModelOptions.persisted(profile, input, settings))));
         return record;
     }
 
@@ -419,7 +421,7 @@ public class JooqAiModelCatalogRepository extends JooqBaseRepository
 
     private AiModelCatalogView view(DSLContext tx, Record row) {
         AiModelId id = new AiModelId(row.get(AI_MODEL.AI_MODEL_ID).toBigInteger());
-        Map<String, Object> options = parseJsonObject(row.get(AI_MODEL.MODEL_OPTIONS_JSON));
+        Map<String, Object> options = parseJsonObject(AiJsonColumns.text(row.get(AI_MODEL.MODEL_OPTIONS_JSON)));
         var providerRecord = tx.select(AI_PROVIDER.PROVIDER_NAME, AI_PROVIDER.PROVIDER_TYPE)
                 .from(AI_PROVIDER)
                 .where(AI_PROVIDER.AI_PROVIDER_ID.eq(row.get(AI_MODEL.PROVIDER_ID)))

@@ -16,6 +16,7 @@ import org.jooq.ForeignKey;
 import org.jooq.Identity;
 import org.jooq.Index;
 import org.jooq.InverseForeignKey;
+import org.jooq.JSON;
 import org.jooq.Name;
 import org.jooq.Path;
 import org.jooq.PlainSQL;
@@ -133,25 +134,25 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
      * The column <code>ai_chat_step.tool_calls_json</code>. JSON array
      * containing tool calls requested by the model.
      */
-    public final TableField<AiChatStepRecord, String> TOOL_CALLS_JSON = createField(DSL.name("tool_calls_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "JSON array containing tool calls requested by the model.");
+    public final TableField<AiChatStepRecord, JSON> TOOL_CALLS_JSON = createField(DSL.name("tool_calls_json"), SQLDataType.JSON.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.JSON)), this, "JSON array containing tool calls requested by the model.");
 
     /**
      * The column <code>ai_chat_step.observation_json</code>. JSON object
      * containing tool execution results observed by the agent.
      */
-    public final TableField<AiChatStepRecord, String> OBSERVATION_JSON = createField(DSL.name("observation_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "JSON object containing tool execution results observed by the agent.");
+    public final TableField<AiChatStepRecord, JSON> OBSERVATION_JSON = createField(DSL.name("observation_json"), SQLDataType.JSON.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.JSON)), this, "JSON object containing tool execution results observed by the agent.");
 
     /**
      * The column <code>ai_chat_step.metrics_json</code>. JSON object containing
      * token usage and other execution metrics.
      */
-    public final TableField<AiChatStepRecord, String> METRICS_JSON = createField(DSL.name("metrics_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "JSON object containing token usage and other execution metrics.");
+    public final TableField<AiChatStepRecord, JSON> METRICS_JSON = createField(DSL.name("metrics_json"), SQLDataType.JSON.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.JSON)), this, "JSON object containing token usage and other execution metrics.");
 
     /**
      * The column <code>ai_chat_step.extra_json</code>. JSON object containing
      * additional ATIF or application-specific step metadata.
      */
-    public final TableField<AiChatStepRecord, String> EXTRA_JSON = createField(DSL.name("extra_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "JSON object containing additional ATIF or application-specific step metadata.");
+    public final TableField<AiChatStepRecord, JSON> EXTRA_JSON = createField(DSL.name("extra_json"), SQLDataType.JSON.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.JSON)), this, "JSON object containing additional ATIF or application-specific step metadata.");
 
     /**
      * The column <code>ai_chat_step.llm_call_count</code>. The number of

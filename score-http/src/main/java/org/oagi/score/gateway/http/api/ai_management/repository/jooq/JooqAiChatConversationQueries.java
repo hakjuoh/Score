@@ -86,7 +86,7 @@ final class JooqAiChatConversationQueries {
                 .limit(1)
                 .fetchOptional(AI_CHAT_STEP.EXTRA_JSON)
                 .flatMap(value -> Optional.ofNullable(
-                        serializer.deserializeMapOrEmpty(value).get("activeWorkflow")))
+                        serializer.deserializeMapOrEmpty(AiJsonColumns.text(value)).get("activeWorkflow")))
                 .map(Object::toString)
                 .filter(StringUtils::hasText);
     }
@@ -104,7 +104,7 @@ final class JooqAiChatConversationQueries {
                 .limit(1)
                 .fetchOptional(record -> {
                     Map<String, Object> metrics = serializer.deserializeMapOrEmpty(
-                            record.get(AI_CHAT_STEP.METRICS_JSON));
+                            AiJsonColumns.text(record.get(AI_CHAT_STEP.METRICS_JSON)));
                     return latestUsage(record.get(AI_CHAT_STEP.MODEL_NAME), metrics,
                             instant(record.get(AI_CHAT_STEP.CREATION_TIMESTAMP)));
                 });
@@ -257,7 +257,7 @@ final class JooqAiChatConversationQueries {
         String kind = record.get(AI_CHAT_STEP.MESSAGE_KIND);
         String reasoning = record.get(AI_CHAT_STEP.REASONING_CONTENT);
         String content = record.get(AI_CHAT_STEP.MESSAGE);
-        Map<String, Object> storedExtra = serializer.deserializeMap(record.get(AI_CHAT_STEP.EXTRA_JSON));
+        Map<String, Object> storedExtra = serializer.deserializeMap(AiJsonColumns.text(record.get(AI_CHAT_STEP.EXTRA_JSON)));
         Map<String, Object> extra = storedExtra != null ? storedExtra : Map.of();
         boolean workerOwned = "SUBAGENT".equals(string(extra, "conversation_kind"))
                 || "PARALLEL".equals(string(extra, "conversation_kind"));
@@ -331,10 +331,10 @@ final class JooqAiChatConversationQueries {
                 AiChatTrajectoryStep.normalizeVisibility(record.get(AI_CHAT_STEP.VISIBILITY)),
                 record.get(AI_CHAT_STEP.MESSAGE), record.get(AI_CHAT_STEP.REASONING_CONTENT),
                 modelName, reasoningEffort,
-                serializer.deserializeListOfMaps(record.get(AI_CHAT_STEP.TOOL_CALLS_JSON)),
-                serializer.deserializeMap(record.get(AI_CHAT_STEP.OBSERVATION_JSON)),
-                serializer.deserializeMap(record.get(AI_CHAT_STEP.METRICS_JSON)),
-                serializer.deserializeMap(record.get(AI_CHAT_STEP.EXTRA_JSON)),
+                serializer.deserializeListOfMaps(AiJsonColumns.text(record.get(AI_CHAT_STEP.TOOL_CALLS_JSON))),
+                serializer.deserializeMap(AiJsonColumns.text(record.get(AI_CHAT_STEP.OBSERVATION_JSON))),
+                serializer.deserializeMap(AiJsonColumns.text(record.get(AI_CHAT_STEP.METRICS_JSON))),
+                serializer.deserializeMap(AiJsonColumns.text(record.get(AI_CHAT_STEP.EXTRA_JSON))),
                 record.get(AI_CHAT_STEP.LLM_CALL_COUNT),
                 byteBoolean(record.get(AI_CHAT_STEP.IS_COPIED_CONTEXT)),
                 createdAt != null ? instant(createdAt) : Instant.EPOCH);
@@ -359,7 +359,7 @@ final class JooqAiChatConversationQueries {
                 .orderBy(AI_CHAT_STEP.STEP_SEQUENCE.desc())
                 .limit(1)
                 .fetchOptional(record -> string(
-                        serializer.deserializeMapOrEmpty(record.get(AI_CHAT_STEP.EXTRA_JSON)),
+                        serializer.deserializeMapOrEmpty(AiJsonColumns.text(record.get(AI_CHAT_STEP.EXTRA_JSON))),
                         "permission_mode"))
                 .filter(mode -> "auto".equals(mode) || "full_access".equals(mode))
                 .orElse("ask");

@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.repository.jooq;
 
+import org.jooq.JSON;
 import org.jooq.DSLContext;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationKind;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationId;
@@ -107,10 +108,10 @@ final class JooqAiChatConversationCommands {
         stepRecord.setReasoningContent(blankToNull(step.reasoningContent()));
         stepRecord.setModelName(blankToNull(step.modelName()));
         stepRecord.setReasoningEffort(blankToNull(step.reasoningEffort()));
-        stepRecord.setToolCallsJson(serializer.serialize(step.toolCalls()));
-        stepRecord.setObservationJson(serializer.serialize(step.observation()));
-        stepRecord.setMetricsJson(serializer.serialize(step.metrics()));
-        stepRecord.setExtraJson(serializer.serialize(step.extra()));
+        stepRecord.setToolCallsJson(JSON.jsonOrNull(serializer.serialize(step.toolCalls())));
+        stepRecord.setObservationJson(JSON.jsonOrNull(serializer.serialize(step.observation())));
+        stepRecord.setMetricsJson(JSON.jsonOrNull(serializer.serialize(step.metrics())));
+        stepRecord.setExtraJson(JSON.jsonOrNull(serializer.serialize(step.extra())));
         stepRecord.setLlmCallCount(step.llmCallCount());
         stepRecord.setIsCopiedContext(byteValue(step.isCopiedContext()));
         stepRecord.setCreationTimestamp(localDateTime(createdAt));
@@ -130,7 +131,7 @@ final class JooqAiChatConversationCommands {
                            Map<String, Object> observation) {
         AiChatConversationId internalConversationId = access.lockOwned(conversationId);
         int updated = dslContext.update(AI_CHAT_STEP)
-                .set(AI_CHAT_STEP.OBSERVATION_JSON, serializer.serialize(observation))
+                .set(AI_CHAT_STEP.OBSERVATION_JSON, JSON.jsonOrNull(serializer.serialize(observation)))
                 .where(AI_CHAT_STEP.AI_CHAT_STEP_ID.eq(access.valueOf(stepId))
                         .and(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID
                                 .eq(access.valueOf(internalConversationId))))
@@ -145,10 +146,10 @@ final class JooqAiChatConversationCommands {
         int updated = dslContext.update(AI_CHAT_STEP)
                 .set(AI_CHAT_STEP.MODEL_NAME, blankToNull(step.modelName()))
                 .set(AI_CHAT_STEP.REASONING_EFFORT, blankToNull(step.reasoningEffort()))
-                .set(AI_CHAT_STEP.TOOL_CALLS_JSON, serializer.serialize(step.toolCalls()))
-                .set(AI_CHAT_STEP.OBSERVATION_JSON, serializer.serialize(step.observation()))
-                .set(AI_CHAT_STEP.METRICS_JSON, serializer.serialize(step.metrics()))
-                .set(AI_CHAT_STEP.EXTRA_JSON, serializer.serialize(step.extra()))
+                .set(AI_CHAT_STEP.TOOL_CALLS_JSON, JSON.jsonOrNull(serializer.serialize(step.toolCalls())))
+                .set(AI_CHAT_STEP.OBSERVATION_JSON, JSON.jsonOrNull(serializer.serialize(step.observation())))
+                .set(AI_CHAT_STEP.METRICS_JSON, JSON.jsonOrNull(serializer.serialize(step.metrics())))
+                .set(AI_CHAT_STEP.EXTRA_JSON, JSON.jsonOrNull(serializer.serialize(step.extra())))
                 .set(AI_CHAT_STEP.LLM_CALL_COUNT, step.llmCallCount())
                 .where(AI_CHAT_STEP.AI_CHAT_STEP_ID.eq(access.valueOf(stepId))
                         .and(AI_CHAT_STEP.AI_CHAT_CONVERSATION_ID

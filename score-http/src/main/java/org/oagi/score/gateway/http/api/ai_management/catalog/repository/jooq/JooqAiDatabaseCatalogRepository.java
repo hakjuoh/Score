@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.catalog.repository.jooq;
 
+import org.oagi.score.gateway.http.api.ai_management.repository.jooq.AiJsonColumns;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
@@ -89,7 +90,7 @@ public class JooqAiDatabaseCatalogRepository extends JooqBaseRepository
                     ? view.configurationConstraints() : null;
             AiModelProfileView.ModelCapabilityConstraints profileCapabilities = view != null
                     ? view.capabilityConstraints() : null;
-            Map<String, Object> storedOptions = jsonObject(row.get(AI_MODEL.MODEL_OPTIONS_JSON));
+            Map<String, Object> storedOptions = jsonObject(AiJsonColumns.text(row.get(AI_MODEL.MODEL_OPTIONS_JSON)));
             Map<String, Object> options = profile != null
                     ? AiModelOptions.runtimeOptions(profile, storedOptions) : Map.of();
             ScoreAiProperties.Model model = new ScoreAiProperties.Model();

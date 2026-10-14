@@ -15,6 +15,7 @@ import org.jooq.Field;
 import org.jooq.ForeignKey;
 import org.jooq.Identity;
 import org.jooq.InverseForeignKey;
+import org.jooq.JSON;
 import org.jooq.Name;
 import org.jooq.Path;
 import org.jooq.PlainSQL;
@@ -96,7 +97,7 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
      * The column <code>ai_chat_memory.metadata_json</code>. Optional JSON
      * metadata associated with the model-context message.
      */
-    public final TableField<AiChatMemoryRecord, String> METADATA_JSON = createField(DSL.name("metadata_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Optional JSON metadata associated with the model-context message.");
+    public final TableField<AiChatMemoryRecord, JSON> METADATA_JSON = createField(DSL.name("metadata_json"), SQLDataType.JSON.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.JSON)), this, "Optional JSON metadata associated with the model-context message.");
 
     /**
      * The column <code>ai_chat_memory.creation_timestamp</code>. The timestamp

@@ -1,5 +1,6 @@
 package org.oagi.score.gateway.http.api.ai_management.repository.jooq;
 
+import org.jooq.JSON;
 import org.jooq.DSLContext;
 import org.oagi.score.gateway.http.api.account_management.model.UserId;
 import org.oagi.score.gateway.http.api.ai_management.model.AiChatConversationId;
@@ -70,7 +71,7 @@ public class JooqAiChatMemoryStorageRepository extends JooqBaseRepository
                 .fetch(record -> new AiChatMemoryEntry(
                         record.get(AI_CHAT_MEMORY.MESSAGE_TYPE),
                         record.get(AI_CHAT_MEMORY.CONTENT),
-                        serializer.deserializeMap(record.get(AI_CHAT_MEMORY.METADATA_JSON))));
+                        serializer.deserializeMap(AiJsonColumns.text(record.get(AI_CHAT_MEMORY.METADATA_JSON)))));
     }
 
     @Override
@@ -92,7 +93,7 @@ public class JooqAiChatMemoryStorageRepository extends JooqBaseRepository
             record.setMemorySequence((long) index);
             record.setMessageType(entry.messageType());
             record.setContent(Objects.requireNonNullElse(entry.content(), ""));
-            record.setMetadataJson(serializer.serialize(entry.metadata()));
+            record.setMetadataJson(JSON.jsonOrNull(serializer.serialize(entry.metadata())));
             record.setCreationTimestamp(LocalDateTime.ofInstant(now, ZoneId.systemDefault()));
             dslContext().insertInto(AI_CHAT_MEMORY).set(record).execute();
         }

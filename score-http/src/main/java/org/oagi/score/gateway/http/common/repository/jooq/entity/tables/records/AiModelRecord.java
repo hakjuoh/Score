@@ -6,6 +6,7 @@ package org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records
 
 import java.time.LocalDateTime;
 
+import org.jooq.JSON;
 import org.jooq.Record1;
 import org.jooq.impl.UpdatableRecordImpl;
 import org.jooq.types.UInteger;
@@ -281,7 +282,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Setter for <code>ai_model.model_options_json</code>. Configured Spring AI
      * model options as a JSON object
      */
-    public void setModelOptionsJson(String value) {
+    public void setModelOptionsJson(JSON value) {
         set(16, value);
     }
 
@@ -289,8 +290,8 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
      * Getter for <code>ai_model.model_options_json</code>. Configured Spring AI
      * model options as a JSON object
      */
-    public String getModelOptionsJson() {
-        return (String) get(16);
+    public JSON getModelOptionsJson() {
+        return (JSON) get(16);
     }
 
     /**
@@ -380,7 +381,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     /**
      * Create a detached, initialised AiModelRecord
      */
-    public AiModelRecord(ULong aiModelId, ULong providerId, String modelKey, String providerModelName, String displayName, String description, Byte enabled, Byte defaultModel, Byte lightweightModel, UInteger sortOrder, UInteger maxTokens, ULong contextWindow, ULong outputReserveTokens, ULong autoCompactThresholdTokens, ULong emergencyHeadroomTokens, ULong toolOutputTokenLimit, String modelOptionsJson, ULong createdBy, ULong lastUpdatedBy, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
+    public AiModelRecord(ULong aiModelId, ULong providerId, String modelKey, String providerModelName, String displayName, String description, Byte enabled, Byte defaultModel, Byte lightweightModel, UInteger sortOrder, UInteger maxTokens, ULong contextWindow, ULong outputReserveTokens, ULong autoCompactThresholdTokens, ULong emergencyHeadroomTokens, ULong toolOutputTokenLimit, JSON modelOptionsJson, ULong createdBy, ULong lastUpdatedBy, LocalDateTime creationTimestamp, LocalDateTime lastUpdateTimestamp) {
         super(AiModel.AI_MODEL);
 
         setAiModelId(aiModelId);

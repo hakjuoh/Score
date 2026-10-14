@@ -6,6 +6,7 @@ package org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records
 
 import java.time.LocalDateTime;
 
+import org.jooq.JSON;
 import org.jooq.Record1;
 import org.jooq.impl.UpdatableRecordImpl;
 import org.jooq.types.ULong;
@@ -202,7 +203,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * Setter for <code>ai_chat_step.tool_calls_json</code>. JSON array
      * containing tool calls requested by the model.
      */
-    public void setToolCallsJson(String value) {
+    public void setToolCallsJson(JSON value) {
         set(11, value);
     }
 
@@ -210,15 +211,15 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * Getter for <code>ai_chat_step.tool_calls_json</code>. JSON array
      * containing tool calls requested by the model.
      */
-    public String getToolCallsJson() {
-        return (String) get(11);
+    public JSON getToolCallsJson() {
+        return (JSON) get(11);
     }
 
     /**
      * Setter for <code>ai_chat_step.observation_json</code>. JSON object
      * containing tool execution results observed by the agent.
      */
-    public void setObservationJson(String value) {
+    public void setObservationJson(JSON value) {
         set(12, value);
     }
 
@@ -226,15 +227,15 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * Getter for <code>ai_chat_step.observation_json</code>. JSON object
      * containing tool execution results observed by the agent.
      */
-    public String getObservationJson() {
-        return (String) get(12);
+    public JSON getObservationJson() {
+        return (JSON) get(12);
     }
 
     /**
      * Setter for <code>ai_chat_step.metrics_json</code>. JSON object containing
      * token usage and other execution metrics.
      */
-    public void setMetricsJson(String value) {
+    public void setMetricsJson(JSON value) {
         set(13, value);
     }
 
@@ -242,15 +243,15 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * Getter for <code>ai_chat_step.metrics_json</code>. JSON object containing
      * token usage and other execution metrics.
      */
-    public String getMetricsJson() {
-        return (String) get(13);
+    public JSON getMetricsJson() {
+        return (JSON) get(13);
     }
 
     /**
      * Setter for <code>ai_chat_step.extra_json</code>. JSON object containing
      * additional ATIF or application-specific step metadata.
      */
-    public void setExtraJson(String value) {
+    public void setExtraJson(JSON value) {
         set(14, value);
     }
 
@@ -258,8 +259,8 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
      * Getter for <code>ai_chat_step.extra_json</code>. JSON object containing
      * additional ATIF or application-specific step metadata.
      */
-    public String getExtraJson() {
-        return (String) get(14);
+    public JSON getExtraJson() {
+        return (JSON) get(14);
     }
 
     /**
@@ -333,7 +334,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     /**
      * Create a detached, initialised AiChatStepRecord
      */
-    public AiChatStepRecord(ULong aiChatStepId, ULong aiChatConversationId, Long stepSequence, String requestId, String source, String messageKind, String visibility, String message, String reasoningContent, String modelName, String reasoningEffort, String toolCallsJson, String observationJson, String metricsJson, String extraJson, Integer llmCallCount, Byte isCopiedContext, LocalDateTime creationTimestamp) {
+    public AiChatStepRecord(ULong aiChatStepId, ULong aiChatConversationId, Long stepSequence, String requestId, String source, String messageKind, String visibility, String message, String reasoningContent, String modelName, String reasoningEffort, JSON toolCallsJson, JSON observationJson, JSON metricsJson, JSON extraJson, Integer llmCallCount, Byte isCopiedContext, LocalDateTime creationTimestamp) {
         super(AiChatStep.AI_CHAT_STEP);
 
         setAiChatStepId(aiChatStepId);

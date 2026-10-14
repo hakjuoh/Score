@@ -89,7 +89,7 @@ class JooqAiProviderCatalogRepositoryTest {
                 .contains("`updater`.`login_id` not in (?)")
                 .contains("`ai_provider`.`last_update_timestamp` >= ?")
                 .contains("`ai_provider`.`last_update_timestamp` < ?")
-                .contains("order by `oagi`.`ai_provider`.`last_update_timestamp` desc")
+                .contains("order by `ai_provider`.`last_update_timestamp` desc")
                 .contains("offset ? rows fetch next ? rows only");
     }
 

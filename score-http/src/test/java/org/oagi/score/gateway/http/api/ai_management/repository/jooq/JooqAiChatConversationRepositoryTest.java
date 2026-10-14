@@ -2,6 +2,7 @@ package org.oagi.score.gateway.http.api.ai_management.repository.jooq;
 
 import org.jooq.DSLContext;
 import org.jooq.Field;
+import org.jooq.JSON;
 import org.jooq.Record;
 import org.jooq.Record1;
 import org.jooq.Record2;
@@ -125,8 +126,8 @@ class JooqAiChatConversationRepositoryTest {
         assertThat(access.lockOwned("conversation-1"))
                 .isEqualTo(AiChatConversationId.from(42L));
         assertThat(owned.sql).hasSize(2).allSatisfy(sql ->
-                assertThat(sql).contains("where (`oagi`.`ai_chat_conversation`.`guid` = ?"
-                        + " and `oagi`.`ai_chat_conversation`.`app_user_id` = ?)"));
+                assertThat(sql).contains("where (`ai_chat_conversation`.`guid` = ?"
+                        + " and `ai_chat_conversation`.`app_user_id` = ?)"));
         assertThat(owned.bindings).allSatisfy(bindings ->
                 assertThat(bindings).extracting(Object::toString)
                         .contains("conversation-1", "9"));
@@ -287,7 +288,7 @@ class JooqAiChatConversationRepositoryTest {
         assertThat(lockIndex).isGreaterThanOrEqualTo(0).isLessThan(settingsIndex);
         assertThat(provider.sql.get(settingsIndex))
                 .contains("message_kind` = ?",
-                        "order by `oagi`.`ai_chat_step`.`step_sequence` desc", "limit ?");
+                        "order by `ai_chat_step`.`step_sequence` desc", "limit ?");
         assertThat(provider.bindings.get(settingsIndex)).contains("settings_change", 1L);
     }
 
@@ -372,13 +373,13 @@ class JooqAiChatConversationRepositoryTest {
                     .containsExactly(1L, 2L, 3L, 4L);
         });
         assertThat(provider.sql.stream()
-                .filter(sql -> sql.contains("from `oagi`.`ai_chat_step`")))
+                .filter(sql -> sql.contains("from `ai_chat_step`")))
                 .noneMatch(sql -> sql.contains(" limit "));
         assertThat(provider.sql.stream()
-                .filter(sql -> sql.contains("from `oagi`.`ai_chat_step`"))
+                .filter(sql -> sql.contains("from `ai_chat_step`"))
                 .toList()).singleElement().satisfies(sql ->
-                assertThat(sql).contains("order by `oagi`.`ai_chat_step`.`creation_timestamp` desc",
-                        "`oagi`.`ai_chat_step`.`ai_chat_step_id` desc"));
+                assertThat(sql).contains("order by `ai_chat_step`.`creation_timestamp` desc",
+                        "`ai_chat_step`.`ai_chat_step_id` desc"));
     }
 
     private static int indexOf(List<String> values,
@@ -399,7 +400,7 @@ class JooqAiChatConversationRepositoryTest {
             sql.add(query);
             bindings.add(java.util.Arrays.asList(context.bindings()));
             DSLContext create = DSL.using(SQLDialect.MYSQL);
-            if (query.contains("from `oagi`.`ai_chat_conversation`")
+            if (query.contains("from `ai_chat_conversation`")
                     && query.contains("for update")) {
                 Result<Record1<ULong>> result = create.newResult(
                         AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
@@ -409,7 +410,7 @@ class JooqAiChatConversationRepositoryTest {
                 result.add(record);
                 return new MockResult[]{new MockResult(1, result)};
             }
-            if (query.contains("from `oagi`.`ai_chat_conversation`")
+            if (query.contains("from `ai_chat_conversation`")
                     && query.contains("select")) {
                 Result<Record1<ULong>> result = create.newResult(
                         AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
@@ -420,9 +421,9 @@ class JooqAiChatConversationRepositoryTest {
                 return new MockResult[]{new MockResult(1, result)};
             }
             if (query.contains("ai_chat_step") && query.contains("extra_json")) {
-                Result<Record1<String>> result = create.newResult(AI_CHAT_STEP.EXTRA_JSON);
-                Record1<String> record = create.newRecord(AI_CHAT_STEP.EXTRA_JSON);
-                record.value1("{\"activeWorkflow\":\"orchestrator_workers\"}");
+                Result<Record1<JSON>> result = create.newResult(AI_CHAT_STEP.EXTRA_JSON);
+                Record1<JSON> record = create.newRecord(AI_CHAT_STEP.EXTRA_JSON);
+                record.value1(JSON.json("{\"activeWorkflow\":\"orchestrator_workers\"}"));
                 result.add(record);
                 return new MockResult[]{new MockResult(1, result)};
             }
@@ -485,7 +486,7 @@ class JooqAiChatConversationRepositoryTest {
             sql.add(query);
             bindings.add(java.util.Arrays.asList(context.bindings()));
             DSLContext create = DSL.using(SQLDialect.MYSQL);
-            if (query.contains("from `oagi`.`ai_chat_conversation`")
+            if (query.contains("from `ai_chat_conversation`")
                     && query.contains("for update")) {
                 Result<Record1<ULong>> result = create.newResult(
                         AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
@@ -510,22 +511,22 @@ class JooqAiChatConversationRepositoryTest {
             sql.add(query);
             bindings.add(java.util.Arrays.asList(context.bindings()));
             DSLContext create = DSL.using(SQLDialect.MYSQL);
-            if (query.contains("from `oagi`.`ai_chat_step`")) {
+            if (query.contains("from `ai_chat_step`")) {
                 Field<?>[] fields = {AI_CHAT_STEP.MODEL_NAME, AI_CHAT_STEP.METRICS_JSON,
                         AI_CHAT_STEP.CREATION_TIMESTAMP};
                 Result<Record> result = create.newResult(fields);
                 Record record = create.newRecord(fields);
                 record.set(AI_CHAT_STEP.MODEL_NAME, "gpt-5.6-sol");
                 record.set(AI_CHAT_STEP.METRICS_JSON,
-                        "{\"fanout_prompt_tokens\":565170,"
+                        JSON.json("{\"fanout_prompt_tokens\":565170,"
                                 + "\"context_input_tokens\":913808,"
-                                + "\"context_estimated\":true}");
+                                + "\"context_estimated\":true}"));
                 record.set(AI_CHAT_STEP.CREATION_TIMESTAMP,
                         LocalDateTime.parse("2026-08-18T14:19:52"));
                 result.add(record);
                 return new MockResult[]{new MockResult(1, result)};
             }
-            if (query.contains("from `oagi`.`ai_chat_conversation`")) {
+            if (query.contains("from `ai_chat_conversation`")) {
                 Result<Record1<ULong>> result = create.newResult(
                         AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
                 Record1<ULong> record = create.newRecord(
@@ -547,10 +548,10 @@ class JooqAiChatConversationRepositoryTest {
             String query = context.sql().toLowerCase(Locale.ROOT);
             sql.add(query);
             DSLContext create = DSL.using(SQLDialect.MYSQL);
-            if (query.contains("from `oagi`.`ai_chat_step`")) {
+            if (query.contains("from `ai_chat_step`")) {
                 return new MockResult[]{new MockResult(6, steps(create))};
             }
-            if (query.contains("from `oagi`.`ai_chat_conversation`")
+            if (query.contains("from `ai_chat_conversation`")
                     && query.contains("parent_ai_chat_conversation_id")) {
                 Field<?>[] fields = {
                         AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID,
@@ -569,7 +570,7 @@ class JooqAiChatConversationRepositoryTest {
                 result.add(record);
                 return new MockResult[]{new MockResult(1, result)};
             }
-            if (query.contains("from `oagi`.`ai_chat_conversation`")) {
+            if (query.contains("from `ai_chat_conversation`")) {
                 Result<Record1<ULong>> result = create.newResult(
                         AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);
                 Record1<ULong> record = create.newRecord(
@@ -637,8 +638,8 @@ class JooqAiChatConversationRepositoryTest {
             record.set(AI_CHAT_STEP.MESSAGE, message);
             record.set(AI_CHAT_STEP.MODEL_NAME, "model");
             record.set(AI_CHAT_STEP.REASONING_EFFORT, "medium");
-            record.set(AI_CHAT_STEP.METRICS_JSON, metrics);
-            record.set(AI_CHAT_STEP.EXTRA_JSON, extra);
+            record.set(AI_CHAT_STEP.METRICS_JSON, JSON.jsonOrNull(metrics));
+            record.set(AI_CHAT_STEP.EXTRA_JSON, JSON.jsonOrNull(extra));
             record.set(AI_CHAT_STEP.LLM_CALL_COUNT, llmCalls);
             record.set(AI_CHAT_STEP.IS_COPIED_CONTEXT, copied);
             record.set(AI_CHAT_STEP.CREATION_TIMESTAMP, createdAt);
@@ -655,7 +656,7 @@ class JooqAiChatConversationRepositoryTest {
             String query = context.sql().toLowerCase(Locale.ROOT);
             sql.add(query);
             DSLContext create = DSL.using(SQLDialect.MYSQL);
-            if (query.contains("from `oagi`.`ai_chat_conversation`")
+            if (query.contains("from `ai_chat_conversation`")
                     && query.contains("for update")) {
                 Result<Record1<ULong>> result = create.newResult(
                         AI_CHAT_CONVERSATION.AI_CHAT_CONVERSATION_ID);

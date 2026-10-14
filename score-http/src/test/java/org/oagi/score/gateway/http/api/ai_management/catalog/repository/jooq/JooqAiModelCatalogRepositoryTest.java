@@ -85,7 +85,7 @@ class JooqAiModelCatalogRepositoryTest {
                 List.of());
 
         var record = repository.configurationRecord(dsl, profile, update);
-        var options = new ObjectMapper().readTree(record.getModelOptionsJson());
+        var options = new ObjectMapper().readTree(record.getModelOptionsJson().data());
 
         assertThat(record.getProviderModelName()).isEqualTo("claude-haiku-4-5");
         assertThat(record.getDisplayName()).isEqualTo("Claude Haiku 4.5");
@@ -116,7 +116,7 @@ class JooqAiModelCatalogRepositoryTest {
                 List.of("enabled", "disabled"), "enabled", List.of());
 
         var record = repository.configurationRecord(dsl, profile, update);
-        var options = new ObjectMapper().readTree(record.getModelOptionsJson());
+        var options = new ObjectMapper().readTree(record.getModelOptionsJson().data());
 
         assertThat(record.getMaxTokens().intValue()).isEqualTo(64_000);
         assertThat(record.getOutputReserveTokens().longValue()).isEqualTo(64_000L);
