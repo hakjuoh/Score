@@ -22,19 +22,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModel.AiModelPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiTokenUsageLedgerRecord;
@@ -49,7 +50,7 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_token_usage_ledger</code>
+     * The reference instance of <code>ai_token_usage_ledger</code>
      */
     public static final AiTokenUsageLedger AI_TOKEN_USAGE_LEDGER = new AiTokenUsageLedger();
 
@@ -62,125 +63,123 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
     }
 
     /**
-     * The column
-     * <code>oagi.ai_token_usage_ledger.ai_token_usage_ledger_id</code>.
+     * The column <code>ai_token_usage_ledger.ai_token_usage_ledger_id</code>.
      * Identifier of the token usage ledger entry
      */
-    public final TableField<AiTokenUsageLedgerRecord, ULong> AI_TOKEN_USAGE_LEDGER_ID = createField(DSL.name("ai_token_usage_ledger_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Identifier of the token usage ledger entry");
+    public final TableField<AiTokenUsageLedgerRecord, ULong> AI_TOKEN_USAGE_LEDGER_ID = createField(DSL.name("ai_token_usage_ledger_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "Identifier of the token usage ledger entry");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.call_id</code>. UUID of the
+     * The column <code>ai_token_usage_ledger.call_id</code>. UUID of the
      * provider call attempt
      */
     public final TableField<AiTokenUsageLedgerRecord, String> CALL_ID = createField(DSL.name("call_id"), SQLDataType.CHAR(36).nullable(false), this, "UUID of the provider call attempt");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.request_id</code>. Identifier
-     * of the root AI request
+     * The column <code>ai_token_usage_ledger.request_id</code>. Identifier of
+     * the root AI request
      */
     public final TableField<AiTokenUsageLedgerRecord, String> REQUEST_ID = createField(DSL.name("request_id"), SQLDataType.VARCHAR(128).nullable(false), this, "Identifier of the root AI request");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.conversation_guid</code>.
-     * GUID of the related AI conversation
+     * The column <code>ai_token_usage_ledger.conversation_guid</code>. GUID of
+     * the related AI conversation
      */
     public final TableField<AiTokenUsageLedgerRecord, String> CONVERSATION_GUID = createField(DSL.name("conversation_guid"), SQLDataType.CHAR(36).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CHAR)), this, "GUID of the related AI conversation");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.app_user_id</code>.
-     * Identifier of the user who initiated the AI call
+     * The column <code>ai_token_usage_ledger.app_user_id</code>. Identifier of
+     * the user who initiated the AI call
      */
     public final TableField<AiTokenUsageLedgerRecord, ULong> APP_USER_ID = createField(DSL.name("app_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the user who initiated the AI call");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.ai_model_id</code>.
-     * Identifier of the AI model that was called
+     * The column <code>ai_token_usage_ledger.ai_model_id</code>. Identifier of
+     * the AI model that was called
      */
     public final TableField<AiTokenUsageLedgerRecord, ULong> AI_MODEL_ID = createField(DSL.name("ai_model_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the AI model that was called");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.execution_kind</code>.
-     * Execution kind such as assistant, planner, or worker
+     * The column <code>ai_token_usage_ledger.execution_kind</code>. Execution
+     * kind such as assistant, planner, or worker
      */
     public final TableField<AiTokenUsageLedgerRecord, String> EXECUTION_KIND = createField(DSL.name("execution_kind"), SQLDataType.VARCHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Execution kind such as assistant, planner, or worker");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.agent_id</code>. Identifier
-     * of the agent that performed the call
+     * The column <code>ai_token_usage_ledger.agent_id</code>. Identifier of the
+     * agent that performed the call
      */
     public final TableField<AiTokenUsageLedgerRecord, String> AGENT_ID = createField(DSL.name("agent_id"), SQLDataType.VARCHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Identifier of the agent that performed the call");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.reserved_tokens</code>.
-     * Number of tokens reserved before the provider call
+     * The column <code>ai_token_usage_ledger.reserved_tokens</code>. Number of
+     * tokens reserved before the provider call
      */
     public final TableField<AiTokenUsageLedgerRecord, ULong> RESERVED_TOKENS = createField(DSL.name("reserved_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of tokens reserved before the provider call");
 
     /**
      * The column
-     * <code>oagi.ai_token_usage_ledger.quota_period_start_timestamp</code>.
-     * Exact inclusive quota window start reserved by this call
+     * <code>ai_token_usage_ledger.quota_period_start_timestamp</code>. Exact
+     * inclusive quota window start reserved by this call
      */
     public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> QUOTA_PERIOD_START_TIMESTAMP = createField(DSL.name("quota_period_start_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Exact inclusive quota window start reserved by this call");
 
     /**
-     * The column
-     * <code>oagi.ai_token_usage_ledger.quota_period_end_timestamp</code>. Exact
-     * exclusive quota window end reserved by this call
+     * The column <code>ai_token_usage_ledger.quota_period_end_timestamp</code>.
+     * Exact exclusive quota window end reserved by this call
      */
     public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> QUOTA_PERIOD_END_TIMESTAMP = createField(DSL.name("quota_period_end_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Exact exclusive quota window end reserved by this call");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.prompt_tokens</code>.
-     * Normalized input tokens reported by the provider
+     * The column <code>ai_token_usage_ledger.prompt_tokens</code>. Normalized
+     * input tokens reported by the provider
      */
     public final TableField<AiTokenUsageLedgerRecord, ULong> PROMPT_TOKENS = createField(DSL.name("prompt_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Normalized input tokens reported by the provider");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.completion_tokens</code>.
-     * Output tokens reported by the provider
+     * The column <code>ai_token_usage_ledger.completion_tokens</code>. Output
+     * tokens reported by the provider
      */
     public final TableField<AiTokenUsageLedgerRecord, ULong> COMPLETION_TOKENS = createField(DSL.name("completion_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Output tokens reported by the provider");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.cached_tokens</code>. Number
-     * of input tokens served from cache
+     * The column <code>ai_token_usage_ledger.cached_tokens</code>. Number of
+     * input tokens served from cache
      */
     public final TableField<AiTokenUsageLedgerRecord, ULong> CACHED_TOKENS = createField(DSL.name("cached_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of input tokens served from cache");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.charged_tokens</code>. Number
-     * of tokens charged against the quota
+     * The column <code>ai_token_usage_ledger.charged_tokens</code>. Number of
+     * tokens charged against the quota
      */
     public final TableField<AiTokenUsageLedgerRecord, ULong> CHARGED_TOKENS = createField(DSL.name("charged_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of tokens charged against the quota");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.usage_complete</code>.
-     * Indicates whether the provider usage data is complete
+     * The column <code>ai_token_usage_ledger.usage_complete</code>. Indicates
+     * whether the provider usage data is complete
      */
     public final TableField<AiTokenUsageLedgerRecord, Byte> USAGE_COMPLETE = createField(DSL.name("usage_complete"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicates whether the provider usage data is complete");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.status</code>. Reservation
-     * and settlement status
+     * The column <code>ai_token_usage_ledger.status</code>. Reservation and
+     * settlement status
      */
     public final TableField<AiTokenUsageLedgerRecord, String> STATUS = createField(DSL.name("status"), SQLDataType.VARCHAR(16).nullable(false), this, "Reservation and settlement status");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.failure_type</code>. Failure
-     * class or error code
+     * The column <code>ai_token_usage_ledger.failure_type</code>. Failure class
+     * or error code
      */
     public final TableField<AiTokenUsageLedgerRecord, String> FAILURE_TYPE = createField(DSL.name("failure_type"), SQLDataType.VARCHAR(240).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Failure class or error code");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.reserved_timestamp</code>.
-     * Date and time when the tokens were reserved
+     * The column <code>ai_token_usage_ledger.reserved_timestamp</code>. Date
+     * and time when the tokens were reserved
      */
     public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> RESERVED_TIMESTAMP = createField(DSL.name("reserved_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the tokens were reserved");
 
     /**
-     * The column <code>oagi.ai_token_usage_ledger.settled_timestamp</code>.
-     * Date and time when the usage was settled or released
+     * The column <code>ai_token_usage_ledger.settled_timestamp</code>. Date and
+     * time when the usage was settled or released
      */
     public final TableField<AiTokenUsageLedgerRecord, LocalDateTime> SETTLED_TIMESTAMP = createField(DSL.name("settled_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "Date and time when the usage was settled or released");
 
@@ -193,21 +192,21 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_token_usage_ledger</code> table reference
+     * Create an aliased <code>ai_token_usage_ledger</code> table reference
      */
     public AiTokenUsageLedger(String alias) {
         this(DSL.name(alias), AI_TOKEN_USAGE_LEDGER);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_token_usage_ledger</code> table reference
+     * Create an aliased <code>ai_token_usage_ledger</code> table reference
      */
     public AiTokenUsageLedger(Name alias) {
         this(alias, AI_TOKEN_USAGE_LEDGER);
     }
 
     /**
-     * Create a <code>oagi.ai_token_usage_ledger</code> table reference
+     * Create a <code>ai_token_usage_ledger</code> table reference
      */
     public AiTokenUsageLedger() {
         this(DSL.name("ai_token_usage_ledger"), null);
@@ -248,7 +247,7 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -279,7 +278,7 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
     private transient AiModelPath _aiModel;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_model</code> table.
+     * Get the implicit join path to the <code>ai_model</code> table.
      */
     public AiModelPath aiModel() {
         if (_aiModel == null)
@@ -291,7 +290,7 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
     private transient AppUserPath _appUser;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table.
+     * Get the implicit join path to the <code>app_user</code> table.
      */
     public AppUserPath appUser() {
         if (_appUser == null)
@@ -344,7 +343,7 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
      */
     @Override
     public AiTokenUsageLedger where(Condition condition) {
-        return new AiTokenUsageLedger(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiTokenUsageLedger(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -411,7 +410,7 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiTokenUsageLedger whereExists(Select<?> select) {
+    public AiTokenUsageLedger whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -419,7 +418,7 @@ public class AiTokenUsageLedger extends TableImpl<AiTokenUsageLedgerRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiTokenUsageLedger whereNotExists(Select<?> select) {
+    public AiTokenUsageLedger whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

@@ -21,24 +21,24 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_chat_memory.ai_chat_memory_id</code>. The
-     * primary key of the AI chat memory record.
+     * Setter for <code>ai_chat_memory.ai_chat_memory_id</code>. The primary key
+     * of the AI chat memory record.
      */
     public void setAiChatMemoryId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_memory.ai_chat_memory_id</code>. The
-     * primary key of the AI chat memory record.
+     * Getter for <code>ai_chat_memory.ai_chat_memory_id</code>. The primary key
+     * of the AI chat memory record.
      */
     public ULong getAiChatMemoryId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_memory.ai_chat_conversation_id</code>.
-     * Foreign key to the AI_CHAT_CONVERSATION table identifying the owning
+     * Setter for <code>ai_chat_memory.ai_chat_conversation_id</code>. Foreign
+     * key to the AI_CHAT_CONVERSATION table identifying the owning
      * conversation.
      */
     public void setAiChatConversationId(ULong value) {
@@ -46,8 +46,8 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_memory.ai_chat_conversation_id</code>.
-     * Foreign key to the AI_CHAT_CONVERSATION table identifying the owning
+     * Getter for <code>ai_chat_memory.ai_chat_conversation_id</code>. Foreign
+     * key to the AI_CHAT_CONVERSATION table identifying the owning
      * conversation.
      */
     public ULong getAiChatConversationId() {
@@ -55,23 +55,23 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_memory.memory_sequence</code>. The
-     * zero-based sequence of the message in the bounded model context.
+     * Setter for <code>ai_chat_memory.memory_sequence</code>. The zero-based
+     * sequence of the message in the bounded model context.
      */
     public void setMemorySequence(Long value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_memory.memory_sequence</code>. The
-     * zero-based sequence of the message in the bounded model context.
+     * Getter for <code>ai_chat_memory.memory_sequence</code>. The zero-based
+     * sequence of the message in the bounded model context.
      */
     public Long getMemorySequence() {
         return (Long) get(2);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_memory.message_type</code>. Expected
+     * Setter for <code>ai_chat_memory.message_type</code>. Expected
      * model-context roles are USER, ASSISTANT, SYSTEM, and TOOL; other values
      * are handled by the application.
      */
@@ -80,7 +80,7 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_memory.message_type</code>. Expected
+     * Getter for <code>ai_chat_memory.message_type</code>. Expected
      * model-context roles are USER, ASSISTANT, SYSTEM, and TOOL; other values
      * are handled by the application.
      */
@@ -89,23 +89,23 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_memory.content</code>. The text content
-     * supplied to the model as conversation memory.
+     * Setter for <code>ai_chat_memory.content</code>. The text content supplied
+     * to the model as conversation memory.
      */
     public void setContent(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_memory.content</code>. The text content
-     * supplied to the model as conversation memory.
+     * Getter for <code>ai_chat_memory.content</code>. The text content supplied
+     * to the model as conversation memory.
      */
     public String getContent() {
         return (String) get(4);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_memory.metadata_json</code>. Optional JSON
+     * Setter for <code>ai_chat_memory.metadata_json</code>. Optional JSON
      * metadata associated with the model-context message.
      */
     public void setMetadataJson(String value) {
@@ -113,7 +113,7 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_memory.metadata_json</code>. Optional JSON
+     * Getter for <code>ai_chat_memory.metadata_json</code>. Optional JSON
      * metadata associated with the model-context message.
      */
     public String getMetadataJson() {
@@ -121,16 +121,16 @@ public class AiChatMemoryRecord extends UpdatableRecordImpl<AiChatMemoryRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_memory.creation_timestamp</code>. The
-     * timestamp when the memory record was created.
+     * Setter for <code>ai_chat_memory.creation_timestamp</code>. The timestamp
+     * when the memory record was created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_memory.creation_timestamp</code>. The
-     * timestamp when the memory record was created.
+     * Getter for <code>ai_chat_memory.creation_timestamp</code>. The timestamp
+     * when the memory record was created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(6);

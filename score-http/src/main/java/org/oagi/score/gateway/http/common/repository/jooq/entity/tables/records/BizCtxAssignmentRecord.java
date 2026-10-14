@@ -21,7 +21,7 @@ public class BizCtxAssignmentRecord extends UpdatableRecordImpl<BizCtxAssignment
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.biz_ctx_assignment.biz_ctx_assignment_id</code>. An
+     * Setter for <code>biz_ctx_assignment.biz_ctx_assignment_id</code>. An
      * internal, primary database key of a BIZ_CTX_ASSIGNMENT record.
      */
     public void setBizCtxAssignmentId(ULong value) {
@@ -29,7 +29,7 @@ public class BizCtxAssignmentRecord extends UpdatableRecordImpl<BizCtxAssignment
     }
 
     /**
-     * Getter for <code>oagi.biz_ctx_assignment.biz_ctx_assignment_id</code>. An
+     * Getter for <code>biz_ctx_assignment.biz_ctx_assignment_id</code>. An
      * internal, primary database key of a BIZ_CTX_ASSIGNMENT record.
      */
     public ULong getBizCtxAssignmentId() {
@@ -37,32 +37,32 @@ public class BizCtxAssignmentRecord extends UpdatableRecordImpl<BizCtxAssignment
     }
 
     /**
-     * Setter for <code>oagi.biz_ctx_assignment.biz_ctx_id</code>. Foreign key
-     * to the biz_ctx table.
+     * Setter for <code>biz_ctx_assignment.biz_ctx_id</code>. Foreign key to the
+     * biz_ctx table.
      */
     public void setBizCtxId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.biz_ctx_assignment.biz_ctx_id</code>. Foreign key
-     * to the biz_ctx table.
+     * Getter for <code>biz_ctx_assignment.biz_ctx_id</code>. Foreign key to the
+     * biz_ctx table.
      */
     public ULong getBizCtxId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>oagi.biz_ctx_assignment.top_level_asbiep_id</code>. This
-     * is a foreign key to the top-level ASBIEP.
+     * Setter for <code>biz_ctx_assignment.top_level_asbiep_id</code>. This is a
+     * foreign key to the top-level ASBIEP.
      */
     public void setTopLevelAsbiepId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.biz_ctx_assignment.top_level_asbiep_id</code>. This
-     * is a foreign key to the top-level ASBIEP.
+     * Getter for <code>biz_ctx_assignment.top_level_asbiep_id</code>. This is a
+     * foreign key to the top-level ASBIEP.
      */
     public ULong getTopLevelAsbiepId() {
         return (ULong) get(2);

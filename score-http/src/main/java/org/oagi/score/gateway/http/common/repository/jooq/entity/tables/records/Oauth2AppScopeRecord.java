@@ -20,7 +20,7 @@ public class Oauth2AppScopeRecord extends UpdatableRecordImpl<Oauth2AppScopeReco
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.oauth2_app_scope.oauth2_app_scope_id</code>. An
+     * Setter for <code>oauth2_app_scope.oauth2_app_scope_id</code>. An
      * internal, primary database key of an OAUTH2_APP_SCOPE record.
      */
     public void setOauth2AppScopeId(ULong value) {
@@ -28,7 +28,7 @@ public class Oauth2AppScopeRecord extends UpdatableRecordImpl<Oauth2AppScopeReco
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app_scope.oauth2_app_scope_id</code>. An
+     * Getter for <code>oauth2_app_scope.oauth2_app_scope_id</code>. An
      * internal, primary database key of an OAUTH2_APP_SCOPE record.
      */
     public ULong getOauth2AppScopeId() {
@@ -36,34 +36,32 @@ public class Oauth2AppScopeRecord extends UpdatableRecordImpl<Oauth2AppScopeReco
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app_scope.oauth2_app_id</code>. Foreign key
-     * to the OAUTH2_APP table.
+     * Setter for <code>oauth2_app_scope.oauth2_app_id</code>. Foreign key to
+     * the OAUTH2_APP table.
      */
     public void setOauth2AppId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app_scope.oauth2_app_id</code>. Foreign key
-     * to the OAUTH2_APP table.
+     * Getter for <code>oauth2_app_scope.oauth2_app_id</code>. Foreign key to
+     * the OAUTH2_APP table.
      */
     public ULong getOauth2AppId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app_scope.scope</code>. A single OAuth2
-     * scope (e.g., openid, profile, email) requested for the associated
-     * OAUTH2_APP.
+     * Setter for <code>oauth2_app_scope.scope</code>. A single OAuth2 scope
+     * (e.g., openid, profile, email) requested for the associated OAUTH2_APP.
      */
     public void setScope(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app_scope.scope</code>. A single OAuth2
-     * scope (e.g., openid, profile, email) requested for the associated
-     * OAUTH2_APP.
+     * Getter for <code>oauth2_app_scope.scope</code>. A single OAuth2 scope
+     * (e.g., openid, profile, email) requested for the associated OAUTH2_APP.
      */
     public String getScope() {
         return (String) get(2);

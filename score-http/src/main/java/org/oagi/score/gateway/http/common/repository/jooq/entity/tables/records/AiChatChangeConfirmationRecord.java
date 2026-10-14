@@ -22,7 +22,7 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
 
     /**
      * Setter for
-     * <code>oagi.ai_chat_change_confirmation.ai_chat_change_confirmation_id</code>.
+     * <code>ai_chat_change_confirmation.ai_chat_change_confirmation_id</code>.
      * The primary key of the AI change confirmation record.
      */
     public void setAiChatChangeConfirmationId(ULong value) {
@@ -31,7 +31,7 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
 
     /**
      * Getter for
-     * <code>oagi.ai_chat_change_confirmation.ai_chat_change_confirmation_id</code>.
+     * <code>ai_chat_change_confirmation.ai_chat_change_confirmation_id</code>.
      * The primary key of the AI change confirmation record.
      */
     public ULong getAiChatChangeConfirmationId() {
@@ -39,7 +39,7 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.guid</code>. The public
+     * Setter for <code>ai_chat_change_confirmation.guid</code>. The public
      * unique identifier of the change confirmation request.
      */
     public void setGuid(String value) {
@@ -47,7 +47,7 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.guid</code>. The public
+     * Getter for <code>ai_chat_change_confirmation.guid</code>. The public
      * unique identifier of the change confirmation request.
      */
     public String getGuid() {
@@ -56,8 +56,8 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
 
     /**
      * Setter for
-     * <code>oagi.ai_chat_change_confirmation.ai_chat_conversation_id</code>.
-     * Foreign key to the AI_CHAT_CONVERSATION table identifying the owning
+     * <code>ai_chat_change_confirmation.ai_chat_conversation_id</code>. Foreign
+     * key to the AI_CHAT_CONVERSATION table identifying the owning
      * conversation.
      */
     public void setAiChatConversationId(ULong value) {
@@ -66,8 +66,8 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
 
     /**
      * Getter for
-     * <code>oagi.ai_chat_change_confirmation.ai_chat_conversation_id</code>.
-     * Foreign key to the AI_CHAT_CONVERSATION table identifying the owning
+     * <code>ai_chat_change_confirmation.ai_chat_conversation_id</code>. Foreign
+     * key to the AI_CHAT_CONVERSATION table identifying the owning
      * conversation.
      */
     public ULong getAiChatConversationId() {
@@ -75,42 +75,39 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.request_id</code>. The
-     * chat request identifier that originally requested the data-changing tool
-     * call.
+     * Setter for <code>ai_chat_change_confirmation.request_id</code>. The chat
+     * request identifier that originally requested the data-changing tool call.
      */
     public void setRequestId(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.request_id</code>. The
-     * chat request identifier that originally requested the data-changing tool
-     * call.
+     * Getter for <code>ai_chat_change_confirmation.request_id</code>. The chat
+     * request identifier that originally requested the data-changing tool call.
      */
     public String getRequestId() {
         return (String) get(3);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.tool_name</code>. The
-     * name of the data-changing tool that requires explicit user approval.
+     * Setter for <code>ai_chat_change_confirmation.tool_name</code>. The name
+     * of the data-changing tool that requires explicit user approval.
      */
     public void setToolName(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.tool_name</code>. The
-     * name of the data-changing tool that requires explicit user approval.
+     * Getter for <code>ai_chat_change_confirmation.tool_name</code>. The name
+     * of the data-changing tool that requires explicit user approval.
      */
     public String getToolName() {
         return (String) get(4);
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_chat_change_confirmation.arguments_digest</code>. The
+     * Setter for <code>ai_chat_change_confirmation.arguments_digest</code>. The
      * SHA-256 digest binding the tool name to its canonicalized arguments.
      */
     public void setArgumentsDigest(String value) {
@@ -118,8 +115,7 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_chat_change_confirmation.arguments_digest</code>. The
+     * Getter for <code>ai_chat_change_confirmation.arguments_digest</code>. The
      * SHA-256 digest binding the tool name to its canonicalized arguments.
      */
     public String getArgumentsDigest() {
@@ -127,7 +123,7 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.status</code>. Expected
+     * Setter for <code>ai_chat_change_confirmation.status</code>. Expected
      * confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and
      * EXPIRED; other values are handled by the application.
      */
@@ -136,7 +132,7 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.status</code>. Expected
+     * Getter for <code>ai_chat_change_confirmation.status</code>. Expected
      * confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and
      * EXPIRED; other values are handled by the application.
      */
@@ -145,27 +141,26 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_change_confirmation.grant_digest</code>.
-     * The SHA-256 digest of the one-time approval grant; cleared after
-     * consumption, denial, or expiration.
+     * Setter for <code>ai_chat_change_confirmation.grant_digest</code>. The
+     * SHA-256 digest of the one-time approval grant; cleared after consumption,
+     * denial, or expiration.
      */
     public void setGrantDigest(String value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_change_confirmation.grant_digest</code>.
-     * The SHA-256 digest of the one-time approval grant; cleared after
-     * consumption, denial, or expiration.
+     * Getter for <code>ai_chat_change_confirmation.grant_digest</code>. The
+     * SHA-256 digest of the one-time approval grant; cleared after consumption,
+     * denial, or expiration.
      */
     public String getGrantDigest() {
         return (String) get(7);
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_chat_change_confirmation.expiration_timestamp</code>. The
-     * timestamp after which the confirmation request or approval grant is
+     * Setter for <code>ai_chat_change_confirmation.expiration_timestamp</code>.
+     * The timestamp after which the confirmation request or approval grant is
      * invalid.
      */
     public void setExpirationTimestamp(LocalDateTime value) {
@@ -173,9 +168,8 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_chat_change_confirmation.expiration_timestamp</code>. The
-     * timestamp after which the confirmation request or approval grant is
+     * Getter for <code>ai_chat_change_confirmation.expiration_timestamp</code>.
+     * The timestamp after which the confirmation request or approval grant is
      * invalid.
      */
     public LocalDateTime getExpirationTimestamp() {
@@ -183,26 +177,23 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_chat_change_confirmation.approved_timestamp</code>. The
-     * timestamp when the change request was approved.
+     * Setter for <code>ai_chat_change_confirmation.approved_timestamp</code>.
+     * The timestamp when the change request was approved.
      */
     public void setApprovedTimestamp(LocalDateTime value) {
         set(9, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_chat_change_confirmation.approved_timestamp</code>. The
-     * timestamp when the change request was approved.
+     * Getter for <code>ai_chat_change_confirmation.approved_timestamp</code>.
+     * The timestamp when the change request was approved.
      */
     public LocalDateTime getApprovedTimestamp() {
         return (LocalDateTime) get(9);
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_chat_change_confirmation.denied_timestamp</code>. The
+     * Setter for <code>ai_chat_change_confirmation.denied_timestamp</code>. The
      * timestamp when the change request was denied.
      */
     public void setDeniedTimestamp(LocalDateTime value) {
@@ -210,8 +201,7 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_chat_change_confirmation.denied_timestamp</code>. The
+     * Getter for <code>ai_chat_change_confirmation.denied_timestamp</code>. The
      * timestamp when the change request was denied.
      */
     public LocalDateTime getDeniedTimestamp() {
@@ -219,54 +209,48 @@ public class AiChatChangeConfirmationRecord extends UpdatableRecordImpl<AiChatCh
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_chat_change_confirmation.consumed_timestamp</code>. The
-     * timestamp when the one-time approval grant was consumed.
+     * Setter for <code>ai_chat_change_confirmation.consumed_timestamp</code>.
+     * The timestamp when the one-time approval grant was consumed.
      */
     public void setConsumedTimestamp(LocalDateTime value) {
         set(11, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_chat_change_confirmation.consumed_timestamp</code>. The
-     * timestamp when the one-time approval grant was consumed.
+     * Getter for <code>ai_chat_change_confirmation.consumed_timestamp</code>.
+     * The timestamp when the one-time approval grant was consumed.
      */
     public LocalDateTime getConsumedTimestamp() {
         return (LocalDateTime) get(11);
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_chat_change_confirmation.expired_timestamp</code>. The
-     * timestamp when the confirmation request or approval grant expired.
+     * Setter for <code>ai_chat_change_confirmation.expired_timestamp</code>.
+     * The timestamp when the confirmation request or approval grant expired.
      */
     public void setExpiredTimestamp(LocalDateTime value) {
         set(12, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_chat_change_confirmation.expired_timestamp</code>. The
-     * timestamp when the confirmation request or approval grant expired.
+     * Getter for <code>ai_chat_change_confirmation.expired_timestamp</code>.
+     * The timestamp when the confirmation request or approval grant expired.
      */
     public LocalDateTime getExpiredTimestamp() {
         return (LocalDateTime) get(12);
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_chat_change_confirmation.creation_timestamp</code>. The
-     * timestamp when the change confirmation request was created.
+     * Setter for <code>ai_chat_change_confirmation.creation_timestamp</code>.
+     * The timestamp when the change confirmation request was created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(13, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_chat_change_confirmation.creation_timestamp</code>. The
-     * timestamp when the change confirmation request was created.
+     * Getter for <code>ai_chat_change_confirmation.creation_timestamp</code>.
+     * The timestamp when the change confirmation request was created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(13);

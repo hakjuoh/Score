@@ -23,10 +23,10 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
@@ -34,9 +34,9 @@ import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiChatStepRecord;
 
@@ -50,7 +50,7 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_chat_step</code>
+     * The reference instance of <code>ai_chat_step</code>
      */
     public static final AiChatStep AI_CHAT_STEP = new AiChatStep();
 
@@ -63,112 +63,111 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_chat_step.ai_chat_step_id</code>. The primary
-     * key of the AI chat trajectory step record.
+     * The column <code>ai_chat_step.ai_chat_step_id</code>. The primary key of
+     * the AI chat trajectory step record.
      */
-    public final TableField<AiChatStepRecord, ULong> AI_CHAT_STEP_ID = createField(DSL.name("ai_chat_step_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the AI chat trajectory step record.");
+    public final TableField<AiChatStepRecord, ULong> AI_CHAT_STEP_ID = createField(DSL.name("ai_chat_step_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the AI chat trajectory step record.");
 
     /**
-     * The column <code>oagi.ai_chat_step.ai_chat_conversation_id</code>.
-     * Foreign key to the AI_CHAT_CONVERSATION table identifying the owning
-     * conversation.
+     * The column <code>ai_chat_step.ai_chat_conversation_id</code>. Foreign key
+     * to the AI_CHAT_CONVERSATION table identifying the owning conversation.
      */
     public final TableField<AiChatStepRecord, ULong> AI_CHAT_CONVERSATION_ID = createField(DSL.name("ai_chat_conversation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the AI_CHAT_CONVERSATION table identifying the owning conversation.");
 
     /**
-     * The column <code>oagi.ai_chat_step.step_sequence</code>. The zero-based
+     * The column <code>ai_chat_step.step_sequence</code>. The zero-based
      * sequence of the step within the complete conversation trajectory.
      */
     public final TableField<AiChatStepRecord, Long> STEP_SEQUENCE = createField(DSL.name("step_sequence"), SQLDataType.BIGINT.nullable(false), this, "The zero-based sequence of the step within the complete conversation trajectory.");
 
     /**
-     * The column <code>oagi.ai_chat_step.request_id</code>. The request
-     * identifier used to correlate steps produced by the same chat request.
+     * The column <code>ai_chat_step.request_id</code>. The request identifier
+     * used to correlate steps produced by the same chat request.
      */
     public final TableField<AiChatStepRecord, String> REQUEST_ID = createField(DSL.name("request_id"), SQLDataType.VARCHAR(128).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "The request identifier used to correlate steps produced by the same chat request.");
 
     /**
-     * The column <code>oagi.ai_chat_step.source</code>. Expected ATIF sources
-     * are system, user, and agent; other values are handled by the application.
+     * The column <code>ai_chat_step.source</code>. Expected ATIF sources are
+     * system, user, and agent; other values are handled by the application.
      */
     public final TableField<AiChatStepRecord, String> SOURCE = createField(DSL.name("source"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("'system'"), SQLDataType.VARCHAR)), this, "Expected ATIF sources are system, user, and agent; other values are handled by the application.");
 
     /**
-     * The column <code>oagi.ai_chat_step.message_kind</code>. The
+     * The column <code>ai_chat_step.message_kind</code>. The
      * application-specific kind of trajectory event represented by the step.
      */
     public final TableField<AiChatStepRecord, String> MESSAGE_KIND = createField(DSL.name("message_kind"), SQLDataType.VARCHAR(64).nullable(false), this, "The application-specific kind of trajectory event represented by the step.");
 
     /**
-     * The column <code>oagi.ai_chat_step.visibility</code>. Expected
-     * presentation scopes are visible and debug; other values are handled by
-     * the application.
+     * The column <code>ai_chat_step.visibility</code>. Expected presentation
+     * scopes are visible and debug; other values are handled by the
+     * application.
      */
     public final TableField<AiChatStepRecord, String> VISIBILITY = createField(DSL.name("visibility"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("'visible'"), SQLDataType.VARCHAR)), this, "Expected presentation scopes are visible and debug; other values are handled by the application.");
 
     /**
-     * The column <code>oagi.ai_chat_step.message</code>. The textual message or
+     * The column <code>ai_chat_step.message</code>. The textual message or
      * event content recorded for the step.
      */
     public final TableField<AiChatStepRecord, String> MESSAGE = createField(DSL.name("message"), SQLDataType.CLOB.nullable(false), this, "The textual message or event content recorded for the step.");
 
     /**
-     * The column <code>oagi.ai_chat_step.reasoning_content</code>. Optional
-     * model reasoning content associated with the step.
+     * The column <code>ai_chat_step.reasoning_content</code>. Optional model
+     * reasoning content associated with the step.
      */
     public final TableField<AiChatStepRecord, String> REASONING_CONTENT = createField(DSL.name("reasoning_content"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Optional model reasoning content associated with the step.");
 
     /**
-     * The column <code>oagi.ai_chat_step.model_name</code>. The model used for
-     * the inference represented by the step.
+     * The column <code>ai_chat_step.model_name</code>. The model used for the
+     * inference represented by the step.
      */
     public final TableField<AiChatStepRecord, String> MODEL_NAME = createField(DSL.name("model_name"), SQLDataType.VARCHAR(240).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "The model used for the inference represented by the step.");
 
     /**
-     * The column <code>oagi.ai_chat_step.reasoning_effort</code>. The
+     * The column <code>ai_chat_step.reasoning_effort</code>. The
      * reasoning-effort setting used for the model inference.
      */
     public final TableField<AiChatStepRecord, String> REASONING_EFFORT = createField(DSL.name("reasoning_effort"), SQLDataType.VARCHAR(32).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "The reasoning-effort setting used for the model inference.");
 
     /**
-     * The column <code>oagi.ai_chat_step.tool_calls_json</code>. JSON array
+     * The column <code>ai_chat_step.tool_calls_json</code>. JSON array
      * containing tool calls requested by the model.
      */
     public final TableField<AiChatStepRecord, String> TOOL_CALLS_JSON = createField(DSL.name("tool_calls_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "JSON array containing tool calls requested by the model.");
 
     /**
-     * The column <code>oagi.ai_chat_step.observation_json</code>. JSON object
+     * The column <code>ai_chat_step.observation_json</code>. JSON object
      * containing tool execution results observed by the agent.
      */
     public final TableField<AiChatStepRecord, String> OBSERVATION_JSON = createField(DSL.name("observation_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "JSON object containing tool execution results observed by the agent.");
 
     /**
-     * The column <code>oagi.ai_chat_step.metrics_json</code>. JSON object
-     * containing token usage and other execution metrics.
+     * The column <code>ai_chat_step.metrics_json</code>. JSON object containing
+     * token usage and other execution metrics.
      */
     public final TableField<AiChatStepRecord, String> METRICS_JSON = createField(DSL.name("metrics_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "JSON object containing token usage and other execution metrics.");
 
     /**
-     * The column <code>oagi.ai_chat_step.extra_json</code>. JSON object
-     * containing additional ATIF or application-specific step metadata.
+     * The column <code>ai_chat_step.extra_json</code>. JSON object containing
+     * additional ATIF or application-specific step metadata.
      */
     public final TableField<AiChatStepRecord, String> EXTRA_JSON = createField(DSL.name("extra_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "JSON object containing additional ATIF or application-specific step metadata.");
 
     /**
-     * The column <code>oagi.ai_chat_step.llm_call_count</code>. The number of
+     * The column <code>ai_chat_step.llm_call_count</code>. The number of
      * language-model calls represented by the step.
      */
     public final TableField<AiChatStepRecord, Integer> LLM_CALL_COUNT = createField(DSL.name("llm_call_count"), SQLDataType.INTEGER.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.INTEGER)), this, "The number of language-model calls represented by the step.");
 
     /**
-     * The column <code>oagi.ai_chat_step.is_copied_context</code>. Indicates
-     * whether the step was copied into the model context (0 = False, 1 = True).
+     * The column <code>ai_chat_step.is_copied_context</code>. Indicates whether
+     * the step was copied into the model context (0 = False, 1 = True).
      */
     public final TableField<AiChatStepRecord, Byte> IS_COPIED_CONTEXT = createField(DSL.name("is_copied_context"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Indicates whether the step was copied into the model context (0 = False, 1 = True).");
 
     /**
-     * The column <code>oagi.ai_chat_step.creation_timestamp</code>. The
-     * timestamp when the trajectory step was created.
+     * The column <code>ai_chat_step.creation_timestamp</code>. The timestamp
+     * when the trajectory step was created.
      */
     public final TableField<AiChatStepRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the trajectory step was created.");
 
@@ -181,21 +180,21 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_step</code> table reference
+     * Create an aliased <code>ai_chat_step</code> table reference
      */
     public AiChatStep(String alias) {
         this(DSL.name(alias), AI_CHAT_STEP);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_step</code> table reference
+     * Create an aliased <code>ai_chat_step</code> table reference
      */
     public AiChatStep(Name alias) {
         this(alias, AI_CHAT_STEP);
     }
 
     /**
-     * Create a <code>oagi.ai_chat_step</code> table reference
+     * Create a <code>ai_chat_step</code> table reference
      */
     public AiChatStep() {
         this(DSL.name("ai_chat_step"), null);
@@ -236,7 +235,7 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -267,7 +266,7 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
     private transient AiChatConversationPath _aiChatConversation;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_chat_conversation</code>
+     * Get the implicit join path to the <code>ai_chat_conversation</code>
      * table.
      */
     public AiChatConversationPath aiChatConversation() {
@@ -331,7 +330,7 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
      */
     @Override
     public AiChatStep where(Condition condition) {
-        return new AiChatStep(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiChatStep(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -398,7 +397,7 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatStep whereExists(Select<?> select) {
+    public AiChatStep whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -406,7 +405,7 @@ public class AiChatStep extends TableImpl<AiChatStepRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatStep whereNotExists(Select<?> select) {
+    public AiChatStep whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

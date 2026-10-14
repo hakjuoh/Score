@@ -21,8 +21,7 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for
-     * <code>oagi.ai_chat_conversation.ai_chat_conversation_id</code>. The
+     * Setter for <code>ai_chat_conversation.ai_chat_conversation_id</code>. The
      * primary key of the AI chat conversation record.
      */
     public void setAiChatConversationId(ULong value) {
@@ -30,8 +29,7 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_chat_conversation.ai_chat_conversation_id</code>. The
+     * Getter for <code>ai_chat_conversation.ai_chat_conversation_id</code>. The
      * primary key of the AI chat conversation record.
      */
     public ULong getAiChatConversationId() {
@@ -39,7 +37,7 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.guid</code>. The public unique
+     * Setter for <code>ai_chat_conversation.guid</code>. The public unique
      * identifier of the AI chat conversation.
      */
     public void setGuid(String value) {
@@ -47,7 +45,7 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.guid</code>. The public unique
+     * Getter for <code>ai_chat_conversation.guid</code>. The public unique
      * identifier of the AI chat conversation.
      */
     public String getGuid() {
@@ -55,16 +53,16 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.app_user_id</code>. Foreign
-     * key to the APP_USER table identifying the owner of the conversation.
+     * Setter for <code>ai_chat_conversation.app_user_id</code>. Foreign key to
+     * the APP_USER table identifying the owner of the conversation.
      */
     public void setAppUserId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.app_user_id</code>. Foreign
-     * key to the APP_USER table identifying the owner of the conversation.
+     * Getter for <code>ai_chat_conversation.app_user_id</code>. Foreign key to
+     * the APP_USER table identifying the owner of the conversation.
      */
     public ULong getAppUserId() {
         return (ULong) get(2);
@@ -72,7 +70,7 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
 
     /**
      * Setter for
-     * <code>oagi.ai_chat_conversation.parent_ai_chat_conversation_id</code>.
+     * <code>ai_chat_conversation.parent_ai_chat_conversation_id</code>.
      * Self-reference to the root conversation that owns this child execution.
      */
     public void setParentAiChatConversationId(ULong value) {
@@ -81,7 +79,7 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
 
     /**
      * Getter for
-     * <code>oagi.ai_chat_conversation.parent_ai_chat_conversation_id</code>.
+     * <code>ai_chat_conversation.parent_ai_chat_conversation_id</code>.
      * Self-reference to the root conversation that owns this child execution.
      */
     public ULong getParentAiChatConversationId() {
@@ -89,41 +87,41 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.conversation_kind</code>.
-     * Expected conversation kinds are ROOT, SUBAGENT, and PARALLEL; other
-     * values are handled by the application.
+     * Setter for <code>ai_chat_conversation.conversation_kind</code>. Expected
+     * conversation kinds are ROOT, SUBAGENT, and PARALLEL; other values are
+     * handled by the application.
      */
     public void setConversationKind(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.conversation_kind</code>.
-     * Expected conversation kinds are ROOT, SUBAGENT, and PARALLEL; other
-     * values are handled by the application.
+     * Getter for <code>ai_chat_conversation.conversation_kind</code>. Expected
+     * conversation kinds are ROOT, SUBAGENT, and PARALLEL; other values are
+     * handled by the application.
      */
     public String getConversationKind() {
         return (String) get(4);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.agent_id</code>. Registered
-     * worker identifier for a child execution conversation.
+     * Setter for <code>ai_chat_conversation.agent_id</code>. Registered worker
+     * identifier for a child execution conversation.
      */
     public void setAgentId(String value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.agent_id</code>. Registered
-     * worker identifier for a child execution conversation.
+     * Getter for <code>ai_chat_conversation.agent_id</code>. Registered worker
+     * identifier for a child execution conversation.
      */
     public String getAgentId() {
         return (String) get(5);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.parent_request_id</code>. Root
+     * Setter for <code>ai_chat_conversation.parent_request_id</code>. Root
      * request that created this child execution conversation.
      */
     public void setParentRequestId(String value) {
@@ -131,7 +129,7 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.parent_request_id</code>. Root
+     * Getter for <code>ai_chat_conversation.parent_request_id</code>. Root
      * request that created this child execution conversation.
      */
     public String getParentRequestId() {
@@ -139,41 +137,39 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.title</code>. The display
-     * title of the conversation, derived from its first prompt.
+     * Setter for <code>ai_chat_conversation.title</code>. The display title of
+     * the conversation, derived from its first prompt.
      */
     public void setTitle(String value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.title</code>. The display
-     * title of the conversation, derived from its first prompt.
+     * Getter for <code>ai_chat_conversation.title</code>. The display title of
+     * the conversation, derived from its first prompt.
      */
     public String getTitle() {
         return (String) get(7);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.compacted</code>. Indicates
-     * whether the conversation model context has been compacted (0 = False, 1 =
-     * True).
+     * Setter for <code>ai_chat_conversation.compacted</code>. Indicates whether
+     * the conversation model context has been compacted (0 = False, 1 = True).
      */
     public void setCompacted(Byte value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.compacted</code>. Indicates
-     * whether the conversation model context has been compacted (0 = False, 1 =
-     * True).
+     * Getter for <code>ai_chat_conversation.compacted</code>. Indicates whether
+     * the conversation model context has been compacted (0 = False, 1 = True).
      */
     public Byte getCompacted() {
         return (Byte) get(8);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.creation_timestamp</code>. The
+     * Setter for <code>ai_chat_conversation.creation_timestamp</code>. The
      * timestamp when the conversation was created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
@@ -181,7 +177,7 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.creation_timestamp</code>. The
+     * Getter for <code>ai_chat_conversation.creation_timestamp</code>. The
      * timestamp when the conversation was created.
      */
     public LocalDateTime getCreationTimestamp() {
@@ -189,16 +185,16 @@ public class AiChatConversationRecord extends UpdatableRecordImpl<AiChatConversa
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_conversation.last_update_timestamp</code>.
-     * The timestamp of the most recent activity in the conversation.
+     * Setter for <code>ai_chat_conversation.last_update_timestamp</code>. The
+     * timestamp of the most recent activity in the conversation.
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_conversation.last_update_timestamp</code>.
-     * The timestamp of the most recent activity in the conversation.
+     * Getter for <code>ai_chat_conversation.last_update_timestamp</code>. The
+     * timestamp of the most recent activity in the conversation.
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(10);

@@ -21,19 +21,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiTokenRequestUsageRecord;
 
@@ -47,7 +48,7 @@ public class AiTokenRequestUsage extends TableImpl<AiTokenRequestUsageRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_token_request_usage</code>
+     * The reference instance of <code>ai_token_request_usage</code>
      */
     public static final AiTokenRequestUsage AI_TOKEN_REQUEST_USAGE = new AiTokenRequestUsage();
 
@@ -60,39 +61,38 @@ public class AiTokenRequestUsage extends TableImpl<AiTokenRequestUsageRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_token_request_usage.request_id</code>.
-     * Identifier of the root AI request
+     * The column <code>ai_token_request_usage.request_id</code>. Identifier of
+     * the root AI request
      */
     public final TableField<AiTokenRequestUsageRecord, String> REQUEST_ID = createField(DSL.name("request_id"), SQLDataType.VARCHAR(128).nullable(false), this, "Identifier of the root AI request");
 
     /**
-     * The column <code>oagi.ai_token_request_usage.app_user_id</code>.
-     * Identifier of the user who submitted the AI request
+     * The column <code>ai_token_request_usage.app_user_id</code>. Identifier of
+     * the user who submitted the AI request
      */
     public final TableField<AiTokenRequestUsageRecord, ULong> APP_USER_ID = createField(DSL.name("app_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the user who submitted the AI request");
 
     /**
-     * The column <code>oagi.ai_token_request_usage.consumed_tokens</code>.
-     * Number of tokens consumed by the request
+     * The column <code>ai_token_request_usage.consumed_tokens</code>. Number of
+     * tokens consumed by the request
      */
     public final TableField<AiTokenRequestUsageRecord, ULong> CONSUMED_TOKENS = createField(DSL.name("consumed_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of tokens consumed by the request");
 
     /**
-     * The column <code>oagi.ai_token_request_usage.reserved_tokens</code>.
-     * Number of tokens reserved by in-progress calls for the request
+     * The column <code>ai_token_request_usage.reserved_tokens</code>. Number of
+     * tokens reserved by in-progress calls for the request
      */
     public final TableField<AiTokenRequestUsageRecord, ULong> RESERVED_TOKENS = createField(DSL.name("reserved_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of tokens reserved by in-progress calls for the request");
 
     /**
-     * The column <code>oagi.ai_token_request_usage.creation_timestamp</code>.
-     * Date and time when the request usage counter was created
+     * The column <code>ai_token_request_usage.creation_timestamp</code>. Date
+     * and time when the request usage counter was created
      */
     public final TableField<AiTokenRequestUsageRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the request usage counter was created");
 
     /**
-     * The column
-     * <code>oagi.ai_token_request_usage.last_update_timestamp</code>. Date and
-     * time when the request usage counter was last updated
+     * The column <code>ai_token_request_usage.last_update_timestamp</code>.
+     * Date and time when the request usage counter was last updated
      */
     public final TableField<AiTokenRequestUsageRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the request usage counter was last updated");
 
@@ -105,23 +105,21 @@ public class AiTokenRequestUsage extends TableImpl<AiTokenRequestUsageRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_token_request_usage</code> table
-     * reference
+     * Create an aliased <code>ai_token_request_usage</code> table reference
      */
     public AiTokenRequestUsage(String alias) {
         this(DSL.name(alias), AI_TOKEN_REQUEST_USAGE);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_token_request_usage</code> table
-     * reference
+     * Create an aliased <code>ai_token_request_usage</code> table reference
      */
     public AiTokenRequestUsage(Name alias) {
         this(alias, AI_TOKEN_REQUEST_USAGE);
     }
 
     /**
-     * Create a <code>oagi.ai_token_request_usage</code> table reference
+     * Create a <code>ai_token_request_usage</code> table reference
      */
     public AiTokenRequestUsage() {
         this(DSL.name("ai_token_request_usage"), null);
@@ -162,7 +160,7 @@ public class AiTokenRequestUsage extends TableImpl<AiTokenRequestUsageRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -183,7 +181,7 @@ public class AiTokenRequestUsage extends TableImpl<AiTokenRequestUsageRecord> {
     private transient AppUserPath _appUser;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table.
+     * Get the implicit join path to the <code>app_user</code> table.
      */
     public AppUserPath appUser() {
         if (_appUser == null)
@@ -236,7 +234,7 @@ public class AiTokenRequestUsage extends TableImpl<AiTokenRequestUsageRecord> {
      */
     @Override
     public AiTokenRequestUsage where(Condition condition) {
-        return new AiTokenRequestUsage(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiTokenRequestUsage(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -303,7 +301,7 @@ public class AiTokenRequestUsage extends TableImpl<AiTokenRequestUsageRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiTokenRequestUsage whereExists(Select<?> select) {
+    public AiTokenRequestUsage whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -311,7 +309,7 @@ public class AiTokenRequestUsage extends TableImpl<AiTokenRequestUsageRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiTokenRequestUsage whereNotExists(Select<?> select) {
+    public AiTokenRequestUsage whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

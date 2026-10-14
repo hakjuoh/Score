@@ -20,7 +20,7 @@ public class AiChatFileObjectRecord extends UpdatableRecordImpl<AiChatFileObject
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_chat_file_object.storage_location</code>. Opaque
+     * Setter for <code>ai_chat_file_object.storage_location</code>. Opaque
      * database-storage object key.
      */
     public void setStorageLocation(String value) {
@@ -28,7 +28,7 @@ public class AiChatFileObjectRecord extends UpdatableRecordImpl<AiChatFileObject
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file_object.storage_location</code>. Opaque
+     * Getter for <code>ai_chat_file_object.storage_location</code>. Opaque
      * database-storage object key.
      */
     public String getStorageLocation() {
@@ -36,32 +36,32 @@ public class AiChatFileObjectRecord extends UpdatableRecordImpl<AiChatFileObject
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file_object.content</code>. File bytes for
-     * the database storage provider.
+     * Setter for <code>ai_chat_file_object.content</code>. File bytes for the
+     * database storage provider.
      */
     public void setContent(byte[] value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file_object.content</code>. File bytes for
-     * the database storage provider.
+     * Getter for <code>ai_chat_file_object.content</code>. File bytes for the
+     * database storage provider.
      */
     public byte[] getContent() {
         return (byte[]) get(1);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_file_object.creation_timestamp</code>.
-     * Object creation timestamp.
+     * Setter for <code>ai_chat_file_object.creation_timestamp</code>. Object
+     * creation timestamp.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_file_object.creation_timestamp</code>.
-     * Object creation timestamp.
+     * Getter for <code>ai_chat_file_object.creation_timestamp</code>. Object
+     * creation timestamp.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(2);

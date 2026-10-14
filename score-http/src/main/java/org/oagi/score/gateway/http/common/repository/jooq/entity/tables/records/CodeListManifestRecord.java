@@ -24,7 +24,7 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.code_list_manifest.code_list_manifest_id</code>. An
+     * Setter for <code>code_list_manifest.code_list_manifest_id</code>. An
      * internal, primary database key of a CODE_LIST_MANIFEST record.
      */
     public void setCodeListManifestId(ULong value) {
@@ -32,7 +32,7 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
     }
 
     /**
-     * Getter for <code>oagi.code_list_manifest.code_list_manifest_id</code>. An
+     * Getter for <code>code_list_manifest.code_list_manifest_id</code>. An
      * internal, primary database key of a CODE_LIST_MANIFEST record.
      */
     public ULong getCodeListManifestId() {
@@ -40,40 +40,39 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
     }
 
     /**
-     * Setter for <code>oagi.code_list_manifest.release_id</code>. Foreign key
-     * to the RELEASE table.
+     * Setter for <code>code_list_manifest.release_id</code>. Foreign key to the
+     * RELEASE table.
      */
     public void setReleaseId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.code_list_manifest.release_id</code>. Foreign key
-     * to the RELEASE table.
+     * Getter for <code>code_list_manifest.release_id</code>. Foreign key to the
+     * RELEASE table.
      */
     public ULong getReleaseId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>oagi.code_list_manifest.code_list_id</code>. Foreign key
-     * to the CODE_LIST table.
+     * Setter for <code>code_list_manifest.code_list_id</code>. Foreign key to
+     * the CODE_LIST table.
      */
     public void setCodeListId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.code_list_manifest.code_list_id</code>. Foreign key
-     * to the CODE_LIST table.
+     * Getter for <code>code_list_manifest.code_list_id</code>. Foreign key to
+     * the CODE_LIST table.
      */
     public ULong getCodeListId() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for
-     * <code>oagi.code_list_manifest.based_code_list_manifest_id</code>. A
+     * Setter for <code>code_list_manifest.based_code_list_manifest_id</code>. A
      * self-reference to the CODE_LIST_MANIFEST record that this record is based
      * on (its base/supertype from which it was derived).
      */
@@ -82,8 +81,7 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
     }
 
     /**
-     * Getter for
-     * <code>oagi.code_list_manifest.based_code_list_manifest_id</code>. A
+     * Getter for <code>code_list_manifest.based_code_list_manifest_id</code>. A
      * self-reference to the CODE_LIST_MANIFEST record that this record is based
      * on (its base/supertype from which it was derived).
      */
@@ -93,9 +91,9 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
 
     /**
      * Setter for
-     * <code>oagi.code_list_manifest.agency_id_list_value_manifest_id</code>.
-     * Foreign key to the AGENCY_ID_LIST_VALUE_MANIFEST table. It identifies the
-     * agency or organization that developed and/or maintains this code list.
+     * <code>code_list_manifest.agency_id_list_value_manifest_id</code>. Foreign
+     * key to the AGENCY_ID_LIST_VALUE_MANIFEST table. It identifies the agency
+     * or organization that developed and/or maintains this code list.
      */
     public void setAgencyIdListValueManifestId(ULong value) {
         set(4, value);
@@ -103,41 +101,41 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
 
     /**
      * Getter for
-     * <code>oagi.code_list_manifest.agency_id_list_value_manifest_id</code>.
-     * Foreign key to the AGENCY_ID_LIST_VALUE_MANIFEST table. It identifies the
-     * agency or organization that developed and/or maintains this code list.
+     * <code>code_list_manifest.agency_id_list_value_manifest_id</code>. Foreign
+     * key to the AGENCY_ID_LIST_VALUE_MANIFEST table. It identifies the agency
+     * or organization that developed and/or maintains this code list.
      */
     public ULong getAgencyIdListValueManifestId() {
         return (ULong) get(4);
     }
 
     /**
-     * Setter for <code>oagi.code_list_manifest.conflict</code>. This indicates
-     * that there is a conflict between self and relationship.
+     * Setter for <code>code_list_manifest.conflict</code>. This indicates that
+     * there is a conflict between self and relationship.
      */
     public void setConflict(Byte value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.code_list_manifest.conflict</code>. This indicates
-     * that there is a conflict between self and relationship.
+     * Getter for <code>code_list_manifest.conflict</code>. This indicates that
+     * there is a conflict between self and relationship.
      */
     public Byte getConflict() {
         return (Byte) get(5);
     }
 
     /**
-     * Setter for <code>oagi.code_list_manifest.log_id</code>. A foreign key
-     * pointed to a log for the current record.
+     * Setter for <code>code_list_manifest.log_id</code>. A foreign key pointed
+     * to a log for the current record.
      */
     public void setLogId(ULong value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.code_list_manifest.log_id</code>. A foreign key
-     * pointed to a log for the current record.
+     * Getter for <code>code_list_manifest.log_id</code>. A foreign key pointed
+     * to a log for the current record.
      */
     public ULong getLogId() {
         return (ULong) get(6);
@@ -145,8 +143,8 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
 
     /**
      * Setter for
-     * <code>oagi.code_list_manifest.replacement_code_list_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * <code>code_list_manifest.replacement_code_list_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public void setReplacementCodeListManifestId(ULong value) {
         set(7, value);
@@ -154,16 +152,15 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
 
     /**
      * Getter for
-     * <code>oagi.code_list_manifest.replacement_code_list_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * <code>code_list_manifest.replacement_code_list_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public ULong getReplacementCodeListManifestId() {
         return (ULong) get(7);
     }
 
     /**
-     * Setter for
-     * <code>oagi.code_list_manifest.prev_code_list_manifest_id</code>. A
+     * Setter for <code>code_list_manifest.prev_code_list_manifest_id</code>. A
      * self-reference to the corresponding CODE_LIST_MANIFEST record in the
      * previous release (revision chain). NULL for the first revision.
      */
@@ -172,8 +169,7 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
     }
 
     /**
-     * Getter for
-     * <code>oagi.code_list_manifest.prev_code_list_manifest_id</code>. A
+     * Getter for <code>code_list_manifest.prev_code_list_manifest_id</code>. A
      * self-reference to the corresponding CODE_LIST_MANIFEST record in the
      * previous release (revision chain). NULL for the first revision.
      */
@@ -182,8 +178,7 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
     }
 
     /**
-     * Setter for
-     * <code>oagi.code_list_manifest.next_code_list_manifest_id</code>. A
+     * Setter for <code>code_list_manifest.next_code_list_manifest_id</code>. A
      * self-reference to the corresponding CODE_LIST_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */
@@ -192,8 +187,7 @@ public class CodeListManifestRecord extends UpdatableRecordImpl<CodeListManifest
     }
 
     /**
-     * Getter for
-     * <code>oagi.code_list_manifest.next_code_list_manifest_id</code>. A
+     * Getter for <code>code_list_manifest.next_code_list_manifest_id</code>. A
      * self-reference to the corresponding CODE_LIST_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */

@@ -23,10 +23,10 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
@@ -35,9 +35,9 @@ import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.UInteger;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelReasoningEffort.AiModelReasoningEffortPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiProvider.AiProviderPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiTokenUsageLedger.AiTokenUsageLedgerPath;
@@ -56,7 +56,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_model</code>
+     * The reference instance of <code>ai_model</code>
      */
     public static final AiModel AI_MODEL = new AiModel();
 
@@ -69,128 +69,128 @@ public class AiModel extends TableImpl<AiModelRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_model.ai_model_id</code>. Identifier of the
+     * The column <code>ai_model.ai_model_id</code>. Identifier of the
      * configured AI model
      */
-    public final TableField<AiModelRecord, ULong> AI_MODEL_ID = createField(DSL.name("ai_model_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Identifier of the configured AI model");
+    public final TableField<AiModelRecord, ULong> AI_MODEL_ID = createField(DSL.name("ai_model_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "Identifier of the configured AI model");
 
     /**
-     * The column <code>oagi.ai_model.provider_id</code>. Identifier of the
-     * provider that serves the model
+     * The column <code>ai_model.provider_id</code>. Identifier of the provider
+     * that serves the model
      */
     public final TableField<AiModelRecord, ULong> PROVIDER_ID = createField(DSL.name("provider_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the provider that serves the model");
 
     /**
-     * The column <code>oagi.ai_model.model_key</code>. Stable
-     * application-facing model key
+     * The column <code>ai_model.model_key</code>. Stable application-facing
+     * model key
      */
     public final TableField<AiModelRecord, String> MODEL_KEY = createField(DSL.name("model_key"), SQLDataType.VARCHAR(240).nullable(false), this, "Stable application-facing model key");
 
     /**
-     * The column <code>oagi.ai_model.provider_model_name</code>. Model or
-     * deployment name sent to the provider
+     * The column <code>ai_model.provider_model_name</code>. Model or deployment
+     * name sent to the provider
      */
     public final TableField<AiModelRecord, String> PROVIDER_MODEL_NAME = createField(DSL.name("provider_model_name"), SQLDataType.VARCHAR(240).nullable(false), this, "Model or deployment name sent to the provider");
 
     /**
-     * The column <code>oagi.ai_model.display_name</code>. Display name shown to
+     * The column <code>ai_model.display_name</code>. Display name shown to
      * administrators and users
      */
     public final TableField<AiModelRecord, String> DISPLAY_NAME = createField(DSL.name("display_name"), SQLDataType.VARCHAR(240).nullable(false), this, "Display name shown to administrators and users");
 
     /**
-     * The column <code>oagi.ai_model.description</code>. Human-readable
-     * description of the model
+     * The column <code>ai_model.description</code>. Human-readable description
+     * of the model
      */
     public final TableField<AiModelRecord, String> DESCRIPTION = createField(DSL.name("description"), SQLDataType.VARCHAR(1000).nullable(false), this, "Human-readable description of the model");
 
     /**
-     * The column <code>oagi.ai_model.enabled</code>. Indicates whether the
-     * model is available for new requests
+     * The column <code>ai_model.enabled</code>. Indicates whether the model is
+     * available for new requests
      */
     public final TableField<AiModelRecord, Byte> ENABLED = createField(DSL.name("enabled"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.TINYINT)), this, "Indicates whether the model is available for new requests");
 
     /**
-     * The column <code>oagi.ai_model.default_model</code>. Set to 1 only for
-     * the global default AI model
+     * The column <code>ai_model.default_model</code>. Set to 1 only for the
+     * global default AI model
      */
     public final TableField<AiModelRecord, Byte> DEFAULT_MODEL = createField(DSL.name("default_model"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Set to 1 only for the global default AI model");
 
     /**
-     * The column <code>oagi.ai_model.lightweight_model</code>. Set to 1 only
-     * for the global lightweight AI model
+     * The column <code>ai_model.lightweight_model</code>. Set to 1 only for the
+     * global lightweight AI model
      */
     public final TableField<AiModelRecord, Byte> LIGHTWEIGHT_MODEL = createField(DSL.name("lightweight_model"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.TINYINT)), this, "Set to 1 only for the global lightweight AI model");
 
     /**
-     * The column <code>oagi.ai_model.sort_order</code>. Stable display and
-     * fallback ordering of AI models
+     * The column <code>ai_model.sort_order</code>. Stable display and fallback
+     * ordering of AI models
      */
     public final TableField<AiModelRecord, UInteger> SORT_ORDER = createField(DSL.name("sort_order"), SQLDataType.INTEGERUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.INTEGERUNSIGNED)), this, "Stable display and fallback ordering of AI models");
 
     /**
-     * The column <code>oagi.ai_model.max_tokens</code>. Maximum output-token
-     * budget for one provider call
+     * The column <code>ai_model.max_tokens</code>. Maximum output-token budget
+     * for one provider call
      */
     public final TableField<AiModelRecord, UInteger> MAX_TOKENS = createField(DSL.name("max_tokens"), SQLDataType.INTEGERUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.INTEGERUNSIGNED)), this, "Maximum output-token budget for one provider call");
 
     /**
-     * The column <code>oagi.ai_model.context_window</code>. Maximum context
-     * window size in tokens
+     * The column <code>ai_model.context_window</code>. Maximum context window
+     * size in tokens
      */
     public final TableField<AiModelRecord, ULong> CONTEXT_WINDOW = createField(DSL.name("context_window"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Maximum context window size in tokens");
 
     /**
-     * The column <code>oagi.ai_model.output_reserve_tokens</code>. Output
-     * tokens reserved during context budget calculation
+     * The column <code>ai_model.output_reserve_tokens</code>. Output tokens
+     * reserved during context budget calculation
      */
     public final TableField<AiModelRecord, ULong> OUTPUT_RESERVE_TOKENS = createField(DSL.name("output_reserve_tokens"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Output tokens reserved during context budget calculation");
 
     /**
-     * The column <code>oagi.ai_model.auto_compact_threshold_tokens</code>.
-     * Context token threshold that triggers automatic compaction
+     * The column <code>ai_model.auto_compact_threshold_tokens</code>. Context
+     * token threshold that triggers automatic compaction
      */
     public final TableField<AiModelRecord, ULong> AUTO_COMPACT_THRESHOLD_TOKENS = createField(DSL.name("auto_compact_threshold_tokens"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Context token threshold that triggers automatic compaction");
 
     /**
-     * The column <code>oagi.ai_model.emergency_headroom_tokens</code>.
-     * Emergency context headroom in tokens
+     * The column <code>ai_model.emergency_headroom_tokens</code>. Emergency
+     * context headroom in tokens
      */
     public final TableField<AiModelRecord, ULong> EMERGENCY_HEADROOM_TOKENS = createField(DSL.name("emergency_headroom_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("4096"), SQLDataType.BIGINTUNSIGNED)), this, "Emergency context headroom in tokens");
 
     /**
-     * The column <code>oagi.ai_model.tool_output_token_limit</code>. Maximum
-     * tool output tokens retained in context
+     * The column <code>ai_model.tool_output_token_limit</code>. Maximum tool
+     * output tokens retained in context
      */
     public final TableField<AiModelRecord, ULong> TOOL_OUTPUT_TOKEN_LIMIT = createField(DSL.name("tool_output_token_limit"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("32000"), SQLDataType.BIGINTUNSIGNED)), this, "Maximum tool output tokens retained in context");
 
     /**
-     * The column <code>oagi.ai_model.model_options_json</code>. Configured
-     * Spring AI model options as a JSON object
+     * The column <code>ai_model.model_options_json</code>. Configured Spring AI
+     * model options as a JSON object
      */
     public final TableField<AiModelRecord, String> MODEL_OPTIONS_JSON = createField(DSL.name("model_options_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Configured Spring AI model options as a JSON object");
 
     /**
-     * The column <code>oagi.ai_model.created_by</code>. Identifier of the
+     * The column <code>ai_model.created_by</code>. Identifier of the
      * administrator who created the model
      */
     public final TableField<AiModelRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who created the model");
 
     /**
-     * The column <code>oagi.ai_model.last_updated_by</code>. Identifier of the
+     * The column <code>ai_model.last_updated_by</code>. Identifier of the
      * administrator who last updated the model
      */
     public final TableField<AiModelRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who last updated the model");
 
     /**
-     * The column <code>oagi.ai_model.creation_timestamp</code>. Date and time
-     * when the model was created
+     * The column <code>ai_model.creation_timestamp</code>. Date and time when
+     * the model was created
      */
     public final TableField<AiModelRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the model was created");
 
     /**
-     * The column <code>oagi.ai_model.last_update_timestamp</code>. Date and
-     * time when the model was last updated
+     * The column <code>ai_model.last_update_timestamp</code>. Date and time
+     * when the model was last updated
      */
     public final TableField<AiModelRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the model was last updated");
 
@@ -203,21 +203,21 @@ public class AiModel extends TableImpl<AiModelRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_model</code> table reference
+     * Create an aliased <code>ai_model</code> table reference
      */
     public AiModel(String alias) {
         this(DSL.name(alias), AI_MODEL);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_model</code> table reference
+     * Create an aliased <code>ai_model</code> table reference
      */
     public AiModel(Name alias) {
         this(alias, AI_MODEL);
     }
 
     /**
-     * Create a <code>oagi.ai_model</code> table reference
+     * Create a <code>ai_model</code> table reference
      */
     public AiModel() {
         this(DSL.name("ai_model"), null);
@@ -258,7 +258,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -289,8 +289,8 @@ public class AiModel extends TableImpl<AiModelRecord> {
     private transient AppUserPath _aiModelCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>ai_model_created_by_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>ai_model_created_by_fk</code> key.
      */
     public AppUserPath aiModelCreatedByFk() {
         if (_aiModelCreatedByFk == null)
@@ -302,8 +302,8 @@ public class AiModel extends TableImpl<AiModelRecord> {
     private transient AppUserPath _aiModelLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>ai_model_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>ai_model_last_updated_by_fk</code> key.
      */
     public AppUserPath aiModelLastUpdatedByFk() {
         if (_aiModelLastUpdatedByFk == null)
@@ -315,7 +315,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
     private transient AiProviderPath _aiProvider;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_provider</code> table.
+     * Get the implicit join path to the <code>ai_provider</code> table.
      */
     public AiProviderPath aiProvider() {
         if (_aiProvider == null)
@@ -328,7 +328,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oagi.ai_model_reasoning_effort</code> table
+     * <code>ai_model_reasoning_effort</code> table
      */
     public AiModelReasoningEffortPath aiModelReasoningEffort() {
         if (_aiModelReasoningEffort == null)
@@ -341,7 +341,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oagi.ai_token_usage_ledger</code> table
+     * <code>ai_token_usage_ledger</code> table
      */
     public AiTokenUsageLedgerPath aiTokenUsageLedger() {
         if (_aiTokenUsageLedger == null)
@@ -354,7 +354,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oagi.ai_user_model_access</code> table
+     * <code>ai_user_model_access</code> table
      */
     public AiUserModelAccessPath aiUserModelAccess() {
         if (_aiUserModelAccess == null)
@@ -366,8 +366,8 @@ public class AiModel extends TableImpl<AiModelRecord> {
     private transient AiUserPolicyPath _aiUserPolicy;
 
     /**
-     * Get the implicit to-many join path to the
-     * <code>oagi.ai_user_policy</code> table
+     * Get the implicit to-many join path to the <code>ai_user_policy</code>
+     * table
      */
     public AiUserPolicyPath aiUserPolicy() {
         if (_aiUserPolicy == null)
@@ -429,7 +429,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
      */
     @Override
     public AiModel where(Condition condition) {
-        return new AiModel(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiModel(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -496,7 +496,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiModel whereExists(Select<?> select) {
+    public AiModel whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -504,7 +504,7 @@ public class AiModel extends TableImpl<AiModelRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiModel whereNotExists(Select<?> select) {
+    public AiModel whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

@@ -21,19 +21,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiTokenUsagePeriodRecord;
 
@@ -47,7 +48,7 @@ public class AiTokenUsagePeriod extends TableImpl<AiTokenUsagePeriodRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_token_usage_period</code>
+     * The reference instance of <code>ai_token_usage_period</code>
      */
     public static final AiTokenUsagePeriod AI_TOKEN_USAGE_PERIOD = new AiTokenUsagePeriod();
 
@@ -60,45 +61,44 @@ public class AiTokenUsagePeriod extends TableImpl<AiTokenUsagePeriodRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_token_usage_period.app_user_id</code>.
-     * Identifier of the user whose token usage is aggregated
+     * The column <code>ai_token_usage_period.app_user_id</code>. Identifier of
+     * the user whose token usage is aggregated
      */
     public final TableField<AiTokenUsagePeriodRecord, ULong> APP_USER_ID = createField(DSL.name("app_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the user whose token usage is aggregated");
 
     /**
-     * The column
-     * <code>oagi.ai_token_usage_period.period_start_timestamp</code>. Inclusive
-     * start of the quota period in UTC
+     * The column <code>ai_token_usage_period.period_start_timestamp</code>.
+     * Inclusive start of the quota period in UTC
      */
     public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> PERIOD_START_TIMESTAMP = createField(DSL.name("period_start_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Inclusive start of the quota period in UTC");
 
     /**
-     * The column <code>oagi.ai_token_usage_period.period_end_timestamp</code>.
+     * The column <code>ai_token_usage_period.period_end_timestamp</code>.
      * Exclusive end of the quota period in UTC
      */
     public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> PERIOD_END_TIMESTAMP = createField(DSL.name("period_end_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Exclusive end of the quota period in UTC");
 
     /**
-     * The column <code>oagi.ai_token_usage_period.consumed_tokens</code>.
-     * Number of tokens consumed during the period
+     * The column <code>ai_token_usage_period.consumed_tokens</code>. Number of
+     * tokens consumed during the period
      */
     public final TableField<AiTokenUsagePeriodRecord, ULong> CONSUMED_TOKENS = createField(DSL.name("consumed_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of tokens consumed during the period");
 
     /**
-     * The column <code>oagi.ai_token_usage_period.reserved_tokens</code>.
-     * Number of tokens reserved by in-progress calls during the period
+     * The column <code>ai_token_usage_period.reserved_tokens</code>. Number of
+     * tokens reserved by in-progress calls during the period
      */
     public final TableField<AiTokenUsagePeriodRecord, ULong> RESERVED_TOKENS = createField(DSL.name("reserved_tokens"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.BIGINTUNSIGNED)), this, "Number of tokens reserved by in-progress calls during the period");
 
     /**
-     * The column <code>oagi.ai_token_usage_period.creation_timestamp</code>.
-     * Date and time when the period counter was created
+     * The column <code>ai_token_usage_period.creation_timestamp</code>. Date
+     * and time when the period counter was created
      */
     public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the period counter was created");
 
     /**
-     * The column <code>oagi.ai_token_usage_period.last_update_timestamp</code>.
-     * Date and time when the period counter was last updated
+     * The column <code>ai_token_usage_period.last_update_timestamp</code>. Date
+     * and time when the period counter was last updated
      */
     public final TableField<AiTokenUsagePeriodRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the period counter was last updated");
 
@@ -111,21 +111,21 @@ public class AiTokenUsagePeriod extends TableImpl<AiTokenUsagePeriodRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_token_usage_period</code> table reference
+     * Create an aliased <code>ai_token_usage_period</code> table reference
      */
     public AiTokenUsagePeriod(String alias) {
         this(DSL.name(alias), AI_TOKEN_USAGE_PERIOD);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_token_usage_period</code> table reference
+     * Create an aliased <code>ai_token_usage_period</code> table reference
      */
     public AiTokenUsagePeriod(Name alias) {
         this(alias, AI_TOKEN_USAGE_PERIOD);
     }
 
     /**
-     * Create a <code>oagi.ai_token_usage_period</code> table reference
+     * Create a <code>ai_token_usage_period</code> table reference
      */
     public AiTokenUsagePeriod() {
         this(DSL.name("ai_token_usage_period"), null);
@@ -166,7 +166,7 @@ public class AiTokenUsagePeriod extends TableImpl<AiTokenUsagePeriodRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -187,7 +187,7 @@ public class AiTokenUsagePeriod extends TableImpl<AiTokenUsagePeriodRecord> {
     private transient AppUserPath _appUser;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table.
+     * Get the implicit join path to the <code>app_user</code> table.
      */
     public AppUserPath appUser() {
         if (_appUser == null)
@@ -240,7 +240,7 @@ public class AiTokenUsagePeriod extends TableImpl<AiTokenUsagePeriodRecord> {
      */
     @Override
     public AiTokenUsagePeriod where(Condition condition) {
-        return new AiTokenUsagePeriod(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiTokenUsagePeriod(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -307,7 +307,7 @@ public class AiTokenUsagePeriod extends TableImpl<AiTokenUsagePeriodRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiTokenUsagePeriod whereExists(Select<?> select) {
+    public AiTokenUsagePeriod whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -315,7 +315,7 @@ public class AiTokenUsagePeriod extends TableImpl<AiTokenUsagePeriodRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiTokenUsagePeriod whereNotExists(Select<?> select) {
+    public AiTokenUsagePeriod whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

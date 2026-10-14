@@ -20,21 +20,21 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListManifest.AgencyIdListManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValue.AgencyIdListValuePath;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AgencyIdListValueManifest.AgencyIdListValueManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.CodeListManifest.CodeListManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Release.ReleasePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AgencyIdListValueManifestRecord;
@@ -53,7 +53,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.agency_id_list_value_manifest</code>
+     * The reference instance of <code>agency_id_list_value_manifest</code>
      */
     public static final AgencyIdListValueManifest AGENCY_ID_LIST_VALUE_MANIFEST = new AgencyIdListValueManifest();
 
@@ -67,56 +67,56 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
 
     /**
      * The column
-     * <code>oagi.agency_id_list_value_manifest.agency_id_list_value_manifest_id</code>.
+     * <code>agency_id_list_value_manifest.agency_id_list_value_manifest_id</code>.
      * An internal, primary database key of a AGENCY_ID_LIST_VALUE_MANIFEST
      * record.
      */
-    public final TableField<AgencyIdListValueManifestRecord, ULong> AGENCY_ID_LIST_VALUE_MANIFEST_ID = createField(DSL.name("agency_id_list_value_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of a AGENCY_ID_LIST_VALUE_MANIFEST record.");
+    public final TableField<AgencyIdListValueManifestRecord, ULong> AGENCY_ID_LIST_VALUE_MANIFEST_ID = createField(DSL.name("agency_id_list_value_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "An internal, primary database key of a AGENCY_ID_LIST_VALUE_MANIFEST record.");
 
     /**
-     * The column <code>oagi.agency_id_list_value_manifest.release_id</code>.
-     * Foreign key to the RELEASE table.
+     * The column <code>agency_id_list_value_manifest.release_id</code>. Foreign
+     * key to the RELEASE table.
      */
     public final TableField<AgencyIdListValueManifestRecord, ULong> RELEASE_ID = createField(DSL.name("release_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the RELEASE table.");
 
     /**
      * The column
-     * <code>oagi.agency_id_list_value_manifest.agency_id_list_value_id</code>.
+     * <code>agency_id_list_value_manifest.agency_id_list_value_id</code>.
      * Foreign key to the AGENCY_ID_LIST_VALUE table.
      */
     public final TableField<AgencyIdListValueManifestRecord, ULong> AGENCY_ID_LIST_VALUE_ID = createField(DSL.name("agency_id_list_value_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the AGENCY_ID_LIST_VALUE table.");
 
     /**
      * The column
-     * <code>oagi.agency_id_list_value_manifest.agency_id_list_manifest_id</code>.
+     * <code>agency_id_list_value_manifest.agency_id_list_manifest_id</code>.
      * Foreign key to the AGENCY_ID_LIST_MANIFEST table.
      */
     public final TableField<AgencyIdListValueManifestRecord, ULong> AGENCY_ID_LIST_MANIFEST_ID = createField(DSL.name("agency_id_list_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the AGENCY_ID_LIST_MANIFEST table.");
 
     /**
      * The column
-     * <code>oagi.agency_id_list_value_manifest.based_agency_id_list_value_manifest_id</code>.
+     * <code>agency_id_list_value_manifest.based_agency_id_list_value_manifest_id</code>.
      * A self-reference to the AGENCY_ID_LIST_VALUE_MANIFEST record that this
      * record is based on (its base/supertype from which it was derived).
      */
     public final TableField<AgencyIdListValueManifestRecord, ULong> BASED_AGENCY_ID_LIST_VALUE_MANIFEST_ID = createField(DSL.name("based_agency_id_list_value_manifest_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A self-reference to the AGENCY_ID_LIST_VALUE_MANIFEST record that this record is based on (its base/supertype from which it was derived).");
 
     /**
-     * The column <code>oagi.agency_id_list_value_manifest.conflict</code>. This
+     * The column <code>agency_id_list_value_manifest.conflict</code>. This
      * indicates that there is a conflict between self and relationship.
      */
     public final TableField<AgencyIdListValueManifestRecord, Byte> CONFLICT = createField(DSL.name("conflict"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "This indicates that there is a conflict between self and relationship.");
 
     /**
      * The column
-     * <code>oagi.agency_id_list_value_manifest.replacement_agency_id_list_value_manifest_id</code>.
+     * <code>agency_id_list_value_manifest.replacement_agency_id_list_value_manifest_id</code>.
      * This refers to a replacement manifest if the record is deprecated.
      */
     public final TableField<AgencyIdListValueManifestRecord, ULong> REPLACEMENT_AGENCY_ID_LIST_VALUE_MANIFEST_ID = createField(DSL.name("replacement_agency_id_list_value_manifest_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "This refers to a replacement manifest if the record is deprecated.");
 
     /**
      * The column
-     * <code>oagi.agency_id_list_value_manifest.prev_agency_id_list_value_manifest_id</code>.
+     * <code>agency_id_list_value_manifest.prev_agency_id_list_value_manifest_id</code>.
      * A self-reference to the corresponding AGENCY_ID_LIST_VALUE_MANIFEST
      * record in the previous release (revision chain). NULL for the first
      * revision.
@@ -125,7 +125,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
 
     /**
      * The column
-     * <code>oagi.agency_id_list_value_manifest.next_agency_id_list_value_manifest_id</code>.
+     * <code>agency_id_list_value_manifest.next_agency_id_list_value_manifest_id</code>.
      * A self-reference to the corresponding AGENCY_ID_LIST_VALUE_MANIFEST
      * record in the next release (revision chain). NULL for the latest
      * revision.
@@ -141,7 +141,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
     }
 
     /**
-     * Create an aliased <code>oagi.agency_id_list_value_manifest</code> table
+     * Create an aliased <code>agency_id_list_value_manifest</code> table
      * reference
      */
     public AgencyIdListValueManifest(String alias) {
@@ -149,7 +149,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
     }
 
     /**
-     * Create an aliased <code>oagi.agency_id_list_value_manifest</code> table
+     * Create an aliased <code>agency_id_list_value_manifest</code> table
      * reference
      */
     public AgencyIdListValueManifest(Name alias) {
@@ -157,7 +157,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
     }
 
     /**
-     * Create a <code>oagi.agency_id_list_value_manifest</code> table reference
+     * Create a <code>agency_id_list_value_manifest</code> table reference
      */
     public AgencyIdListValueManifest() {
         this(DSL.name("agency_id_list_value_manifest"), null);
@@ -198,7 +198,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -219,8 +219,8 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
     private transient AgencyIdListManifestPath _agencyIdListManifest;
 
     /**
-     * Get the implicit join path to the
-     * <code>oagi.agency_id_list_manifest</code> table.
+     * Get the implicit join path to the <code>agency_id_list_manifest</code>
+     * table.
      */
     public AgencyIdListManifestPath agencyIdListManifest() {
         if (_agencyIdListManifest == null)
@@ -232,7 +232,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
     private transient AgencyIdListValuePath _agencyIdListValue;
 
     /**
-     * Get the implicit join path to the <code>oagi.agency_id_list_value</code>
+     * Get the implicit join path to the <code>agency_id_list_value</code>
      * table.
      */
     public AgencyIdListValuePath agencyIdListValue() {
@@ -246,7 +246,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
 
     /**
      * Get the implicit join path to the
-     * <code>oagi.agency_id_list_value_manifest</code> table, via the
+     * <code>agency_id_list_value_manifest</code> table, via the
      * <code>agency_id_list_value_manifest_based_agency_id_list_val_mnf_id_fk</code>
      * key.
      */
@@ -261,7 +261,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
 
     /**
      * Get the implicit join path to the
-     * <code>oagi.agency_id_list_value_manifest</code> table, via the
+     * <code>agency_id_list_value_manifest</code> table, via the
      * <code>agency_id_list_value_manifest_next_agency_id_list_value_manif_fk</code>
      * key.
      */
@@ -276,7 +276,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
 
     /**
      * Get the implicit join path to the
-     * <code>oagi.agency_id_list_value_manifest</code> table, via the
+     * <code>agency_id_list_value_manifest</code> table, via the
      * <code>agency_id_list_value_manifest_prev_agency_id_list_value_manif_fk</code>
      * key.
      */
@@ -290,7 +290,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
     private transient ReleasePath _release;
 
     /**
-     * Get the implicit join path to the <code>oagi.release</code> table.
+     * Get the implicit join path to the <code>release</code> table.
      */
     public ReleasePath release() {
         if (_release == null)
@@ -303,7 +303,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
 
     /**
      * Get the implicit join path to the
-     * <code>oagi.agency_id_list_value_manifest</code> table, via the
+     * <code>agency_id_list_value_manifest</code> table, via the
      * <code>agency_id_list_value_replacement_agency_id_list_manif_fk</code>
      * key.
      */
@@ -317,8 +317,8 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
     private transient CodeListManifestPath _codeListManifest;
 
     /**
-     * Get the implicit to-many join path to the
-     * <code>oagi.code_list_manifest</code> table
+     * Get the implicit to-many join path to the <code>code_list_manifest</code>
+     * table
      */
     public CodeListManifestPath codeListManifest() {
         if (_codeListManifest == null)
@@ -371,7 +371,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
      */
     @Override
     public AgencyIdListValueManifest where(Condition condition) {
-        return new AgencyIdListValueManifest(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AgencyIdListValueManifest(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -438,7 +438,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
      * Create an inline derived table from this table
      */
     @Override
-    public AgencyIdListValueManifest whereExists(Select<?> select) {
+    public AgencyIdListValueManifest whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -446,7 +446,7 @@ public class AgencyIdListValueManifest extends TableImpl<AgencyIdListValueManife
      * Create an inline derived table from this table
      */
     @Override
-    public AgencyIdListValueManifest whereNotExists(Select<?> select) {
+    public AgencyIdListValueManifest whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

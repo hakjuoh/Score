@@ -22,10 +22,10 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
@@ -33,8 +33,8 @@ import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModel.AiModelPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppSecret.AppSecretPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
@@ -50,7 +50,7 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_provider</code>
+     * The reference instance of <code>ai_provider</code>
      */
     public static final AiProvider AI_PROVIDER = new AiProvider();
 
@@ -63,74 +63,74 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_provider.ai_provider_id</code>. Identifier of
-     * the AI provider
+     * The column <code>ai_provider.ai_provider_id</code>. Identifier of the AI
+     * provider
      */
-    public final TableField<AiProviderRecord, ULong> AI_PROVIDER_ID = createField(DSL.name("ai_provider_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Identifier of the AI provider");
+    public final TableField<AiProviderRecord, ULong> AI_PROVIDER_ID = createField(DSL.name("ai_provider_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "Identifier of the AI provider");
 
     /**
-     * The column <code>oagi.ai_provider.provider_name</code>. Unique
+     * The column <code>ai_provider.provider_name</code>. Unique
      * application-facing name of the AI provider
      */
     public final TableField<AiProviderRecord, String> PROVIDER_NAME = createField(DSL.name("provider_name"), SQLDataType.VARCHAR(120).nullable(false), this, "Unique application-facing name of the AI provider");
 
     /**
-     * The column <code>oagi.ai_provider.provider_type</code>. Provider adapter
-     * type: anthropic or openai
+     * The column <code>ai_provider.provider_type</code>. Provider adapter type:
+     * anthropic or openai
      */
     public final TableField<AiProviderRecord, String> PROVIDER_TYPE = createField(DSL.name("provider_type"), SQLDataType.VARCHAR(32).nullable(false), this, "Provider adapter type: anthropic or openai");
 
     /**
-     * The column <code>oagi.ai_provider.base_url</code>. Base endpoint URL of
-     * the AI provider
+     * The column <code>ai_provider.base_url</code>. Base endpoint URL of the AI
+     * provider
      */
     public final TableField<AiProviderRecord, String> BASE_URL = createField(DSL.name("base_url"), SQLDataType.VARCHAR(1000).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Base endpoint URL of the AI provider");
 
     /**
-     * The column <code>oagi.ai_provider.messages_url</code>. Optional
+     * The column <code>ai_provider.messages_url</code>. Optional
      * provider-specific messages endpoint URL
      */
     public final TableField<AiProviderRecord, String> MESSAGES_URL = createField(DSL.name("messages_url"), SQLDataType.VARCHAR(1000).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Optional provider-specific messages endpoint URL");
 
     /**
-     * The column <code>oagi.ai_provider.api_version</code>. Provider API
-     * version sent using the provider-specific mechanism
+     * The column <code>ai_provider.api_version</code>. Provider API version
+     * sent using the provider-specific mechanism
      */
     public final TableField<AiProviderRecord, String> API_VERSION = createField(DSL.name("api_version"), SQLDataType.VARCHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Provider API version sent using the provider-specific mechanism");
 
     /**
-     * The column <code>oagi.ai_provider.api_key_secret_id</code>. Encrypted API
-     * key referenced from app_secret
+     * The column <code>ai_provider.api_key_secret_id</code>. Encrypted API key
+     * referenced from app_secret
      */
     public final TableField<AiProviderRecord, ULong> API_KEY_SECRET_ID = createField(DSL.name("api_key_secret_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Encrypted API key referenced from app_secret");
 
     /**
-     * The column <code>oagi.ai_provider.enabled</code>. Indicates whether the
+     * The column <code>ai_provider.enabled</code>. Indicates whether the
      * provider can serve model requests
      */
     public final TableField<AiProviderRecord, Byte> ENABLED = createField(DSL.name("enabled"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.TINYINT)), this, "Indicates whether the provider can serve model requests");
 
     /**
-     * The column <code>oagi.ai_provider.created_by</code>. Identifier of the
+     * The column <code>ai_provider.created_by</code>. Identifier of the
      * administrator who created the provider
      */
     public final TableField<AiProviderRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who created the provider");
 
     /**
-     * The column <code>oagi.ai_provider.last_updated_by</code>. Identifier of
-     * the administrator who last updated the provider
+     * The column <code>ai_provider.last_updated_by</code>. Identifier of the
+     * administrator who last updated the provider
      */
     public final TableField<AiProviderRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who last updated the provider");
 
     /**
-     * The column <code>oagi.ai_provider.creation_timestamp</code>. Date and
-     * time when the provider was created
+     * The column <code>ai_provider.creation_timestamp</code>. Date and time
+     * when the provider was created
      */
     public final TableField<AiProviderRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the provider was created");
 
     /**
-     * The column <code>oagi.ai_provider.last_update_timestamp</code>. Date and
-     * time when the provider was last updated
+     * The column <code>ai_provider.last_update_timestamp</code>. Date and time
+     * when the provider was last updated
      */
     public final TableField<AiProviderRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the provider was last updated");
 
@@ -143,21 +143,21 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_provider</code> table reference
+     * Create an aliased <code>ai_provider</code> table reference
      */
     public AiProvider(String alias) {
         this(DSL.name(alias), AI_PROVIDER);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_provider</code> table reference
+     * Create an aliased <code>ai_provider</code> table reference
      */
     public AiProvider(Name alias) {
         this(alias, AI_PROVIDER);
     }
 
     /**
-     * Create a <code>oagi.ai_provider</code> table reference
+     * Create a <code>ai_provider</code> table reference
      */
     public AiProvider() {
         this(DSL.name("ai_provider"), null);
@@ -198,7 +198,7 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -224,7 +224,7 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
     private transient AppSecretPath _appSecret;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_secret</code> table.
+     * Get the implicit join path to the <code>app_secret</code> table.
      */
     public AppSecretPath appSecret() {
         if (_appSecret == null)
@@ -236,8 +236,8 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
     private transient AppUserPath _aiProviderCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>ai_provider_created_by_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>ai_provider_created_by_fk</code> key.
      */
     public AppUserPath aiProviderCreatedByFk() {
         if (_aiProviderCreatedByFk == null)
@@ -249,8 +249,8 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
     private transient AppUserPath _aiProviderLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>ai_provider_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>ai_provider_last_updated_by_fk</code> key.
      */
     public AppUserPath aiProviderLastUpdatedByFk() {
         if (_aiProviderLastUpdatedByFk == null)
@@ -262,8 +262,7 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
     private transient AiModelPath _aiModel;
 
     /**
-     * Get the implicit to-many join path to the <code>oagi.ai_model</code>
-     * table
+     * Get the implicit to-many join path to the <code>ai_model</code> table
      */
     public AiModelPath aiModel() {
         if (_aiModel == null)
@@ -323,7 +322,7 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
      */
     @Override
     public AiProvider where(Condition condition) {
-        return new AiProvider(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiProvider(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -390,7 +389,7 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiProvider whereExists(Select<?> select) {
+    public AiProvider whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -398,7 +397,7 @@ public class AiProvider extends TableImpl<AiProviderRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiProvider whereNotExists(Select<?> select) {
+    public AiProvider whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

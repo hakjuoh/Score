@@ -21,23 +21,23 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.oauth2_app.oauth2_app_id</code>. An internal,
-     * primary database key of a OAUTH2_APP record.
+     * Setter for <code>oauth2_app.oauth2_app_id</code>. An internal, primary
+     * database key of a OAUTH2_APP record.
      */
     public void setOauth2AppId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.oauth2_app_id</code>. An internal,
-     * primary database key of a OAUTH2_APP record.
+     * Getter for <code>oauth2_app.oauth2_app_id</code>. An internal, primary
+     * database key of a OAUTH2_APP record.
      */
     public ULong getOauth2AppId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.provider_name</code>. The unique name
+     * Setter for <code>oauth2_app.provider_name</code>. The unique name
      * identifying this OAuth 2.0 provider; used as the client registration ID.
      */
     public void setProviderName(String value) {
@@ -45,7 +45,7 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.provider_name</code>. The unique name
+     * Getter for <code>oauth2_app.provider_name</code>. The unique name
      * identifying this OAuth 2.0 provider; used as the client registration ID.
      */
     public String getProviderName() {
@@ -53,89 +53,87 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.issuer_uri</code>. The OpenID Connect
-     * issuer URI; when set, the provider's endpoints are discovered from its
-     * metadata.
+     * Setter for <code>oauth2_app.issuer_uri</code>. The OpenID Connect issuer
+     * URI; when set, the provider's endpoints are discovered from its metadata.
      */
     public void setIssuerUri(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.issuer_uri</code>. The OpenID Connect
-     * issuer URI; when set, the provider's endpoints are discovered from its
-     * metadata.
+     * Getter for <code>oauth2_app.issuer_uri</code>. The OpenID Connect issuer
+     * URI; when set, the provider's endpoints are discovered from its metadata.
      */
     public String getIssuerUri() {
         return (String) get(2);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.authorization_uri</code>. The
-     * authorization endpoint URI of the OAuth 2.0 provider.
+     * Setter for <code>oauth2_app.authorization_uri</code>. The authorization
+     * endpoint URI of the OAuth 2.0 provider.
      */
     public void setAuthorizationUri(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.authorization_uri</code>. The
-     * authorization endpoint URI of the OAuth 2.0 provider.
+     * Getter for <code>oauth2_app.authorization_uri</code>. The authorization
+     * endpoint URI of the OAuth 2.0 provider.
      */
     public String getAuthorizationUri() {
         return (String) get(3);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.token_uri</code>. The token endpoint URI
-     * of the OAuth 2.0 provider.
+     * Setter for <code>oauth2_app.token_uri</code>. The token endpoint URI of
+     * the OAuth 2.0 provider.
      */
     public void setTokenUri(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.token_uri</code>. The token endpoint URI
-     * of the OAuth 2.0 provider.
+     * Getter for <code>oauth2_app.token_uri</code>. The token endpoint URI of
+     * the OAuth 2.0 provider.
      */
     public String getTokenUri() {
         return (String) get(4);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.user_info_uri</code>. The UserInfo
-     * endpoint URI of the OAuth 2.0 provider.
+     * Setter for <code>oauth2_app.user_info_uri</code>. The UserInfo endpoint
+     * URI of the OAuth 2.0 provider.
      */
     public void setUserInfoUri(String value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.user_info_uri</code>. The UserInfo
-     * endpoint URI of the OAuth 2.0 provider.
+     * Getter for <code>oauth2_app.user_info_uri</code>. The UserInfo endpoint
+     * URI of the OAuth 2.0 provider.
      */
     public String getUserInfoUri() {
         return (String) get(5);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.jwk_set_uri</code>. The JSON Web Key
-     * (JWK) Set URI of the OAuth 2.0 provider, used to validate tokens.
+     * Setter for <code>oauth2_app.jwk_set_uri</code>. The JSON Web Key (JWK)
+     * Set URI of the OAuth 2.0 provider, used to validate tokens.
      */
     public void setJwkSetUri(String value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.jwk_set_uri</code>. The JSON Web Key
-     * (JWK) Set URI of the OAuth 2.0 provider, used to validate tokens.
+     * Getter for <code>oauth2_app.jwk_set_uri</code>. The JSON Web Key (JWK)
+     * Set URI of the OAuth 2.0 provider, used to validate tokens.
      */
     public String getJwkSetUri() {
         return (String) get(6);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.redirect_uri</code>. The redirect URI to
+     * Setter for <code>oauth2_app.redirect_uri</code>. The redirect URI to
      * which the OAuth 2.0 provider returns the end user after authorization.
      */
     public void setRedirectUri(String value) {
@@ -143,7 +141,7 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.redirect_uri</code>. The redirect URI to
+     * Getter for <code>oauth2_app.redirect_uri</code>. The redirect URI to
      * which the OAuth 2.0 provider returns the end user after authorization.
      */
     public String getRedirectUri() {
@@ -151,23 +149,23 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.end_session_endpoint</code>. The
-     * end-session (logout) endpoint URI of the OAuth 2.0 provider.
+     * Setter for <code>oauth2_app.end_session_endpoint</code>. The end-session
+     * (logout) endpoint URI of the OAuth 2.0 provider.
      */
     public void setEndSessionEndpoint(String value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.end_session_endpoint</code>. The
-     * end-session (logout) endpoint URI of the OAuth 2.0 provider.
+     * Getter for <code>oauth2_app.end_session_endpoint</code>. The end-session
+     * (logout) endpoint URI of the OAuth 2.0 provider.
      */
     public String getEndSessionEndpoint() {
         return (String) get(8);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.client_id</code>. The client identifier
+     * Setter for <code>oauth2_app.client_id</code>. The client identifier
      * issued to this application by the OAuth 2.0 provider.
      */
     public void setClientId(String value) {
@@ -175,7 +173,7 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.client_id</code>. The client identifier
+     * Getter for <code>oauth2_app.client_id</code>. The client identifier
      * issued to this application by the OAuth 2.0 provider.
      */
     public String getClientId() {
@@ -183,7 +181,7 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.client_secret</code>. The client secret
+     * Setter for <code>oauth2_app.client_secret</code>. The client secret
      * issued to this application by the OAuth 2.0 provider.
      */
     public void setClientSecret(String value) {
@@ -191,7 +189,7 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.client_secret</code>. The client secret
+     * Getter for <code>oauth2_app.client_secret</code>. The client secret
      * issued to this application by the OAuth 2.0 provider.
      */
     public String getClientSecret() {
@@ -199,7 +197,7 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.client_authentication_method</code>. The
+     * Setter for <code>oauth2_app.client_authentication_method</code>. The
      * client authentication method used with the provider (e.g.
      * client_secret_basic, client_secret_post).
      */
@@ -208,7 +206,7 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.client_authentication_method</code>. The
+     * Getter for <code>oauth2_app.client_authentication_method</code>. The
      * client authentication method used with the provider (e.g.
      * client_secret_basic, client_secret_post).
      */
@@ -217,8 +215,8 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.authorization_grant_type</code>. The
-     * OAuth 2.0 authorization grant type used with the provider (e.g.
+     * Setter for <code>oauth2_app.authorization_grant_type</code>. The OAuth
+     * 2.0 authorization grant type used with the provider (e.g.
      * authorization_code).
      */
     public void setAuthorizationGrantType(String value) {
@@ -226,8 +224,8 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.authorization_grant_type</code>. The
-     * OAuth 2.0 authorization grant type used with the provider (e.g.
+     * Getter for <code>oauth2_app.authorization_grant_type</code>. The OAuth
+     * 2.0 authorization grant type used with the provider (e.g.
      * authorization_code).
      */
     public String getAuthorizationGrantType() {
@@ -235,55 +233,55 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.prompt</code>. The OpenID Connect
-     * 'prompt' parameter sent to the provider's authorization endpoint.
+     * Setter for <code>oauth2_app.prompt</code>. The OpenID Connect 'prompt'
+     * parameter sent to the provider's authorization endpoint.
      */
     public void setPrompt(String value) {
         set(13, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.prompt</code>. The OpenID Connect
-     * 'prompt' parameter sent to the provider's authorization endpoint.
+     * Getter for <code>oauth2_app.prompt</code>. The OpenID Connect 'prompt'
+     * parameter sent to the provider's authorization endpoint.
      */
     public String getPrompt() {
         return (String) get(13);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.display_provider_name</code>. The
-     * provider name displayed on the login button in the user interface.
+     * Setter for <code>oauth2_app.display_provider_name</code>. The provider
+     * name displayed on the login button in the user interface.
      */
     public void setDisplayProviderName(String value) {
         set(14, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.display_provider_name</code>. The
-     * provider name displayed on the login button in the user interface.
+     * Getter for <code>oauth2_app.display_provider_name</code>. The provider
+     * name displayed on the login button in the user interface.
      */
     public String getDisplayProviderName() {
         return (String) get(14);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.background_color</code>. The background
-     * color of the provider's login button in the user interface.
+     * Setter for <code>oauth2_app.background_color</code>. The background color
+     * of the provider's login button in the user interface.
      */
     public void setBackgroundColor(String value) {
         set(15, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.background_color</code>. The background
-     * color of the provider's login button in the user interface.
+     * Getter for <code>oauth2_app.background_color</code>. The background color
+     * of the provider's login button in the user interface.
      */
     public String getBackgroundColor() {
         return (String) get(15);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.font_color</code>. The font color of the
+     * Setter for <code>oauth2_app.font_color</code>. The font color of the
      * provider's login button in the user interface.
      */
     public void setFontColor(String value) {
@@ -291,7 +289,7 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.font_color</code>. The font color of the
+     * Getter for <code>oauth2_app.font_color</code>. The font color of the
      * provider's login button in the user interface.
      */
     public String getFontColor() {
@@ -299,32 +297,32 @@ public class Oauth2AppRecord extends UpdatableRecordImpl<Oauth2AppRecord> {
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.display_order</code>. The order in which
-     * this provider is displayed among the login options.
+     * Setter for <code>oauth2_app.display_order</code>. The order in which this
+     * provider is displayed among the login options.
      */
     public void setDisplayOrder(Integer value) {
         set(17, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.display_order</code>. The order in which
-     * this provider is displayed among the login options.
+     * Getter for <code>oauth2_app.display_order</code>. The order in which this
+     * provider is displayed among the login options.
      */
     public Integer getDisplayOrder() {
         return (Integer) get(17);
     }
 
     /**
-     * Setter for <code>oagi.oauth2_app.is_disabled</code>. A flag indicating
-     * whether this OAuth 2.0 provider is disabled (1 = disabled, 0 = enabled).
+     * Setter for <code>oauth2_app.is_disabled</code>. A flag indicating whether
+     * this OAuth 2.0 provider is disabled (1 = disabled, 0 = enabled).
      */
     public void setIsDisabled(Byte value) {
         set(18, value);
     }
 
     /**
-     * Getter for <code>oagi.oauth2_app.is_disabled</code>. A flag indicating
-     * whether this OAuth 2.0 provider is disabled (1 = disabled, 0 = enabled).
+     * Getter for <code>oauth2_app.is_disabled</code>. A flag indicating whether
+     * this OAuth 2.0 provider is disabled (1 = disabled, 0 = enabled).
      */
     public Byte getIsDisabled() {
         return (Byte) get(18);

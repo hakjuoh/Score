@@ -14,17 +14,18 @@ import org.jooq.PlainSQL;
 import org.jooq.QueryPart;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiChatFileObjectRecord;
 
 
@@ -37,7 +38,7 @@ public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_chat_file_object</code>
+     * The reference instance of <code>ai_chat_file_object</code>
      */
     public static final AiChatFileObject AI_CHAT_FILE_OBJECT = new AiChatFileObject();
 
@@ -50,20 +51,20 @@ public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_chat_file_object.storage_location</code>. Opaque
+     * The column <code>ai_chat_file_object.storage_location</code>. Opaque
      * database-storage object key.
      */
     public final TableField<AiChatFileObjectRecord, String> STORAGE_LOCATION = createField(DSL.name("storage_location"), SQLDataType.VARCHAR(512).nullable(false), this, "Opaque database-storage object key.");
 
     /**
-     * The column <code>oagi.ai_chat_file_object.content</code>. File bytes for
-     * the database storage provider.
+     * The column <code>ai_chat_file_object.content</code>. File bytes for the
+     * database storage provider.
      */
     public final TableField<AiChatFileObjectRecord, byte[]> CONTENT = createField(DSL.name("content"), SQLDataType.BLOB.nullable(false), this, "File bytes for the database storage provider.");
 
     /**
-     * The column <code>oagi.ai_chat_file_object.creation_timestamp</code>.
-     * Object creation timestamp.
+     * The column <code>ai_chat_file_object.creation_timestamp</code>. Object
+     * creation timestamp.
      */
     public final TableField<AiChatFileObjectRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Object creation timestamp.");
 
@@ -76,21 +77,21 @@ public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_file_object</code> table reference
+     * Create an aliased <code>ai_chat_file_object</code> table reference
      */
     public AiChatFileObject(String alias) {
         this(DSL.name(alias), AI_CHAT_FILE_OBJECT);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_file_object</code> table reference
+     * Create an aliased <code>ai_chat_file_object</code> table reference
      */
     public AiChatFileObject(Name alias) {
         this(alias, AI_CHAT_FILE_OBJECT);
     }
 
     /**
-     * Create a <code>oagi.ai_chat_file_object</code> table reference
+     * Create a <code>ai_chat_file_object</code> table reference
      */
     public AiChatFileObject() {
         this(DSL.name("ai_chat_file_object"), null);
@@ -98,7 +99,7 @@ public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -150,7 +151,7 @@ public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
      */
     @Override
     public AiChatFileObject where(Condition condition) {
-        return new AiChatFileObject(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiChatFileObject(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -217,7 +218,7 @@ public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatFileObject whereExists(Select<?> select) {
+    public AiChatFileObject whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -225,7 +226,7 @@ public class AiChatFileObject extends TableImpl<AiChatFileObjectRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatFileObject whereNotExists(Select<?> select) {
+    public AiChatFileObject whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

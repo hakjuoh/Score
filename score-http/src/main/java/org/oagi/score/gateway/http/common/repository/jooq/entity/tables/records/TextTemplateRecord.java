@@ -21,70 +21,70 @@ public class TextTemplateRecord extends UpdatableRecordImpl<TextTemplateRecord> 
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.text_template.text_template_id</code>.
+     * Setter for <code>text_template.text_template_id</code>.
      */
     public void setTextTemplateId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.text_template.text_template_id</code>.
+     * Getter for <code>text_template.text_template_id</code>.
      */
     public ULong getTextTemplateId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.text_template.name</code>.
+     * Setter for <code>text_template.name</code>.
      */
     public void setName(String value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.text_template.name</code>.
+     * Getter for <code>text_template.name</code>.
      */
     public String getName() {
         return (String) get(1);
     }
 
     /**
-     * Setter for <code>oagi.text_template.subject</code>.
+     * Setter for <code>text_template.subject</code>.
      */
     public void setSubject(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.text_template.subject</code>.
+     * Getter for <code>text_template.subject</code>.
      */
     public String getSubject() {
         return (String) get(2);
     }
 
     /**
-     * Setter for <code>oagi.text_template.content_type</code>.
+     * Setter for <code>text_template.content_type</code>.
      */
     public void setContentType(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.text_template.content_type</code>.
+     * Getter for <code>text_template.content_type</code>.
      */
     public String getContentType() {
         return (String) get(3);
     }
 
     /**
-     * Setter for <code>oagi.text_template.template</code>.
+     * Setter for <code>text_template.template</code>.
      */
     public void setTemplate(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.text_template.template</code>.
+     * Getter for <code>text_template.template</code>.
      */
     public String getTemplate() {
         return (String) get(4);

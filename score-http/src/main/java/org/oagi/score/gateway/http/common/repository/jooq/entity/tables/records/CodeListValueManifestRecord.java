@@ -23,8 +23,8 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
 
     /**
      * Setter for
-     * <code>oagi.code_list_value_manifest.code_list_value_manifest_id</code>.
-     * An internal, primary database key of a CODE_LIST_VALUE_MANIFEST record.
+     * <code>code_list_value_manifest.code_list_value_manifest_id</code>. An
+     * internal, primary database key of a CODE_LIST_VALUE_MANIFEST record.
      */
     public void setCodeListValueManifestId(ULong value) {
         set(0, value);
@@ -32,31 +32,31 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
 
     /**
      * Getter for
-     * <code>oagi.code_list_value_manifest.code_list_value_manifest_id</code>.
-     * An internal, primary database key of a CODE_LIST_VALUE_MANIFEST record.
+     * <code>code_list_value_manifest.code_list_value_manifest_id</code>. An
+     * internal, primary database key of a CODE_LIST_VALUE_MANIFEST record.
      */
     public ULong getCodeListValueManifestId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.code_list_value_manifest.release_id</code>. Foreign
-     * key to the RELEASE table.
+     * Setter for <code>code_list_value_manifest.release_id</code>. Foreign key
+     * to the RELEASE table.
      */
     public void setReleaseId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.code_list_value_manifest.release_id</code>. Foreign
-     * key to the RELEASE table.
+     * Getter for <code>code_list_value_manifest.release_id</code>. Foreign key
+     * to the RELEASE table.
      */
     public ULong getReleaseId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>oagi.code_list_value_manifest.code_list_value_id</code>.
+     * Setter for <code>code_list_value_manifest.code_list_value_id</code>.
      * Foreign key to the CODE_LIST_VALUE table.
      */
     public void setCodeListValueId(ULong value) {
@@ -64,7 +64,7 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
     }
 
     /**
-     * Getter for <code>oagi.code_list_value_manifest.code_list_value_id</code>.
+     * Getter for <code>code_list_value_manifest.code_list_value_id</code>.
      * Foreign key to the CODE_LIST_VALUE table.
      */
     public ULong getCodeListValueId() {
@@ -72,18 +72,16 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
     }
 
     /**
-     * Setter for
-     * <code>oagi.code_list_value_manifest.code_list_manifest_id</code>. Foreign
-     * key to the CODE_LIST_MANIFEST table.
+     * Setter for <code>code_list_value_manifest.code_list_manifest_id</code>.
+     * Foreign key to the CODE_LIST_MANIFEST table.
      */
     public void setCodeListManifestId(ULong value) {
         set(3, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.code_list_value_manifest.code_list_manifest_id</code>. Foreign
-     * key to the CODE_LIST_MANIFEST table.
+     * Getter for <code>code_list_value_manifest.code_list_manifest_id</code>.
+     * Foreign key to the CODE_LIST_MANIFEST table.
      */
     public ULong getCodeListManifestId() {
         return (ULong) get(3);
@@ -91,7 +89,7 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
 
     /**
      * Setter for
-     * <code>oagi.code_list_value_manifest.based_code_list_value_manifest_id</code>.
+     * <code>code_list_value_manifest.based_code_list_value_manifest_id</code>.
      * A self-reference to the CODE_LIST_VALUE_MANIFEST record that this record
      * is based on (its base/supertype from which it was derived).
      */
@@ -101,7 +99,7 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
 
     /**
      * Getter for
-     * <code>oagi.code_list_value_manifest.based_code_list_value_manifest_id</code>.
+     * <code>code_list_value_manifest.based_code_list_value_manifest_id</code>.
      * A self-reference to the CODE_LIST_VALUE_MANIFEST record that this record
      * is based on (its base/supertype from which it was derived).
      */
@@ -110,16 +108,16 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
     }
 
     /**
-     * Setter for <code>oagi.code_list_value_manifest.conflict</code>. This
-     * indicates that there is a conflict between self and relationship.
+     * Setter for <code>code_list_value_manifest.conflict</code>. This indicates
+     * that there is a conflict between self and relationship.
      */
     public void setConflict(Byte value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.code_list_value_manifest.conflict</code>. This
-     * indicates that there is a conflict between self and relationship.
+     * Getter for <code>code_list_value_manifest.conflict</code>. This indicates
+     * that there is a conflict between self and relationship.
      */
     public Byte getConflict() {
         return (Byte) get(5);
@@ -127,7 +125,7 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
 
     /**
      * Setter for
-     * <code>oagi.code_list_value_manifest.replacement_code_list_value_manifest_id</code>.
+     * <code>code_list_value_manifest.replacement_code_list_value_manifest_id</code>.
      * This refers to a replacement manifest if the record is deprecated.
      */
     public void setReplacementCodeListValueManifestId(ULong value) {
@@ -136,7 +134,7 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
 
     /**
      * Getter for
-     * <code>oagi.code_list_value_manifest.replacement_code_list_value_manifest_id</code>.
+     * <code>code_list_value_manifest.replacement_code_list_value_manifest_id</code>.
      * This refers to a replacement manifest if the record is deprecated.
      */
     public ULong getReplacementCodeListValueManifestId() {
@@ -145,8 +143,8 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
 
     /**
      * Setter for
-     * <code>oagi.code_list_value_manifest.prev_code_list_value_manifest_id</code>.
-     * A self-reference to the corresponding CODE_LIST_VALUE_MANIFEST record in
+     * <code>code_list_value_manifest.prev_code_list_value_manifest_id</code>. A
+     * self-reference to the corresponding CODE_LIST_VALUE_MANIFEST record in
      * the previous release (revision chain). NULL for the first revision.
      */
     public void setPrevCodeListValueManifestId(ULong value) {
@@ -155,8 +153,8 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
 
     /**
      * Getter for
-     * <code>oagi.code_list_value_manifest.prev_code_list_value_manifest_id</code>.
-     * A self-reference to the corresponding CODE_LIST_VALUE_MANIFEST record in
+     * <code>code_list_value_manifest.prev_code_list_value_manifest_id</code>. A
+     * self-reference to the corresponding CODE_LIST_VALUE_MANIFEST record in
      * the previous release (revision chain). NULL for the first revision.
      */
     public ULong getPrevCodeListValueManifestId() {
@@ -165,8 +163,8 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
 
     /**
      * Setter for
-     * <code>oagi.code_list_value_manifest.next_code_list_value_manifest_id</code>.
-     * A self-reference to the corresponding CODE_LIST_VALUE_MANIFEST record in
+     * <code>code_list_value_manifest.next_code_list_value_manifest_id</code>. A
+     * self-reference to the corresponding CODE_LIST_VALUE_MANIFEST record in
      * the next release (revision chain). NULL for the latest revision.
      */
     public void setNextCodeListValueManifestId(ULong value) {
@@ -175,8 +173,8 @@ public class CodeListValueManifestRecord extends UpdatableRecordImpl<CodeListVal
 
     /**
      * Getter for
-     * <code>oagi.code_list_value_manifest.next_code_list_value_manifest_id</code>.
-     * A self-reference to the corresponding CODE_LIST_VALUE_MANIFEST record in
+     * <code>code_list_value_manifest.next_code_list_value_manifest_id</code>. A
+     * self-reference to the corresponding CODE_LIST_VALUE_MANIFEST record in
      * the next release (revision chain). NULL for the latest revision.
      */
     public ULong getNextCodeListValueManifestId() {

@@ -23,23 +23,23 @@ public class DtManifestRecord extends UpdatableRecordImpl<DtManifestRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.dt_manifest.dt_manifest_id</code>. An internal,
-     * primary database key of a DT_MANIFEST record.
+     * Setter for <code>dt_manifest.dt_manifest_id</code>. An internal, primary
+     * database key of a DT_MANIFEST record.
      */
     public void setDtManifestId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.dt_manifest.dt_manifest_id</code>. An internal,
-     * primary database key of a DT_MANIFEST record.
+     * Getter for <code>dt_manifest.dt_manifest_id</code>. An internal, primary
+     * database key of a DT_MANIFEST record.
      */
     public ULong getDtManifestId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.dt_manifest.release_id</code>. Foreign key to the
+     * Setter for <code>dt_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public void setReleaseId(ULong value) {
@@ -47,7 +47,7 @@ public class DtManifestRecord extends UpdatableRecordImpl<DtManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.dt_manifest.release_id</code>. Foreign key to the
+     * Getter for <code>dt_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public ULong getReleaseId() {
@@ -55,23 +55,21 @@ public class DtManifestRecord extends UpdatableRecordImpl<DtManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.dt_manifest.dt_id</code>. Foreign key to the DT
-     * table.
+     * Setter for <code>dt_manifest.dt_id</code>. Foreign key to the DT table.
      */
     public void setDtId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.dt_manifest.dt_id</code>. Foreign key to the DT
-     * table.
+     * Getter for <code>dt_manifest.dt_id</code>. Foreign key to the DT table.
      */
     public ULong getDtId() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for <code>oagi.dt_manifest.based_dt_manifest_id</code>. A
+     * Setter for <code>dt_manifest.based_dt_manifest_id</code>. A
      * self-reference to the DT_MANIFEST record that this record is based on
      * (its base/supertype from which it was derived).
      */
@@ -80,7 +78,7 @@ public class DtManifestRecord extends UpdatableRecordImpl<DtManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.dt_manifest.based_dt_manifest_id</code>. A
+     * Getter for <code>dt_manifest.based_dt_manifest_id</code>. A
      * self-reference to the DT_MANIFEST record that this record is based on
      * (its base/supertype from which it was derived).
      */
@@ -89,55 +87,55 @@ public class DtManifestRecord extends UpdatableRecordImpl<DtManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.dt_manifest.den</code>. Dictionary Entry Name of
-     * the data type.
+     * Setter for <code>dt_manifest.den</code>. Dictionary Entry Name of the
+     * data type.
      */
     public void setDen(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.dt_manifest.den</code>. Dictionary Entry Name of
-     * the data type.
+     * Getter for <code>dt_manifest.den</code>. Dictionary Entry Name of the
+     * data type.
      */
     public String getDen() {
         return (String) get(4);
     }
 
     /**
-     * Setter for <code>oagi.dt_manifest.conflict</code>. This indicates that
-     * there is a conflict between self and relationship.
+     * Setter for <code>dt_manifest.conflict</code>. This indicates that there
+     * is a conflict between self and relationship.
      */
     public void setConflict(Byte value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.dt_manifest.conflict</code>. This indicates that
-     * there is a conflict between self and relationship.
+     * Getter for <code>dt_manifest.conflict</code>. This indicates that there
+     * is a conflict between self and relationship.
      */
     public Byte getConflict() {
         return (Byte) get(5);
     }
 
     /**
-     * Setter for <code>oagi.dt_manifest.log_id</code>. A foreign key pointed to
-     * a log for the current record.
+     * Setter for <code>dt_manifest.log_id</code>. A foreign key pointed to a
+     * log for the current record.
      */
     public void setLogId(ULong value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.dt_manifest.log_id</code>. A foreign key pointed to
-     * a log for the current record.
+     * Getter for <code>dt_manifest.log_id</code>. A foreign key pointed to a
+     * log for the current record.
      */
     public ULong getLogId() {
         return (ULong) get(6);
     }
 
     /**
-     * Setter for <code>oagi.dt_manifest.replacement_dt_manifest_id</code>. This
+     * Setter for <code>dt_manifest.replacement_dt_manifest_id</code>. This
      * refers to a replacement manifest if the record is deprecated.
      */
     public void setReplacementDtManifestId(ULong value) {
@@ -145,7 +143,7 @@ public class DtManifestRecord extends UpdatableRecordImpl<DtManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.dt_manifest.replacement_dt_manifest_id</code>. This
+     * Getter for <code>dt_manifest.replacement_dt_manifest_id</code>. This
      * refers to a replacement manifest if the record is deprecated.
      */
     public ULong getReplacementDtManifestId() {
@@ -153,36 +151,36 @@ public class DtManifestRecord extends UpdatableRecordImpl<DtManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.dt_manifest.prev_dt_manifest_id</code>. A
-     * self-reference to the corresponding DT_MANIFEST record in the previous
-     * release (revision chain). NULL for the first revision.
+     * Setter for <code>dt_manifest.prev_dt_manifest_id</code>. A self-reference
+     * to the corresponding DT_MANIFEST record in the previous release (revision
+     * chain). NULL for the first revision.
      */
     public void setPrevDtManifestId(ULong value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.dt_manifest.prev_dt_manifest_id</code>. A
-     * self-reference to the corresponding DT_MANIFEST record in the previous
-     * release (revision chain). NULL for the first revision.
+     * Getter for <code>dt_manifest.prev_dt_manifest_id</code>. A self-reference
+     * to the corresponding DT_MANIFEST record in the previous release (revision
+     * chain). NULL for the first revision.
      */
     public ULong getPrevDtManifestId() {
         return (ULong) get(8);
     }
 
     /**
-     * Setter for <code>oagi.dt_manifest.next_dt_manifest_id</code>. A
-     * self-reference to the corresponding DT_MANIFEST record in the next
-     * release (revision chain). NULL for the latest revision.
+     * Setter for <code>dt_manifest.next_dt_manifest_id</code>. A self-reference
+     * to the corresponding DT_MANIFEST record in the next release (revision
+     * chain). NULL for the latest revision.
      */
     public void setNextDtManifestId(ULong value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.dt_manifest.next_dt_manifest_id</code>. A
-     * self-reference to the corresponding DT_MANIFEST record in the next
-     * release (revision chain). NULL for the latest revision.
+     * Getter for <code>dt_manifest.next_dt_manifest_id</code>. A self-reference
+     * to the corresponding DT_MANIFEST record in the next release (revision
+     * chain). NULL for the latest revision.
      */
     public ULong getNextDtManifestId() {
         return (ULong) get(9);

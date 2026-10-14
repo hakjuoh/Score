@@ -21,23 +21,23 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AccManifest.AccManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsccManifest.AsccManifestPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.BccManifest.BccManifestPath;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.SeqKey.SeqKeyPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.SeqKeyRecord;
 
 
@@ -55,7 +55,7 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.seq_key</code>
+     * The reference instance of <code>seq_key</code>
      */
     public static final SeqKey SEQ_KEY = new SeqKey();
 
@@ -68,43 +68,42 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
     }
 
     /**
-     * The column <code>oagi.seq_key.seq_key_id</code>. An internal, primary
-     * database key of a SEQ_KEY record.
+     * The column <code>seq_key.seq_key_id</code>. An internal, primary database
+     * key of a SEQ_KEY record.
      */
-    public final TableField<SeqKeyRecord, ULong> SEQ_KEY_ID = createField(DSL.name("seq_key_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "An internal, primary database key of a SEQ_KEY record.");
+    public final TableField<SeqKeyRecord, ULong> SEQ_KEY_ID = createField(DSL.name("seq_key_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "An internal, primary database key of a SEQ_KEY record.");
 
     /**
-     * The column <code>oagi.seq_key.from_acc_manifest_id</code>. Foreign key to
-     * the ACC_MANIFEST table pointing to the ACC that owns the association
+     * The column <code>seq_key.from_acc_manifest_id</code>. Foreign key to the
+     * ACC_MANIFEST table pointing to the ACC that owns the association
      * (ASCC/BCC) ordered by this sequence key.
      */
     public final TableField<SeqKeyRecord, ULong> FROM_ACC_MANIFEST_ID = createField(DSL.name("from_acc_manifest_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the ACC_MANIFEST table pointing to the ACC that owns the association (ASCC/BCC) ordered by this sequence key.");
 
     /**
-     * The column <code>oagi.seq_key.ascc_manifest_id</code>. Foreign key to the
+     * The column <code>seq_key.ascc_manifest_id</code>. Foreign key to the
      * ASCC_MANIFEST table for the ASCC association ordered by this record.
      * Exactly one of ASCC_MANIFEST_ID / BCC_MANIFEST_ID is non-null.
      */
     public final TableField<SeqKeyRecord, ULong> ASCC_MANIFEST_ID = createField(DSL.name("ascc_manifest_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the ASCC_MANIFEST table for the ASCC association ordered by this record. Exactly one of ASCC_MANIFEST_ID / BCC_MANIFEST_ID is non-null.");
 
     /**
-     * The column <code>oagi.seq_key.bcc_manifest_id</code>. Foreign key to the
+     * The column <code>seq_key.bcc_manifest_id</code>. Foreign key to the
      * BCC_MANIFEST table for the BCC association ordered by this record.
      * Exactly one of ASCC_MANIFEST_ID / BCC_MANIFEST_ID is non-null.
      */
     public final TableField<SeqKeyRecord, ULong> BCC_MANIFEST_ID = createField(DSL.name("bcc_manifest_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Foreign key to the BCC_MANIFEST table for the BCC association ordered by this record. Exactly one of ASCC_MANIFEST_ID / BCC_MANIFEST_ID is non-null.");
 
     /**
-     * The column <code>oagi.seq_key.prev_seq_key_id</code>. A self-reference to
-     * the previous SEQ_KEY record in the ordering chain; NULL for the first
+     * The column <code>seq_key.prev_seq_key_id</code>. A self-reference to the
+     * previous SEQ_KEY record in the ordering chain; NULL for the first
      * association.
      */
     public final TableField<SeqKeyRecord, ULong> PREV_SEQ_KEY_ID = createField(DSL.name("prev_seq_key_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A self-reference to the previous SEQ_KEY record in the ordering chain; NULL for the first association.");
 
     /**
-     * The column <code>oagi.seq_key.next_seq_key_id</code>. A self-reference to
-     * the next SEQ_KEY record in the ordering chain; NULL for the last
-     * association.
+     * The column <code>seq_key.next_seq_key_id</code>. A self-reference to the
+     * next SEQ_KEY record in the ordering chain; NULL for the last association.
      */
     public final TableField<SeqKeyRecord, ULong> NEXT_SEQ_KEY_ID = createField(DSL.name("next_seq_key_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "A self-reference to the next SEQ_KEY record in the ordering chain; NULL for the last association.");
 
@@ -117,21 +116,21 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.seq_key</code> table reference
+     * Create an aliased <code>seq_key</code> table reference
      */
     public SeqKey(String alias) {
         this(DSL.name(alias), SEQ_KEY);
     }
 
     /**
-     * Create an aliased <code>oagi.seq_key</code> table reference
+     * Create an aliased <code>seq_key</code> table reference
      */
     public SeqKey(Name alias) {
         this(alias, SEQ_KEY);
     }
 
     /**
-     * Create a <code>oagi.seq_key</code> table reference
+     * Create a <code>seq_key</code> table reference
      */
     public SeqKey() {
         this(DSL.name("seq_key"), null);
@@ -172,7 +171,7 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -198,7 +197,7 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
     private transient AsccManifestPath _asccManifest;
 
     /**
-     * Get the implicit join path to the <code>oagi.ascc_manifest</code> table.
+     * Get the implicit join path to the <code>ascc_manifest</code> table.
      */
     public AsccManifestPath asccManifest() {
         if (_asccManifest == null)
@@ -210,7 +209,7 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
     private transient BccManifestPath _bccManifest;
 
     /**
-     * Get the implicit join path to the <code>oagi.bcc_manifest</code> table.
+     * Get the implicit join path to the <code>bcc_manifest</code> table.
      */
     public BccManifestPath bccManifest() {
         if (_bccManifest == null)
@@ -222,7 +221,7 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
     private transient AccManifestPath _accManifest;
 
     /**
-     * Get the implicit join path to the <code>oagi.acc_manifest</code> table.
+     * Get the implicit join path to the <code>acc_manifest</code> table.
      */
     public AccManifestPath accManifest() {
         if (_accManifest == null)
@@ -234,8 +233,8 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
     private transient SeqKeyPath _seqKeyNextSeqKeyIdFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.seq_key</code> table, via
-     * the <code>seq_key_next_seq_key_id_fk</code> key.
+     * Get the implicit join path to the <code>seq_key</code> table, via the
+     * <code>seq_key_next_seq_key_id_fk</code> key.
      */
     public SeqKeyPath seqKeyNextSeqKeyIdFk() {
         if (_seqKeyNextSeqKeyIdFk == null)
@@ -247,8 +246,8 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
     private transient SeqKeyPath _seqKeyPrevSeqKeyIdFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.seq_key</code> table, via
-     * the <code>seq_key_prev_seq_key_id_fk</code> key.
+     * Get the implicit join path to the <code>seq_key</code> table, via the
+     * <code>seq_key_prev_seq_key_id_fk</code> key.
      */
     public SeqKeyPath seqKeyPrevSeqKeyIdFk() {
         if (_seqKeyPrevSeqKeyIdFk == null)
@@ -301,7 +300,7 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
      */
     @Override
     public SeqKey where(Condition condition) {
-        return new SeqKey(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new SeqKey(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -368,7 +367,7 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public SeqKey whereExists(Select<?> select) {
+    public SeqKey whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -376,7 +375,7 @@ public class SeqKey extends TableImpl<SeqKeyRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public SeqKey whereNotExists(Select<?> select) {
+    public SeqKey whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

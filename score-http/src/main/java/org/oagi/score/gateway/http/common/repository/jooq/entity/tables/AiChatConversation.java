@@ -22,21 +22,21 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatChangeConfirmation.AiChatChangeConfirmationPath;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatFile.AiChatFilePath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatMemory.AiChatMemoryPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatStep.AiChatStepPath;
@@ -53,7 +53,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_chat_conversation</code>
+     * The reference instance of <code>ai_chat_conversation</code>
      */
     public static final AiChatConversation AI_CHAT_CONVERSATION = new AiChatConversation();
 
@@ -66,72 +66,70 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
     }
 
     /**
-     * The column
-     * <code>oagi.ai_chat_conversation.ai_chat_conversation_id</code>. The
+     * The column <code>ai_chat_conversation.ai_chat_conversation_id</code>. The
      * primary key of the AI chat conversation record.
      */
-    public final TableField<AiChatConversationRecord, ULong> AI_CHAT_CONVERSATION_ID = createField(DSL.name("ai_chat_conversation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the AI chat conversation record.");
+    public final TableField<AiChatConversationRecord, ULong> AI_CHAT_CONVERSATION_ID = createField(DSL.name("ai_chat_conversation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the AI chat conversation record.");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.guid</code>. The public unique
+     * The column <code>ai_chat_conversation.guid</code>. The public unique
      * identifier of the AI chat conversation.
      */
     public final TableField<AiChatConversationRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.CHAR(36).nullable(false), this, "The public unique identifier of the AI chat conversation.");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.app_user_id</code>. Foreign
-     * key to the APP_USER table identifying the owner of the conversation.
+     * The column <code>ai_chat_conversation.app_user_id</code>. Foreign key to
+     * the APP_USER table identifying the owner of the conversation.
      */
     public final TableField<AiChatConversationRecord, ULong> APP_USER_ID = createField(DSL.name("app_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the APP_USER table identifying the owner of the conversation.");
 
     /**
      * The column
-     * <code>oagi.ai_chat_conversation.parent_ai_chat_conversation_id</code>.
+     * <code>ai_chat_conversation.parent_ai_chat_conversation_id</code>.
      * Self-reference to the root conversation that owns this child execution.
      */
     public final TableField<AiChatConversationRecord, ULong> PARENT_AI_CHAT_CONVERSATION_ID = createField(DSL.name("parent_ai_chat_conversation_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Self-reference to the root conversation that owns this child execution.");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.conversation_kind</code>.
-     * Expected conversation kinds are ROOT, SUBAGENT, and PARALLEL; other
-     * values are handled by the application.
+     * The column <code>ai_chat_conversation.conversation_kind</code>. Expected
+     * conversation kinds are ROOT, SUBAGENT, and PARALLEL; other values are
+     * handled by the application.
      */
     public final TableField<AiChatConversationRecord, String> CONVERSATION_KIND = createField(DSL.name("conversation_kind"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("'ROOT'"), SQLDataType.VARCHAR)), this, "Expected conversation kinds are ROOT, SUBAGENT, and PARALLEL; other values are handled by the application.");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.agent_id</code>. Registered
-     * worker identifier for a child execution conversation.
+     * The column <code>ai_chat_conversation.agent_id</code>. Registered worker
+     * identifier for a child execution conversation.
      */
     public final TableField<AiChatConversationRecord, String> AGENT_ID = createField(DSL.name("agent_id"), SQLDataType.VARCHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Registered worker identifier for a child execution conversation.");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.parent_request_id</code>. Root
+     * The column <code>ai_chat_conversation.parent_request_id</code>. Root
      * request that created this child execution conversation.
      */
     public final TableField<AiChatConversationRecord, String> PARENT_REQUEST_ID = createField(DSL.name("parent_request_id"), SQLDataType.VARCHAR(128).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Root request that created this child execution conversation.");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.title</code>. The display
-     * title of the conversation, derived from its first prompt.
+     * The column <code>ai_chat_conversation.title</code>. The display title of
+     * the conversation, derived from its first prompt.
      */
     public final TableField<AiChatConversationRecord, String> TITLE = createField(DSL.name("title"), SQLDataType.VARCHAR(240).nullable(false), this, "The display title of the conversation, derived from its first prompt.");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.compacted</code>. Indicates
-     * whether the conversation model context has been compacted (0 = False, 1 =
-     * True).
+     * The column <code>ai_chat_conversation.compacted</code>. Indicates whether
+     * the conversation model context has been compacted (0 = False, 1 = True).
      */
     public final TableField<AiChatConversationRecord, Byte> COMPACTED = createField(DSL.name("compacted"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicates whether the conversation model context has been compacted (0 = False, 1 = True).");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.creation_timestamp</code>. The
+     * The column <code>ai_chat_conversation.creation_timestamp</code>. The
      * timestamp when the conversation was created.
      */
     public final TableField<AiChatConversationRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the conversation was created.");
 
     /**
-     * The column <code>oagi.ai_chat_conversation.last_update_timestamp</code>.
-     * The timestamp of the most recent activity in the conversation.
+     * The column <code>ai_chat_conversation.last_update_timestamp</code>. The
+     * timestamp of the most recent activity in the conversation.
      */
     public final TableField<AiChatConversationRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp of the most recent activity in the conversation.");
 
@@ -144,21 +142,21 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_conversation</code> table reference
+     * Create an aliased <code>ai_chat_conversation</code> table reference
      */
     public AiChatConversation(String alias) {
         this(DSL.name(alias), AI_CHAT_CONVERSATION);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_conversation</code> table reference
+     * Create an aliased <code>ai_chat_conversation</code> table reference
      */
     public AiChatConversation(Name alias) {
         this(alias, AI_CHAT_CONVERSATION);
     }
 
     /**
-     * Create a <code>oagi.ai_chat_conversation</code> table reference
+     * Create a <code>ai_chat_conversation</code> table reference
      */
     public AiChatConversation() {
         this(DSL.name("ai_chat_conversation"), null);
@@ -199,7 +197,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -230,7 +228,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
     private transient AppUserPath _appUser;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table.
+     * Get the implicit join path to the <code>app_user</code> table.
      */
     public AppUserPath appUser() {
         if (_appUser == null)
@@ -242,7 +240,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
     private transient AiChatConversationPath _aiChatConversation;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_chat_conversation</code>
+     * Get the implicit join path to the <code>ai_chat_conversation</code>
      * table.
      */
     public AiChatConversationPath aiChatConversation() {
@@ -256,7 +254,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oagi.ai_chat_change_confirmation</code> table
+     * <code>ai_chat_change_confirmation</code> table
      */
     public AiChatChangeConfirmationPath aiChatChangeConfirmation() {
         if (_aiChatChangeConfirmation == null)
@@ -268,8 +266,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
     private transient AiChatFilePath _aiChatFile;
 
     /**
-     * Get the implicit to-many join path to the <code>oagi.ai_chat_file</code>
-     * table
+     * Get the implicit to-many join path to the <code>ai_chat_file</code> table
      */
     public AiChatFilePath aiChatFile() {
         if (_aiChatFile == null)
@@ -281,8 +278,8 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
     private transient AiChatMemoryPath _aiChatMemory;
 
     /**
-     * Get the implicit to-many join path to the
-     * <code>oagi.ai_chat_memory</code> table
+     * Get the implicit to-many join path to the <code>ai_chat_memory</code>
+     * table
      */
     public AiChatMemoryPath aiChatMemory() {
         if (_aiChatMemory == null)
@@ -294,8 +291,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
     private transient AiChatStepPath _aiChatStep;
 
     /**
-     * Get the implicit to-many join path to the <code>oagi.ai_chat_step</code>
-     * table
+     * Get the implicit to-many join path to the <code>ai_chat_step</code> table
      */
     public AiChatStepPath aiChatStep() {
         if (_aiChatStep == null)
@@ -348,7 +344,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
      */
     @Override
     public AiChatConversation where(Condition condition) {
-        return new AiChatConversation(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiChatConversation(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -415,7 +411,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatConversation whereExists(Select<?> select) {
+    public AiChatConversation whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -423,7 +419,7 @@ public class AiChatConversation extends TableImpl<AiChatConversationRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatConversation whereNotExists(Select<?> select) {
+    public AiChatConversation whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

@@ -24,7 +24,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.bcc_manifest.bcc_manifest_id</code>. An internal,
+     * Setter for <code>bcc_manifest.bcc_manifest_id</code>. An internal,
      * primary database key of a BCC_MANIFEST record.
      */
     public void setBccManifestId(ULong value) {
@@ -32,7 +32,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.bcc_manifest_id</code>. An internal,
+     * Getter for <code>bcc_manifest.bcc_manifest_id</code>. An internal,
      * primary database key of a BCC_MANIFEST record.
      */
     public ULong getBccManifestId() {
@@ -40,7 +40,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bcc_manifest.release_id</code>. Foreign key to the
+     * Setter for <code>bcc_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public void setReleaseId(ULong value) {
@@ -48,7 +48,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.release_id</code>. Foreign key to the
+     * Getter for <code>bcc_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public ULong getReleaseId() {
@@ -56,7 +56,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bcc_manifest.bcc_id</code>. Foreign key to the BCC
+     * Setter for <code>bcc_manifest.bcc_id</code>. Foreign key to the BCC
      * table.
      */
     public void setBccId(ULong value) {
@@ -64,7 +64,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.bcc_id</code>. Foreign key to the BCC
+     * Getter for <code>bcc_manifest.bcc_id</code>. Foreign key to the BCC
      * table.
      */
     public ULong getBccId() {
@@ -72,7 +72,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bcc_manifest.seq_key_id</code>. Foreign key to the
+     * Setter for <code>bcc_manifest.seq_key_id</code>. Foreign key to the
      * SEQ_KEY table, which records the order of this association among its
      * siblings.
      */
@@ -81,7 +81,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.seq_key_id</code>. Foreign key to the
+     * Getter for <code>bcc_manifest.seq_key_id</code>. Foreign key to the
      * SEQ_KEY table, which records the order of this association among its
      * siblings.
      */
@@ -90,95 +90,95 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bcc_manifest.from_acc_manifest_id</code>. Foreign
-     * key to the ACC_MANIFEST table pointing to the parent ACC (the FROM end of
-     * the association) of the TO_BCCP_MANIFEST_ID.
+     * Setter for <code>bcc_manifest.from_acc_manifest_id</code>. Foreign key to
+     * the ACC_MANIFEST table pointing to the parent ACC (the FROM end of the
+     * association) of the TO_BCCP_MANIFEST_ID.
      */
     public void setFromAccManifestId(ULong value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.from_acc_manifest_id</code>. Foreign
-     * key to the ACC_MANIFEST table pointing to the parent ACC (the FROM end of
-     * the association) of the TO_BCCP_MANIFEST_ID.
+     * Getter for <code>bcc_manifest.from_acc_manifest_id</code>. Foreign key to
+     * the ACC_MANIFEST table pointing to the parent ACC (the FROM end of the
+     * association) of the TO_BCCP_MANIFEST_ID.
      */
     public ULong getFromAccManifestId() {
         return (ULong) get(4);
     }
 
     /**
-     * Setter for <code>oagi.bcc_manifest.to_bccp_manifest_id</code>. Foreign
-     * key to the BCCP_MANIFEST table pointing to the child BCCP (the TO end of
-     * the association) of the FROM_ACC_MANIFEST_ID.
+     * Setter for <code>bcc_manifest.to_bccp_manifest_id</code>. Foreign key to
+     * the BCCP_MANIFEST table pointing to the child BCCP (the TO end of the
+     * association) of the FROM_ACC_MANIFEST_ID.
      */
     public void setToBccpManifestId(ULong value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.to_bccp_manifest_id</code>. Foreign
-     * key to the BCCP_MANIFEST table pointing to the child BCCP (the TO end of
-     * the association) of the FROM_ACC_MANIFEST_ID.
+     * Getter for <code>bcc_manifest.to_bccp_manifest_id</code>. Foreign key to
+     * the BCCP_MANIFEST table pointing to the child BCCP (the TO end of the
+     * association) of the FROM_ACC_MANIFEST_ID.
      */
     public ULong getToBccpManifestId() {
         return (ULong) get(5);
     }
 
     /**
-     * Setter for <code>oagi.bcc_manifest.den</code>. DEN (dictionary entry
-     * name) of the BCC. This column can be derived from QUALIFIER and
-     * OBJECT_CLASS_TERM of the FROM_ACC_ID and DEN of the TO_BCCP_ID as
-     * QUALIFIER + "_ " + OBJECT_CLASS_TERM + ". " + DEN.
+     * Setter for <code>bcc_manifest.den</code>. DEN (dictionary entry name) of
+     * the BCC. This column can be derived from QUALIFIER and OBJECT_CLASS_TERM
+     * of the FROM_ACC_ID and DEN of the TO_BCCP_ID as QUALIFIER + "_ " +
+     * OBJECT_CLASS_TERM + ". " + DEN.
      */
     public void setDen(String value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.den</code>. DEN (dictionary entry
-     * name) of the BCC. This column can be derived from QUALIFIER and
-     * OBJECT_CLASS_TERM of the FROM_ACC_ID and DEN of the TO_BCCP_ID as
-     * QUALIFIER + "_ " + OBJECT_CLASS_TERM + ". " + DEN.
+     * Getter for <code>bcc_manifest.den</code>. DEN (dictionary entry name) of
+     * the BCC. This column can be derived from QUALIFIER and OBJECT_CLASS_TERM
+     * of the FROM_ACC_ID and DEN of the TO_BCCP_ID as QUALIFIER + "_ " +
+     * OBJECT_CLASS_TERM + ". " + DEN.
      */
     public String getDen() {
         return (String) get(6);
     }
 
     /**
-     * Setter for <code>oagi.bcc_manifest.conflict</code>. This indicates that
-     * there is a conflict between self and relationship.
+     * Setter for <code>bcc_manifest.conflict</code>. This indicates that there
+     * is a conflict between self and relationship.
      */
     public void setConflict(Byte value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.conflict</code>. This indicates that
-     * there is a conflict between self and relationship.
+     * Getter for <code>bcc_manifest.conflict</code>. This indicates that there
+     * is a conflict between self and relationship.
      */
     public Byte getConflict() {
         return (Byte) get(7);
     }
 
     /**
-     * Setter for <code>oagi.bcc_manifest.replacement_bcc_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * Setter for <code>bcc_manifest.replacement_bcc_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public void setReplacementBccManifestId(ULong value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.replacement_bcc_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * Getter for <code>bcc_manifest.replacement_bcc_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public ULong getReplacementBccManifestId() {
         return (ULong) get(8);
     }
 
     /**
-     * Setter for <code>oagi.bcc_manifest.prev_bcc_manifest_id</code>. A
+     * Setter for <code>bcc_manifest.prev_bcc_manifest_id</code>. A
      * self-reference to the corresponding BCC_MANIFEST record in the previous
      * release (revision chain). NULL for the first revision.
      */
@@ -187,7 +187,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.prev_bcc_manifest_id</code>. A
+     * Getter for <code>bcc_manifest.prev_bcc_manifest_id</code>. A
      * self-reference to the corresponding BCC_MANIFEST record in the previous
      * release (revision chain). NULL for the first revision.
      */
@@ -196,7 +196,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.bcc_manifest.next_bcc_manifest_id</code>. A
+     * Setter for <code>bcc_manifest.next_bcc_manifest_id</code>. A
      * self-reference to the corresponding BCC_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */
@@ -205,7 +205,7 @@ public class BccManifestRecord extends UpdatableRecordImpl<BccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.bcc_manifest.next_bcc_manifest_id</code>. A
+     * Getter for <code>bcc_manifest.next_bcc_manifest_id</code>. A
      * self-reference to the corresponding BCC_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */

@@ -19,19 +19,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.UInteger;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModel.AiModelPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserModelReasoningAccess.AiUserModelReasoningAccessPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicy.AiUserPolicyPath;
@@ -47,7 +48,7 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_model_reasoning_effort</code>
+     * The reference instance of <code>ai_model_reasoning_effort</code>
      */
     public static final AiModelReasoningEffort AI_MODEL_REASONING_EFFORT = new AiModelReasoningEffort();
 
@@ -60,37 +61,37 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
     }
 
     /**
-     * The column <code>oagi.ai_model_reasoning_effort.ai_model_id</code>.
-     * Identifier of the configured AI model
+     * The column <code>ai_model_reasoning_effort.ai_model_id</code>. Identifier
+     * of the configured AI model
      */
     public final TableField<AiModelReasoningEffortRecord, ULong> AI_MODEL_ID = createField(DSL.name("ai_model_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the configured AI model");
 
     /**
-     * The column <code>oagi.ai_model_reasoning_effort.reasoning_effort</code>.
+     * The column <code>ai_model_reasoning_effort.reasoning_effort</code>.
      * Canonical reasoning effort name
      */
     public final TableField<AiModelReasoningEffortRecord, String> REASONING_EFFORT = createField(DSL.name("reasoning_effort"), SQLDataType.VARCHAR(32).nullable(false), this, "Canonical reasoning effort name");
 
     /**
-     * The column <code>oagi.ai_model_reasoning_effort.display_name</code>.
-     * Display name of the reasoning effort
+     * The column <code>ai_model_reasoning_effort.display_name</code>. Display
+     * name of the reasoning effort
      */
     public final TableField<AiModelReasoningEffortRecord, String> DISPLAY_NAME = createField(DSL.name("display_name"), SQLDataType.VARCHAR(120).nullable(false), this, "Display name of the reasoning effort");
 
     /**
-     * The column <code>oagi.ai_model_reasoning_effort.description</code>.
+     * The column <code>ai_model_reasoning_effort.description</code>.
      * Human-readable description of the reasoning effort
      */
     public final TableField<AiModelReasoningEffortRecord, String> DESCRIPTION = createField(DSL.name("description"), SQLDataType.VARCHAR(500).nullable(false), this, "Human-readable description of the reasoning effort");
 
     /**
-     * The column <code>oagi.ai_model_reasoning_effort.default_effort</code>.
+     * The column <code>ai_model_reasoning_effort.default_effort</code>.
      * Indicates whether this is the model default reasoning effort
      */
     public final TableField<AiModelReasoningEffortRecord, Byte> DEFAULT_EFFORT = createField(DSL.name("default_effort"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "Indicates whether this is the model default reasoning effort");
 
     /**
-     * The column <code>oagi.ai_model_reasoning_effort.sort_order</code>. Stable
+     * The column <code>ai_model_reasoning_effort.sort_order</code>. Stable
      * display ordering of reasoning efforts
      */
     public final TableField<AiModelReasoningEffortRecord, UInteger> SORT_ORDER = createField(DSL.name("sort_order"), SQLDataType.INTEGERUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("0"), SQLDataType.INTEGERUNSIGNED)), this, "Stable display ordering of reasoning efforts");
@@ -104,23 +105,21 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
     }
 
     /**
-     * Create an aliased <code>oagi.ai_model_reasoning_effort</code> table
-     * reference
+     * Create an aliased <code>ai_model_reasoning_effort</code> table reference
      */
     public AiModelReasoningEffort(String alias) {
         this(DSL.name(alias), AI_MODEL_REASONING_EFFORT);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_model_reasoning_effort</code> table
-     * reference
+     * Create an aliased <code>ai_model_reasoning_effort</code> table reference
      */
     public AiModelReasoningEffort(Name alias) {
         this(alias, AI_MODEL_REASONING_EFFORT);
     }
 
     /**
-     * Create a <code>oagi.ai_model_reasoning_effort</code> table reference
+     * Create a <code>ai_model_reasoning_effort</code> table reference
      */
     public AiModelReasoningEffort() {
         this(DSL.name("ai_model_reasoning_effort"), null);
@@ -161,7 +160,7 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -177,7 +176,7 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
     private transient AiModelPath _aiModel;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_model</code> table.
+     * Get the implicit join path to the <code>ai_model</code> table.
      */
     public AiModelPath aiModel() {
         if (_aiModel == null)
@@ -190,7 +189,7 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oagi.ai_user_model_reasoning_access</code> table
+     * <code>ai_user_model_reasoning_access</code> table
      */
     public AiUserModelReasoningAccessPath aiUserModelReasoningAccess() {
         if (_aiUserModelReasoningAccess == null)
@@ -201,7 +200,7 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
 
     /**
      * Get the implicit many-to-many join path to the
-     * <code>oagi.ai_user_policy</code> table
+     * <code>ai_user_policy</code> table
      */
     public AiUserPolicyPath aiUserPolicy() {
         return aiUserModelReasoningAccess().aiUserPolicy();
@@ -251,7 +250,7 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
      */
     @Override
     public AiModelReasoningEffort where(Condition condition) {
-        return new AiModelReasoningEffort(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiModelReasoningEffort(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -318,7 +317,7 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
      * Create an inline derived table from this table
      */
     @Override
-    public AiModelReasoningEffort whereExists(Select<?> select) {
+    public AiModelReasoningEffort whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -326,7 +325,7 @@ public class AiModelReasoningEffort extends TableImpl<AiModelReasoningEffortReco
      * Create an inline derived table from this table
      */
     @Override
-    public AiModelReasoningEffort whereNotExists(Select<?> select) {
+    public AiModelReasoningEffort whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

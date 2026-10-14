@@ -21,41 +21,39 @@ public class AiTokenUsagePeriodRecord extends UpdatableRecordImpl<AiTokenUsagePe
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_token_usage_period.app_user_id</code>.
-     * Identifier of the user whose token usage is aggregated
+     * Setter for <code>ai_token_usage_period.app_user_id</code>. Identifier of
+     * the user whose token usage is aggregated
      */
     public void setAppUserId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_period.app_user_id</code>.
-     * Identifier of the user whose token usage is aggregated
+     * Getter for <code>ai_token_usage_period.app_user_id</code>. Identifier of
+     * the user whose token usage is aggregated
      */
     public ULong getAppUserId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_token_usage_period.period_start_timestamp</code>. Inclusive
-     * start of the quota period in UTC
+     * Setter for <code>ai_token_usage_period.period_start_timestamp</code>.
+     * Inclusive start of the quota period in UTC
      */
     public void setPeriodStartTimestamp(LocalDateTime value) {
         set(1, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_token_usage_period.period_start_timestamp</code>. Inclusive
-     * start of the quota period in UTC
+     * Getter for <code>ai_token_usage_period.period_start_timestamp</code>.
+     * Inclusive start of the quota period in UTC
      */
     public LocalDateTime getPeriodStartTimestamp() {
         return (LocalDateTime) get(1);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_period.period_end_timestamp</code>.
+     * Setter for <code>ai_token_usage_period.period_end_timestamp</code>.
      * Exclusive end of the quota period in UTC
      */
     public void setPeriodEndTimestamp(LocalDateTime value) {
@@ -63,7 +61,7 @@ public class AiTokenUsagePeriodRecord extends UpdatableRecordImpl<AiTokenUsagePe
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_period.period_end_timestamp</code>.
+     * Getter for <code>ai_token_usage_period.period_end_timestamp</code>.
      * Exclusive end of the quota period in UTC
      */
     public LocalDateTime getPeriodEndTimestamp() {
@@ -71,64 +69,64 @@ public class AiTokenUsagePeriodRecord extends UpdatableRecordImpl<AiTokenUsagePe
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_period.consumed_tokens</code>.
-     * Number of tokens consumed during the period
+     * Setter for <code>ai_token_usage_period.consumed_tokens</code>. Number of
+     * tokens consumed during the period
      */
     public void setConsumedTokens(ULong value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_period.consumed_tokens</code>.
-     * Number of tokens consumed during the period
+     * Getter for <code>ai_token_usage_period.consumed_tokens</code>. Number of
+     * tokens consumed during the period
      */
     public ULong getConsumedTokens() {
         return (ULong) get(3);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_period.reserved_tokens</code>.
-     * Number of tokens reserved by in-progress calls during the period
+     * Setter for <code>ai_token_usage_period.reserved_tokens</code>. Number of
+     * tokens reserved by in-progress calls during the period
      */
     public void setReservedTokens(ULong value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_period.reserved_tokens</code>.
-     * Number of tokens reserved by in-progress calls during the period
+     * Getter for <code>ai_token_usage_period.reserved_tokens</code>. Number of
+     * tokens reserved by in-progress calls during the period
      */
     public ULong getReservedTokens() {
         return (ULong) get(4);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_period.creation_timestamp</code>.
-     * Date and time when the period counter was created
+     * Setter for <code>ai_token_usage_period.creation_timestamp</code>. Date
+     * and time when the period counter was created
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_period.creation_timestamp</code>.
-     * Date and time when the period counter was created
+     * Getter for <code>ai_token_usage_period.creation_timestamp</code>. Date
+     * and time when the period counter was created
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(5);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_period.last_update_timestamp</code>.
-     * Date and time when the period counter was last updated
+     * Setter for <code>ai_token_usage_period.last_update_timestamp</code>. Date
+     * and time when the period counter was last updated
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_period.last_update_timestamp</code>.
-     * Date and time when the period counter was last updated
+     * Getter for <code>ai_token_usage_period.last_update_timestamp</code>. Date
+     * and time when the period counter was last updated
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(6);

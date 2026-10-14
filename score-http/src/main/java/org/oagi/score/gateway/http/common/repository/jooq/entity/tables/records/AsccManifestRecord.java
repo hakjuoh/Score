@@ -23,7 +23,7 @@ public class AsccManifestRecord extends UpdatableRecordImpl<AsccManifestRecord> 
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ascc_manifest.ascc_manifest_id</code>. An internal,
+     * Setter for <code>ascc_manifest.ascc_manifest_id</code>. An internal,
      * primary database key of an ASCC_MANIFEST record.
      */
     public void setAsccManifestId(ULong value) {
@@ -31,7 +31,7 @@ public class AsccManifestRecord extends UpdatableRecordImpl<AsccManifestRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.ascc_manifest_id</code>. An internal,
+     * Getter for <code>ascc_manifest.ascc_manifest_id</code>. An internal,
      * primary database key of an ASCC_MANIFEST record.
      */
     public ULong getAsccManifestId() {
@@ -39,7 +39,7 @@ public class AsccManifestRecord extends UpdatableRecordImpl<AsccManifestRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ascc_manifest.release_id</code>. Foreign key to the
+     * Setter for <code>ascc_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public void setReleaseId(ULong value) {
@@ -47,7 +47,7 @@ public class AsccManifestRecord extends UpdatableRecordImpl<AsccManifestRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.release_id</code>. Foreign key to the
+     * Getter for <code>ascc_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public ULong getReleaseId() {
@@ -55,23 +55,23 @@ public class AsccManifestRecord extends UpdatableRecordImpl<AsccManifestRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ascc_manifest.ascc_id</code>. Foreign key to the
-     * ASCC table.
+     * Setter for <code>ascc_manifest.ascc_id</code>. Foreign key to the ASCC
+     * table.
      */
     public void setAsccId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.ascc_id</code>. Foreign key to the
-     * ASCC table.
+     * Getter for <code>ascc_manifest.ascc_id</code>. Foreign key to the ASCC
+     * table.
      */
     public ULong getAsccId() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for <code>oagi.ascc_manifest.seq_key_id</code>. Foreign key to the
+     * Setter for <code>ascc_manifest.seq_key_id</code>. Foreign key to the
      * SEQ_KEY table, which records the order of this association among its
      * siblings.
      */
@@ -80,7 +80,7 @@ public class AsccManifestRecord extends UpdatableRecordImpl<AsccManifestRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.seq_key_id</code>. Foreign key to the
+     * Getter for <code>ascc_manifest.seq_key_id</code>. Foreign key to the
      * SEQ_KEY table, which records the order of this association among its
      * siblings.
      */
@@ -89,95 +89,95 @@ public class AsccManifestRecord extends UpdatableRecordImpl<AsccManifestRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ascc_manifest.from_acc_manifest_id</code>. Foreign
-     * key to the ACC_MANIFEST table pointing to the parent ACC (the FROM end of
-     * the association) of the TO_ASCCP_MANIFEST_ID.
+     * Setter for <code>ascc_manifest.from_acc_manifest_id</code>. Foreign key
+     * to the ACC_MANIFEST table pointing to the parent ACC (the FROM end of the
+     * association) of the TO_ASCCP_MANIFEST_ID.
      */
     public void setFromAccManifestId(ULong value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.from_acc_manifest_id</code>. Foreign
-     * key to the ACC_MANIFEST table pointing to the parent ACC (the FROM end of
-     * the association) of the TO_ASCCP_MANIFEST_ID.
+     * Getter for <code>ascc_manifest.from_acc_manifest_id</code>. Foreign key
+     * to the ACC_MANIFEST table pointing to the parent ACC (the FROM end of the
+     * association) of the TO_ASCCP_MANIFEST_ID.
      */
     public ULong getFromAccManifestId() {
         return (ULong) get(4);
     }
 
     /**
-     * Setter for <code>oagi.ascc_manifest.to_asccp_manifest_id</code>. Foreign
-     * key to the ASCCP_MANIFEST table pointing to the child ASCCP (the TO end
-     * of the association) of the FROM_ACC_MANIFEST_ID.
+     * Setter for <code>ascc_manifest.to_asccp_manifest_id</code>. Foreign key
+     * to the ASCCP_MANIFEST table pointing to the child ASCCP (the TO end of
+     * the association) of the FROM_ACC_MANIFEST_ID.
      */
     public void setToAsccpManifestId(ULong value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.to_asccp_manifest_id</code>. Foreign
-     * key to the ASCCP_MANIFEST table pointing to the child ASCCP (the TO end
-     * of the association) of the FROM_ACC_MANIFEST_ID.
+     * Getter for <code>ascc_manifest.to_asccp_manifest_id</code>. Foreign key
+     * to the ASCCP_MANIFEST table pointing to the child ASCCP (the TO end of
+     * the association) of the FROM_ACC_MANIFEST_ID.
      */
     public ULong getToAsccpManifestId() {
         return (ULong) get(5);
     }
 
     /**
-     * Setter for <code>oagi.ascc_manifest.den</code>. DEN (dictionary entry
-     * name) of the ASCC. This column can be derived from Qualifier and
-     * OBJECT_CLASS_TERM of the FROM_ACC_ID and DEN of the TO_ASCCP_ID as
-     * Qualifier + "_ " + OBJECT_CLASS_TERM + ". " + DEN.
+     * Setter for <code>ascc_manifest.den</code>. DEN (dictionary entry name) of
+     * the ASCC. This column can be derived from Qualifier and OBJECT_CLASS_TERM
+     * of the FROM_ACC_ID and DEN of the TO_ASCCP_ID as Qualifier + "_ " +
+     * OBJECT_CLASS_TERM + ". " + DEN.
      */
     public void setDen(String value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.den</code>. DEN (dictionary entry
-     * name) of the ASCC. This column can be derived from Qualifier and
-     * OBJECT_CLASS_TERM of the FROM_ACC_ID and DEN of the TO_ASCCP_ID as
-     * Qualifier + "_ " + OBJECT_CLASS_TERM + ". " + DEN.
+     * Getter for <code>ascc_manifest.den</code>. DEN (dictionary entry name) of
+     * the ASCC. This column can be derived from Qualifier and OBJECT_CLASS_TERM
+     * of the FROM_ACC_ID and DEN of the TO_ASCCP_ID as Qualifier + "_ " +
+     * OBJECT_CLASS_TERM + ". " + DEN.
      */
     public String getDen() {
         return (String) get(6);
     }
 
     /**
-     * Setter for <code>oagi.ascc_manifest.conflict</code>. This indicates that
-     * there is a conflict between self and relationship.
+     * Setter for <code>ascc_manifest.conflict</code>. This indicates that there
+     * is a conflict between self and relationship.
      */
     public void setConflict(Byte value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.conflict</code>. This indicates that
-     * there is a conflict between self and relationship.
+     * Getter for <code>ascc_manifest.conflict</code>. This indicates that there
+     * is a conflict between self and relationship.
      */
     public Byte getConflict() {
         return (Byte) get(7);
     }
 
     /**
-     * Setter for <code>oagi.ascc_manifest.replacement_ascc_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * Setter for <code>ascc_manifest.replacement_ascc_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public void setReplacementAsccManifestId(ULong value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.replacement_ascc_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * Getter for <code>ascc_manifest.replacement_ascc_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public ULong getReplacementAsccManifestId() {
         return (ULong) get(8);
     }
 
     /**
-     * Setter for <code>oagi.ascc_manifest.prev_ascc_manifest_id</code>. A
+     * Setter for <code>ascc_manifest.prev_ascc_manifest_id</code>. A
      * self-reference to the corresponding ASCC_MANIFEST record in the previous
      * release (revision chain). NULL for the first revision.
      */
@@ -186,7 +186,7 @@ public class AsccManifestRecord extends UpdatableRecordImpl<AsccManifestRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.prev_ascc_manifest_id</code>. A
+     * Getter for <code>ascc_manifest.prev_ascc_manifest_id</code>. A
      * self-reference to the corresponding ASCC_MANIFEST record in the previous
      * release (revision chain). NULL for the first revision.
      */
@@ -195,7 +195,7 @@ public class AsccManifestRecord extends UpdatableRecordImpl<AsccManifestRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ascc_manifest.next_ascc_manifest_id</code>. A
+     * Setter for <code>ascc_manifest.next_ascc_manifest_id</code>. A
      * self-reference to the corresponding ASCC_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */
@@ -204,7 +204,7 @@ public class AsccManifestRecord extends UpdatableRecordImpl<AsccManifestRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ascc_manifest.next_ascc_manifest_id</code>. A
+     * Getter for <code>ascc_manifest.next_ascc_manifest_id</code>. A
      * self-reference to the corresponding ASCC_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */

@@ -21,19 +21,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
 import org.jooq.types.UShort;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiProvider.AiProviderPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AppSecretRecord;
@@ -48,7 +49,7 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.app_secret</code>
+     * The reference instance of <code>app_secret</code>
      */
     public static final AppSecret APP_SECRET = new AppSecret();
 
@@ -61,74 +62,74 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
     }
 
     /**
-     * The column <code>oagi.app_secret.app_secret_id</code>. Identifier of the
+     * The column <code>app_secret.app_secret_id</code>. Identifier of the
      * encrypted application secret
      */
-    public final TableField<AppSecretRecord, ULong> APP_SECRET_ID = createField(DSL.name("app_secret_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Identifier of the encrypted application secret");
+    public final TableField<AppSecretRecord, ULong> APP_SECRET_ID = createField(DSL.name("app_secret_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "Identifier of the encrypted application secret");
 
     /**
-     * The column <code>oagi.app_secret.secret_guid</code>. Stable UUID used as
+     * The column <code>app_secret.secret_guid</code>. Stable UUID used as
      * authenticated encryption context
      */
     public final TableField<AppSecretRecord, String> SECRET_GUID = createField(DSL.name("secret_guid"), SQLDataType.CHAR(36).nullable(false), this, "Stable UUID used as authenticated encryption context");
 
     /**
-     * The column <code>oagi.app_secret.secret_name</code>. Unique logical name
-     * of the application secret
+     * The column <code>app_secret.secret_name</code>. Unique logical name of
+     * the application secret
      */
     public final TableField<AppSecretRecord, String> SECRET_NAME = createField(DSL.name("secret_name"), SQLDataType.VARCHAR(255).nullable(false), this, "Unique logical name of the application secret");
 
     /**
-     * The column <code>oagi.app_secret.secret_type</code>. Secret type such as
+     * The column <code>app_secret.secret_type</code>. Secret type such as
      * AI_PROVIDER_API_KEY
      */
     public final TableField<AppSecretRecord, String> SECRET_TYPE = createField(DSL.name("secret_type"), SQLDataType.VARCHAR(32).nullable(false), this, "Secret type such as AI_PROVIDER_API_KEY");
 
     /**
-     * The column <code>oagi.app_secret.encrypted_value</code>. AES-256-GCM
+     * The column <code>app_secret.encrypted_value</code>. AES-256-GCM
      * ciphertext including the authentication tag
      */
     public final TableField<AppSecretRecord, byte[]> ENCRYPTED_VALUE = createField(DSL.name("encrypted_value"), SQLDataType.BLOB(16777215).nullable(false), this, "AES-256-GCM ciphertext including the authentication tag");
 
     /**
-     * The column <code>oagi.app_secret.nonce</code>. Unique 96-bit AES-GCM
-     * nonce for this encrypted value
+     * The column <code>app_secret.nonce</code>. Unique 96-bit AES-GCM nonce for
+     * this encrypted value
      */
     public final TableField<AppSecretRecord, byte[]> NONCE = createField(DSL.name("nonce"), SQLDataType.BINARY(12).nullable(false), this, "Unique 96-bit AES-GCM nonce for this encrypted value");
 
     /**
-     * The column <code>oagi.app_secret.encryption_key_id</code>. Identifier of
-     * the application encryption key used for this value
+     * The column <code>app_secret.encryption_key_id</code>. Identifier of the
+     * application encryption key used for this value
      */
     public final TableField<AppSecretRecord, String> ENCRYPTION_KEY_ID = createField(DSL.name("encryption_key_id"), SQLDataType.VARCHAR(64).nullable(false), this, "Identifier of the application encryption key used for this value");
 
     /**
-     * The column <code>oagi.app_secret.encryption_version</code>. Version of
-     * the encryption payload format
+     * The column <code>app_secret.encryption_version</code>. Version of the
+     * encryption payload format
      */
     public final TableField<AppSecretRecord, UShort> ENCRYPTION_VERSION = createField(DSL.name("encryption_version"), SQLDataType.SMALLINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.SMALLINTUNSIGNED)), this, "Version of the encryption payload format");
 
     /**
-     * The column <code>oagi.app_secret.created_by</code>. Identifier of the
+     * The column <code>app_secret.created_by</code>. Identifier of the
      * administrator who created the secret
      */
     public final TableField<AppSecretRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who created the secret");
 
     /**
-     * The column <code>oagi.app_secret.last_updated_by</code>. Identifier of
-     * the administrator who last updated the secret
+     * The column <code>app_secret.last_updated_by</code>. Identifier of the
+     * administrator who last updated the secret
      */
     public final TableField<AppSecretRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who last updated the secret");
 
     /**
-     * The column <code>oagi.app_secret.creation_timestamp</code>. Date and time
-     * when the secret was created
+     * The column <code>app_secret.creation_timestamp</code>. Date and time when
+     * the secret was created
      */
     public final TableField<AppSecretRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the secret was created");
 
     /**
-     * The column <code>oagi.app_secret.last_update_timestamp</code>. Date and
-     * time when the secret was last updated
+     * The column <code>app_secret.last_update_timestamp</code>. Date and time
+     * when the secret was last updated
      */
     public final TableField<AppSecretRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the secret was last updated");
 
@@ -141,21 +142,21 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.app_secret</code> table reference
+     * Create an aliased <code>app_secret</code> table reference
      */
     public AppSecret(String alias) {
         this(DSL.name(alias), APP_SECRET);
     }
 
     /**
-     * Create an aliased <code>oagi.app_secret</code> table reference
+     * Create an aliased <code>app_secret</code> table reference
      */
     public AppSecret(Name alias) {
         this(alias, APP_SECRET);
     }
 
     /**
-     * Create a <code>oagi.app_secret</code> table reference
+     * Create a <code>app_secret</code> table reference
      */
     public AppSecret() {
         this(DSL.name("app_secret"), null);
@@ -196,7 +197,7 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -222,8 +223,8 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
     private transient AppUserPath _appSecretCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>app_secret_created_by_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>app_secret_created_by_fk</code> key.
      */
     public AppUserPath appSecretCreatedByFk() {
         if (_appSecretCreatedByFk == null)
@@ -235,8 +236,8 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
     private transient AppUserPath _appSecretLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>app_secret_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>app_secret_last_updated_by_fk</code> key.
      */
     public AppUserPath appSecretLastUpdatedByFk() {
         if (_appSecretLastUpdatedByFk == null)
@@ -248,8 +249,7 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
     private transient AiProviderPath _aiProvider;
 
     /**
-     * Get the implicit to-many join path to the <code>oagi.ai_provider</code>
-     * table
+     * Get the implicit to-many join path to the <code>ai_provider</code> table
      */
     public AiProviderPath aiProvider() {
         if (_aiProvider == null)
@@ -302,7 +302,7 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
      */
     @Override
     public AppSecret where(Condition condition) {
-        return new AppSecret(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AppSecret(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -369,7 +369,7 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AppSecret whereExists(Select<?> select) {
+    public AppSecret whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -377,7 +377,7 @@ public class AppSecret extends TableImpl<AppSecretRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AppSecret whereNotExists(Select<?> select) {
+    public AppSecret whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

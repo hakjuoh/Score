@@ -24,7 +24,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.acc_manifest.acc_manifest_id</code>. An internal,
+     * Setter for <code>acc_manifest.acc_manifest_id</code>. An internal,
      * primary database key of a ACC_MANIFEST record.
      */
     public void setAccManifestId(ULong value) {
@@ -32,7 +32,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.acc_manifest.acc_manifest_id</code>. An internal,
+     * Getter for <code>acc_manifest.acc_manifest_id</code>. An internal,
      * primary database key of a ACC_MANIFEST record.
      */
     public ULong getAccManifestId() {
@@ -40,7 +40,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.acc_manifest.release_id</code>. Foreign key to the
+     * Setter for <code>acc_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public void setReleaseId(ULong value) {
@@ -48,7 +48,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.acc_manifest.release_id</code>. Foreign key to the
+     * Getter for <code>acc_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public ULong getReleaseId() {
@@ -56,7 +56,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.acc_manifest.acc_id</code>. Foreign key to the ACC
+     * Setter for <code>acc_manifest.acc_id</code>. Foreign key to the ACC
      * table.
      */
     public void setAccId(ULong value) {
@@ -64,7 +64,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.acc_manifest.acc_id</code>. Foreign key to the ACC
+     * Getter for <code>acc_manifest.acc_id</code>. Foreign key to the ACC
      * table.
      */
     public ULong getAccId() {
@@ -72,7 +72,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.acc_manifest.based_acc_manifest_id</code>. A
+     * Setter for <code>acc_manifest.based_acc_manifest_id</code>. A
      * self-reference to the ACC_MANIFEST record that this record is based on
      * (its base/supertype from which it was derived).
      */
@@ -81,7 +81,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.acc_manifest.based_acc_manifest_id</code>. A
+     * Getter for <code>acc_manifest.based_acc_manifest_id</code>. A
      * self-reference to the ACC_MANIFEST record that this record is based on
      * (its base/supertype from which it was derived).
      */
@@ -90,8 +90,8 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.acc_manifest.den</code>. DEN (dictionary entry
-     * name) of the ACC. It can be derived as OBJECT_CLASS_QUALIFIER + "_ " +
+     * Setter for <code>acc_manifest.den</code>. DEN (dictionary entry name) of
+     * the ACC. It can be derived as OBJECT_CLASS_QUALIFIER + "_ " +
      * OBJECT_CLASS_TERM + ". Details".
      */
     public void setDen(String value) {
@@ -99,8 +99,8 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.acc_manifest.den</code>. DEN (dictionary entry
-     * name) of the ACC. It can be derived as OBJECT_CLASS_QUALIFIER + "_ " +
+     * Getter for <code>acc_manifest.den</code>. DEN (dictionary entry name) of
+     * the ACC. It can be derived as OBJECT_CLASS_QUALIFIER + "_ " +
      * OBJECT_CLASS_TERM + ". Details".
      */
     public String getDen() {
@@ -108,55 +108,55 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.acc_manifest.conflict</code>. This indicates that
-     * there is a conflict between self and relationship.
+     * Setter for <code>acc_manifest.conflict</code>. This indicates that there
+     * is a conflict between self and relationship.
      */
     public void setConflict(Byte value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.acc_manifest.conflict</code>. This indicates that
-     * there is a conflict between self and relationship.
+     * Getter for <code>acc_manifest.conflict</code>. This indicates that there
+     * is a conflict between self and relationship.
      */
     public Byte getConflict() {
         return (Byte) get(5);
     }
 
     /**
-     * Setter for <code>oagi.acc_manifest.log_id</code>. A foreign key pointed
-     * to a log for the current record.
+     * Setter for <code>acc_manifest.log_id</code>. A foreign key pointed to a
+     * log for the current record.
      */
     public void setLogId(ULong value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.acc_manifest.log_id</code>. A foreign key pointed
-     * to a log for the current record.
+     * Getter for <code>acc_manifest.log_id</code>. A foreign key pointed to a
+     * log for the current record.
      */
     public ULong getLogId() {
         return (ULong) get(6);
     }
 
     /**
-     * Setter for <code>oagi.acc_manifest.replacement_acc_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * Setter for <code>acc_manifest.replacement_acc_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public void setReplacementAccManifestId(ULong value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.acc_manifest.replacement_acc_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * Getter for <code>acc_manifest.replacement_acc_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public ULong getReplacementAccManifestId() {
         return (ULong) get(7);
     }
 
     /**
-     * Setter for <code>oagi.acc_manifest.prev_acc_manifest_id</code>. A
+     * Setter for <code>acc_manifest.prev_acc_manifest_id</code>. A
      * self-reference to the corresponding ACC_MANIFEST record in the previous
      * release (revision chain). NULL for the first revision.
      */
@@ -165,7 +165,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.acc_manifest.prev_acc_manifest_id</code>. A
+     * Getter for <code>acc_manifest.prev_acc_manifest_id</code>. A
      * self-reference to the corresponding ACC_MANIFEST record in the previous
      * release (revision chain). NULL for the first revision.
      */
@@ -174,7 +174,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Setter for <code>oagi.acc_manifest.next_acc_manifest_id</code>. A
+     * Setter for <code>acc_manifest.next_acc_manifest_id</code>. A
      * self-reference to the corresponding ACC_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */
@@ -183,7 +183,7 @@ public class AccManifestRecord extends UpdatableRecordImpl<AccManifestRecord> {
     }
 
     /**
-     * Getter for <code>oagi.acc_manifest.next_acc_manifest_id</code>. A
+     * Getter for <code>acc_manifest.next_acc_manifest_id</code>. A
      * self-reference to the corresponding ACC_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */

@@ -22,7 +22,7 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.app_secret.app_secret_id</code>. Identifier of the
+     * Setter for <code>app_secret.app_secret_id</code>. Identifier of the
      * encrypted application secret
      */
     public void setAppSecretId(ULong value) {
@@ -30,7 +30,7 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Getter for <code>oagi.app_secret.app_secret_id</code>. Identifier of the
+     * Getter for <code>app_secret.app_secret_id</code>. Identifier of the
      * encrypted application secret
      */
     public ULong getAppSecretId() {
@@ -38,7 +38,7 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Setter for <code>oagi.app_secret.secret_guid</code>. Stable UUID used as
+     * Setter for <code>app_secret.secret_guid</code>. Stable UUID used as
      * authenticated encryption context
      */
     public void setSecretGuid(String value) {
@@ -46,7 +46,7 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Getter for <code>oagi.app_secret.secret_guid</code>. Stable UUID used as
+     * Getter for <code>app_secret.secret_guid</code>. Stable UUID used as
      * authenticated encryption context
      */
     public String getSecretGuid() {
@@ -54,23 +54,23 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Setter for <code>oagi.app_secret.secret_name</code>. Unique logical name
-     * of the application secret
+     * Setter for <code>app_secret.secret_name</code>. Unique logical name of
+     * the application secret
      */
     public void setSecretName(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.app_secret.secret_name</code>. Unique logical name
-     * of the application secret
+     * Getter for <code>app_secret.secret_name</code>. Unique logical name of
+     * the application secret
      */
     public String getSecretName() {
         return (String) get(2);
     }
 
     /**
-     * Setter for <code>oagi.app_secret.secret_type</code>. Secret type such as
+     * Setter for <code>app_secret.secret_type</code>. Secret type such as
      * AI_PROVIDER_API_KEY
      */
     public void setSecretType(String value) {
@@ -78,7 +78,7 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Getter for <code>oagi.app_secret.secret_type</code>. Secret type such as
+     * Getter for <code>app_secret.secret_type</code>. Secret type such as
      * AI_PROVIDER_API_KEY
      */
     public String getSecretType() {
@@ -86,7 +86,7 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Setter for <code>oagi.app_secret.encrypted_value</code>. AES-256-GCM
+     * Setter for <code>app_secret.encrypted_value</code>. AES-256-GCM
      * ciphertext including the authentication tag
      */
     public void setEncryptedValue(byte[] value) {
@@ -94,7 +94,7 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Getter for <code>oagi.app_secret.encrypted_value</code>. AES-256-GCM
+     * Getter for <code>app_secret.encrypted_value</code>. AES-256-GCM
      * ciphertext including the authentication tag
      */
     public byte[] getEncryptedValue() {
@@ -102,55 +102,55 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Setter for <code>oagi.app_secret.nonce</code>. Unique 96-bit AES-GCM
-     * nonce for this encrypted value
+     * Setter for <code>app_secret.nonce</code>. Unique 96-bit AES-GCM nonce for
+     * this encrypted value
      */
     public void setNonce(byte[] value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.app_secret.nonce</code>. Unique 96-bit AES-GCM
-     * nonce for this encrypted value
+     * Getter for <code>app_secret.nonce</code>. Unique 96-bit AES-GCM nonce for
+     * this encrypted value
      */
     public byte[] getNonce() {
         return (byte[]) get(5);
     }
 
     /**
-     * Setter for <code>oagi.app_secret.encryption_key_id</code>. Identifier of
-     * the application encryption key used for this value
+     * Setter for <code>app_secret.encryption_key_id</code>. Identifier of the
+     * application encryption key used for this value
      */
     public void setEncryptionKeyId(String value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.app_secret.encryption_key_id</code>. Identifier of
-     * the application encryption key used for this value
+     * Getter for <code>app_secret.encryption_key_id</code>. Identifier of the
+     * application encryption key used for this value
      */
     public String getEncryptionKeyId() {
         return (String) get(6);
     }
 
     /**
-     * Setter for <code>oagi.app_secret.encryption_version</code>. Version of
-     * the encryption payload format
+     * Setter for <code>app_secret.encryption_version</code>. Version of the
+     * encryption payload format
      */
     public void setEncryptionVersion(UShort value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.app_secret.encryption_version</code>. Version of
-     * the encryption payload format
+     * Getter for <code>app_secret.encryption_version</code>. Version of the
+     * encryption payload format
      */
     public UShort getEncryptionVersion() {
         return (UShort) get(7);
     }
 
     /**
-     * Setter for <code>oagi.app_secret.created_by</code>. Identifier of the
+     * Setter for <code>app_secret.created_by</code>. Identifier of the
      * administrator who created the secret
      */
     public void setCreatedBy(ULong value) {
@@ -158,7 +158,7 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Getter for <code>oagi.app_secret.created_by</code>. Identifier of the
+     * Getter for <code>app_secret.created_by</code>. Identifier of the
      * administrator who created the secret
      */
     public ULong getCreatedBy() {
@@ -166,48 +166,48 @@ public class AppSecretRecord extends UpdatableRecordImpl<AppSecretRecord> {
     }
 
     /**
-     * Setter for <code>oagi.app_secret.last_updated_by</code>. Identifier of
-     * the administrator who last updated the secret
+     * Setter for <code>app_secret.last_updated_by</code>. Identifier of the
+     * administrator who last updated the secret
      */
     public void setLastUpdatedBy(ULong value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.app_secret.last_updated_by</code>. Identifier of
-     * the administrator who last updated the secret
+     * Getter for <code>app_secret.last_updated_by</code>. Identifier of the
+     * administrator who last updated the secret
      */
     public ULong getLastUpdatedBy() {
         return (ULong) get(9);
     }
 
     /**
-     * Setter for <code>oagi.app_secret.creation_timestamp</code>. Date and time
-     * when the secret was created
+     * Setter for <code>app_secret.creation_timestamp</code>. Date and time when
+     * the secret was created
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.app_secret.creation_timestamp</code>. Date and time
-     * when the secret was created
+     * Getter for <code>app_secret.creation_timestamp</code>. Date and time when
+     * the secret was created
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(10);
     }
 
     /**
-     * Setter for <code>oagi.app_secret.last_update_timestamp</code>. Date and
-     * time when the secret was last updated
+     * Setter for <code>app_secret.last_update_timestamp</code>. Date and time
+     * when the secret was last updated
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oagi.app_secret.last_update_timestamp</code>. Date and
-     * time when the secret was last updated
+     * Getter for <code>app_secret.last_update_timestamp</code>. Date and time
+     * when the secret was last updated
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(11);

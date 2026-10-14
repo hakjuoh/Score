@@ -26,7 +26,7 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
 
     /**
      * Setter for
-     * <code>oagi.bie_package_top_level_asbiep.bie_package_top_level_asbiep_id</code>.
+     * <code>bie_package_top_level_asbiep.bie_package_top_level_asbiep_id</code>.
      * The primary key of the BIE package-Top-Level ASBIEP record.
      */
     public void setBiePackageTopLevelAsbiepId(ULong value) {
@@ -35,7 +35,7 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
 
     /**
      * Getter for
-     * <code>oagi.bie_package_top_level_asbiep.bie_package_top_level_asbiep_id</code>.
+     * <code>bie_package_top_level_asbiep.bie_package_top_level_asbiep_id</code>.
      * The primary key of the BIE package-Top-Level ASBIEP record.
      */
     public ULong getBiePackageTopLevelAsbiepId() {
@@ -43,38 +43,36 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
     }
 
     /**
-     * Setter for <code>oagi.bie_package_top_level_asbiep.bie_package_id</code>.
-     * A foreign key referring to the BIE package.
+     * Setter for <code>bie_package_top_level_asbiep.bie_package_id</code>. A
+     * foreign key referring to the BIE package.
      */
     public void setBiePackageId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.bie_package_top_level_asbiep.bie_package_id</code>.
-     * A foreign key referring to the BIE package.
+     * Getter for <code>bie_package_top_level_asbiep.bie_package_id</code>. A
+     * foreign key referring to the BIE package.
      */
     public ULong getBiePackageId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for
-     * <code>oagi.bie_package_top_level_asbiep.top_level_asbiep_id</code>. A
-     * foreign key referring to the TOP_LEVEL_ASBIEP_ID which has linked to the
-     * BIE package. The release ID of this record must be the same to the BIE
-     * package's release ID.
+     * Setter for <code>bie_package_top_level_asbiep.top_level_asbiep_id</code>.
+     * A foreign key referring to the TOP_LEVEL_ASBIEP_ID which has linked to
+     * the BIE package. The release ID of this record must be the same to the
+     * BIE package's release ID.
      */
     public void setTopLevelAsbiepId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.bie_package_top_level_asbiep.top_level_asbiep_id</code>. A
-     * foreign key referring to the TOP_LEVEL_ASBIEP_ID which has linked to the
-     * BIE package. The release ID of this record must be the same to the BIE
-     * package's release ID.
+     * Getter for <code>bie_package_top_level_asbiep.top_level_asbiep_id</code>.
+     * A foreign key referring to the TOP_LEVEL_ASBIEP_ID which has linked to
+     * the BIE package. The release ID of this record must be the same to the
+     * BIE package's release ID.
      */
     public ULong getTopLevelAsbiepId() {
         return (ULong) get(2);
@@ -82,8 +80,8 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
 
     /**
      * Setter for
-     * <code>oagi.bie_package_top_level_asbiep.prev_top_level_asbiep_id</code>.
-     * A foreign key referring to the previous version of the Top-Level ASBIEP
+     * <code>bie_package_top_level_asbiep.prev_top_level_asbiep_id</code>. A
+     * foreign key referring to the previous version of the Top-Level ASBIEP
      * record, if any. Used to track version history within the BIE package.
      */
     public void setPrevTopLevelAsbiepId(ULong value) {
@@ -92,8 +90,8 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
 
     /**
      * Getter for
-     * <code>oagi.bie_package_top_level_asbiep.prev_top_level_asbiep_id</code>.
-     * A foreign key referring to the previous version of the Top-Level ASBIEP
+     * <code>bie_package_top_level_asbiep.prev_top_level_asbiep_id</code>. A
+     * foreign key referring to the previous version of the Top-Level ASBIEP
      * record, if any. Used to track version history within the BIE package.
      */
     public ULong getPrevTopLevelAsbiepId() {
@@ -101,7 +99,7 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
     }
 
     /**
-     * Setter for <code>oagi.bie_package_top_level_asbiep.created_by</code>. A
+     * Setter for <code>bie_package_top_level_asbiep.created_by</code>. A
      * foreign key referring to the user who adds the record into the BIE
      * package.
      */
@@ -110,7 +108,7 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
     }
 
     /**
-     * Getter for <code>oagi.bie_package_top_level_asbiep.created_by</code>. A
+     * Getter for <code>bie_package_top_level_asbiep.created_by</code>. A
      * foreign key referring to the user who adds the record into the BIE
      * package.
      */
@@ -119,8 +117,7 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
     }
 
     /**
-     * Setter for
-     * <code>oagi.bie_package_top_level_asbiep.creation_timestamp</code>.
+     * Setter for <code>bie_package_top_level_asbiep.creation_timestamp</code>.
      * Timestamp when this record was first created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
@@ -128,8 +125,7 @@ public class BiePackageTopLevelAsbiepRecord extends UpdatableRecordImpl<BiePacka
     }
 
     /**
-     * Getter for
-     * <code>oagi.bie_package_top_level_asbiep.creation_timestamp</code>.
+     * Getter for <code>bie_package_top_level_asbiep.creation_timestamp</code>.
      * Timestamp when this record was first created.
      */
     public LocalDateTime getCreationTimestamp() {

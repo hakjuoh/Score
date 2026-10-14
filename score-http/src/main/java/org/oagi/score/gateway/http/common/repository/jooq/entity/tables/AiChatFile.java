@@ -22,19 +22,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiChatFileRecord;
 
@@ -48,7 +49,7 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_chat_file</code>
+     * The reference instance of <code>ai_chat_file</code>
      */
     public static final AiChatFile AI_CHAT_FILE = new AiChatFile();
 
@@ -61,78 +62,76 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_chat_file.ai_chat_file_id</code>. The primary
-     * key of the generated AI file.
+     * The column <code>ai_chat_file.ai_chat_file_id</code>. The primary key of
+     * the generated AI file.
      */
-    public final TableField<AiChatFileRecord, ULong> AI_CHAT_FILE_ID = createField(DSL.name("ai_chat_file_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the generated AI file.");
+    public final TableField<AiChatFileRecord, ULong> AI_CHAT_FILE_ID = createField(DSL.name("ai_chat_file_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the generated AI file.");
 
     /**
-     * The column <code>oagi.ai_chat_file.guid</code>. Public file identifier.
+     * The column <code>ai_chat_file.guid</code>. Public file identifier.
      */
     public final TableField<AiChatFileRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.CHAR(36).nullable(false), this, "Public file identifier.");
 
     /**
-     * The column <code>oagi.ai_chat_file.ai_chat_conversation_id</code>. Owning
-     * AI chat conversation.
+     * The column <code>ai_chat_file.ai_chat_conversation_id</code>. Owning AI
+     * chat conversation.
      */
     public final TableField<AiChatFileRecord, ULong> AI_CHAT_CONVERSATION_ID = createField(DSL.name("ai_chat_conversation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Owning AI chat conversation.");
 
     /**
-     * The column <code>oagi.ai_chat_file.request_id</code>. Request that
-     * created the file.
+     * The column <code>ai_chat_file.request_id</code>. Request that created the
+     * file.
      */
     public final TableField<AiChatFileRecord, String> REQUEST_ID = createField(DSL.name("request_id"), SQLDataType.VARCHAR(128).nullable(false), this, "Request that created the file.");
 
     /**
-     * The column <code>oagi.ai_chat_file.format</code>. Renderer format
-     * identifier.
+     * The column <code>ai_chat_file.format</code>. Renderer format identifier.
      */
     public final TableField<AiChatFileRecord, String> FORMAT = createField(DSL.name("format"), SQLDataType.VARCHAR(64).nullable(false), this, "Renderer format identifier.");
 
     /**
-     * The column <code>oagi.ai_chat_file.filename</code>. Safe download
-     * filename.
+     * The column <code>ai_chat_file.filename</code>. Safe download filename.
      */
     public final TableField<AiChatFileRecord, String> FILENAME = createField(DSL.name("filename"), SQLDataType.VARCHAR(240).nullable(false), this, "Safe download filename.");
 
     /**
-     * The column <code>oagi.ai_chat_file.media_type</code>. File media type.
+     * The column <code>ai_chat_file.media_type</code>. File media type.
      */
     public final TableField<AiChatFileRecord, String> MEDIA_TYPE = createField(DSL.name("media_type"), SQLDataType.VARCHAR(160).nullable(false), this, "File media type.");
 
     /**
-     * The column <code>oagi.ai_chat_file.byte_size</code>. Stored content size
-     * in bytes.
+     * The column <code>ai_chat_file.byte_size</code>. Stored content size in
+     * bytes.
      */
     public final TableField<AiChatFileRecord, ULong> BYTE_SIZE = createField(DSL.name("byte_size"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Stored content size in bytes.");
 
     /**
-     * The column <code>oagi.ai_chat_file.sha256</code>. SHA-256 digest of
-     * stored content.
+     * The column <code>ai_chat_file.sha256</code>. SHA-256 digest of stored
+     * content.
      */
     public final TableField<AiChatFileRecord, String> SHA256 = createField(DSL.name("sha256"), SQLDataType.CHAR(64).nullable(false), this, "SHA-256 digest of stored content.");
 
     /**
-     * The column <code>oagi.ai_chat_file.storage_provider</code>. Configured
-     * file storage provider identifier.
+     * The column <code>ai_chat_file.storage_provider</code>. Configured file
+     * storage provider identifier.
      */
     public final TableField<AiChatFileRecord, String> STORAGE_PROVIDER = createField(DSL.name("storage_provider"), SQLDataType.VARCHAR(64).nullable(false), this, "Configured file storage provider identifier.");
 
     /**
-     * The column <code>oagi.ai_chat_file.storage_location</code>.
-     * Provider-owned opaque object location.
+     * The column <code>ai_chat_file.storage_location</code>. Provider-owned
+     * opaque object location.
      */
     public final TableField<AiChatFileRecord, String> STORAGE_LOCATION = createField(DSL.name("storage_location"), SQLDataType.VARCHAR(1024).nullable(false), this, "Provider-owned opaque object location.");
 
     /**
-     * The column <code>oagi.ai_chat_file.creation_timestamp</code>. File
-     * creation timestamp.
+     * The column <code>ai_chat_file.creation_timestamp</code>. File creation
+     * timestamp.
      */
     public final TableField<AiChatFileRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "File creation timestamp.");
 
     /**
-     * The column <code>oagi.ai_chat_file.expiration_timestamp</code>. File
-     * retention deadline.
+     * The column <code>ai_chat_file.expiration_timestamp</code>. File retention
+     * deadline.
      */
     public final TableField<AiChatFileRecord, LocalDateTime> EXPIRATION_TIMESTAMP = createField(DSL.name("expiration_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "File retention deadline.");
 
@@ -145,21 +144,21 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_file</code> table reference
+     * Create an aliased <code>ai_chat_file</code> table reference
      */
     public AiChatFile(String alias) {
         this(DSL.name(alias), AI_CHAT_FILE);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_file</code> table reference
+     * Create an aliased <code>ai_chat_file</code> table reference
      */
     public AiChatFile(Name alias) {
         this(alias, AI_CHAT_FILE);
     }
 
     /**
-     * Create a <code>oagi.ai_chat_file</code> table reference
+     * Create a <code>ai_chat_file</code> table reference
      */
     public AiChatFile() {
         this(DSL.name("ai_chat_file"), null);
@@ -200,7 +199,7 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -231,7 +230,7 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
     private transient AiChatConversationPath _aiChatConversation;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_chat_conversation</code>
+     * Get the implicit join path to the <code>ai_chat_conversation</code>
      * table.
      */
     public AiChatConversationPath aiChatConversation() {
@@ -285,7 +284,7 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
      */
     @Override
     public AiChatFile where(Condition condition) {
-        return new AiChatFile(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiChatFile(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -352,7 +351,7 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatFile whereExists(Select<?> select) {
+    public AiChatFile whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -360,7 +359,7 @@ public class AiChatFile extends TableImpl<AiChatFileRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatFile whereNotExists(Select<?> select) {
+    public AiChatFile whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

@@ -22,7 +22,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_model.ai_model_id</code>. Identifier of the
+     * Setter for <code>ai_model.ai_model_id</code>. Identifier of the
      * configured AI model
      */
     public void setAiModelId(ULong value) {
@@ -30,7 +30,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_model.ai_model_id</code>. Identifier of the
+     * Getter for <code>ai_model.ai_model_id</code>. Identifier of the
      * configured AI model
      */
     public ULong getAiModelId() {
@@ -38,55 +38,55 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_model.provider_id</code>. Identifier of the
-     * provider that serves the model
+     * Setter for <code>ai_model.provider_id</code>. Identifier of the provider
+     * that serves the model
      */
     public void setProviderId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.provider_id</code>. Identifier of the
-     * provider that serves the model
+     * Getter for <code>ai_model.provider_id</code>. Identifier of the provider
+     * that serves the model
      */
     public ULong getProviderId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.model_key</code>. Stable
-     * application-facing model key
+     * Setter for <code>ai_model.model_key</code>. Stable application-facing
+     * model key
      */
     public void setModelKey(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.model_key</code>. Stable
-     * application-facing model key
+     * Getter for <code>ai_model.model_key</code>. Stable application-facing
+     * model key
      */
     public String getModelKey() {
         return (String) get(2);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.provider_model_name</code>. Model or
-     * deployment name sent to the provider
+     * Setter for <code>ai_model.provider_model_name</code>. Model or deployment
+     * name sent to the provider
      */
     public void setProviderModelName(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.provider_model_name</code>. Model or
-     * deployment name sent to the provider
+     * Getter for <code>ai_model.provider_model_name</code>. Model or deployment
+     * name sent to the provider
      */
     public String getProviderModelName() {
         return (String) get(3);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.display_name</code>. Display name shown to
+     * Setter for <code>ai_model.display_name</code>. Display name shown to
      * administrators and users
      */
     public void setDisplayName(String value) {
@@ -94,7 +94,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_model.display_name</code>. Display name shown to
+     * Getter for <code>ai_model.display_name</code>. Display name shown to
      * administrators and users
      */
     public String getDisplayName() {
@@ -102,199 +102,199 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_model.description</code>. Human-readable
-     * description of the model
+     * Setter for <code>ai_model.description</code>. Human-readable description
+     * of the model
      */
     public void setDescription(String value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.description</code>. Human-readable
-     * description of the model
+     * Getter for <code>ai_model.description</code>. Human-readable description
+     * of the model
      */
     public String getDescription() {
         return (String) get(5);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.enabled</code>. Indicates whether the
-     * model is available for new requests
+     * Setter for <code>ai_model.enabled</code>. Indicates whether the model is
+     * available for new requests
      */
     public void setEnabled(Byte value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.enabled</code>. Indicates whether the
-     * model is available for new requests
+     * Getter for <code>ai_model.enabled</code>. Indicates whether the model is
+     * available for new requests
      */
     public Byte getEnabled() {
         return (Byte) get(6);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.default_model</code>. Set to 1 only for
-     * the global default AI model
+     * Setter for <code>ai_model.default_model</code>. Set to 1 only for the
+     * global default AI model
      */
     public void setDefaultModel(Byte value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.default_model</code>. Set to 1 only for
-     * the global default AI model
+     * Getter for <code>ai_model.default_model</code>. Set to 1 only for the
+     * global default AI model
      */
     public Byte getDefaultModel() {
         return (Byte) get(7);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.lightweight_model</code>. Set to 1 only
-     * for the global lightweight AI model
+     * Setter for <code>ai_model.lightweight_model</code>. Set to 1 only for the
+     * global lightweight AI model
      */
     public void setLightweightModel(Byte value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.lightweight_model</code>. Set to 1 only
-     * for the global lightweight AI model
+     * Getter for <code>ai_model.lightweight_model</code>. Set to 1 only for the
+     * global lightweight AI model
      */
     public Byte getLightweightModel() {
         return (Byte) get(8);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.sort_order</code>. Stable display and
-     * fallback ordering of AI models
+     * Setter for <code>ai_model.sort_order</code>. Stable display and fallback
+     * ordering of AI models
      */
     public void setSortOrder(UInteger value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.sort_order</code>. Stable display and
-     * fallback ordering of AI models
+     * Getter for <code>ai_model.sort_order</code>. Stable display and fallback
+     * ordering of AI models
      */
     public UInteger getSortOrder() {
         return (UInteger) get(9);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.max_tokens</code>. Maximum output-token
-     * budget for one provider call
+     * Setter for <code>ai_model.max_tokens</code>. Maximum output-token budget
+     * for one provider call
      */
     public void setMaxTokens(UInteger value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.max_tokens</code>. Maximum output-token
-     * budget for one provider call
+     * Getter for <code>ai_model.max_tokens</code>. Maximum output-token budget
+     * for one provider call
      */
     public UInteger getMaxTokens() {
         return (UInteger) get(10);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.context_window</code>. Maximum context
-     * window size in tokens
+     * Setter for <code>ai_model.context_window</code>. Maximum context window
+     * size in tokens
      */
     public void setContextWindow(ULong value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.context_window</code>. Maximum context
-     * window size in tokens
+     * Getter for <code>ai_model.context_window</code>. Maximum context window
+     * size in tokens
      */
     public ULong getContextWindow() {
         return (ULong) get(11);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.output_reserve_tokens</code>. Output
-     * tokens reserved during context budget calculation
+     * Setter for <code>ai_model.output_reserve_tokens</code>. Output tokens
+     * reserved during context budget calculation
      */
     public void setOutputReserveTokens(ULong value) {
         set(12, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.output_reserve_tokens</code>. Output
-     * tokens reserved during context budget calculation
+     * Getter for <code>ai_model.output_reserve_tokens</code>. Output tokens
+     * reserved during context budget calculation
      */
     public ULong getOutputReserveTokens() {
         return (ULong) get(12);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.auto_compact_threshold_tokens</code>.
-     * Context token threshold that triggers automatic compaction
+     * Setter for <code>ai_model.auto_compact_threshold_tokens</code>. Context
+     * token threshold that triggers automatic compaction
      */
     public void setAutoCompactThresholdTokens(ULong value) {
         set(13, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.auto_compact_threshold_tokens</code>.
-     * Context token threshold that triggers automatic compaction
+     * Getter for <code>ai_model.auto_compact_threshold_tokens</code>. Context
+     * token threshold that triggers automatic compaction
      */
     public ULong getAutoCompactThresholdTokens() {
         return (ULong) get(13);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.emergency_headroom_tokens</code>.
-     * Emergency context headroom in tokens
+     * Setter for <code>ai_model.emergency_headroom_tokens</code>. Emergency
+     * context headroom in tokens
      */
     public void setEmergencyHeadroomTokens(ULong value) {
         set(14, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.emergency_headroom_tokens</code>.
-     * Emergency context headroom in tokens
+     * Getter for <code>ai_model.emergency_headroom_tokens</code>. Emergency
+     * context headroom in tokens
      */
     public ULong getEmergencyHeadroomTokens() {
         return (ULong) get(14);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.tool_output_token_limit</code>. Maximum
-     * tool output tokens retained in context
+     * Setter for <code>ai_model.tool_output_token_limit</code>. Maximum tool
+     * output tokens retained in context
      */
     public void setToolOutputTokenLimit(ULong value) {
         set(15, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.tool_output_token_limit</code>. Maximum
-     * tool output tokens retained in context
+     * Getter for <code>ai_model.tool_output_token_limit</code>. Maximum tool
+     * output tokens retained in context
      */
     public ULong getToolOutputTokenLimit() {
         return (ULong) get(15);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.model_options_json</code>. Configured
-     * Spring AI model options as a JSON object
+     * Setter for <code>ai_model.model_options_json</code>. Configured Spring AI
+     * model options as a JSON object
      */
     public void setModelOptionsJson(String value) {
         set(16, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.model_options_json</code>. Configured
-     * Spring AI model options as a JSON object
+     * Getter for <code>ai_model.model_options_json</code>. Configured Spring AI
+     * model options as a JSON object
      */
     public String getModelOptionsJson() {
         return (String) get(16);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.created_by</code>. Identifier of the
+     * Setter for <code>ai_model.created_by</code>. Identifier of the
      * administrator who created the model
      */
     public void setCreatedBy(ULong value) {
@@ -302,7 +302,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_model.created_by</code>. Identifier of the
+     * Getter for <code>ai_model.created_by</code>. Identifier of the
      * administrator who created the model
      */
     public ULong getCreatedBy() {
@@ -310,7 +310,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_model.last_updated_by</code>. Identifier of the
+     * Setter for <code>ai_model.last_updated_by</code>. Identifier of the
      * administrator who last updated the model
      */
     public void setLastUpdatedBy(ULong value) {
@@ -318,7 +318,7 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_model.last_updated_by</code>. Identifier of the
+     * Getter for <code>ai_model.last_updated_by</code>. Identifier of the
      * administrator who last updated the model
      */
     public ULong getLastUpdatedBy() {
@@ -326,32 +326,32 @@ public class AiModelRecord extends UpdatableRecordImpl<AiModelRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_model.creation_timestamp</code>. Date and time
-     * when the model was created
+     * Setter for <code>ai_model.creation_timestamp</code>. Date and time when
+     * the model was created
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(19, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.creation_timestamp</code>. Date and time
-     * when the model was created
+     * Getter for <code>ai_model.creation_timestamp</code>. Date and time when
+     * the model was created
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(19);
     }
 
     /**
-     * Setter for <code>oagi.ai_model.last_update_timestamp</code>. Date and
-     * time when the model was last updated
+     * Setter for <code>ai_model.last_update_timestamp</code>. Date and time
+     * when the model was last updated
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(20, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model.last_update_timestamp</code>. Date and
-     * time when the model was last updated
+     * Getter for <code>ai_model.last_update_timestamp</code>. Date and time
+     * when the model was last updated
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(20);

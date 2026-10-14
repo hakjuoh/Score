@@ -21,98 +21,96 @@ public class AiTokenRequestUsageRecord extends UpdatableRecordImpl<AiTokenReques
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_token_request_usage.request_id</code>.
-     * Identifier of the root AI request
+     * Setter for <code>ai_token_request_usage.request_id</code>. Identifier of
+     * the root AI request
      */
     public void setRequestId(String value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_request_usage.request_id</code>.
-     * Identifier of the root AI request
+     * Getter for <code>ai_token_request_usage.request_id</code>. Identifier of
+     * the root AI request
      */
     public String getRequestId() {
         return (String) get(0);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_request_usage.app_user_id</code>.
-     * Identifier of the user who submitted the AI request
+     * Setter for <code>ai_token_request_usage.app_user_id</code>. Identifier of
+     * the user who submitted the AI request
      */
     public void setAppUserId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_request_usage.app_user_id</code>.
-     * Identifier of the user who submitted the AI request
+     * Getter for <code>ai_token_request_usage.app_user_id</code>. Identifier of
+     * the user who submitted the AI request
      */
     public ULong getAppUserId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_request_usage.consumed_tokens</code>.
-     * Number of tokens consumed by the request
+     * Setter for <code>ai_token_request_usage.consumed_tokens</code>. Number of
+     * tokens consumed by the request
      */
     public void setConsumedTokens(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_request_usage.consumed_tokens</code>.
-     * Number of tokens consumed by the request
+     * Getter for <code>ai_token_request_usage.consumed_tokens</code>. Number of
+     * tokens consumed by the request
      */
     public ULong getConsumedTokens() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_request_usage.reserved_tokens</code>.
-     * Number of tokens reserved by in-progress calls for the request
+     * Setter for <code>ai_token_request_usage.reserved_tokens</code>. Number of
+     * tokens reserved by in-progress calls for the request
      */
     public void setReservedTokens(ULong value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_request_usage.reserved_tokens</code>.
-     * Number of tokens reserved by in-progress calls for the request
+     * Getter for <code>ai_token_request_usage.reserved_tokens</code>. Number of
+     * tokens reserved by in-progress calls for the request
      */
     public ULong getReservedTokens() {
         return (ULong) get(3);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_request_usage.creation_timestamp</code>.
-     * Date and time when the request usage counter was created
+     * Setter for <code>ai_token_request_usage.creation_timestamp</code>. Date
+     * and time when the request usage counter was created
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_request_usage.creation_timestamp</code>.
-     * Date and time when the request usage counter was created
+     * Getter for <code>ai_token_request_usage.creation_timestamp</code>. Date
+     * and time when the request usage counter was created
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(4);
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_token_request_usage.last_update_timestamp</code>. Date and
-     * time when the request usage counter was last updated
+     * Setter for <code>ai_token_request_usage.last_update_timestamp</code>.
+     * Date and time when the request usage counter was last updated
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(5, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_token_request_usage.last_update_timestamp</code>. Date and
-     * time when the request usage counter was last updated
+     * Getter for <code>ai_token_request_usage.last_update_timestamp</code>.
+     * Date and time when the request usage counter was last updated
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(5);

@@ -20,23 +20,23 @@ public class AiModelReasoningEffortRecord extends UpdatableRecordImpl<AiModelRea
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_model_reasoning_effort.ai_model_id</code>.
-     * Identifier of the configured AI model
+     * Setter for <code>ai_model_reasoning_effort.ai_model_id</code>. Identifier
+     * of the configured AI model
      */
     public void setAiModelId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model_reasoning_effort.ai_model_id</code>.
-     * Identifier of the configured AI model
+     * Getter for <code>ai_model_reasoning_effort.ai_model_id</code>. Identifier
+     * of the configured AI model
      */
     public ULong getAiModelId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.ai_model_reasoning_effort.reasoning_effort</code>.
+     * Setter for <code>ai_model_reasoning_effort.reasoning_effort</code>.
      * Canonical reasoning effort name
      */
     public void setReasoningEffort(String value) {
@@ -44,7 +44,7 @@ public class AiModelReasoningEffortRecord extends UpdatableRecordImpl<AiModelRea
     }
 
     /**
-     * Getter for <code>oagi.ai_model_reasoning_effort.reasoning_effort</code>.
+     * Getter for <code>ai_model_reasoning_effort.reasoning_effort</code>.
      * Canonical reasoning effort name
      */
     public String getReasoningEffort() {
@@ -52,23 +52,23 @@ public class AiModelReasoningEffortRecord extends UpdatableRecordImpl<AiModelRea
     }
 
     /**
-     * Setter for <code>oagi.ai_model_reasoning_effort.display_name</code>.
-     * Display name of the reasoning effort
+     * Setter for <code>ai_model_reasoning_effort.display_name</code>. Display
+     * name of the reasoning effort
      */
     public void setDisplayName(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_model_reasoning_effort.display_name</code>.
-     * Display name of the reasoning effort
+     * Getter for <code>ai_model_reasoning_effort.display_name</code>. Display
+     * name of the reasoning effort
      */
     public String getDisplayName() {
         return (String) get(2);
     }
 
     /**
-     * Setter for <code>oagi.ai_model_reasoning_effort.description</code>.
+     * Setter for <code>ai_model_reasoning_effort.description</code>.
      * Human-readable description of the reasoning effort
      */
     public void setDescription(String value) {
@@ -76,7 +76,7 @@ public class AiModelReasoningEffortRecord extends UpdatableRecordImpl<AiModelRea
     }
 
     /**
-     * Getter for <code>oagi.ai_model_reasoning_effort.description</code>.
+     * Getter for <code>ai_model_reasoning_effort.description</code>.
      * Human-readable description of the reasoning effort
      */
     public String getDescription() {
@@ -84,7 +84,7 @@ public class AiModelReasoningEffortRecord extends UpdatableRecordImpl<AiModelRea
     }
 
     /**
-     * Setter for <code>oagi.ai_model_reasoning_effort.default_effort</code>.
+     * Setter for <code>ai_model_reasoning_effort.default_effort</code>.
      * Indicates whether this is the model default reasoning effort
      */
     public void setDefaultEffort(Byte value) {
@@ -92,7 +92,7 @@ public class AiModelReasoningEffortRecord extends UpdatableRecordImpl<AiModelRea
     }
 
     /**
-     * Getter for <code>oagi.ai_model_reasoning_effort.default_effort</code>.
+     * Getter for <code>ai_model_reasoning_effort.default_effort</code>.
      * Indicates whether this is the model default reasoning effort
      */
     public Byte getDefaultEffort() {
@@ -100,7 +100,7 @@ public class AiModelReasoningEffortRecord extends UpdatableRecordImpl<AiModelRea
     }
 
     /**
-     * Setter for <code>oagi.ai_model_reasoning_effort.sort_order</code>. Stable
+     * Setter for <code>ai_model_reasoning_effort.sort_order</code>. Stable
      * display ordering of reasoning efforts
      */
     public void setSortOrder(UInteger value) {
@@ -108,7 +108,7 @@ public class AiModelReasoningEffortRecord extends UpdatableRecordImpl<AiModelRea
     }
 
     /**
-     * Getter for <code>oagi.ai_model_reasoning_effort.sort_order</code>. Stable
+     * Getter for <code>ai_model_reasoning_effort.sort_order</code>. Stable
      * display ordering of reasoning efforts
      */
     public UInteger getSortOrder() {

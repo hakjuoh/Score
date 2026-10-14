@@ -19,18 +19,19 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModel.AiModelPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicy.AiUserPolicyPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiUserModelAccessRecord;
@@ -45,7 +46,7 @@ public class AiUserModelAccess extends TableImpl<AiUserModelAccessRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_user_model_access</code>
+     * The reference instance of <code>ai_user_model_access</code>
      */
     public static final AiUserModelAccess AI_USER_MODEL_ACCESS = new AiUserModelAccess();
 
@@ -58,14 +59,14 @@ public class AiUserModelAccess extends TableImpl<AiUserModelAccessRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_user_model_access.app_user_id</code>. Identifier
-     * of the user to whom the policy applies
+     * The column <code>ai_user_model_access.app_user_id</code>. Identifier of
+     * the user to whom the policy applies
      */
     public final TableField<AiUserModelAccessRecord, ULong> APP_USER_ID = createField(DSL.name("app_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the user to whom the policy applies");
 
     /**
-     * The column <code>oagi.ai_user_model_access.ai_model_id</code>. Identifier
-     * of an AI model allowed for the user
+     * The column <code>ai_user_model_access.ai_model_id</code>. Identifier of
+     * an AI model allowed for the user
      */
     public final TableField<AiUserModelAccessRecord, ULong> AI_MODEL_ID = createField(DSL.name("ai_model_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of an AI model allowed for the user");
 
@@ -78,21 +79,21 @@ public class AiUserModelAccess extends TableImpl<AiUserModelAccessRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_user_model_access</code> table reference
+     * Create an aliased <code>ai_user_model_access</code> table reference
      */
     public AiUserModelAccess(String alias) {
         this(DSL.name(alias), AI_USER_MODEL_ACCESS);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_user_model_access</code> table reference
+     * Create an aliased <code>ai_user_model_access</code> table reference
      */
     public AiUserModelAccess(Name alias) {
         this(alias, AI_USER_MODEL_ACCESS);
     }
 
     /**
-     * Create a <code>oagi.ai_user_model_access</code> table reference
+     * Create a <code>ai_user_model_access</code> table reference
      */
     public AiUserModelAccess() {
         this(DSL.name("ai_user_model_access"), null);
@@ -133,7 +134,7 @@ public class AiUserModelAccess extends TableImpl<AiUserModelAccessRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -149,7 +150,7 @@ public class AiUserModelAccess extends TableImpl<AiUserModelAccessRecord> {
     private transient AiModelPath _aiModel;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_model</code> table.
+     * Get the implicit join path to the <code>ai_model</code> table.
      */
     public AiModelPath aiModel() {
         if (_aiModel == null)
@@ -161,7 +162,7 @@ public class AiUserModelAccess extends TableImpl<AiUserModelAccessRecord> {
     private transient AiUserPolicyPath _aiUserPolicy;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_user_policy</code> table.
+     * Get the implicit join path to the <code>ai_user_policy</code> table.
      */
     public AiUserPolicyPath aiUserPolicy() {
         if (_aiUserPolicy == null)
@@ -214,7 +215,7 @@ public class AiUserModelAccess extends TableImpl<AiUserModelAccessRecord> {
      */
     @Override
     public AiUserModelAccess where(Condition condition) {
-        return new AiUserModelAccess(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiUserModelAccess(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -281,7 +282,7 @@ public class AiUserModelAccess extends TableImpl<AiUserModelAccessRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiUserModelAccess whereExists(Select<?> select) {
+    public AiUserModelAccess whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -289,7 +290,7 @@ public class AiUserModelAccess extends TableImpl<AiUserModelAccessRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiUserModelAccess whereNotExists(Select<?> select) {
+    public AiUserModelAccess whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

@@ -21,8 +21,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for
-     * <code>oagi.ai_token_usage_ledger.ai_token_usage_ledger_id</code>.
+     * Setter for <code>ai_token_usage_ledger.ai_token_usage_ledger_id</code>.
      * Identifier of the token usage ledger entry
      */
     public void setAiTokenUsageLedgerId(ULong value) {
@@ -30,8 +29,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_token_usage_ledger.ai_token_usage_ledger_id</code>.
+     * Getter for <code>ai_token_usage_ledger.ai_token_usage_ledger_id</code>.
      * Identifier of the token usage ledger entry
      */
     public ULong getAiTokenUsageLedgerId() {
@@ -39,7 +37,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.call_id</code>. UUID of the
+     * Setter for <code>ai_token_usage_ledger.call_id</code>. UUID of the
      * provider call attempt
      */
     public void setCallId(String value) {
@@ -47,7 +45,7 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.call_id</code>. UUID of the
+     * Getter for <code>ai_token_usage_ledger.call_id</code>. UUID of the
      * provider call attempt
      */
     public String getCallId() {
@@ -55,112 +53,112 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.request_id</code>. Identifier
-     * of the root AI request
+     * Setter for <code>ai_token_usage_ledger.request_id</code>. Identifier of
+     * the root AI request
      */
     public void setRequestId(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.request_id</code>. Identifier
-     * of the root AI request
+     * Getter for <code>ai_token_usage_ledger.request_id</code>. Identifier of
+     * the root AI request
      */
     public String getRequestId() {
         return (String) get(2);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.conversation_guid</code>.
-     * GUID of the related AI conversation
+     * Setter for <code>ai_token_usage_ledger.conversation_guid</code>. GUID of
+     * the related AI conversation
      */
     public void setConversationGuid(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.conversation_guid</code>.
-     * GUID of the related AI conversation
+     * Getter for <code>ai_token_usage_ledger.conversation_guid</code>. GUID of
+     * the related AI conversation
      */
     public String getConversationGuid() {
         return (String) get(3);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.app_user_id</code>.
-     * Identifier of the user who initiated the AI call
+     * Setter for <code>ai_token_usage_ledger.app_user_id</code>. Identifier of
+     * the user who initiated the AI call
      */
     public void setAppUserId(ULong value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.app_user_id</code>.
-     * Identifier of the user who initiated the AI call
+     * Getter for <code>ai_token_usage_ledger.app_user_id</code>. Identifier of
+     * the user who initiated the AI call
      */
     public ULong getAppUserId() {
         return (ULong) get(4);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.ai_model_id</code>.
-     * Identifier of the AI model that was called
+     * Setter for <code>ai_token_usage_ledger.ai_model_id</code>. Identifier of
+     * the AI model that was called
      */
     public void setAiModelId(ULong value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.ai_model_id</code>.
-     * Identifier of the AI model that was called
+     * Getter for <code>ai_token_usage_ledger.ai_model_id</code>. Identifier of
+     * the AI model that was called
      */
     public ULong getAiModelId() {
         return (ULong) get(5);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.execution_kind</code>.
-     * Execution kind such as assistant, planner, or worker
+     * Setter for <code>ai_token_usage_ledger.execution_kind</code>. Execution
+     * kind such as assistant, planner, or worker
      */
     public void setExecutionKind(String value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.execution_kind</code>.
-     * Execution kind such as assistant, planner, or worker
+     * Getter for <code>ai_token_usage_ledger.execution_kind</code>. Execution
+     * kind such as assistant, planner, or worker
      */
     public String getExecutionKind() {
         return (String) get(6);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.agent_id</code>. Identifier
-     * of the agent that performed the call
+     * Setter for <code>ai_token_usage_ledger.agent_id</code>. Identifier of the
+     * agent that performed the call
      */
     public void setAgentId(String value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.agent_id</code>. Identifier
-     * of the agent that performed the call
+     * Getter for <code>ai_token_usage_ledger.agent_id</code>. Identifier of the
+     * agent that performed the call
      */
     public String getAgentId() {
         return (String) get(7);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.reserved_tokens</code>.
-     * Number of tokens reserved before the provider call
+     * Setter for <code>ai_token_usage_ledger.reserved_tokens</code>. Number of
+     * tokens reserved before the provider call
      */
     public void setReservedTokens(ULong value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.reserved_tokens</code>.
-     * Number of tokens reserved before the provider call
+     * Getter for <code>ai_token_usage_ledger.reserved_tokens</code>. Number of
+     * tokens reserved before the provider call
      */
     public ULong getReservedTokens() {
         return (ULong) get(8);
@@ -168,8 +166,8 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
 
     /**
      * Setter for
-     * <code>oagi.ai_token_usage_ledger.quota_period_start_timestamp</code>.
-     * Exact inclusive quota window start reserved by this call
+     * <code>ai_token_usage_ledger.quota_period_start_timestamp</code>. Exact
+     * inclusive quota window start reserved by this call
      */
     public void setQuotaPeriodStartTimestamp(LocalDateTime value) {
         set(9, value);
@@ -177,170 +175,168 @@ public class AiTokenUsageLedgerRecord extends UpdatableRecordImpl<AiTokenUsageLe
 
     /**
      * Getter for
-     * <code>oagi.ai_token_usage_ledger.quota_period_start_timestamp</code>.
-     * Exact inclusive quota window start reserved by this call
+     * <code>ai_token_usage_ledger.quota_period_start_timestamp</code>. Exact
+     * inclusive quota window start reserved by this call
      */
     public LocalDateTime getQuotaPeriodStartTimestamp() {
         return (LocalDateTime) get(9);
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_token_usage_ledger.quota_period_end_timestamp</code>. Exact
-     * exclusive quota window end reserved by this call
+     * Setter for <code>ai_token_usage_ledger.quota_period_end_timestamp</code>.
+     * Exact exclusive quota window end reserved by this call
      */
     public void setQuotaPeriodEndTimestamp(LocalDateTime value) {
         set(10, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_token_usage_ledger.quota_period_end_timestamp</code>. Exact
-     * exclusive quota window end reserved by this call
+     * Getter for <code>ai_token_usage_ledger.quota_period_end_timestamp</code>.
+     * Exact exclusive quota window end reserved by this call
      */
     public LocalDateTime getQuotaPeriodEndTimestamp() {
         return (LocalDateTime) get(10);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.prompt_tokens</code>.
-     * Normalized input tokens reported by the provider
+     * Setter for <code>ai_token_usage_ledger.prompt_tokens</code>. Normalized
+     * input tokens reported by the provider
      */
     public void setPromptTokens(ULong value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.prompt_tokens</code>.
-     * Normalized input tokens reported by the provider
+     * Getter for <code>ai_token_usage_ledger.prompt_tokens</code>. Normalized
+     * input tokens reported by the provider
      */
     public ULong getPromptTokens() {
         return (ULong) get(11);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.completion_tokens</code>.
-     * Output tokens reported by the provider
+     * Setter for <code>ai_token_usage_ledger.completion_tokens</code>. Output
+     * tokens reported by the provider
      */
     public void setCompletionTokens(ULong value) {
         set(12, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.completion_tokens</code>.
-     * Output tokens reported by the provider
+     * Getter for <code>ai_token_usage_ledger.completion_tokens</code>. Output
+     * tokens reported by the provider
      */
     public ULong getCompletionTokens() {
         return (ULong) get(12);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.cached_tokens</code>. Number
-     * of input tokens served from cache
+     * Setter for <code>ai_token_usage_ledger.cached_tokens</code>. Number of
+     * input tokens served from cache
      */
     public void setCachedTokens(ULong value) {
         set(13, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.cached_tokens</code>. Number
-     * of input tokens served from cache
+     * Getter for <code>ai_token_usage_ledger.cached_tokens</code>. Number of
+     * input tokens served from cache
      */
     public ULong getCachedTokens() {
         return (ULong) get(13);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.charged_tokens</code>. Number
-     * of tokens charged against the quota
+     * Setter for <code>ai_token_usage_ledger.charged_tokens</code>. Number of
+     * tokens charged against the quota
      */
     public void setChargedTokens(ULong value) {
         set(14, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.charged_tokens</code>. Number
-     * of tokens charged against the quota
+     * Getter for <code>ai_token_usage_ledger.charged_tokens</code>. Number of
+     * tokens charged against the quota
      */
     public ULong getChargedTokens() {
         return (ULong) get(14);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.usage_complete</code>.
-     * Indicates whether the provider usage data is complete
+     * Setter for <code>ai_token_usage_ledger.usage_complete</code>. Indicates
+     * whether the provider usage data is complete
      */
     public void setUsageComplete(Byte value) {
         set(15, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.usage_complete</code>.
-     * Indicates whether the provider usage data is complete
+     * Getter for <code>ai_token_usage_ledger.usage_complete</code>. Indicates
+     * whether the provider usage data is complete
      */
     public Byte getUsageComplete() {
         return (Byte) get(15);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.status</code>. Reservation
-     * and settlement status
+     * Setter for <code>ai_token_usage_ledger.status</code>. Reservation and
+     * settlement status
      */
     public void setStatus(String value) {
         set(16, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.status</code>. Reservation
-     * and settlement status
+     * Getter for <code>ai_token_usage_ledger.status</code>. Reservation and
+     * settlement status
      */
     public String getStatus() {
         return (String) get(16);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.failure_type</code>. Failure
-     * class or error code
+     * Setter for <code>ai_token_usage_ledger.failure_type</code>. Failure class
+     * or error code
      */
     public void setFailureType(String value) {
         set(17, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.failure_type</code>. Failure
-     * class or error code
+     * Getter for <code>ai_token_usage_ledger.failure_type</code>. Failure class
+     * or error code
      */
     public String getFailureType() {
         return (String) get(17);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.reserved_timestamp</code>.
-     * Date and time when the tokens were reserved
+     * Setter for <code>ai_token_usage_ledger.reserved_timestamp</code>. Date
+     * and time when the tokens were reserved
      */
     public void setReservedTimestamp(LocalDateTime value) {
         set(18, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.reserved_timestamp</code>.
-     * Date and time when the tokens were reserved
+     * Getter for <code>ai_token_usage_ledger.reserved_timestamp</code>. Date
+     * and time when the tokens were reserved
      */
     public LocalDateTime getReservedTimestamp() {
         return (LocalDateTime) get(18);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_usage_ledger.settled_timestamp</code>.
-     * Date and time when the usage was settled or released
+     * Setter for <code>ai_token_usage_ledger.settled_timestamp</code>. Date and
+     * time when the usage was settled or released
      */
     public void setSettledTimestamp(LocalDateTime value) {
         set(19, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_usage_ledger.settled_timestamp</code>.
-     * Date and time when the usage was settled or released
+     * Getter for <code>ai_token_usage_ledger.settled_timestamp</code>. Date and
+     * time when the usage was settled or released
      */
     public LocalDateTime getSettledTimestamp() {
         return (LocalDateTime) get(19);

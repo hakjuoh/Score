@@ -19,32 +19,32 @@ public class AiUserModelAccessRecord extends UpdatableRecordImpl<AiUserModelAcce
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_user_model_access.app_user_id</code>. Identifier
-     * of the user to whom the policy applies
+     * Setter for <code>ai_user_model_access.app_user_id</code>. Identifier of
+     * the user to whom the policy applies
      */
     public void setAppUserId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_model_access.app_user_id</code>. Identifier
-     * of the user to whom the policy applies
+     * Getter for <code>ai_user_model_access.app_user_id</code>. Identifier of
+     * the user to whom the policy applies
      */
     public ULong getAppUserId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_model_access.ai_model_id</code>. Identifier
-     * of an AI model allowed for the user
+     * Setter for <code>ai_user_model_access.ai_model_id</code>. Identifier of
+     * an AI model allowed for the user
      */
     public void setAiModelId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_model_access.ai_model_id</code>. Identifier
-     * of an AI model allowed for the user
+     * Getter for <code>ai_user_model_access.ai_model_id</code>. Identifier of
+     * an AI model allowed for the user
      */
     public ULong getAiModelId() {
         return (ULong) get(1);

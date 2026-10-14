@@ -22,7 +22,7 @@ public class AiTokenQuotaAdjustmentRecord extends UpdatableRecordImpl<AiTokenQuo
 
     /**
      * Setter for
-     * <code>oagi.ai_token_quota_adjustment.ai_token_quota_adjustment_id</code>.
+     * <code>ai_token_quota_adjustment.ai_token_quota_adjustment_id</code>.
      * Identifier of the token quota adjustment
      */
     public void setAiTokenQuotaAdjustmentId(ULong value) {
@@ -31,7 +31,7 @@ public class AiTokenQuotaAdjustmentRecord extends UpdatableRecordImpl<AiTokenQuo
 
     /**
      * Getter for
-     * <code>oagi.ai_token_quota_adjustment.ai_token_quota_adjustment_id</code>.
+     * <code>ai_token_quota_adjustment.ai_token_quota_adjustment_id</code>.
      * Identifier of the token quota adjustment
      */
     public ULong getAiTokenQuotaAdjustmentId() {
@@ -39,8 +39,7 @@ public class AiTokenQuotaAdjustmentRecord extends UpdatableRecordImpl<AiTokenQuo
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_token_quota_adjustment.target_app_user_id</code>.
+     * Setter for <code>ai_token_quota_adjustment.target_app_user_id</code>.
      * Identifier of the user whose quota was adjusted
      */
     public void setTargetAppUserId(ULong value) {
@@ -48,8 +47,7 @@ public class AiTokenQuotaAdjustmentRecord extends UpdatableRecordImpl<AiTokenQuo
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_token_quota_adjustment.target_app_user_id</code>.
+     * Getter for <code>ai_token_quota_adjustment.target_app_user_id</code>.
      * Identifier of the user whose quota was adjusted
      */
     public ULong getTargetAppUserId() {
@@ -57,7 +55,7 @@ public class AiTokenQuotaAdjustmentRecord extends UpdatableRecordImpl<AiTokenQuo
     }
 
     /**
-     * Setter for <code>oagi.ai_token_quota_adjustment.actor_app_user_id</code>.
+     * Setter for <code>ai_token_quota_adjustment.actor_app_user_id</code>.
      * Identifier of the administrator who adjusted the quota
      */
     public void setActorAppUserId(ULong value) {
@@ -65,7 +63,7 @@ public class AiTokenQuotaAdjustmentRecord extends UpdatableRecordImpl<AiTokenQuo
     }
 
     /**
-     * Getter for <code>oagi.ai_token_quota_adjustment.actor_app_user_id</code>.
+     * Getter for <code>ai_token_quota_adjustment.actor_app_user_id</code>.
      * Identifier of the administrator who adjusted the quota
      */
     public ULong getActorAppUserId() {
@@ -73,68 +71,64 @@ public class AiTokenQuotaAdjustmentRecord extends UpdatableRecordImpl<AiTokenQuo
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_token_quota_adjustment.period_start_timestamp</code>. Start
-     * of the adjusted quota period in UTC
+     * Setter for <code>ai_token_quota_adjustment.period_start_timestamp</code>.
+     * Start of the adjusted quota period in UTC
      */
     public void setPeriodStartTimestamp(LocalDateTime value) {
         set(3, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_token_quota_adjustment.period_start_timestamp</code>. Start
-     * of the adjusted quota period in UTC
+     * Getter for <code>ai_token_quota_adjustment.period_start_timestamp</code>.
+     * Start of the adjusted quota period in UTC
      */
     public LocalDateTime getPeriodStartTimestamp() {
         return (LocalDateTime) get(3);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_quota_adjustment.delta_tokens</code>.
-     * Positive or negative token amount applied to consumed usage
+     * Setter for <code>ai_token_quota_adjustment.delta_tokens</code>. Positive
+     * or negative token amount applied to consumed usage
      */
     public void setDeltaTokens(Long value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_quota_adjustment.delta_tokens</code>.
-     * Positive or negative token amount applied to consumed usage
+     * Getter for <code>ai_token_quota_adjustment.delta_tokens</code>. Positive
+     * or negative token amount applied to consumed usage
      */
     public Long getDeltaTokens() {
         return (Long) get(4);
     }
 
     /**
-     * Setter for <code>oagi.ai_token_quota_adjustment.reason</code>. Reason for
-     * the quota adjustment
+     * Setter for <code>ai_token_quota_adjustment.reason</code>. Reason for the
+     * quota adjustment
      */
     public void setReason(String value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_token_quota_adjustment.reason</code>. Reason for
-     * the quota adjustment
+     * Getter for <code>ai_token_quota_adjustment.reason</code>. Reason for the
+     * quota adjustment
      */
     public String getReason() {
         return (String) get(5);
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_token_quota_adjustment.creation_timestamp</code>. Date and
-     * time when the quota was adjusted
+     * Setter for <code>ai_token_quota_adjustment.creation_timestamp</code>.
+     * Date and time when the quota was adjusted
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(6, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_token_quota_adjustment.creation_timestamp</code>. Date and
-     * time when the quota was adjusted
+     * Getter for <code>ai_token_quota_adjustment.creation_timestamp</code>.
+     * Date and time when the quota was adjusted
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(6);

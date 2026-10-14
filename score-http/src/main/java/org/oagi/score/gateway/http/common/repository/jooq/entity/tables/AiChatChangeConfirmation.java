@@ -22,19 +22,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiChatChangeConfirmationRecord;
 
@@ -48,7 +49,7 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_chat_change_confirmation</code>
+     * The reference instance of <code>ai_chat_change_confirmation</code>
      */
     public static final AiChatChangeConfirmation AI_CHAT_CHANGE_CONFIRMATION = new AiChatChangeConfirmation();
 
@@ -62,99 +63,91 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
 
     /**
      * The column
-     * <code>oagi.ai_chat_change_confirmation.ai_chat_change_confirmation_id</code>.
+     * <code>ai_chat_change_confirmation.ai_chat_change_confirmation_id</code>.
      * The primary key of the AI change confirmation record.
      */
-    public final TableField<AiChatChangeConfirmationRecord, ULong> AI_CHAT_CHANGE_CONFIRMATION_ID = createField(DSL.name("ai_chat_change_confirmation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the AI change confirmation record.");
+    public final TableField<AiChatChangeConfirmationRecord, ULong> AI_CHAT_CHANGE_CONFIRMATION_ID = createField(DSL.name("ai_chat_change_confirmation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the AI change confirmation record.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.guid</code>. The public
+     * The column <code>ai_chat_change_confirmation.guid</code>. The public
      * unique identifier of the change confirmation request.
      */
     public final TableField<AiChatChangeConfirmationRecord, String> GUID = createField(DSL.name("guid"), SQLDataType.CHAR(36).nullable(false), this, "The public unique identifier of the change confirmation request.");
 
     /**
      * The column
-     * <code>oagi.ai_chat_change_confirmation.ai_chat_conversation_id</code>.
-     * Foreign key to the AI_CHAT_CONVERSATION table identifying the owning
+     * <code>ai_chat_change_confirmation.ai_chat_conversation_id</code>. Foreign
+     * key to the AI_CHAT_CONVERSATION table identifying the owning
      * conversation.
      */
     public final TableField<AiChatChangeConfirmationRecord, ULong> AI_CHAT_CONVERSATION_ID = createField(DSL.name("ai_chat_conversation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the AI_CHAT_CONVERSATION table identifying the owning conversation.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.request_id</code>. The
-     * chat request identifier that originally requested the data-changing tool
-     * call.
+     * The column <code>ai_chat_change_confirmation.request_id</code>. The chat
+     * request identifier that originally requested the data-changing tool call.
      */
     public final TableField<AiChatChangeConfirmationRecord, String> REQUEST_ID = createField(DSL.name("request_id"), SQLDataType.VARCHAR(128).nullable(false), this, "The chat request identifier that originally requested the data-changing tool call.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.tool_name</code>. The
-     * name of the data-changing tool that requires explicit user approval.
+     * The column <code>ai_chat_change_confirmation.tool_name</code>. The name
+     * of the data-changing tool that requires explicit user approval.
      */
     public final TableField<AiChatChangeConfirmationRecord, String> TOOL_NAME = createField(DSL.name("tool_name"), SQLDataType.VARCHAR(240).nullable(false), this, "The name of the data-changing tool that requires explicit user approval.");
 
     /**
-     * The column
-     * <code>oagi.ai_chat_change_confirmation.arguments_digest</code>. The
+     * The column <code>ai_chat_change_confirmation.arguments_digest</code>. The
      * SHA-256 digest binding the tool name to its canonicalized arguments.
      */
     public final TableField<AiChatChangeConfirmationRecord, String> ARGUMENTS_DIGEST = createField(DSL.name("arguments_digest"), SQLDataType.CHAR(64).nullable(false), this, "The SHA-256 digest binding the tool name to its canonicalized arguments.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.status</code>. Expected
+     * The column <code>ai_chat_change_confirmation.status</code>. Expected
      * confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and
      * EXPIRED; other values are handled by the application.
      */
     public final TableField<AiChatChangeConfirmationRecord, String> STATUS = createField(DSL.name("status"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("'REQUESTED'"), SQLDataType.VARCHAR)), this, "Expected confirmation states are REQUESTED, APPROVED, DENIED, CONSUMED, and EXPIRED; other values are handled by the application.");
 
     /**
-     * The column <code>oagi.ai_chat_change_confirmation.grant_digest</code>.
-     * The SHA-256 digest of the one-time approval grant; cleared after
-     * consumption, denial, or expiration.
+     * The column <code>ai_chat_change_confirmation.grant_digest</code>. The
+     * SHA-256 digest of the one-time approval grant; cleared after consumption,
+     * denial, or expiration.
      */
     public final TableField<AiChatChangeConfirmationRecord, String> GRANT_DIGEST = createField(DSL.name("grant_digest"), SQLDataType.CHAR(64).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CHAR)), this, "The SHA-256 digest of the one-time approval grant; cleared after consumption, denial, or expiration.");
 
     /**
-     * The column
-     * <code>oagi.ai_chat_change_confirmation.expiration_timestamp</code>. The
-     * timestamp after which the confirmation request or approval grant is
+     * The column <code>ai_chat_change_confirmation.expiration_timestamp</code>.
+     * The timestamp after which the confirmation request or approval grant is
      * invalid.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> EXPIRATION_TIMESTAMP = createField(DSL.name("expiration_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp after which the confirmation request or approval grant is invalid.");
 
     /**
-     * The column
-     * <code>oagi.ai_chat_change_confirmation.approved_timestamp</code>. The
-     * timestamp when the change request was approved.
+     * The column <code>ai_chat_change_confirmation.approved_timestamp</code>.
+     * The timestamp when the change request was approved.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> APPROVED_TIMESTAMP = createField(DSL.name("approved_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "The timestamp when the change request was approved.");
 
     /**
-     * The column
-     * <code>oagi.ai_chat_change_confirmation.denied_timestamp</code>. The
+     * The column <code>ai_chat_change_confirmation.denied_timestamp</code>. The
      * timestamp when the change request was denied.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> DENIED_TIMESTAMP = createField(DSL.name("denied_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "The timestamp when the change request was denied.");
 
     /**
-     * The column
-     * <code>oagi.ai_chat_change_confirmation.consumed_timestamp</code>. The
-     * timestamp when the one-time approval grant was consumed.
+     * The column <code>ai_chat_change_confirmation.consumed_timestamp</code>.
+     * The timestamp when the one-time approval grant was consumed.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> CONSUMED_TIMESTAMP = createField(DSL.name("consumed_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "The timestamp when the one-time approval grant was consumed.");
 
     /**
-     * The column
-     * <code>oagi.ai_chat_change_confirmation.expired_timestamp</code>. The
-     * timestamp when the confirmation request or approval grant expired.
+     * The column <code>ai_chat_change_confirmation.expired_timestamp</code>.
+     * The timestamp when the confirmation request or approval grant expired.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> EXPIRED_TIMESTAMP = createField(DSL.name("expired_timestamp"), SQLDataType.LOCALDATETIME(6).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.LOCALDATETIME)), this, "The timestamp when the confirmation request or approval grant expired.");
 
     /**
-     * The column
-     * <code>oagi.ai_chat_change_confirmation.creation_timestamp</code>. The
-     * timestamp when the change confirmation request was created.
+     * The column <code>ai_chat_change_confirmation.creation_timestamp</code>.
+     * The timestamp when the change confirmation request was created.
      */
     public final TableField<AiChatChangeConfirmationRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the change confirmation request was created.");
 
@@ -167,7 +160,7 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_change_confirmation</code> table
+     * Create an aliased <code>ai_chat_change_confirmation</code> table
      * reference
      */
     public AiChatChangeConfirmation(String alias) {
@@ -175,7 +168,7 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_change_confirmation</code> table
+     * Create an aliased <code>ai_chat_change_confirmation</code> table
      * reference
      */
     public AiChatChangeConfirmation(Name alias) {
@@ -183,7 +176,7 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
     }
 
     /**
-     * Create a <code>oagi.ai_chat_change_confirmation</code> table reference
+     * Create a <code>ai_chat_change_confirmation</code> table reference
      */
     public AiChatChangeConfirmation() {
         this(DSL.name("ai_chat_change_confirmation"), null);
@@ -224,7 +217,7 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -255,7 +248,7 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
     private transient AiChatConversationPath _aiChatConversation;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_chat_conversation</code>
+     * Get the implicit join path to the <code>ai_chat_conversation</code>
      * table.
      */
     public AiChatConversationPath aiChatConversation() {
@@ -309,7 +302,7 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
      */
     @Override
     public AiChatChangeConfirmation where(Condition condition) {
-        return new AiChatChangeConfirmation(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiChatChangeConfirmation(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -376,7 +369,7 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatChangeConfirmation whereExists(Select<?> select) {
+    public AiChatChangeConfirmation whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -384,7 +377,7 @@ public class AiChatChangeConfirmation extends TableImpl<AiChatChangeConfirmation
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatChangeConfirmation whereNotExists(Select<?> select) {
+    public AiChatChangeConfirmation whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

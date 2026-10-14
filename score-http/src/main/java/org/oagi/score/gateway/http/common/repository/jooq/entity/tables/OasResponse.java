@@ -21,18 +21,19 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasHttpHeader.OasHttpHeaderPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.OasMessageBody.OasMessageBodyPath;
@@ -55,7 +56,7 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.oas_response</code>
+     * The reference instance of <code>oas_response</code>
      */
     public static final OasResponse OAS_RESPONSE = new OasResponse();
 
@@ -68,80 +69,79 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
     }
 
     /**
-     * The column <code>oagi.oas_response.oas_response_id</code>. The primary
-     * key of the record.
+     * The column <code>oas_response.oas_response_id</code>. The primary key of
+     * the record.
      */
-    public final TableField<OasResponseRecord, ULong> OAS_RESPONSE_ID = createField(DSL.name("oas_response_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the record.");
+    public final TableField<OasResponseRecord, ULong> OAS_RESPONSE_ID = createField(DSL.name("oas_response_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the record.");
 
     /**
-     * The column <code>oagi.oas_response.oas_operation_id</code>.
+     * The column <code>oas_response.oas_operation_id</code>.
      */
     public final TableField<OasResponseRecord, ULong> OAS_OPERATION_ID = createField(DSL.name("oas_operation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "");
 
     /**
-     * The column <code>oagi.oas_response.http_status_code</code>.
+     * The column <code>oas_response.http_status_code</code>.
      */
     public final TableField<OasResponseRecord, Integer> HTTP_STATUS_CODE = createField(DSL.name("http_status_code"), SQLDataType.INTEGER.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.INTEGER)), this, "");
 
     /**
-     * The column <code>oagi.oas_response.description</code>. A brief
-     * description of the response body. This could contain examples of use.
-     * CommonMark syntax MAY be used for rich text representation.
+     * The column <code>oas_response.description</code>. A brief description of
+     * the response body. This could contain examples of use. CommonMark syntax
+     * MAY be used for rich text representation.
      */
     public final TableField<OasResponseRecord, String> DESCRIPTION = createField(DSL.name("description"), SQLDataType.CLOB(65535).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "A brief description of the response body. This could contain examples of use. CommonMark syntax MAY be used for rich text representation.");
 
     /**
-     * The column <code>oagi.oas_response.oas_message_body_id</code>.
+     * The column <code>oas_response.oas_message_body_id</code>.
      */
     public final TableField<OasResponseRecord, ULong> OAS_MESSAGE_BODY_ID = createField(DSL.name("oas_message_body_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "");
 
     /**
-     * The column <code>oagi.oas_response.make_array_indicator</code>.
+     * The column <code>oas_response.make_array_indicator</code>.
      */
     public final TableField<OasResponseRecord, Byte> MAKE_ARRAY_INDICATOR = createField(DSL.name("make_array_indicator"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "");
 
     /**
-     * The column <code>oagi.oas_response.suppress_root_indicator</code>.
+     * The column <code>oas_response.suppress_root_indicator</code>.
      */
     public final TableField<OasResponseRecord, Byte> SUPPRESS_ROOT_INDICATOR = createField(DSL.name("suppress_root_indicator"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "");
 
     /**
-     * The column
-     * <code>oagi.oas_response.meta_header_top_level_asbiep_id</code>.
+     * The column <code>oas_response.meta_header_top_level_asbiep_id</code>.
      */
     public final TableField<OasResponseRecord, ULong> META_HEADER_TOP_LEVEL_ASBIEP_ID = createField(DSL.name("meta_header_top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "");
 
     /**
-     * The column <code>oagi.oas_response.pagination_top_level_asbiep_id</code>.
+     * The column <code>oas_response.pagination_top_level_asbiep_id</code>.
      */
     public final TableField<OasResponseRecord, ULong> PAGINATION_TOP_LEVEL_ASBIEP_ID = createField(DSL.name("pagination_top_level_asbiep_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "");
 
     /**
-     * The column <code>oagi.oas_response.include_confirm_indicator</code>.
+     * The column <code>oas_response.include_confirm_indicator</code>.
      */
     public final TableField<OasResponseRecord, Byte> INCLUDE_CONFIRM_INDICATOR = createField(DSL.name("include_confirm_indicator"), SQLDataType.TINYINT.defaultValue(DSL.field(DSL.raw("0"), SQLDataType.TINYINT)), this, "");
 
     /**
-     * The column <code>oagi.oas_response.created_by</code>. The user who
-     * creates the record.
+     * The column <code>oas_response.created_by</code>. The user who creates the
+     * record.
      */
     public final TableField<OasResponseRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who creates the record.");
 
     /**
-     * The column <code>oagi.oas_response.last_updated_by</code>. The user who
-     * last updates the record.
+     * The column <code>oas_response.last_updated_by</code>. The user who last
+     * updates the record.
      */
     public final TableField<OasResponseRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "The user who last updates the record.");
 
     /**
-     * The column <code>oagi.oas_response.creation_timestamp</code>. The
-     * timestamp when the record is created.
+     * The column <code>oas_response.creation_timestamp</code>. The timestamp
+     * when the record is created.
      */
     public final TableField<OasResponseRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is created.");
 
     /**
-     * The column <code>oagi.oas_response.last_update_timestamp</code>. The
-     * timestamp when the record is last updated.
+     * The column <code>oas_response.last_update_timestamp</code>. The timestamp
+     * when the record is last updated.
      */
     public final TableField<OasResponseRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the record is last updated.");
 
@@ -154,21 +154,21 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.oas_response</code> table reference
+     * Create an aliased <code>oas_response</code> table reference
      */
     public OasResponse(String alias) {
         this(DSL.name(alias), OAS_RESPONSE);
     }
 
     /**
-     * Create an aliased <code>oagi.oas_response</code> table reference
+     * Create an aliased <code>oas_response</code> table reference
      */
     public OasResponse(Name alias) {
         this(alias, OAS_RESPONSE);
     }
 
     /**
-     * Create a <code>oagi.oas_response</code> table reference
+     * Create a <code>oas_response</code> table reference
      */
     public OasResponse() {
         this(DSL.name("oas_response"), null);
@@ -209,7 +209,7 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -230,8 +230,8 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
     private transient AppUserPath _oasResponseCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>oas_response_created_by_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>oas_response_created_by_fk</code> key.
      */
     public AppUserPath oasResponseCreatedByFk() {
         if (_oasResponseCreatedByFk == null)
@@ -243,8 +243,8 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
     private transient AppUserPath _oasResponseLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>oas_response_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>oas_response_last_updated_by_fk</code> key.
      */
     public AppUserPath oasResponseLastUpdatedByFk() {
         if (_oasResponseLastUpdatedByFk == null)
@@ -256,9 +256,8 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
     private transient TopLevelAsbiepPath _oasResponseMetaHeaderTopLevelAsbiepIdFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.top_level_asbiep</code>
-     * table, via the
-     * <code>oas_response_meta_header_top_level_asbiep_id_fk</code> key.
+     * Get the implicit join path to the <code>top_level_asbiep</code> table,
+     * via the <code>oas_response_meta_header_top_level_asbiep_id_fk</code> key.
      */
     public TopLevelAsbiepPath oasResponseMetaHeaderTopLevelAsbiepIdFk() {
         if (_oasResponseMetaHeaderTopLevelAsbiepIdFk == null)
@@ -270,8 +269,7 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
     private transient OasMessageBodyPath _oasMessageBody;
 
     /**
-     * Get the implicit join path to the <code>oagi.oas_message_body</code>
-     * table.
+     * Get the implicit join path to the <code>oas_message_body</code> table.
      */
     public OasMessageBodyPath oasMessageBody() {
         if (_oasMessageBody == null)
@@ -283,7 +281,7 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
     private transient OasOperationPath _oasOperation;
 
     /**
-     * Get the implicit join path to the <code>oagi.oas_operation</code> table.
+     * Get the implicit join path to the <code>oas_operation</code> table.
      */
     public OasOperationPath oasOperation() {
         if (_oasOperation == null)
@@ -295,9 +293,8 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
     private transient TopLevelAsbiepPath _oasResponsePaginationTopLevelAsbiepIdFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.top_level_asbiep</code>
-     * table, via the
-     * <code>oas_response_pagination_top_level_asbiep_id_fk</code> key.
+     * Get the implicit join path to the <code>top_level_asbiep</code> table,
+     * via the <code>oas_response_pagination_top_level_asbiep_id_fk</code> key.
      */
     public TopLevelAsbiepPath oasResponsePaginationTopLevelAsbiepIdFk() {
         if (_oasResponsePaginationTopLevelAsbiepIdFk == null)
@@ -309,8 +306,8 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
     private transient OasParameterLinkPath _oasParameterLink;
 
     /**
-     * Get the implicit to-many join path to the
-     * <code>oagi.oas_parameter_link</code> table
+     * Get the implicit to-many join path to the <code>oas_parameter_link</code>
+     * table
      */
     public OasParameterLinkPath oasParameterLink() {
         if (_oasParameterLink == null)
@@ -323,7 +320,7 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oagi.oas_response_headers</code> table
+     * <code>oas_response_headers</code> table
      */
     public OasResponseHeadersPath oasResponseHeaders() {
         if (_oasResponseHeaders == null)
@@ -334,7 +331,7 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
 
     /**
      * Get the implicit many-to-many join path to the
-     * <code>oagi.oas_http_header</code> table
+     * <code>oas_http_header</code> table
      */
     public OasHttpHeaderPath oasHttpHeader() {
         return oasResponseHeaders().oasHttpHeader();
@@ -384,7 +381,7 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
      */
     @Override
     public OasResponse where(Condition condition) {
-        return new OasResponse(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new OasResponse(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -451,7 +448,7 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasResponse whereExists(Select<?> select) {
+    public OasResponse whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -459,7 +456,7 @@ public class OasResponse extends TableImpl<OasResponseRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public OasResponse whereNotExists(Select<?> select) {
+    public OasResponse whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

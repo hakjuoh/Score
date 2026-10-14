@@ -22,19 +22,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Indexes;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser.AppUserPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiTokenQuotaAdjustmentRecord;
 
@@ -48,7 +49,7 @@ public class AiTokenQuotaAdjustment extends TableImpl<AiTokenQuotaAdjustmentReco
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_token_quota_adjustment</code>
+     * The reference instance of <code>ai_token_quota_adjustment</code>
      */
     public static final AiTokenQuotaAdjustment AI_TOKEN_QUOTA_ADJUSTMENT = new AiTokenQuotaAdjustment();
 
@@ -62,47 +63,44 @@ public class AiTokenQuotaAdjustment extends TableImpl<AiTokenQuotaAdjustmentReco
 
     /**
      * The column
-     * <code>oagi.ai_token_quota_adjustment.ai_token_quota_adjustment_id</code>.
+     * <code>ai_token_quota_adjustment.ai_token_quota_adjustment_id</code>.
      * Identifier of the token quota adjustment
      */
-    public final TableField<AiTokenQuotaAdjustmentRecord, ULong> AI_TOKEN_QUOTA_ADJUSTMENT_ID = createField(DSL.name("ai_token_quota_adjustment_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "Identifier of the token quota adjustment");
+    public final TableField<AiTokenQuotaAdjustmentRecord, ULong> AI_TOKEN_QUOTA_ADJUSTMENT_ID = createField(DSL.name("ai_token_quota_adjustment_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "Identifier of the token quota adjustment");
 
     /**
-     * The column
-     * <code>oagi.ai_token_quota_adjustment.target_app_user_id</code>.
+     * The column <code>ai_token_quota_adjustment.target_app_user_id</code>.
      * Identifier of the user whose quota was adjusted
      */
     public final TableField<AiTokenQuotaAdjustmentRecord, ULong> TARGET_APP_USER_ID = createField(DSL.name("target_app_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the user whose quota was adjusted");
 
     /**
-     * The column <code>oagi.ai_token_quota_adjustment.actor_app_user_id</code>.
+     * The column <code>ai_token_quota_adjustment.actor_app_user_id</code>.
      * Identifier of the administrator who adjusted the quota
      */
     public final TableField<AiTokenQuotaAdjustmentRecord, ULong> ACTOR_APP_USER_ID = createField(DSL.name("actor_app_user_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Identifier of the administrator who adjusted the quota");
 
     /**
-     * The column
-     * <code>oagi.ai_token_quota_adjustment.period_start_timestamp</code>. Start
-     * of the adjusted quota period in UTC
+     * The column <code>ai_token_quota_adjustment.period_start_timestamp</code>.
+     * Start of the adjusted quota period in UTC
      */
     public final TableField<AiTokenQuotaAdjustmentRecord, LocalDateTime> PERIOD_START_TIMESTAMP = createField(DSL.name("period_start_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Start of the adjusted quota period in UTC");
 
     /**
-     * The column <code>oagi.ai_token_quota_adjustment.delta_tokens</code>.
-     * Positive or negative token amount applied to consumed usage
+     * The column <code>ai_token_quota_adjustment.delta_tokens</code>. Positive
+     * or negative token amount applied to consumed usage
      */
     public final TableField<AiTokenQuotaAdjustmentRecord, Long> DELTA_TOKENS = createField(DSL.name("delta_tokens"), SQLDataType.BIGINT.nullable(false), this, "Positive or negative token amount applied to consumed usage");
 
     /**
-     * The column <code>oagi.ai_token_quota_adjustment.reason</code>. Reason for
-     * the quota adjustment
+     * The column <code>ai_token_quota_adjustment.reason</code>. Reason for the
+     * quota adjustment
      */
     public final TableField<AiTokenQuotaAdjustmentRecord, String> REASON = createField(DSL.name("reason"), SQLDataType.VARCHAR(500).nullable(false), this, "Reason for the quota adjustment");
 
     /**
-     * The column
-     * <code>oagi.ai_token_quota_adjustment.creation_timestamp</code>. Date and
-     * time when the quota was adjusted
+     * The column <code>ai_token_quota_adjustment.creation_timestamp</code>.
+     * Date and time when the quota was adjusted
      */
     public final TableField<AiTokenQuotaAdjustmentRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the quota was adjusted");
 
@@ -115,23 +113,21 @@ public class AiTokenQuotaAdjustment extends TableImpl<AiTokenQuotaAdjustmentReco
     }
 
     /**
-     * Create an aliased <code>oagi.ai_token_quota_adjustment</code> table
-     * reference
+     * Create an aliased <code>ai_token_quota_adjustment</code> table reference
      */
     public AiTokenQuotaAdjustment(String alias) {
         this(DSL.name(alias), AI_TOKEN_QUOTA_ADJUSTMENT);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_token_quota_adjustment</code> table
-     * reference
+     * Create an aliased <code>ai_token_quota_adjustment</code> table reference
      */
     public AiTokenQuotaAdjustment(Name alias) {
         this(alias, AI_TOKEN_QUOTA_ADJUSTMENT);
     }
 
     /**
-     * Create a <code>oagi.ai_token_quota_adjustment</code> table reference
+     * Create a <code>ai_token_quota_adjustment</code> table reference
      */
     public AiTokenQuotaAdjustment() {
         this(DSL.name("ai_token_quota_adjustment"), null);
@@ -172,7 +168,7 @@ public class AiTokenQuotaAdjustment extends TableImpl<AiTokenQuotaAdjustmentReco
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -198,7 +194,7 @@ public class AiTokenQuotaAdjustment extends TableImpl<AiTokenQuotaAdjustmentReco
     private transient AppUserPath _appUser;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table.
+     * Get the implicit join path to the <code>app_user</code> table.
      */
     public AppUserPath appUser() {
         if (_appUser == null)
@@ -251,7 +247,7 @@ public class AiTokenQuotaAdjustment extends TableImpl<AiTokenQuotaAdjustmentReco
      */
     @Override
     public AiTokenQuotaAdjustment where(Condition condition) {
-        return new AiTokenQuotaAdjustment(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiTokenQuotaAdjustment(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -318,7 +314,7 @@ public class AiTokenQuotaAdjustment extends TableImpl<AiTokenQuotaAdjustmentReco
      * Create an inline derived table from this table
      */
     @Override
-    public AiTokenQuotaAdjustment whereExists(Select<?> select) {
+    public AiTokenQuotaAdjustment whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -326,7 +322,7 @@ public class AiTokenQuotaAdjustment extends TableImpl<AiTokenQuotaAdjustmentReco
      * Create an inline derived table from this table
      */
     @Override
-    public AiTokenQuotaAdjustment whereNotExists(Select<?> select) {
+    public AiTokenQuotaAdjustment whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

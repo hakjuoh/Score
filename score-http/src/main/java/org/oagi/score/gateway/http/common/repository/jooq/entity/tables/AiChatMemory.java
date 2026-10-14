@@ -22,10 +22,10 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
@@ -33,8 +33,8 @@ import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiChatConversation.AiChatConversationPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiChatMemoryRecord;
 
@@ -48,7 +48,7 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_chat_memory</code>
+     * The reference instance of <code>ai_chat_memory</code>
      */
     public static final AiChatMemory AI_CHAT_MEMORY = new AiChatMemory();
 
@@ -61,46 +61,46 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_chat_memory.ai_chat_memory_id</code>. The
-     * primary key of the AI chat memory record.
+     * The column <code>ai_chat_memory.ai_chat_memory_id</code>. The primary key
+     * of the AI chat memory record.
      */
-    public final TableField<AiChatMemoryRecord, ULong> AI_CHAT_MEMORY_ID = createField(DSL.name("ai_chat_memory_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).identity(true), this, "The primary key of the AI chat memory record.");
+    public final TableField<AiChatMemoryRecord, ULong> AI_CHAT_MEMORY_ID = createField(DSL.name("ai_chat_memory_id"), SQLDataType.BIGINTUNSIGNED.nullable(false).generatedByDefaultAsIdentity(), this, "The primary key of the AI chat memory record.");
 
     /**
-     * The column <code>oagi.ai_chat_memory.ai_chat_conversation_id</code>.
-     * Foreign key to the AI_CHAT_CONVERSATION table identifying the owning
+     * The column <code>ai_chat_memory.ai_chat_conversation_id</code>. Foreign
+     * key to the AI_CHAT_CONVERSATION table identifying the owning
      * conversation.
      */
     public final TableField<AiChatMemoryRecord, ULong> AI_CHAT_CONVERSATION_ID = createField(DSL.name("ai_chat_conversation_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Foreign key to the AI_CHAT_CONVERSATION table identifying the owning conversation.");
 
     /**
-     * The column <code>oagi.ai_chat_memory.memory_sequence</code>. The
-     * zero-based sequence of the message in the bounded model context.
+     * The column <code>ai_chat_memory.memory_sequence</code>. The zero-based
+     * sequence of the message in the bounded model context.
      */
     public final TableField<AiChatMemoryRecord, Long> MEMORY_SEQUENCE = createField(DSL.name("memory_sequence"), SQLDataType.BIGINT.nullable(false), this, "The zero-based sequence of the message in the bounded model context.");
 
     /**
-     * The column <code>oagi.ai_chat_memory.message_type</code>. Expected
+     * The column <code>ai_chat_memory.message_type</code>. Expected
      * model-context roles are USER, ASSISTANT, SYSTEM, and TOOL; other values
      * are handled by the application.
      */
     public final TableField<AiChatMemoryRecord, String> MESSAGE_TYPE = createField(DSL.name("message_type"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Expected model-context roles are USER, ASSISTANT, SYSTEM, and TOOL; other values are handled by the application.");
 
     /**
-     * The column <code>oagi.ai_chat_memory.content</code>. The text content
-     * supplied to the model as conversation memory.
+     * The column <code>ai_chat_memory.content</code>. The text content supplied
+     * to the model as conversation memory.
      */
     public final TableField<AiChatMemoryRecord, String> CONTENT = createField(DSL.name("content"), SQLDataType.CLOB.nullable(false), this, "The text content supplied to the model as conversation memory.");
 
     /**
-     * The column <code>oagi.ai_chat_memory.metadata_json</code>. Optional JSON
+     * The column <code>ai_chat_memory.metadata_json</code>. Optional JSON
      * metadata associated with the model-context message.
      */
     public final TableField<AiChatMemoryRecord, String> METADATA_JSON = createField(DSL.name("metadata_json"), SQLDataType.CLOB.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.CLOB)), this, "Optional JSON metadata associated with the model-context message.");
 
     /**
-     * The column <code>oagi.ai_chat_memory.creation_timestamp</code>. The
-     * timestamp when the memory record was created.
+     * The column <code>ai_chat_memory.creation_timestamp</code>. The timestamp
+     * when the memory record was created.
      */
     public final TableField<AiChatMemoryRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "The timestamp when the memory record was created.");
 
@@ -113,21 +113,21 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_memory</code> table reference
+     * Create an aliased <code>ai_chat_memory</code> table reference
      */
     public AiChatMemory(String alias) {
         this(DSL.name(alias), AI_CHAT_MEMORY);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_chat_memory</code> table reference
+     * Create an aliased <code>ai_chat_memory</code> table reference
      */
     public AiChatMemory(Name alias) {
         this(alias, AI_CHAT_MEMORY);
     }
 
     /**
-     * Create a <code>oagi.ai_chat_memory</code> table reference
+     * Create a <code>ai_chat_memory</code> table reference
      */
     public AiChatMemory() {
         this(DSL.name("ai_chat_memory"), null);
@@ -168,7 +168,7 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -194,7 +194,7 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
     private transient AiChatConversationPath _aiChatConversation;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_chat_conversation</code>
+     * Get the implicit join path to the <code>ai_chat_conversation</code>
      * table.
      */
     public AiChatConversationPath aiChatConversation() {
@@ -255,7 +255,7 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
      */
     @Override
     public AiChatMemory where(Condition condition) {
-        return new AiChatMemory(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiChatMemory(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -322,7 +322,7 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatMemory whereExists(Select<?> select) {
+    public AiChatMemory whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -330,7 +330,7 @@ public class AiChatMemory extends TableImpl<AiChatMemoryRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiChatMemory whereNotExists(Select<?> select) {
+    public AiChatMemory whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

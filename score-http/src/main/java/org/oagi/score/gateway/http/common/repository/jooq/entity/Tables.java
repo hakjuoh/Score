@@ -31,6 +31,7 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPo
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppOauth2User;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppSecret;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppUser;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AppWebauthnUser;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbie;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AsbieBizterm;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Asbiep;
@@ -144,12 +145,13 @@ import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.TopLevel
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.UsageRule;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.UsageRuleExpression;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.UserTenant;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.WebauthnCredential;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.Xbt;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.XbtManifest;
 
 
 /**
- * Convenience access to all tables in oagi.
+ * Convenience access to all tables in the default schema.
  */
 @SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class Tables {
@@ -326,6 +328,12 @@ public class Tables {
      * authorization purposes.
      */
     public static final AppUser APP_USER = AppUser.APP_USER;
+
+    /**
+     * WebAuthn identity (user handle) of an app_user; created on the first
+     * passkey registration.
+     */
+    public static final AppWebauthnUser APP_WEBAUTHN_USER = AppWebauthnUser.APP_WEBAUTHN_USER;
 
     /**
      * An ASBIE represents a relationship/association between two ABIEs through
@@ -715,7 +723,7 @@ public class Tables {
     public static final Exception EXCEPTION = Exception.EXCEPTION;
 
     /**
-     * The table <code>oagi.flyway_schema_history</code>.
+     * The table <code>flyway_schema_history</code>.
      */
     public static final FlywaySchemaHistory FLYWAY_SCHEMA_HISTORY = FlywaySchemaHistory.FLYWAY_SCHEMA_HISTORY;
 
@@ -1136,6 +1144,11 @@ public class Tables {
      * This table captures the tenant roles of the user
      */
     public static final UserTenant USER_TENANT = UserTenant.USER_TENANT;
+
+    /**
+     * Registered passkeys (WebAuthn credentials) of local accounts.
+     */
+    public static final WebauthnCredential WEBAUTHN_CREDENTIAL = WebauthnCredential.WEBAUTHN_CREDENTIAL;
 
     /**
      * This table stores XML schema built-in types and OAGIS built-in types.

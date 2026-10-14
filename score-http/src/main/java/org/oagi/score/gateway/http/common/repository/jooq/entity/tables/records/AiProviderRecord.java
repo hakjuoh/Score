@@ -21,23 +21,23 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_provider.ai_provider_id</code>. Identifier of
-     * the AI provider
+     * Setter for <code>ai_provider.ai_provider_id</code>. Identifier of the AI
+     * provider
      */
     public void setAiProviderId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.ai_provider_id</code>. Identifier of
-     * the AI provider
+     * Getter for <code>ai_provider.ai_provider_id</code>. Identifier of the AI
+     * provider
      */
     public ULong getAiProviderId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.provider_name</code>. Unique
+     * Setter for <code>ai_provider.provider_name</code>. Unique
      * application-facing name of the AI provider
      */
     public void setProviderName(String value) {
@@ -45,7 +45,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.provider_name</code>. Unique
+     * Getter for <code>ai_provider.provider_name</code>. Unique
      * application-facing name of the AI provider
      */
     public String getProviderName() {
@@ -53,39 +53,39 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.provider_type</code>. Provider adapter
-     * type: anthropic or openai
+     * Setter for <code>ai_provider.provider_type</code>. Provider adapter type:
+     * anthropic or openai
      */
     public void setProviderType(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.provider_type</code>. Provider adapter
-     * type: anthropic or openai
+     * Getter for <code>ai_provider.provider_type</code>. Provider adapter type:
+     * anthropic or openai
      */
     public String getProviderType() {
         return (String) get(2);
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.base_url</code>. Base endpoint URL of
-     * the AI provider
+     * Setter for <code>ai_provider.base_url</code>. Base endpoint URL of the AI
+     * provider
      */
     public void setBaseUrl(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.base_url</code>. Base endpoint URL of
-     * the AI provider
+     * Getter for <code>ai_provider.base_url</code>. Base endpoint URL of the AI
+     * provider
      */
     public String getBaseUrl() {
         return (String) get(3);
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.messages_url</code>. Optional
+     * Setter for <code>ai_provider.messages_url</code>. Optional
      * provider-specific messages endpoint URL
      */
     public void setMessagesUrl(String value) {
@@ -93,7 +93,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.messages_url</code>. Optional
+     * Getter for <code>ai_provider.messages_url</code>. Optional
      * provider-specific messages endpoint URL
      */
     public String getMessagesUrl() {
@@ -101,39 +101,39 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.api_version</code>. Provider API
-     * version sent using the provider-specific mechanism
+     * Setter for <code>ai_provider.api_version</code>. Provider API version
+     * sent using the provider-specific mechanism
      */
     public void setApiVersion(String value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.api_version</code>. Provider API
-     * version sent using the provider-specific mechanism
+     * Getter for <code>ai_provider.api_version</code>. Provider API version
+     * sent using the provider-specific mechanism
      */
     public String getApiVersion() {
         return (String) get(5);
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.api_key_secret_id</code>. Encrypted API
-     * key referenced from app_secret
+     * Setter for <code>ai_provider.api_key_secret_id</code>. Encrypted API key
+     * referenced from app_secret
      */
     public void setApiKeySecretId(ULong value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.api_key_secret_id</code>. Encrypted API
-     * key referenced from app_secret
+     * Getter for <code>ai_provider.api_key_secret_id</code>. Encrypted API key
+     * referenced from app_secret
      */
     public ULong getApiKeySecretId() {
         return (ULong) get(6);
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.enabled</code>. Indicates whether the
+     * Setter for <code>ai_provider.enabled</code>. Indicates whether the
      * provider can serve model requests
      */
     public void setEnabled(Byte value) {
@@ -141,7 +141,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.enabled</code>. Indicates whether the
+     * Getter for <code>ai_provider.enabled</code>. Indicates whether the
      * provider can serve model requests
      */
     public Byte getEnabled() {
@@ -149,7 +149,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.created_by</code>. Identifier of the
+     * Setter for <code>ai_provider.created_by</code>. Identifier of the
      * administrator who created the provider
      */
     public void setCreatedBy(ULong value) {
@@ -157,7 +157,7 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.created_by</code>. Identifier of the
+     * Getter for <code>ai_provider.created_by</code>. Identifier of the
      * administrator who created the provider
      */
     public ULong getCreatedBy() {
@@ -165,48 +165,48 @@ public class AiProviderRecord extends UpdatableRecordImpl<AiProviderRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.last_updated_by</code>. Identifier of
-     * the administrator who last updated the provider
+     * Setter for <code>ai_provider.last_updated_by</code>. Identifier of the
+     * administrator who last updated the provider
      */
     public void setLastUpdatedBy(ULong value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.last_updated_by</code>. Identifier of
-     * the administrator who last updated the provider
+     * Getter for <code>ai_provider.last_updated_by</code>. Identifier of the
+     * administrator who last updated the provider
      */
     public ULong getLastUpdatedBy() {
         return (ULong) get(9);
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.creation_timestamp</code>. Date and
-     * time when the provider was created
+     * Setter for <code>ai_provider.creation_timestamp</code>. Date and time
+     * when the provider was created
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.creation_timestamp</code>. Date and
-     * time when the provider was created
+     * Getter for <code>ai_provider.creation_timestamp</code>. Date and time
+     * when the provider was created
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(10);
     }
 
     /**
-     * Setter for <code>oagi.ai_provider.last_update_timestamp</code>. Date and
-     * time when the provider was last updated
+     * Setter for <code>ai_provider.last_update_timestamp</code>. Date and time
+     * when the provider was last updated
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_provider.last_update_timestamp</code>. Date and
-     * time when the provider was last updated
+     * Getter for <code>ai_provider.last_update_timestamp</code>. Date and time
+     * when the provider was last updated
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(11);

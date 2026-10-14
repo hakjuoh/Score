@@ -24,24 +24,24 @@ public class SeqKeyRecord extends UpdatableRecordImpl<SeqKeyRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.seq_key.seq_key_id</code>. An internal, primary
-     * database key of a SEQ_KEY record.
+     * Setter for <code>seq_key.seq_key_id</code>. An internal, primary database
+     * key of a SEQ_KEY record.
      */
     public void setSeqKeyId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.seq_key.seq_key_id</code>. An internal, primary
-     * database key of a SEQ_KEY record.
+     * Getter for <code>seq_key.seq_key_id</code>. An internal, primary database
+     * key of a SEQ_KEY record.
      */
     public ULong getSeqKeyId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.seq_key.from_acc_manifest_id</code>. Foreign key to
-     * the ACC_MANIFEST table pointing to the ACC that owns the association
+     * Setter for <code>seq_key.from_acc_manifest_id</code>. Foreign key to the
+     * ACC_MANIFEST table pointing to the ACC that owns the association
      * (ASCC/BCC) ordered by this sequence key.
      */
     public void setFromAccManifestId(ULong value) {
@@ -49,8 +49,8 @@ public class SeqKeyRecord extends UpdatableRecordImpl<SeqKeyRecord> {
     }
 
     /**
-     * Getter for <code>oagi.seq_key.from_acc_manifest_id</code>. Foreign key to
-     * the ACC_MANIFEST table pointing to the ACC that owns the association
+     * Getter for <code>seq_key.from_acc_manifest_id</code>. Foreign key to the
+     * ACC_MANIFEST table pointing to the ACC that owns the association
      * (ASCC/BCC) ordered by this sequence key.
      */
     public ULong getFromAccManifestId() {
@@ -58,7 +58,7 @@ public class SeqKeyRecord extends UpdatableRecordImpl<SeqKeyRecord> {
     }
 
     /**
-     * Setter for <code>oagi.seq_key.ascc_manifest_id</code>. Foreign key to the
+     * Setter for <code>seq_key.ascc_manifest_id</code>. Foreign key to the
      * ASCC_MANIFEST table for the ASCC association ordered by this record.
      * Exactly one of ASCC_MANIFEST_ID / BCC_MANIFEST_ID is non-null.
      */
@@ -67,7 +67,7 @@ public class SeqKeyRecord extends UpdatableRecordImpl<SeqKeyRecord> {
     }
 
     /**
-     * Getter for <code>oagi.seq_key.ascc_manifest_id</code>. Foreign key to the
+     * Getter for <code>seq_key.ascc_manifest_id</code>. Foreign key to the
      * ASCC_MANIFEST table for the ASCC association ordered by this record.
      * Exactly one of ASCC_MANIFEST_ID / BCC_MANIFEST_ID is non-null.
      */
@@ -76,7 +76,7 @@ public class SeqKeyRecord extends UpdatableRecordImpl<SeqKeyRecord> {
     }
 
     /**
-     * Setter for <code>oagi.seq_key.bcc_manifest_id</code>. Foreign key to the
+     * Setter for <code>seq_key.bcc_manifest_id</code>. Foreign key to the
      * BCC_MANIFEST table for the BCC association ordered by this record.
      * Exactly one of ASCC_MANIFEST_ID / BCC_MANIFEST_ID is non-null.
      */
@@ -85,7 +85,7 @@ public class SeqKeyRecord extends UpdatableRecordImpl<SeqKeyRecord> {
     }
 
     /**
-     * Getter for <code>oagi.seq_key.bcc_manifest_id</code>. Foreign key to the
+     * Getter for <code>seq_key.bcc_manifest_id</code>. Foreign key to the
      * BCC_MANIFEST table for the BCC association ordered by this record.
      * Exactly one of ASCC_MANIFEST_ID / BCC_MANIFEST_ID is non-null.
      */
@@ -94,8 +94,8 @@ public class SeqKeyRecord extends UpdatableRecordImpl<SeqKeyRecord> {
     }
 
     /**
-     * Setter for <code>oagi.seq_key.prev_seq_key_id</code>. A self-reference to
-     * the previous SEQ_KEY record in the ordering chain; NULL for the first
+     * Setter for <code>seq_key.prev_seq_key_id</code>. A self-reference to the
+     * previous SEQ_KEY record in the ordering chain; NULL for the first
      * association.
      */
     public void setPrevSeqKeyId(ULong value) {
@@ -103,8 +103,8 @@ public class SeqKeyRecord extends UpdatableRecordImpl<SeqKeyRecord> {
     }
 
     /**
-     * Getter for <code>oagi.seq_key.prev_seq_key_id</code>. A self-reference to
-     * the previous SEQ_KEY record in the ordering chain; NULL for the first
+     * Getter for <code>seq_key.prev_seq_key_id</code>. A self-reference to the
+     * previous SEQ_KEY record in the ordering chain; NULL for the first
      * association.
      */
     public ULong getPrevSeqKeyId() {
@@ -112,18 +112,16 @@ public class SeqKeyRecord extends UpdatableRecordImpl<SeqKeyRecord> {
     }
 
     /**
-     * Setter for <code>oagi.seq_key.next_seq_key_id</code>. A self-reference to
-     * the next SEQ_KEY record in the ordering chain; NULL for the last
-     * association.
+     * Setter for <code>seq_key.next_seq_key_id</code>. A self-reference to the
+     * next SEQ_KEY record in the ordering chain; NULL for the last association.
      */
     public void setNextSeqKeyId(ULong value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.seq_key.next_seq_key_id</code>. A self-reference to
-     * the next SEQ_KEY record in the ordering chain; NULL for the last
-     * association.
+     * Getter for <code>seq_key.next_seq_key_id</code>. A self-reference to the
+     * next SEQ_KEY record in the ordering chain; NULL for the last association.
      */
     public ULong getNextSeqKeyId() {
         return (ULong) get(5);

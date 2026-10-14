@@ -19,18 +19,19 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelReasoningEffort.AiModelReasoningEffortPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserPolicy.AiUserPolicyPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.records.AiUserModelReasoningAccessRecord;
@@ -45,8 +46,7 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of
-     * <code>oagi.ai_user_model_reasoning_access</code>
+     * The reference instance of <code>ai_user_model_reasoning_access</code>
      */
     public static final AiUserModelReasoningAccess AI_USER_MODEL_REASONING_ACCESS = new AiUserModelReasoningAccess();
 
@@ -59,21 +59,20 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
     }
 
     /**
-     * The column <code>oagi.ai_user_model_reasoning_access.app_user_id</code>.
+     * The column <code>ai_user_model_reasoning_access.app_user_id</code>.
      * Identifier of the user to whom the policy applies
      */
     public final TableField<AiUserModelReasoningAccessRecord, ULong> APP_USER_ID = createField(DSL.name("app_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the user to whom the policy applies");
 
     /**
-     * The column <code>oagi.ai_user_model_reasoning_access.ai_model_id</code>.
+     * The column <code>ai_user_model_reasoning_access.ai_model_id</code>.
      * Identifier of the AI model subject to the reasoning effort restriction
      */
     public final TableField<AiUserModelReasoningAccessRecord, ULong> AI_MODEL_ID = createField(DSL.name("ai_model_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the AI model subject to the reasoning effort restriction");
 
     /**
-     * The column
-     * <code>oagi.ai_user_model_reasoning_access.reasoning_effort</code>. Name
-     * of a reasoning effort allowed for the user
+     * The column <code>ai_user_model_reasoning_access.reasoning_effort</code>.
+     * Name of a reasoning effort allowed for the user
      */
     public final TableField<AiUserModelReasoningAccessRecord, String> REASONING_EFFORT = createField(DSL.name("reasoning_effort"), SQLDataType.VARCHAR(32).nullable(false), this, "Name of a reasoning effort allowed for the user");
 
@@ -86,7 +85,7 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
     }
 
     /**
-     * Create an aliased <code>oagi.ai_user_model_reasoning_access</code> table
+     * Create an aliased <code>ai_user_model_reasoning_access</code> table
      * reference
      */
     public AiUserModelReasoningAccess(String alias) {
@@ -94,7 +93,7 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
     }
 
     /**
-     * Create an aliased <code>oagi.ai_user_model_reasoning_access</code> table
+     * Create an aliased <code>ai_user_model_reasoning_access</code> table
      * reference
      */
     public AiUserModelReasoningAccess(Name alias) {
@@ -102,7 +101,7 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
     }
 
     /**
-     * Create a <code>oagi.ai_user_model_reasoning_access</code> table reference
+     * Create a <code>ai_user_model_reasoning_access</code> table reference
      */
     public AiUserModelReasoningAccess() {
         this(DSL.name("ai_user_model_reasoning_access"), null);
@@ -143,7 +142,7 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -159,8 +158,8 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
     private transient AiModelReasoningEffortPath _aiModelReasoningEffort;
 
     /**
-     * Get the implicit join path to the
-     * <code>oagi.ai_model_reasoning_effort</code> table.
+     * Get the implicit join path to the <code>ai_model_reasoning_effort</code>
+     * table.
      */
     public AiModelReasoningEffortPath aiModelReasoningEffort() {
         if (_aiModelReasoningEffort == null)
@@ -172,7 +171,7 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
     private transient AiUserPolicyPath _aiUserPolicy;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_user_policy</code> table.
+     * Get the implicit join path to the <code>ai_user_policy</code> table.
      */
     public AiUserPolicyPath aiUserPolicy() {
         if (_aiUserPolicy == null)
@@ -225,7 +224,7 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
      */
     @Override
     public AiUserModelReasoningAccess where(Condition condition) {
-        return new AiUserModelReasoningAccess(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiUserModelReasoningAccess(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -292,7 +291,7 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
      * Create an inline derived table from this table
      */
     @Override
-    public AiUserModelReasoningAccess whereExists(Select<?> select) {
+    public AiUserModelReasoningAccess whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -300,7 +299,7 @@ public class AiUserModelReasoningAccess extends TableImpl<AiUserModelReasoningAc
      * Create an inline derived table from this table
      */
     @Override
-    public AiUserModelReasoningAccess whereNotExists(Select<?> select) {
+    public AiUserModelReasoningAccess whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }

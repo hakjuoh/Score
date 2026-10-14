@@ -24,7 +24,7 @@ public class BccpManifestRecord extends UpdatableRecordImpl<BccpManifestRecord> 
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.bccp_manifest.bccp_manifest_id</code>. An internal,
+     * Setter for <code>bccp_manifest.bccp_manifest_id</code>. An internal,
      * primary database key of a BCCP_MANIFEST record.
      */
     public void setBccpManifestId(ULong value) {
@@ -32,7 +32,7 @@ public class BccpManifestRecord extends UpdatableRecordImpl<BccpManifestRecord> 
     }
 
     /**
-     * Getter for <code>oagi.bccp_manifest.bccp_manifest_id</code>. An internal,
+     * Getter for <code>bccp_manifest.bccp_manifest_id</code>. An internal,
      * primary database key of a BCCP_MANIFEST record.
      */
     public ULong getBccpManifestId() {
@@ -40,7 +40,7 @@ public class BccpManifestRecord extends UpdatableRecordImpl<BccpManifestRecord> 
     }
 
     /**
-     * Setter for <code>oagi.bccp_manifest.release_id</code>. Foreign key to the
+     * Setter for <code>bccp_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public void setReleaseId(ULong value) {
@@ -48,7 +48,7 @@ public class BccpManifestRecord extends UpdatableRecordImpl<BccpManifestRecord> 
     }
 
     /**
-     * Getter for <code>oagi.bccp_manifest.release_id</code>. Foreign key to the
+     * Getter for <code>bccp_manifest.release_id</code>. Foreign key to the
      * RELEASE table.
      */
     public ULong getReleaseId() {
@@ -56,105 +56,105 @@ public class BccpManifestRecord extends UpdatableRecordImpl<BccpManifestRecord> 
     }
 
     /**
-     * Setter for <code>oagi.bccp_manifest.bccp_id</code>. Foreign key to the
-     * BCCP table.
+     * Setter for <code>bccp_manifest.bccp_id</code>. Foreign key to the BCCP
+     * table.
      */
     public void setBccpId(ULong value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.bccp_manifest.bccp_id</code>. Foreign key to the
-     * BCCP table.
+     * Getter for <code>bccp_manifest.bccp_id</code>. Foreign key to the BCCP
+     * table.
      */
     public ULong getBccpId() {
         return (ULong) get(2);
     }
 
     /**
-     * Setter for <code>oagi.bccp_manifest.bdt_manifest_id</code>. Foreign key
-     * to the DT_MANIFEST table for the BDT (business data type) that specifies
-     * the data format of the BCCP. Only a DT whose type is BDT can be used.
+     * Setter for <code>bccp_manifest.bdt_manifest_id</code>. Foreign key to the
+     * DT_MANIFEST table for the BDT (business data type) that specifies the
+     * data format of the BCCP. Only a DT whose type is BDT can be used.
      */
     public void setBdtManifestId(ULong value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.bccp_manifest.bdt_manifest_id</code>. Foreign key
-     * to the DT_MANIFEST table for the BDT (business data type) that specifies
-     * the data format of the BCCP. Only a DT whose type is BDT can be used.
+     * Getter for <code>bccp_manifest.bdt_manifest_id</code>. Foreign key to the
+     * DT_MANIFEST table for the BDT (business data type) that specifies the
+     * data format of the BCCP. Only a DT whose type is BDT can be used.
      */
     public ULong getBdtManifestId() {
         return (ULong) get(3);
     }
 
     /**
-     * Setter for <code>oagi.bccp_manifest.den</code>. The dictionary entry name
-     * of the BCCP. It is derived by PROPERTY_TERM + ". " + REPRESENTATION_TERM.
+     * Setter for <code>bccp_manifest.den</code>. The dictionary entry name of
+     * the BCCP. It is derived by PROPERTY_TERM + ". " + REPRESENTATION_TERM.
      */
     public void setDen(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.bccp_manifest.den</code>. The dictionary entry name
-     * of the BCCP. It is derived by PROPERTY_TERM + ". " + REPRESENTATION_TERM.
+     * Getter for <code>bccp_manifest.den</code>. The dictionary entry name of
+     * the BCCP. It is derived by PROPERTY_TERM + ". " + REPRESENTATION_TERM.
      */
     public String getDen() {
         return (String) get(4);
     }
 
     /**
-     * Setter for <code>oagi.bccp_manifest.conflict</code>. This indicates that
-     * there is a conflict between self and relationship.
+     * Setter for <code>bccp_manifest.conflict</code>. This indicates that there
+     * is a conflict between self and relationship.
      */
     public void setConflict(Byte value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.bccp_manifest.conflict</code>. This indicates that
-     * there is a conflict between self and relationship.
+     * Getter for <code>bccp_manifest.conflict</code>. This indicates that there
+     * is a conflict between self and relationship.
      */
     public Byte getConflict() {
         return (Byte) get(5);
     }
 
     /**
-     * Setter for <code>oagi.bccp_manifest.log_id</code>. A foreign key pointed
-     * to a log for the current record.
+     * Setter for <code>bccp_manifest.log_id</code>. A foreign key pointed to a
+     * log for the current record.
      */
     public void setLogId(ULong value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.bccp_manifest.log_id</code>. A foreign key pointed
-     * to a log for the current record.
+     * Getter for <code>bccp_manifest.log_id</code>. A foreign key pointed to a
+     * log for the current record.
      */
     public ULong getLogId() {
         return (ULong) get(6);
     }
 
     /**
-     * Setter for <code>oagi.bccp_manifest.replacement_bccp_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * Setter for <code>bccp_manifest.replacement_bccp_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public void setReplacementBccpManifestId(ULong value) {
         set(7, value);
     }
 
     /**
-     * Getter for <code>oagi.bccp_manifest.replacement_bccp_manifest_id</code>.
-     * This refers to a replacement manifest if the record is deprecated.
+     * Getter for <code>bccp_manifest.replacement_bccp_manifest_id</code>. This
+     * refers to a replacement manifest if the record is deprecated.
      */
     public ULong getReplacementBccpManifestId() {
         return (ULong) get(7);
     }
 
     /**
-     * Setter for <code>oagi.bccp_manifest.prev_bccp_manifest_id</code>. A
+     * Setter for <code>bccp_manifest.prev_bccp_manifest_id</code>. A
      * self-reference to the corresponding BCCP_MANIFEST record in the previous
      * release (revision chain). NULL for the first revision.
      */
@@ -163,7 +163,7 @@ public class BccpManifestRecord extends UpdatableRecordImpl<BccpManifestRecord> 
     }
 
     /**
-     * Getter for <code>oagi.bccp_manifest.prev_bccp_manifest_id</code>. A
+     * Getter for <code>bccp_manifest.prev_bccp_manifest_id</code>. A
      * self-reference to the corresponding BCCP_MANIFEST record in the previous
      * release (revision chain). NULL for the first revision.
      */
@@ -172,7 +172,7 @@ public class BccpManifestRecord extends UpdatableRecordImpl<BccpManifestRecord> 
     }
 
     /**
-     * Setter for <code>oagi.bccp_manifest.next_bccp_manifest_id</code>. A
+     * Setter for <code>bccp_manifest.next_bccp_manifest_id</code>. A
      * self-reference to the corresponding BCCP_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */
@@ -181,7 +181,7 @@ public class BccpManifestRecord extends UpdatableRecordImpl<BccpManifestRecord> 
     }
 
     /**
-     * Getter for <code>oagi.bccp_manifest.next_bccp_manifest_id</code>. A
+     * Getter for <code>bccp_manifest.next_bccp_manifest_id</code>. A
      * self-reference to the corresponding BCCP_MANIFEST record in the next
      * release (revision chain). NULL for the latest revision.
      */

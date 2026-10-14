@@ -21,41 +21,39 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_chat_step.ai_chat_step_id</code>. The primary
-     * key of the AI chat trajectory step record.
+     * Setter for <code>ai_chat_step.ai_chat_step_id</code>. The primary key of
+     * the AI chat trajectory step record.
      */
     public void setAiChatStepId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.ai_chat_step_id</code>. The primary
-     * key of the AI chat trajectory step record.
+     * Getter for <code>ai_chat_step.ai_chat_step_id</code>. The primary key of
+     * the AI chat trajectory step record.
      */
     public ULong getAiChatStepId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.ai_chat_conversation_id</code>.
-     * Foreign key to the AI_CHAT_CONVERSATION table identifying the owning
-     * conversation.
+     * Setter for <code>ai_chat_step.ai_chat_conversation_id</code>. Foreign key
+     * to the AI_CHAT_CONVERSATION table identifying the owning conversation.
      */
     public void setAiChatConversationId(ULong value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.ai_chat_conversation_id</code>.
-     * Foreign key to the AI_CHAT_CONVERSATION table identifying the owning
-     * conversation.
+     * Getter for <code>ai_chat_step.ai_chat_conversation_id</code>. Foreign key
+     * to the AI_CHAT_CONVERSATION table identifying the owning conversation.
      */
     public ULong getAiChatConversationId() {
         return (ULong) get(1);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.step_sequence</code>. The zero-based
+     * Setter for <code>ai_chat_step.step_sequence</code>. The zero-based
      * sequence of the step within the complete conversation trajectory.
      */
     public void setStepSequence(Long value) {
@@ -63,7 +61,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.step_sequence</code>. The zero-based
+     * Getter for <code>ai_chat_step.step_sequence</code>. The zero-based
      * sequence of the step within the complete conversation trajectory.
      */
     public Long getStepSequence() {
@@ -71,39 +69,39 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.request_id</code>. The request
-     * identifier used to correlate steps produced by the same chat request.
+     * Setter for <code>ai_chat_step.request_id</code>. The request identifier
+     * used to correlate steps produced by the same chat request.
      */
     public void setRequestId(String value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.request_id</code>. The request
-     * identifier used to correlate steps produced by the same chat request.
+     * Getter for <code>ai_chat_step.request_id</code>. The request identifier
+     * used to correlate steps produced by the same chat request.
      */
     public String getRequestId() {
         return (String) get(3);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.source</code>. Expected ATIF sources
-     * are system, user, and agent; other values are handled by the application.
+     * Setter for <code>ai_chat_step.source</code>. Expected ATIF sources are
+     * system, user, and agent; other values are handled by the application.
      */
     public void setSource(String value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.source</code>. Expected ATIF sources
-     * are system, user, and agent; other values are handled by the application.
+     * Getter for <code>ai_chat_step.source</code>. Expected ATIF sources are
+     * system, user, and agent; other values are handled by the application.
      */
     public String getSource() {
         return (String) get(4);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.message_kind</code>. The
+     * Setter for <code>ai_chat_step.message_kind</code>. The
      * application-specific kind of trajectory event represented by the step.
      */
     public void setMessageKind(String value) {
@@ -111,7 +109,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.message_kind</code>. The
+     * Getter for <code>ai_chat_step.message_kind</code>. The
      * application-specific kind of trajectory event represented by the step.
      */
     public String getMessageKind() {
@@ -119,25 +117,25 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.visibility</code>. Expected
-     * presentation scopes are visible and debug; other values are handled by
-     * the application.
+     * Setter for <code>ai_chat_step.visibility</code>. Expected presentation
+     * scopes are visible and debug; other values are handled by the
+     * application.
      */
     public void setVisibility(String value) {
         set(6, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.visibility</code>. Expected
-     * presentation scopes are visible and debug; other values are handled by
-     * the application.
+     * Getter for <code>ai_chat_step.visibility</code>. Expected presentation
+     * scopes are visible and debug; other values are handled by the
+     * application.
      */
     public String getVisibility() {
         return (String) get(6);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.message</code>. The textual message or
+     * Setter for <code>ai_chat_step.message</code>. The textual message or
      * event content recorded for the step.
      */
     public void setMessage(String value) {
@@ -145,7 +143,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.message</code>. The textual message or
+     * Getter for <code>ai_chat_step.message</code>. The textual message or
      * event content recorded for the step.
      */
     public String getMessage() {
@@ -153,39 +151,39 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.reasoning_content</code>. Optional
-     * model reasoning content associated with the step.
+     * Setter for <code>ai_chat_step.reasoning_content</code>. Optional model
+     * reasoning content associated with the step.
      */
     public void setReasoningContent(String value) {
         set(8, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.reasoning_content</code>. Optional
-     * model reasoning content associated with the step.
+     * Getter for <code>ai_chat_step.reasoning_content</code>. Optional model
+     * reasoning content associated with the step.
      */
     public String getReasoningContent() {
         return (String) get(8);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.model_name</code>. The model used for
-     * the inference represented by the step.
+     * Setter for <code>ai_chat_step.model_name</code>. The model used for the
+     * inference represented by the step.
      */
     public void setModelName(String value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.model_name</code>. The model used for
-     * the inference represented by the step.
+     * Getter for <code>ai_chat_step.model_name</code>. The model used for the
+     * inference represented by the step.
      */
     public String getModelName() {
         return (String) get(9);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.reasoning_effort</code>. The
+     * Setter for <code>ai_chat_step.reasoning_effort</code>. The
      * reasoning-effort setting used for the model inference.
      */
     public void setReasoningEffort(String value) {
@@ -193,7 +191,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.reasoning_effort</code>. The
+     * Getter for <code>ai_chat_step.reasoning_effort</code>. The
      * reasoning-effort setting used for the model inference.
      */
     public String getReasoningEffort() {
@@ -201,7 +199,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.tool_calls_json</code>. JSON array
+     * Setter for <code>ai_chat_step.tool_calls_json</code>. JSON array
      * containing tool calls requested by the model.
      */
     public void setToolCallsJson(String value) {
@@ -209,7 +207,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.tool_calls_json</code>. JSON array
+     * Getter for <code>ai_chat_step.tool_calls_json</code>. JSON array
      * containing tool calls requested by the model.
      */
     public String getToolCallsJson() {
@@ -217,7 +215,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.observation_json</code>. JSON object
+     * Setter for <code>ai_chat_step.observation_json</code>. JSON object
      * containing tool execution results observed by the agent.
      */
     public void setObservationJson(String value) {
@@ -225,7 +223,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.observation_json</code>. JSON object
+     * Getter for <code>ai_chat_step.observation_json</code>. JSON object
      * containing tool execution results observed by the agent.
      */
     public String getObservationJson() {
@@ -233,39 +231,39 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.metrics_json</code>. JSON object
-     * containing token usage and other execution metrics.
+     * Setter for <code>ai_chat_step.metrics_json</code>. JSON object containing
+     * token usage and other execution metrics.
      */
     public void setMetricsJson(String value) {
         set(13, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.metrics_json</code>. JSON object
-     * containing token usage and other execution metrics.
+     * Getter for <code>ai_chat_step.metrics_json</code>. JSON object containing
+     * token usage and other execution metrics.
      */
     public String getMetricsJson() {
         return (String) get(13);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.extra_json</code>. JSON object
-     * containing additional ATIF or application-specific step metadata.
+     * Setter for <code>ai_chat_step.extra_json</code>. JSON object containing
+     * additional ATIF or application-specific step metadata.
      */
     public void setExtraJson(String value) {
         set(14, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.extra_json</code>. JSON object
-     * containing additional ATIF or application-specific step metadata.
+     * Getter for <code>ai_chat_step.extra_json</code>. JSON object containing
+     * additional ATIF or application-specific step metadata.
      */
     public String getExtraJson() {
         return (String) get(14);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.llm_call_count</code>. The number of
+     * Setter for <code>ai_chat_step.llm_call_count</code>. The number of
      * language-model calls represented by the step.
      */
     public void setLlmCallCount(Integer value) {
@@ -273,7 +271,7 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.llm_call_count</code>. The number of
+     * Getter for <code>ai_chat_step.llm_call_count</code>. The number of
      * language-model calls represented by the step.
      */
     public Integer getLlmCallCount() {
@@ -281,32 +279,32 @@ public class AiChatStepRecord extends UpdatableRecordImpl<AiChatStepRecord> {
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.is_copied_context</code>. Indicates
-     * whether the step was copied into the model context (0 = False, 1 = True).
+     * Setter for <code>ai_chat_step.is_copied_context</code>. Indicates whether
+     * the step was copied into the model context (0 = False, 1 = True).
      */
     public void setIsCopiedContext(Byte value) {
         set(16, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.is_copied_context</code>. Indicates
-     * whether the step was copied into the model context (0 = False, 1 = True).
+     * Getter for <code>ai_chat_step.is_copied_context</code>. Indicates whether
+     * the step was copied into the model context (0 = False, 1 = True).
      */
     public Byte getIsCopiedContext() {
         return (Byte) get(16);
     }
 
     /**
-     * Setter for <code>oagi.ai_chat_step.creation_timestamp</code>. The
-     * timestamp when the trajectory step was created.
+     * Setter for <code>ai_chat_step.creation_timestamp</code>. The timestamp
+     * when the trajectory step was created.
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(17, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_chat_step.creation_timestamp</code>. The
-     * timestamp when the trajectory step was created.
+     * Getter for <code>ai_chat_step.creation_timestamp</code>. The timestamp
+     * when the trajectory step was created.
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(17);

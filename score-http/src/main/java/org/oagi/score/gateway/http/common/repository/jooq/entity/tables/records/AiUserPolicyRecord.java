@@ -22,103 +22,103 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_user_policy.app_user_id</code>. Identifier of
-     * the user to whom the policy applies
+     * Setter for <code>ai_user_policy.app_user_id</code>. Identifier of the
+     * user to whom the policy applies
      */
     public void setAppUserId(ULong value) {
         set(0, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.app_user_id</code>. Identifier of
-     * the user to whom the policy applies
+     * Getter for <code>ai_user_policy.app_user_id</code>. Identifier of the
+     * user to whom the policy applies
      */
     public ULong getAppUserId() {
         return (ULong) get(0);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.ai_enabled</code>. Indicates whether
-     * the user can use AI Assistant
+     * Setter for <code>ai_user_policy.ai_enabled</code>. Indicates whether the
+     * user can use AI Assistant
      */
     public void setAiEnabled(Byte value) {
         set(1, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.ai_enabled</code>. Indicates whether
-     * the user can use AI Assistant
+     * Getter for <code>ai_user_policy.ai_enabled</code>. Indicates whether the
+     * user can use AI Assistant
      */
     public Byte getAiEnabled() {
         return (Byte) get(1);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.model_access_mode</code>. Model
-     * access mode: ALL or ALLOW_LIST
+     * Setter for <code>ai_user_policy.model_access_mode</code>. Model access
+     * mode: ALL or ALLOW_LIST
      */
     public void setModelAccessMode(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.model_access_mode</code>. Model
-     * access mode: ALL or ALLOW_LIST
+     * Getter for <code>ai_user_policy.model_access_mode</code>. Model access
+     * mode: ALL or ALLOW_LIST
      */
     public String getModelAccessMode() {
         return (String) get(2);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.default_ai_model_id</code>.
-     * Identifier of the default AI model for the user
+     * Setter for <code>ai_user_policy.default_ai_model_id</code>. Identifier of
+     * the default AI model for the user
      */
     public void setDefaultAiModelId(ULong value) {
         set(3, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.default_ai_model_id</code>.
-     * Identifier of the default AI model for the user
+     * Getter for <code>ai_user_policy.default_ai_model_id</code>. Identifier of
+     * the default AI model for the user
      */
     public ULong getDefaultAiModelId() {
         return (ULong) get(3);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.multi_agent_enabled</code>.
-     * Indicates whether the user can use multi-agent workflows
+     * Setter for <code>ai_user_policy.multi_agent_enabled</code>. Indicates
+     * whether the user can use multi-agent workflows
      */
     public void setMultiAgentEnabled(Byte value) {
         set(4, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.multi_agent_enabled</code>.
-     * Indicates whether the user can use multi-agent workflows
+     * Getter for <code>ai_user_policy.multi_agent_enabled</code>. Indicates
+     * whether the user can use multi-agent workflows
      */
     public Byte getMultiAgentEnabled() {
         return (Byte) get(4);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.max_agents_per_request</code>.
-     * Maximum number of agents allowed per request
+     * Setter for <code>ai_user_policy.max_agents_per_request</code>. Maximum
+     * number of agents allowed per request
      */
     public void setMaxAgentsPerRequest(UByte value) {
         set(5, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.max_agents_per_request</code>.
-     * Maximum number of agents allowed per request
+     * Getter for <code>ai_user_policy.max_agents_per_request</code>. Maximum
+     * number of agents allowed per request
      */
     public UByte getMaxAgentsPerRequest() {
         return (UByte) get(5);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.max_active_requests</code>. Maximum
+     * Setter for <code>ai_user_policy.max_active_requests</code>. Maximum
      * number of concurrent AI requests for the user
      */
     public void setMaxActiveRequests(UByte value) {
@@ -126,7 +126,7 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.max_active_requests</code>. Maximum
+     * Getter for <code>ai_user_policy.max_active_requests</code>. Maximum
      * number of concurrent AI requests for the user
      */
     public UByte getMaxActiveRequests() {
@@ -134,7 +134,7 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.max_output_tokens_per_call</code>.
+     * Setter for <code>ai_user_policy.max_output_tokens_per_call</code>.
      * Maximum number of output tokens allowed per model call
      */
     public void setMaxOutputTokensPerCall(ULong value) {
@@ -142,7 +142,7 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.max_output_tokens_per_call</code>.
+     * Getter for <code>ai_user_policy.max_output_tokens_per_call</code>.
      * Maximum number of output tokens allowed per model call
      */
     public ULong getMaxOutputTokensPerCall() {
@@ -150,7 +150,7 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.max_total_tokens_per_request</code>.
+     * Setter for <code>ai_user_policy.max_total_tokens_per_request</code>.
      * Maximum total tokens allowed for a root request
      */
     public void setMaxTotalTokensPerRequest(ULong value) {
@@ -158,7 +158,7 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.max_total_tokens_per_request</code>.
+     * Getter for <code>ai_user_policy.max_total_tokens_per_request</code>.
      * Maximum total tokens allowed for a root request
      */
     public ULong getMaxTotalTokensPerRequest() {
@@ -166,55 +166,55 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.quota_period</code>. Cumulative
-     * token quota period: DAILY or MONTHLY
+     * Setter for <code>ai_user_policy.quota_period</code>. Cumulative token
+     * quota period: DAILY or MONTHLY
      */
     public void setQuotaPeriod(String value) {
         set(9, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.quota_period</code>. Cumulative
-     * token quota period: DAILY or MONTHLY
+     * Getter for <code>ai_user_policy.quota_period</code>. Cumulative token
+     * quota period: DAILY or MONTHLY
      */
     public String getQuotaPeriod() {
         return (String) get(9);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.quota_tokens</code>. Maximum
-     * cumulative tokens allowed during the quota period
+     * Setter for <code>ai_user_policy.quota_tokens</code>. Maximum cumulative
+     * tokens allowed during the quota period
      */
     public void setQuotaTokens(ULong value) {
         set(10, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.quota_tokens</code>. Maximum
-     * cumulative tokens allowed during the quota period
+     * Getter for <code>ai_user_policy.quota_tokens</code>. Maximum cumulative
+     * tokens allowed during the quota period
      */
     public ULong getQuotaTokens() {
         return (ULong) get(10);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.policy_version</code>. Policy
-     * version used for optimistic locking
+     * Setter for <code>ai_user_policy.policy_version</code>. Policy version
+     * used for optimistic locking
      */
     public void setPolicyVersion(ULong value) {
         set(11, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.policy_version</code>. Policy
-     * version used for optimistic locking
+     * Getter for <code>ai_user_policy.policy_version</code>. Policy version
+     * used for optimistic locking
      */
     public ULong getPolicyVersion() {
         return (ULong) get(11);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.created_by</code>. Identifier of the
+     * Setter for <code>ai_user_policy.created_by</code>. Identifier of the
      * administrator who created the policy
      */
     public void setCreatedBy(ULong value) {
@@ -222,7 +222,7 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.created_by</code>. Identifier of the
+     * Getter for <code>ai_user_policy.created_by</code>. Identifier of the
      * administrator who created the policy
      */
     public ULong getCreatedBy() {
@@ -230,48 +230,48 @@ public class AiUserPolicyRecord extends UpdatableRecordImpl<AiUserPolicyRecord> 
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.last_updated_by</code>. Identifier
-     * of the administrator who last updated the policy
+     * Setter for <code>ai_user_policy.last_updated_by</code>. Identifier of the
+     * administrator who last updated the policy
      */
     public void setLastUpdatedBy(ULong value) {
         set(13, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.last_updated_by</code>. Identifier
-     * of the administrator who last updated the policy
+     * Getter for <code>ai_user_policy.last_updated_by</code>. Identifier of the
+     * administrator who last updated the policy
      */
     public ULong getLastUpdatedBy() {
         return (ULong) get(13);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.creation_timestamp</code>. Date and
-     * time when the policy was created
+     * Setter for <code>ai_user_policy.creation_timestamp</code>. Date and time
+     * when the policy was created
      */
     public void setCreationTimestamp(LocalDateTime value) {
         set(14, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.creation_timestamp</code>. Date and
-     * time when the policy was created
+     * Getter for <code>ai_user_policy.creation_timestamp</code>. Date and time
+     * when the policy was created
      */
     public LocalDateTime getCreationTimestamp() {
         return (LocalDateTime) get(14);
     }
 
     /**
-     * Setter for <code>oagi.ai_user_policy.last_update_timestamp</code>. Date
-     * and time when the policy was last updated
+     * Setter for <code>ai_user_policy.last_update_timestamp</code>. Date and
+     * time when the policy was last updated
      */
     public void setLastUpdateTimestamp(LocalDateTime value) {
         set(15, value);
     }
 
     /**
-     * Getter for <code>oagi.ai_user_policy.last_update_timestamp</code>. Date
-     * and time when the policy was last updated
+     * Getter for <code>ai_user_policy.last_update_timestamp</code>. Date and
+     * time when the policy was last updated
      */
     public LocalDateTime getLastUpdateTimestamp() {
         return (LocalDateTime) get(15);

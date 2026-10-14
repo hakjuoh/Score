@@ -19,7 +19,7 @@ public class AiUserModelReasoningAccessRecord extends UpdatableRecordImpl<AiUser
     private static final long serialVersionUID = 1L;
 
     /**
-     * Setter for <code>oagi.ai_user_model_reasoning_access.app_user_id</code>.
+     * Setter for <code>ai_user_model_reasoning_access.app_user_id</code>.
      * Identifier of the user to whom the policy applies
      */
     public void setAppUserId(ULong value) {
@@ -27,7 +27,7 @@ public class AiUserModelReasoningAccessRecord extends UpdatableRecordImpl<AiUser
     }
 
     /**
-     * Getter for <code>oagi.ai_user_model_reasoning_access.app_user_id</code>.
+     * Getter for <code>ai_user_model_reasoning_access.app_user_id</code>.
      * Identifier of the user to whom the policy applies
      */
     public ULong getAppUserId() {
@@ -35,7 +35,7 @@ public class AiUserModelReasoningAccessRecord extends UpdatableRecordImpl<AiUser
     }
 
     /**
-     * Setter for <code>oagi.ai_user_model_reasoning_access.ai_model_id</code>.
+     * Setter for <code>ai_user_model_reasoning_access.ai_model_id</code>.
      * Identifier of the AI model subject to the reasoning effort restriction
      */
     public void setAiModelId(ULong value) {
@@ -43,7 +43,7 @@ public class AiUserModelReasoningAccessRecord extends UpdatableRecordImpl<AiUser
     }
 
     /**
-     * Getter for <code>oagi.ai_user_model_reasoning_access.ai_model_id</code>.
+     * Getter for <code>ai_user_model_reasoning_access.ai_model_id</code>.
      * Identifier of the AI model subject to the reasoning effort restriction
      */
     public ULong getAiModelId() {
@@ -51,18 +51,16 @@ public class AiUserModelReasoningAccessRecord extends UpdatableRecordImpl<AiUser
     }
 
     /**
-     * Setter for
-     * <code>oagi.ai_user_model_reasoning_access.reasoning_effort</code>. Name
-     * of a reasoning effort allowed for the user
+     * Setter for <code>ai_user_model_reasoning_access.reasoning_effort</code>.
+     * Name of a reasoning effort allowed for the user
      */
     public void setReasoningEffort(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for
-     * <code>oagi.ai_user_model_reasoning_access.reasoning_effort</code>. Name
-     * of a reasoning effort allowed for the user
+     * Getter for <code>ai_user_model_reasoning_access.reasoning_effort</code>.
+     * Name of a reasoning effort allowed for the user
      */
     public String getReasoningEffort() {
         return (String) get(2);

@@ -20,19 +20,20 @@ import org.jooq.QueryPart;
 import org.jooq.Record;
 import org.jooq.SQL;
 import org.jooq.Schema;
-import org.jooq.Select;
 import org.jooq.Stringly;
 import org.jooq.Table;
 import org.jooq.TableField;
+import org.jooq.TableLike;
 import org.jooq.TableOptions;
 import org.jooq.UniqueKey;
 import org.jooq.impl.DSL;
+import org.jooq.impl.Internal;
 import org.jooq.impl.SQLDataType;
 import org.jooq.impl.TableImpl;
 import org.jooq.types.UByte;
 import org.jooq.types.ULong;
+import org.oagi.score.gateway.http.common.repository.jooq.entity.DefaultSchema;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.Keys;
-import org.oagi.score.gateway.http.common.repository.jooq.entity.Oagi;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModel.AiModelPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiModelReasoningEffort.AiModelReasoningEffortPath;
 import org.oagi.score.gateway.http.common.repository.jooq.entity.tables.AiUserModelAccess.AiUserModelAccessPath;
@@ -50,7 +51,7 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
     private static final long serialVersionUID = 1L;
 
     /**
-     * The reference instance of <code>oagi.ai_user_policy</code>
+     * The reference instance of <code>ai_user_policy</code>
      */
     public static final AiUserPolicy AI_USER_POLICY = new AiUserPolicy();
 
@@ -63,98 +64,98 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
     }
 
     /**
-     * The column <code>oagi.ai_user_policy.app_user_id</code>. Identifier of
-     * the user to whom the policy applies
+     * The column <code>ai_user_policy.app_user_id</code>. Identifier of the
+     * user to whom the policy applies
      */
     public final TableField<AiUserPolicyRecord, ULong> APP_USER_ID = createField(DSL.name("app_user_id"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the user to whom the policy applies");
 
     /**
-     * The column <code>oagi.ai_user_policy.ai_enabled</code>. Indicates whether
-     * the user can use AI Assistant
+     * The column <code>ai_user_policy.ai_enabled</code>. Indicates whether the
+     * user can use AI Assistant
      */
     public final TableField<AiUserPolicyRecord, Byte> AI_ENABLED = createField(DSL.name("ai_enabled"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.TINYINT)), this, "Indicates whether the user can use AI Assistant");
 
     /**
-     * The column <code>oagi.ai_user_policy.model_access_mode</code>. Model
-     * access mode: ALL or ALLOW_LIST
+     * The column <code>ai_user_policy.model_access_mode</code>. Model access
+     * mode: ALL or ALLOW_LIST
      */
     public final TableField<AiUserPolicyRecord, String> MODEL_ACCESS_MODE = createField(DSL.name("model_access_mode"), SQLDataType.VARCHAR(16).nullable(false).defaultValue(DSL.field(DSL.raw("'ALL'"), SQLDataType.VARCHAR)), this, "Model access mode: ALL or ALLOW_LIST");
 
     /**
-     * The column <code>oagi.ai_user_policy.default_ai_model_id</code>.
-     * Identifier of the default AI model for the user
+     * The column <code>ai_user_policy.default_ai_model_id</code>. Identifier of
+     * the default AI model for the user
      */
     public final TableField<AiUserPolicyRecord, ULong> DEFAULT_AI_MODEL_ID = createField(DSL.name("default_ai_model_id"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Identifier of the default AI model for the user");
 
     /**
-     * The column <code>oagi.ai_user_policy.multi_agent_enabled</code>.
-     * Indicates whether the user can use multi-agent workflows
+     * The column <code>ai_user_policy.multi_agent_enabled</code>. Indicates
+     * whether the user can use multi-agent workflows
      */
     public final TableField<AiUserPolicyRecord, Byte> MULTI_AGENT_ENABLED = createField(DSL.name("multi_agent_enabled"), SQLDataType.TINYINT.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.TINYINT)), this, "Indicates whether the user can use multi-agent workflows");
 
     /**
-     * The column <code>oagi.ai_user_policy.max_agents_per_request</code>.
-     * Maximum number of agents allowed per request
+     * The column <code>ai_user_policy.max_agents_per_request</code>. Maximum
+     * number of agents allowed per request
      */
     public final TableField<AiUserPolicyRecord, UByte> MAX_AGENTS_PER_REQUEST = createField(DSL.name("max_agents_per_request"), SQLDataType.TINYINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("4"), SQLDataType.TINYINTUNSIGNED)), this, "Maximum number of agents allowed per request");
 
     /**
-     * The column <code>oagi.ai_user_policy.max_active_requests</code>. Maximum
+     * The column <code>ai_user_policy.max_active_requests</code>. Maximum
      * number of concurrent AI requests for the user
      */
     public final TableField<AiUserPolicyRecord, UByte> MAX_ACTIVE_REQUESTS = createField(DSL.name("max_active_requests"), SQLDataType.TINYINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("8"), SQLDataType.TINYINTUNSIGNED)), this, "Maximum number of concurrent AI requests for the user");
 
     /**
-     * The column <code>oagi.ai_user_policy.max_output_tokens_per_call</code>.
+     * The column <code>ai_user_policy.max_output_tokens_per_call</code>.
      * Maximum number of output tokens allowed per model call
      */
     public final TableField<AiUserPolicyRecord, ULong> MAX_OUTPUT_TOKENS_PER_CALL = createField(DSL.name("max_output_tokens_per_call"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Maximum number of output tokens allowed per model call");
 
     /**
-     * The column <code>oagi.ai_user_policy.max_total_tokens_per_request</code>.
+     * The column <code>ai_user_policy.max_total_tokens_per_request</code>.
      * Maximum total tokens allowed for a root request
      */
     public final TableField<AiUserPolicyRecord, ULong> MAX_TOTAL_TOKENS_PER_REQUEST = createField(DSL.name("max_total_tokens_per_request"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Maximum total tokens allowed for a root request");
 
     /**
-     * The column <code>oagi.ai_user_policy.quota_period</code>. Cumulative
-     * token quota period: DAILY or MONTHLY
+     * The column <code>ai_user_policy.quota_period</code>. Cumulative token
+     * quota period: DAILY or MONTHLY
      */
     public final TableField<AiUserPolicyRecord, String> QUOTA_PERIOD = createField(DSL.name("quota_period"), SQLDataType.VARCHAR(16).defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.VARCHAR)), this, "Cumulative token quota period: DAILY or MONTHLY");
 
     /**
-     * The column <code>oagi.ai_user_policy.quota_tokens</code>. Maximum
-     * cumulative tokens allowed during the quota period
+     * The column <code>ai_user_policy.quota_tokens</code>. Maximum cumulative
+     * tokens allowed during the quota period
      */
     public final TableField<AiUserPolicyRecord, ULong> QUOTA_TOKENS = createField(DSL.name("quota_tokens"), SQLDataType.BIGINTUNSIGNED.defaultValue(DSL.field(DSL.raw("NULL"), SQLDataType.BIGINTUNSIGNED)), this, "Maximum cumulative tokens allowed during the quota period");
 
     /**
-     * The column <code>oagi.ai_user_policy.policy_version</code>. Policy
-     * version used for optimistic locking
+     * The column <code>ai_user_policy.policy_version</code>. Policy version
+     * used for optimistic locking
      */
     public final TableField<AiUserPolicyRecord, ULong> POLICY_VERSION = createField(DSL.name("policy_version"), SQLDataType.BIGINTUNSIGNED.nullable(false).defaultValue(DSL.field(DSL.raw("1"), SQLDataType.BIGINTUNSIGNED)), this, "Policy version used for optimistic locking");
 
     /**
-     * The column <code>oagi.ai_user_policy.created_by</code>. Identifier of the
+     * The column <code>ai_user_policy.created_by</code>. Identifier of the
      * administrator who created the policy
      */
     public final TableField<AiUserPolicyRecord, ULong> CREATED_BY = createField(DSL.name("created_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who created the policy");
 
     /**
-     * The column <code>oagi.ai_user_policy.last_updated_by</code>. Identifier
-     * of the administrator who last updated the policy
+     * The column <code>ai_user_policy.last_updated_by</code>. Identifier of the
+     * administrator who last updated the policy
      */
     public final TableField<AiUserPolicyRecord, ULong> LAST_UPDATED_BY = createField(DSL.name("last_updated_by"), SQLDataType.BIGINTUNSIGNED.nullable(false), this, "Identifier of the administrator who last updated the policy");
 
     /**
-     * The column <code>oagi.ai_user_policy.creation_timestamp</code>. Date and
-     * time when the policy was created
+     * The column <code>ai_user_policy.creation_timestamp</code>. Date and time
+     * when the policy was created
      */
     public final TableField<AiUserPolicyRecord, LocalDateTime> CREATION_TIMESTAMP = createField(DSL.name("creation_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the policy was created");
 
     /**
-     * The column <code>oagi.ai_user_policy.last_update_timestamp</code>. Date
-     * and time when the policy was last updated
+     * The column <code>ai_user_policy.last_update_timestamp</code>. Date and
+     * time when the policy was last updated
      */
     public final TableField<AiUserPolicyRecord, LocalDateTime> LAST_UPDATE_TIMESTAMP = createField(DSL.name("last_update_timestamp"), SQLDataType.LOCALDATETIME(6).nullable(false), this, "Date and time when the policy was last updated");
 
@@ -167,21 +168,21 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
     }
 
     /**
-     * Create an aliased <code>oagi.ai_user_policy</code> table reference
+     * Create an aliased <code>ai_user_policy</code> table reference
      */
     public AiUserPolicy(String alias) {
         this(DSL.name(alias), AI_USER_POLICY);
     }
 
     /**
-     * Create an aliased <code>oagi.ai_user_policy</code> table reference
+     * Create an aliased <code>ai_user_policy</code> table reference
      */
     public AiUserPolicy(Name alias) {
         this(alias, AI_USER_POLICY);
     }
 
     /**
-     * Create a <code>oagi.ai_user_policy</code> table reference
+     * Create a <code>ai_user_policy</code> table reference
      */
     public AiUserPolicy() {
         this(DSL.name("ai_user_policy"), null);
@@ -222,7 +223,7 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
 
     @Override
     public Schema getSchema() {
-        return aliased() ? null : Oagi.OAGI;
+        return aliased() ? null : DefaultSchema.DEFAULT_SCHEMA;
     }
 
     @Override
@@ -238,8 +239,8 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
     private transient AppUserPath _aiUserPolicyCreatedByFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>ai_user_policy_created_by_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>ai_user_policy_created_by_fk</code> key.
      */
     public AppUserPath aiUserPolicyCreatedByFk() {
         if (_aiUserPolicyCreatedByFk == null)
@@ -251,7 +252,7 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
     private transient AiModelPath _aiModel;
 
     /**
-     * Get the implicit join path to the <code>oagi.ai_model</code> table.
+     * Get the implicit join path to the <code>ai_model</code> table.
      */
     public AiModelPath aiModel() {
         if (_aiModel == null)
@@ -263,8 +264,8 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
     private transient AppUserPath _aiUserPolicyLastUpdatedByFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>ai_user_policy_last_updated_by_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>ai_user_policy_last_updated_by_fk</code> key.
      */
     public AppUserPath aiUserPolicyLastUpdatedByFk() {
         if (_aiUserPolicyLastUpdatedByFk == null)
@@ -276,8 +277,8 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
     private transient AppUserPath _aiUserPolicyUserFk;
 
     /**
-     * Get the implicit join path to the <code>oagi.app_user</code> table, via
-     * the <code>ai_user_policy_user_fk</code> key.
+     * Get the implicit join path to the <code>app_user</code> table, via the
+     * <code>ai_user_policy_user_fk</code> key.
      */
     public AppUserPath aiUserPolicyUserFk() {
         if (_aiUserPolicyUserFk == null)
@@ -290,7 +291,7 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oagi.ai_user_model_access</code> table
+     * <code>ai_user_model_access</code> table
      */
     public AiUserModelAccessPath aiUserModelAccess() {
         if (_aiUserModelAccess == null)
@@ -303,7 +304,7 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
 
     /**
      * Get the implicit to-many join path to the
-     * <code>oagi.ai_user_model_reasoning_access</code> table
+     * <code>ai_user_model_reasoning_access</code> table
      */
     public AiUserModelReasoningAccessPath aiUserModelReasoningAccess() {
         if (_aiUserModelReasoningAccess == null)
@@ -314,7 +315,7 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
 
     /**
      * Get the implicit many-to-many join path to the
-     * <code>oagi.ai_model_reasoning_effort</code> table
+     * <code>ai_model_reasoning_effort</code> table
      */
     public AiModelReasoningEffortPath aiModelReasoningEffort() {
         return aiUserModelReasoningAccess().aiModelReasoningEffort();
@@ -364,7 +365,7 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
      */
     @Override
     public AiUserPolicy where(Condition condition) {
-        return new AiUserPolicy(getQualifiedName(), aliased() ? this : null, null, condition);
+        return new AiUserPolicy(getQualifiedName(), aliased() ? this : null, null, Internal.condition(this, condition));
     }
 
     /**
@@ -431,7 +432,7 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiUserPolicy whereExists(Select<?> select) {
+    public AiUserPolicy whereExists(TableLike<?> select) {
         return where(DSL.exists(select));
     }
 
@@ -439,7 +440,7 @@ public class AiUserPolicy extends TableImpl<AiUserPolicyRecord> {
      * Create an inline derived table from this table
      */
     @Override
-    public AiUserPolicy whereNotExists(Select<?> select) {
+    public AiUserPolicy whereNotExists(TableLike<?> select) {
         return where(DSL.notExists(select));
     }
 }
