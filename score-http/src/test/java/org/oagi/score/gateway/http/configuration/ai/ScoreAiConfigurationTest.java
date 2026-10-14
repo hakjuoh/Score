@@ -110,6 +110,7 @@ class ScoreAiConfigurationTest {
                         "logging.level.org.springframework.messaging",
                         "logging.level.org.jooq",
                         "logging.level.org.oagi.score",
+                        "score.ai.provider-connection-test.allow-private-addresses",
                         "management.tracing.export.enabled",
                         "management.tracing.export.otlp.enabled",
                         "management.opentelemetry.resource-attributes"

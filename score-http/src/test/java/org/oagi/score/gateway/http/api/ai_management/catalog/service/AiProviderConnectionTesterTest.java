@@ -72,6 +72,30 @@ class AiProviderConnectionTesterTest {
 
     @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
+    void acceptsAnAllowListedHostOnAPrivateLinkAddressOnlyWhenConfigured() throws Exception {
+        HttpClient client = mock(HttpClient.class);
+        HttpResponse<Void> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(response);
+        AiProviderConnectionTester.HostResolver privateLink = host ->
+                new InetAddress[]{InetAddress.getByName("10.168.104.134")};
+        var azure = provider("openai", "https://unit.openai.azure.com", "2024-10-21");
+
+        var refused = new AiProviderConnectionTester(client, new ObjectMapper(), privateLink)
+                .test(azure, "test-key".toCharArray(), null);
+        verifyNoInteractions(client);
+        var accepted = new AiProviderConnectionTester(client, new ObjectMapper(), privateLink, true)
+                .test(azure, "test-key".toCharArray(), null);
+
+        assertThat(refused.successful()).isFalse();
+        assertThat(refused.message()).contains("10.168.104.134")
+                .contains("allow-private-addresses");
+        assertThat(accepted.successful()).isTrue();
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
     void usesTheAzureOpenAiAdapterWhenOpenAiHasAnApiVersion() throws Exception {
         HttpClient client = mock(HttpClient.class);
         HttpResponse<Void> response = mock(HttpResponse.class);
@@ -171,7 +195,7 @@ class AiProviderConnectionTesterTest {
                 "test-key".toCharArray(), null);
 
         assertThat(result.successful()).isFalse();
-        assertThat(result.message()).contains("endpoint or API key is invalid");
+        assertThat(result.message()).contains("private address 127.0.0.1");
         verifyNoInteractions(client);
     }
 

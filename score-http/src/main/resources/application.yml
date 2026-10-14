@@ -235,6 +235,9 @@ score:
   ai:
     catalog:
       bootstrap-enabled: ${SCORE_AI_CATALOG_BOOTSTRAP_ENABLED:false}
+    provider-connection-test:
+      # Accept an allow-listed provider host that resolves to a private address (Azure Private Link).
+      allow-private-addresses: ${SCORE_AI_PROVIDER_TEST_ALLOW_PRIVATE_ADDRESSES:false}
     observability:
       enabled: ${SCORE_AI_OBSERVABILITY_ENABLED:false}
       service-name: ${SCORE_AI_OBSERVABILITY_SERVICE_NAME:score-ai}

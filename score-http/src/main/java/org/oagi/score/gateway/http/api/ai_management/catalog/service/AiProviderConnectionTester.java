@@ -6,6 +6,7 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderCon
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderUpdate;
 import org.oagi.score.gateway.http.configuration.ai.AiProviderEndpointResolver;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -29,24 +30,38 @@ public class AiProviderConnectionTester {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final HostResolver hostResolver;
+    private final boolean allowPrivateAddresses;
 
+    /**
+     * @param allowPrivateAddresses accept an allow-listed provider host that resolves to a private
+     *                              address, as Azure Private Link endpoints do; off by default
+     */
     @Autowired
-    public AiProviderConnectionTester(ObjectMapper objectMapper) {
+    public AiProviderConnectionTester(
+            ObjectMapper objectMapper,
+            @Value("${score.ai.provider-connection-test.allow-private-addresses:false}")
+            boolean allowPrivateAddresses) {
         this(HttpClient.newBuilder()
                 .connectTimeout(REQUEST_TIMEOUT)
                 .followRedirects(HttpClient.Redirect.NEVER)
-                .build(), objectMapper, InetAddress::getAllByName);
+                .build(), objectMapper, InetAddress::getAllByName, allowPrivateAddresses);
     }
 
     AiProviderConnectionTester(HttpClient httpClient, ObjectMapper objectMapper) {
-        this(httpClient, objectMapper, InetAddress::getAllByName);
+        this(httpClient, objectMapper, InetAddress::getAllByName, false);
     }
 
     AiProviderConnectionTester(HttpClient httpClient, ObjectMapper objectMapper,
                                HostResolver hostResolver) {
+        this(httpClient, objectMapper, hostResolver, false);
+    }
+
+    AiProviderConnectionTester(HttpClient httpClient, ObjectMapper objectMapper,
+                               HostResolver hostResolver, boolean allowPrivateAddresses) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.hostResolver = hostResolver;
+        this.allowPrivateAddresses = allowPrivateAddresses;
     }
 
     public AiProviderConnectionTestResult test(AiProviderUpdate provider, char[] apiKey,
@@ -76,6 +91,8 @@ public class AiProviderConnectionTester {
             return failed("The provider connection test was interrupted.", null);
         } catch (IOException exception) {
             return failed("The provider endpoint could not be reached.", null);
+        } catch (EndpointRejectedException exception) {
+            return failed(exception.getMessage(), null);
         } catch (IllegalArgumentException exception) {
             return failed("The provider endpoint or API key is invalid.", null);
         }
@@ -147,7 +164,8 @@ public class AiProviderConnectionTester {
     private void requirePublicHttpsEndpoint(URI endpoint, String providerType) throws IOException {
         if (!"https".equalsIgnoreCase(endpoint.getScheme()) || endpoint.getHost() == null
                 || endpoint.getUserInfo() != null) {
-            throw new IllegalArgumentException("Provider endpoint must be a public HTTPS URL");
+            throw new EndpointRejectedException("The provider endpoint must be an HTTPS URL "
+                    + "without credentials.");
         }
         String host = endpoint.getHost().toLowerCase();
         boolean trusted = switch (providerType) {
@@ -159,15 +177,19 @@ public class AiProviderConnectionTester {
             default -> false;
         };
         if (!trusted) {
-            throw new IllegalArgumentException("Provider endpoint host is not trusted");
+            throw new EndpointRejectedException("The provider endpoint host " + host
+                    + " is not an allowed " + providerType + " host.");
         }
         InetAddress[] addresses = hostResolver.resolve(endpoint.getHost());
         if (addresses.length == 0) {
-            throw new IllegalArgumentException("Provider endpoint host could not be resolved");
+            throw new EndpointRejectedException("The provider endpoint host could not be resolved.");
         }
         for (InetAddress address : addresses) {
-            if (!isPublic(address)) {
-                throw new IllegalArgumentException("Provider endpoint resolves to a private address");
+            if (!allowPrivateAddresses && !isPublic(address)) {
+                throw new EndpointRejectedException("The provider endpoint resolves to the private "
+                        + "address " + address.getHostAddress() + ". For an Azure Private Link "
+                        + "endpoint, set score.ai.provider-connection-test.allow-private-addresses "
+                        + "to true.");
             }
         }
     }
@@ -184,6 +206,13 @@ public class AiProviderConnectionTester {
             return !(first == 0 || first == 100 && second >= 64 && second <= 127);
         }
         return true;
+    }
+
+    /** A rejection whose message is safe and useful to show to the administrator. */
+    private static final class EndpointRejectedException extends IllegalArgumentException {
+        EndpointRejectedException(String message) {
+            super(message);
+        }
     }
 
     @FunctionalInterface

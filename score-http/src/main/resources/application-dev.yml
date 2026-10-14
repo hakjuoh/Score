@@ -49,5 +49,7 @@ score:
   ai:
     catalog:
       bootstrap-enabled: ${SCORE_AI_CATALOG_BOOTSTRAP_ENABLED:true}
+    provider-connection-test:
+      allow-private-addresses: ${SCORE_AI_PROVIDER_TEST_ALLOW_PRIVATE_ADDRESSES:true}
     observability:
       enabled: ${SCORE_AI_OBSERVABILITY_ENABLED:true}
