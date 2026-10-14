@@ -251,7 +251,7 @@ public class ScoreAiConfiguration {
         Boolean configured = model.getModelCapabilities().getReasoningModel();
         if (configured != null) return configured;
         String normalized = modelName.toLowerCase();
-        return normalized.startsWith("gpt-5") || normalized.matches("o[134](?:[-_].*)?")
+        return normalized.matches("gpt-[56].*") || normalized.matches("o[134](?:[-_].*)?")
                 || model.getReasoningEfforts().stream().anyMatch(effort -> effort != null
                 && StringUtils.hasText(effort.getName()) && !"default".equalsIgnoreCase(effort.getName()));
     }

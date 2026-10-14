@@ -3,29 +3,24 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.open
 import java.util.List;
 
 /**
- * GPT-5 specifications from the OpenAI model pages current for Spring AI 2.0.0.
+ * GPT-6 specifications from the OpenAI model pages (developers.openai.com/api/docs/models).
  * Reasoning-disabled models expose the application-level {@code disabled} choice, which the
  * request factory translates to OpenAI's provider-level {@code none} value.
  */
 final class OpenAiModelProfileSpecs {
     private OpenAiModelProfileSpecs() {}
 
-    static final OpenAiModelProfileSpec GPT_56 = spec(
+    // gpt-6-astra does not accept the none effort; the model page does not state its default,
+    // so medium (the default of the other GPT-6 models) is assumed.
+    static final OpenAiModelProfileSpec GPT_6_ASTRA = spec(
+            1_050_000L, 128_000L, List.of("low", "medium", "high", "xhigh", "max"),
+            "medium", true, true, true, true, true);
+    static final OpenAiModelProfileSpec GPT_61_SOL = spec(
+            1_050_000L, 128_000L, List.of("low", "medium", "high", "xhigh", "max"),
+            "medium", true, true, true, true, true);
+    static final OpenAiModelProfileSpec GPT_6_LUNA = spec(
             1_050_000L, 128_000L, List.of("disabled", "low", "medium", "high", "xhigh", "max"),
             "medium", true, true, true, true, true);
-    static final OpenAiModelProfileSpec GPT_55 = spec(
-            1_050_000L, 128_000L, List.of("disabled", "low", "medium", "high", "xhigh"),
-            "medium", true, true, true, true, false);
-    static final OpenAiModelProfileSpec GPT_54 = spec(
-            1_050_000L, 128_000L, List.of("disabled", "low", "medium", "high", "xhigh"),
-            "disabled", true, true, true, true, false);
-    static final OpenAiModelProfileSpec GPT_54_PRO = spec(
-            1_050_000L, 128_000L, List.of("medium", "high", "xhigh"),
-            "medium", false, true, true, false, false);
-    static final OpenAiModelProfileSpec GPT_54_MINI = spec(
-            400_000L, 128_000L, List.of("disabled", "low", "medium", "high", "xhigh"),
-            "disabled", true, true, true, true, false);
-    static final OpenAiModelProfileSpec GPT_54_NANO = GPT_54_MINI;
 
     private static OpenAiModelProfileSpec spec(
             long contextWindow, long maxOutputTokens, List<String> reasoningEfforts,

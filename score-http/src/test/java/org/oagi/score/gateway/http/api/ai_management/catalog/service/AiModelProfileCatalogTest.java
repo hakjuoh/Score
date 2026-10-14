@@ -27,42 +27,35 @@ class AiModelProfileCatalogTest {
     void exposesEachSupportedModelThroughItsOwnProfileClass() {
         assertThat(AiModelProfileCatalog.modelsFor("anthropic"))
                 .hasExactlyElementsOfTypes(
-                        ClaudeHaiku45Profile.class,
-                        ClaudeSonnet45Profile.class, ClaudeSonnet46Profile.class,
-                        ClaudeSonnet5Profile.class,
-                        ClaudeOpus45Profile.class, ClaudeOpus46Profile.class,
-                        ClaudeOpus47Profile.class, ClaudeOpus48Profile.class,
-                        ClaudeOpus5Profile.class, ClaudeFable5Profile.class,
-                        ClaudeMythos5Profile.class);
+                        ClaudeHaiku55Profile.class, ClaudeSonnet55Profile.class,
+                        ClaudeOpus55Profile.class);
         assertThat(AiModelProfileCatalog.modelsFor("openai"))
                 .hasExactlyElementsOfTypes(
-                        Gpt56SolProfile.class, Gpt56TerraProfile.class, Gpt56LunaProfile.class,
-                        Gpt55Profile.class,
-                        Gpt54Profile.class, Gpt54ProProfile.class,
-                        Gpt54MiniProfile.class, Gpt54NanoProfile.class);
+                        Gpt6LunaProfile.class, Gpt61SolProfile.class, Gpt6AstraProfile.class);
     }
 
     @Test
-    void haikuUsesFixedThinkingWithoutReasoningEffort() {
-        var haiku = new ClaudeHaiku45Profile();
+    void haikuAcceptsAdaptiveAndDisabledThinkingWithTheFullEffortLadder() {
+        var haiku = new ClaudeHaiku55Profile();
         var view = AiModelProfileView.from(haiku);
 
-        assertThat(view.thinkingBudgetTokens()).isEqualTo(4096);
-        assertThat(view.adaptiveThinking()).isFalse();
-        assertThat(haiku.getThinkingModes()).containsExactly("enabled", "disabled");
-        assertThat(view.reasoningEfforts()).isEmpty();
+        assertThat(view.adaptiveThinking()).isTrue();
+        assertThat(haiku.getThinkingModes()).containsExactly("adaptive", "disabled");
+        assertThat(haiku.getDefaultThinking()).isEqualTo("adaptive");
+        assertThat(view.reasoningEfforts()).extracting(ReasoningEffort::name)
+                .containsExactly("low", "medium", "high", "xhigh", "max");
     }
 
     @Test
-    void currentOpenAiProfilesUsePublishedGpt56LimitsAndEfforts() {
-        var sol = new Gpt56SolProfile();
+    void currentOpenAiProfilesUsePublishedGpt6LimitsAndEfforts() {
+        var sol = new Gpt61SolProfile();
         var view = AiModelProfileView.from(sol);
 
         assertThat(view.contextWindow()).isEqualTo(1_050_000L);
         assertThat(view.maxTokens()).isEqualTo(128_000);
         assertThat(sol.getReasoningEfforts())
                 .extracting(effort -> effort.name())
-                .containsExactly("disabled", "low", "medium", "high", "xhigh", "max");
+                .containsExactly("low", "medium", "high", "xhigh", "max");
         assertThat(sol.getReasoningEfforts()).filteredOn(effort -> effort.defaultEffort())
                 .extracting(effort -> effort.name()).containsExactly("medium");
         assertThat(view.capabilityConstraints().providerCompaction().supported()).isTrue();
@@ -100,90 +93,44 @@ class AiModelProfileCatalogTest {
     }
 
     @Test
-    void anthropicOptionsFollowDocumentedModelVersionBoundaries() {
-        var haiku45 = optionKeys(new ClaudeHaiku45Profile());
-        var sonnet45 = optionKeys(new ClaudeSonnet45Profile());
-        var sonnet46 = optionKeys(new ClaudeSonnet46Profile());
-        var opus46 = optionKeys(new ClaudeOpus46Profile());
-        var opus47 = optionKeys(new ClaudeOpus47Profile());
-
-        assertThat(haiku45).contains("topP", "topK", "cacheStrategy")
-                .doesNotContain("citationsEnabled", "outputConfig", "skillContainer");
-        assertThat(sonnet45).contains("topP", "topK", "citationsEnabled", "skillContainer")
-                .doesNotContain("outputConfig", "outputSchema", "outputEffort");
-        assertThat(sonnet46).contains("topP", "topK", "outputConfig", "outputSchema",
-                "outputEffort", "citationsEnabled");
-        assertThat(opus46).contains("topP", "topK", "outputConfig");
-        assertThat(option(new ClaudeSonnet46Profile(), "thinking").description())
-                .containsIgnoringCase("enabled fixed thinking is deprecated")
-                .containsIgnoringCase("use adaptive instead");
-        assertThat(option(new ClaudeOpus46Profile(), "thinking").description())
-                .containsIgnoringCase("enabled fixed thinking is deprecated")
-                .containsIgnoringCase("use adaptive instead");
-        assertThat(option(new ClaudeSonnet45Profile(), "thinking").description())
-                .doesNotContainIgnoringCase("deprecated");
-        assertThat(opus47).contains("outputConfig", "citationsEnabled")
-                .doesNotContain("topP", "topK", "thinkingBudgetTokens");
+    void anthropicOptionsFollowTheDocumentedClaude5Surface() {
+        AiModelProfileCatalog.modelsFor("anthropic").forEach(profile ->
+                assertThat(optionKeys(profile)).contains("cacheStrategy", "outputConfig",
+                        "outputSchema", "outputEffort", "citationsEnabled", "skillContainer")
+                        .doesNotContain("topP", "topK", "thinkingBudgetTokens"));
+        assertThat(option(new ClaudeOpus55Profile(), "outputEffort").value()).isEqualTo("MEDIUM");
+        assertThat(option(new ClaudeSonnet55Profile(), "outputEffort").value()).isEqualTo("HIGH");
+        assertThat(option(new ClaudeHaiku55Profile(), "outputEffort").value()).isEqualTo("MEDIUM");
     }
 
     @Test
     void anthropicProfilesExposeOnlyTheEffortsAcceptedByEachModel() {
-        assertOutputEfforts(new ClaudeHaiku45Profile());
-        assertOutputEfforts(new ClaudeSonnet45Profile());
-        assertOutputEfforts(new ClaudeOpus45Profile(), "low", "medium", "high");
-        assertOutputEfforts(new ClaudeSonnet46Profile(), "low", "medium", "high", "max");
-        assertOutputEfforts(new ClaudeOpus46Profile(), "low", "medium", "high", "max");
-        assertOutputEfforts(new ClaudeOpus47Profile(), "low", "medium", "high", "xhigh", "max");
-        assertOutputEfforts(new ClaudeOpus48Profile(), "low", "medium", "high", "xhigh", "max");
-        assertOutputEfforts(new ClaudeSonnet5Profile(), "low", "medium", "high", "xhigh", "max");
-        assertOutputEfforts(new ClaudeOpus5Profile(), "low", "medium", "high", "xhigh", "max");
-        assertOutputEfforts(new ClaudeFable5Profile(), "low", "medium", "high", "xhigh", "max");
-        assertOutputEfforts(new ClaudeMythos5Profile(), "low", "medium", "high", "xhigh", "max");
+        AiModelProfileCatalog.modelsFor("anthropic").forEach(profile ->
+                assertOutputEfforts(profile, "low", "medium", "high", "xhigh", "max"));
+        assertDefaultOutputEffort(new ClaudeOpus55Profile(), "medium");
+        assertDefaultOutputEffort(new ClaudeSonnet55Profile(), "high");
+        assertDefaultOutputEffort(new ClaudeHaiku55Profile(), "medium");
     }
 
     @Test
     void modelSpecificationsMatchThePublishedProviderMatrices() {
-        assertProfile(new ClaudeSonnet45Profile(), 200_000L, 64_000L,
-                java.util.List.of("enabled", "disabled"));
-        assertProfile(new ClaudeOpus45Profile(), 200_000L, 64_000L,
-                java.util.List.of("enabled", "disabled"));
-        assertProfile(new ClaudeSonnet46Profile(), 1_000_000L, 128_000L,
-                java.util.List.of("enabled", "adaptive", "disabled"));
-        assertProfile(new ClaudeOpus46Profile(), 1_000_000L, 128_000L,
-                java.util.List.of("enabled", "adaptive", "disabled"));
-        assertProfile(new ClaudeOpus47Profile(), 1_000_000L, 128_000L,
-                java.util.List.of("adaptive", "disabled"));
-        assertProfile(new ClaudeOpus48Profile(), 1_000_000L, 128_000L,
-                java.util.List.of("adaptive", "disabled"));
-        assertProfile(new ClaudeFable5Profile(), 1_000_000L, 128_000L,
+        assertProfile(new ClaudeOpus55Profile(), 1_000_000L, 128_000L,
                 java.util.List.of("adaptive"));
-        assertProfile(new ClaudeMythos5Profile(), 1_000_000L, 128_000L,
+        assertProfile(new ClaudeSonnet55Profile(), 1_000_000L, 128_000L,
                 java.util.List.of("adaptive"));
+        assertProfile(new ClaudeHaiku55Profile(), 1_000_000L, 128_000L,
+                java.util.List.of("adaptive", "disabled"));
 
-        assertOpenAiProfile(new Gpt54Profile(), 1_050_000L,
-                java.util.List.of("disabled", "low", "medium", "high", "xhigh"),
-                "disabled", true, true);
-        assertOpenAiProfile(new Gpt54ProProfile(), 1_050_000L,
-                java.util.List.of("medium", "high", "xhigh"),
-                "medium", false, true);
-        assertOpenAiProfile(new Gpt54MiniProfile(), 400_000L,
-                java.util.List.of("disabled", "low", "medium", "high", "xhigh"),
-                "disabled", true, true);
-        assertOpenAiProfile(new Gpt54NanoProfile(), 400_000L,
-                java.util.List.of("disabled", "low", "medium", "high", "xhigh"),
-                "disabled", true, true);
-        assertOpenAiProfile(new Gpt55Profile(), 1_050_000L,
-                java.util.List.of("disabled", "low", "medium", "high", "xhigh"),
-                "medium", true, true);
-        assertOpenAiProfile(new Gpt56SolProfile(), 1_050_000L,
+        var withoutNone = java.util.List.of("low", "medium", "high", "xhigh", "max");
+        assertOpenAiProfile(new Gpt6AstraProfile(), 1_050_000L, withoutNone, "medium", true, true);
+        assertOpenAiProfile(new Gpt61SolProfile(), 1_050_000L, withoutNone, "medium", true, true);
+        assertOpenAiProfile(new Gpt6LunaProfile(), 1_050_000L,
                 java.util.List.of("disabled", "low", "medium", "high", "xhigh", "max"),
                 "medium", true, true);
-        assertThat(new Gpt54Profile().isChatCompletionsCompatible()).isTrue();
-        assertThat(new Gpt54ProProfile().isChatCompletionsCompatible()).isFalse();
     }
 
     @Test
-    void gpt5ProfilesUseReasoningOptionsWithoutUnsupportedTemperatureOrMaxTokens() {
+    void gpt6ProfilesUseReasoningOptionsWithoutUnsupportedTemperatureOrMaxTokens() {
         AiModelProfileCatalog.modelsFor("openai").forEach(profile -> {
             assertThat(optionKeys(profile)).contains(
                     "maxCompletionTokens", "reasoningEffort", "verbosity",
@@ -209,10 +156,10 @@ class AiModelProfileCatalogTest {
                 .containsExactlyInAnyOrder("getProviderType", "getModelKey", "getProviderModelName",
                         "getDisplayName", "getDescription", "getTokenConstraints", "getOptions",
                         "isChatCompletionsCompatible");
-        assertThat(new ClaudeHaiku45Profile()).isInstanceOf(FixedThinkingModelProfile.class);
-        assertThat(new ClaudeHaiku45Profile()).isInstanceOf(CacheModelProfile.class);
-        assertThat(new ClaudeHaiku45Profile())
-                .isNotInstanceOf(AdaptiveThinkingModelProfile.class)
+        assertThat(new ClaudeHaiku55Profile()).isInstanceOf(AdaptiveThinkingModelProfile.class);
+        assertThat(new ClaudeHaiku55Profile()).isInstanceOf(CacheModelProfile.class);
+        assertThat(new ClaudeHaiku55Profile())
+                .isNotInstanceOf(FixedThinkingModelProfile.class)
                 .isNotInstanceOf(ReasoningEffortModelProfile.class);
     }
 
@@ -271,52 +218,16 @@ class AiModelProfileCatalogTest {
                 .isNotInstanceOf(ThinkingModesModelProfile.class)
                 .isNotInstanceOf(AdaptiveThinkingModelProfile.class)
                 .isNotInstanceOf(FixedThinkingModelProfile.class));
-        AiModelProfileCatalog.modelsFor("anthropic").stream()
-                .filter(profile -> !profile.getModelKey().endsWith("-4_5")
-                        && !profile.getModelKey().endsWith("-4_6"))
-                .forEach(profile -> assertThat(profile)
-                        .isInstanceOf(AdaptiveThinkingModelProfile.class)
-                        .isInstanceOf(OutputEffortModelProfile.class)
-                        .isInstanceOf(CacheModelProfile.class)
-                        .isNotInstanceOf(ReasoningOptionsModelProfile.class)
-                        .isNotInstanceOf(ReasoningEffortModelProfile.class)
-                        .isNotInstanceOf(VerbosityModelProfile.class)
-                        .isNotInstanceOf(ProviderCompactionModelProfile.class)
-                        .isNotInstanceOf(TemperatureModelProfile.class)
-                        .isNotInstanceOf(FixedThinkingModelProfile.class));
-        AiModelProfileCatalog.modelsFor("anthropic").stream()
-                .filter(profile -> profile.getModelKey().endsWith("-4_6"))
-                .forEach(profile -> assertThat(profile)
-                        .isInstanceOf(FixedThinkingModelProfile.class)
-                        .isInstanceOf(AdaptiveThinkingModelProfile.class)
-                        .isInstanceOf(OutputEffortModelProfile.class)
-                        .isInstanceOf(CacheModelProfile.class));
-        AiModelProfileCatalog.modelsFor("anthropic").stream()
-                .filter(profile -> profile.getModelKey().endsWith("-4_5")
-                        && profile instanceof ClaudeSonnet45Profile)
-                .forEach(profile -> assertThat(profile)
-                        .isInstanceOf(FixedThinkingModelProfile.class)
-                        .isInstanceOf(CacheModelProfile.class)
-                        .isNotInstanceOf(AdaptiveThinkingModelProfile.class)
-                        .isNotInstanceOf(OutputEffortModelProfile.class));
-        assertThat(new ClaudeOpus45Profile())
-                .isInstanceOf(FixedThinkingModelProfile.class)
+        AiModelProfileCatalog.modelsFor("anthropic").forEach(profile -> assertThat(profile)
+                .isInstanceOf(AdaptiveThinkingModelProfile.class)
                 .isInstanceOf(OutputEffortModelProfile.class)
                 .isInstanceOf(CacheModelProfile.class)
-                .isNotInstanceOf(AdaptiveThinkingModelProfile.class);
-        AiModelProfileCatalog.modelsFor("anthropic").stream()
-                .filter(ClaudeHaiku45Profile.class::isInstance)
-                .forEach(profile -> assertThat(profile)
-                        .isInstanceOf(FixedThinkingModelProfile.class)
-                        .isInstanceOf(ThinkingModesModelProfile.class)
-                        .isInstanceOf(CacheModelProfile.class)
-                        .isNotInstanceOf(AdaptiveThinkingModelProfile.class)
-                        .isNotInstanceOf(OutputEffortModelProfile.class)
-                        .isNotInstanceOf(ReasoningOptionsModelProfile.class)
-                        .isNotInstanceOf(ReasoningEffortModelProfile.class)
-                        .isNotInstanceOf(VerbosityModelProfile.class)
-                        .isNotInstanceOf(ProviderCompactionModelProfile.class)
-                        .isNotInstanceOf(TemperatureModelProfile.class));
+                .isNotInstanceOf(ReasoningOptionsModelProfile.class)
+                .isNotInstanceOf(ReasoningEffortModelProfile.class)
+                .isNotInstanceOf(VerbosityModelProfile.class)
+                .isNotInstanceOf(ProviderCompactionModelProfile.class)
+                .isNotInstanceOf(TemperatureModelProfile.class)
+                .isNotInstanceOf(FixedThinkingModelProfile.class));
     }
 
     @Test
@@ -368,19 +279,18 @@ class AiModelProfileCatalogTest {
         AiModelProfileCatalog.install(properties);
 
         assertThat(properties.getModels()).containsOnlyKeys(
-                "claude-haiku-4_5", "claude-sonnet-4_5", "claude-sonnet-4_6",
-                "claude-sonnet-5", "claude-opus-4_5", "claude-opus-4_6",
-                "claude-opus-4_7", "claude-opus-4_8", "claude-opus-5",
-                "claude-fable-5", "claude-mythos-5",
-                "gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna",
-                "gpt-5_5", "gpt-5_4", "gpt-5_4-pro",
-                "gpt-5_4-mini", "gpt-5_4-nano");
-        assertThat(properties.getModels().get("claude-haiku-4_5").getReasoningEfforts())
-                .isEmpty();
-        assertThat(properties.getModels().get("gpt-5_6-sol").getReasoningEfforts())
+                "claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5",
+                "gpt-6-luna", "gpt-6_1-sol", "gpt-6-astra");
+        assertThat(properties.getModels().get("claude-haiku-5-5").getReasoningEfforts())
+                .extracting(ScoreAiProperties.ReasoningEffort::getName)
+                .containsExactly("low", "medium", "high", "xhigh", "max");
+        assertThat(properties.getModels().get("gpt-6_1-sol").getReasoningEfforts())
+                .extracting(ScoreAiProperties.ReasoningEffort::getName)
+                .containsExactly("low", "medium", "high", "xhigh", "max");
+        assertThat(properties.getModels().get("gpt-6-luna").getReasoningEfforts())
                 .extracting(ScoreAiProperties.ReasoningEffort::getName)
                 .containsExactly("disabled", "low", "medium", "high", "xhigh", "max");
-        assertThat(properties.getModels().get("gpt-5_6-sol").getProvider())
+        assertThat(properties.getModels().get("gpt-6_1-sol").getProvider())
                 .isEqualTo("azure-openai");
     }
 
@@ -396,15 +306,13 @@ class AiModelProfileCatalogTest {
         AiModelProfileCatalog.install(properties);
 
         assertThat(properties.getModels()).containsOnlyKeys(
-                "gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna",
-                "gpt-5_5", "gpt-5_4", "gpt-5_4-pro",
-                "gpt-5_4-mini", "gpt-5_4-nano");
+                "gpt-6-luna", "gpt-6_1-sol", "gpt-6-astra");
     }
 
     @Test
     void serializesProfilesAsTheFrontendContract() {
         var json = new ObjectMapper().valueToTree(
-                AiModelProfileView.from(new Gpt56SolProfile()));
+                AiModelProfileView.from(new Gpt61SolProfile()));
 
         assertThat(fieldNames(json)).containsExactlyInAnyOrder(
                 "providerType", "modelKey", "providerModelName", "displayName", "description",
@@ -425,7 +333,7 @@ class AiModelProfileCatalogTest {
                 "reasoningOptions", "outputEffort", "verbosity", "temperature",
                 "adaptiveThinking", "providerCompaction");
         assertThat(json.get("providerType").asText()).isEqualTo("openai");
-        assertThat(json.get("modelKey").asText()).isEqualTo("gpt-5_6-sol");
+        assertThat(json.get("modelKey").asText()).isEqualTo("gpt-6_1-sol");
         assertThat(json.get("contextWindow").asLong()).isEqualTo(1_050_000L);
         assertThat(json.get("maxContextWindow").asLong()).isEqualTo(1_050_000L);
         assertThat(json.get("maxOutputTokens").asInt()).isEqualTo(128_000);
@@ -433,33 +341,28 @@ class AiModelProfileCatalogTest {
                 .get("maximum").asLong()).isEqualTo(1_050_000L);
         assertThat(json.get("capabilityConstraints").get("reasoningOptions")
                 .get("supported").asBoolean()).isTrue();
-        assertThat(json.get("reasoningEfforts").get(2).get("defaultEffort").asBoolean())
+        assertThat(json.get("reasoningEfforts").get(1).get("defaultEffort").asBoolean())
                 .isTrue();
     }
 
     @Test
-    void serializesUnsupportedHaikuCapabilitiesWithStableSentinelValues() {
+    void serializesHaikuCapabilitiesWithStableSentinelValues() {
         var json = new ObjectMapper().valueToTree(
-                AiModelProfileView.from(new ClaudeHaiku45Profile()));
+                AiModelProfileView.from(new ClaudeHaiku55Profile()));
 
         assertThat(json.get("reasoningModelSupported").asBoolean()).isFalse();
-        assertThat(json.get("outputEffortSupported").asBoolean()).isFalse();
+        assertThat(json.get("outputEffortSupported").asBoolean()).isTrue();
         assertThat(json.get("verbositySupported").asBoolean()).isFalse();
         assertThat(json.get("temperatureSupported").asBoolean()).isFalse();
         assertThat(json.get("providerCompactionEnabled").asBoolean()).isFalse();
-        assertThat(json.get("adaptiveThinking").asBoolean()).isFalse();
+        assertThat(json.get("adaptiveThinking").asBoolean()).isTrue();
         assertThat(json.get("temperature").isNull()).isTrue();
-        assertThat(json.get("outputEffort").isNull()).isTrue();
-        assertThat(json.get("reasoningEfforts").isEmpty()).isTrue();
+        assertThat(json.get("outputEffort").asText()).isEqualTo("medium");
         assertThat(json.get("thinkingModes")).extracting(node -> node.asText())
-                .containsExactly("enabled", "disabled");
-        assertThat(json.get("defaultThinking").asText()).isEqualTo("disabled");
+                .containsExactly("adaptive", "disabled");
+        assertThat(json.get("defaultThinking").asText()).isEqualTo("adaptive");
         assertThat(json.get("cacheStrategy").asText()).isEqualTo("conversation-history");
-        assertThat(json.get("thinkingBudgetTokens").asInt()).isEqualTo(4_096);
-        json.get("capabilityConstraints").forEach(capability -> {
-            assertThat(capability.get("supported").asBoolean()).isFalse();
-            assertThat(capability.get("defaultEnabled").asBoolean()).isFalse();
-        });
+        assertThat(json.get("thinkingBudgetTokens").isNull()).isTrue();
     }
 
     @Test
@@ -469,12 +372,12 @@ class AiModelProfileCatalogTest {
 
     @Test
     void resolvesEditableSettingsWithinProfileLimitsForPersistence() {
-        var profile = new ClaudeHaiku45Profile();
+        var profile = new ClaudeHaiku55Profile();
         var update = new AiModelCatalogUpdate(AiProviderId.from(1L), profile.getModelKey(),
                 true, false, 0, 32_000, 100_000L, 32_000L, 60_000L,
-                4_096L, 16_000L, false, null, 2_048, false,
-                null, "conversation-history", null, false, null, false,
-                java.util.List.of("disabled"), "disabled", java.util.List.of());
+                4_096L, 16_000L, false, null, null, true,
+                "high", "conversation-history", null, true, null, false,
+                java.util.List.of("adaptive", "disabled"), "adaptive", java.util.List.of());
 
         AiModelProfileSettingsValidator.validate(profile, update);
         var settings = AiModelProfileSettingsResolver.resolve(profile, update);
@@ -483,26 +386,24 @@ class AiModelProfileCatalogTest {
         assertThat(settings.maxTokens()).isEqualTo(32_000);
         assertThat(settings.outputReserveTokens()).isEqualTo(32_000L);
         assertThat(settings.autoCompactThresholdTokens()).isEqualTo(60_000L);
-        assertThat(settings.thinkingBudgetTokens()).isEqualTo(2_048);
-        assertThat(settings.adaptiveThinking()).isFalse();
+        assertThat(settings.adaptiveThinking()).isTrue();
     }
 
     @Test
     void normalizesOptionalNullSettingsToProfileDefaultsBeforePersistence() {
-        var profile = new ClaudeHaiku45Profile();
+        var profile = new ClaudeHaiku55Profile();
         var update = new AiModelCatalogUpdate(AiProviderId.from(1L), profile.getModelKey(),
-                true, false, 0, null, 200_000L, null, null,
-                8_192L, 32_000L, false, null, null, false,
-                null, "conversation-history", null, false, null, false,
-                java.util.List.of("enabled", "disabled"), "enabled", java.util.List.of());
+                true, false, 0, null, 1_000_000L, null, null,
+                8_192L, 32_000L, false, null, null, true,
+                "medium", "conversation-history", null, true, null, false,
+                java.util.List.of("adaptive", "disabled"), "adaptive", java.util.List.of());
 
         AiModelProfileSettingsValidator.validate(profile, update);
         var settings = AiModelProfileSettingsResolver.resolve(profile, update);
 
-        assertThat(settings.maxTokens()).isEqualTo(64_000);
-        assertThat(settings.outputReserveTokens()).isEqualTo(64_000L);
-        assertThat(settings.autoCompactThresholdTokens()).isEqualTo(120_000L);
-        assertThat(settings.thinkingBudgetTokens()).isEqualTo(4_096);
+        assertThat(settings.maxTokens()).isEqualTo(128_000);
+        assertThat(settings.outputReserveTokens()).isEqualTo(128_000L);
+        assertThat(settings.autoCompactThresholdTokens()).isEqualTo(800_000L);
     }
 
     private static Set<String> fieldNames(com.fasterxml.jackson.databind.JsonNode node) {
@@ -556,6 +457,14 @@ class AiModelProfileCatalogTest {
     private static AiModelOption option(AiModelProfile profile, String key) {
         return profile.getOptions().stream().filter(value -> value.key().equals(key))
                 .findFirst().orElseThrow();
+    }
+
+    private static void assertDefaultOutputEffort(AiModelProfile profile, String expected) {
+        assertThat(AiModelProfileView.from(profile).reasoningEfforts())
+                .filteredOn(ReasoningEffort::defaultEffort)
+                .extracting(ReasoningEffort::name).containsExactly(expected);
+        assertThat(((OutputEffortModelProfile) profile).getDefaultOutputEffort())
+                .isEqualTo(expected);
     }
 
     private static void assertOutputEfforts(AiModelProfile profile, String... expected) {

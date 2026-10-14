@@ -404,7 +404,7 @@ public class ScoreAiModelRegistry {
                 return configuredReasoningModel;
             }
             String normalized = model.toLowerCase();
-            return normalized.startsWith("gpt-5") || normalized.matches("o[134](?:[-_].*)?")
+            return normalized.matches("gpt-[56].*") || normalized.matches("o[134](?:[-_].*)?")
                     || reasoningEfforts.stream().anyMatch(effort -> !"default".equals(effort.name()));
         }
 
@@ -412,7 +412,7 @@ public class ScoreAiModelRegistry {
             if (configuredVerbosity != null) {
                 return configuredVerbosity;
             }
-            return openAiReasoningModel() && model.toLowerCase().startsWith("gpt-5");
+            return openAiReasoningModel() && model.toLowerCase().matches("gpt-[56].*");
         }
 
         public boolean supportsTemperature() {

@@ -21,16 +21,8 @@ import java.util.Optional;
  */
 public final class AiModelProfileCatalog {
     private static final List<AiModelProfile> PROFILES = List.of(
-            new ClaudeHaiku45Profile(),
-            new ClaudeSonnet45Profile(), new ClaudeSonnet46Profile(),
-            new ClaudeSonnet5Profile(),
-            new ClaudeOpus45Profile(), new ClaudeOpus46Profile(),
-            new ClaudeOpus47Profile(), new ClaudeOpus48Profile(), new ClaudeOpus5Profile(),
-            new ClaudeFable5Profile(), new ClaudeMythos5Profile(),
-            new Gpt56SolProfile(), new Gpt56TerraProfile(), new Gpt56LunaProfile(),
-            new Gpt55Profile(),
-            new Gpt54Profile(), new Gpt54ProProfile(),
-            new Gpt54MiniProfile(), new Gpt54NanoProfile());
+            new ClaudeHaiku55Profile(), new ClaudeSonnet55Profile(), new ClaudeOpus55Profile(),
+            new Gpt6LunaProfile(), new Gpt61SolProfile(), new Gpt6AstraProfile());
 
     private AiModelProfileCatalog() {}
 

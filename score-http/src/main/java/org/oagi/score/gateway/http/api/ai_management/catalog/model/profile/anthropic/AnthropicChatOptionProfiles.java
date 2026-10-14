@@ -11,7 +11,8 @@ final class AnthropicChatOptionProfiles {
     private AnthropicChatOptionProfiles() {}
 
     static List<AiModelOption> options(String model, int maxTokens,
-                                       AnthropicChatOptionSupport support) {
+                                       AnthropicChatOptionSupport support,
+                                       String defaultOutputEffort) {
         List<AiModelOption> options = new ArrayList<>();
         options.add(string("model", model, "Name of the Claude model sent to Anthropic."));
         options.add(integer("maxTokens", maxTokens,
@@ -70,7 +71,7 @@ final class AnthropicChatOptionProfiles {
                     "JSON output configuration combining a structured-output schema and effort."));
             options.add(json("outputSchema", null,
                     "JSON Schema used for Anthropic structured output."));
-            options.add(enumeration("outputEffort", "HIGH",
+            options.add(enumeration("outputEffort", defaultOutputEffort.toUpperCase(),
                     "Effort level used by outputConfig.", support.outputEfforts().stream()
                             .map(String::toUpperCase).toArray(String[]::new)));
         }

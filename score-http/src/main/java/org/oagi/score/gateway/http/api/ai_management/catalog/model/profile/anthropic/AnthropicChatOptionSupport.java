@@ -15,26 +15,6 @@ record AnthropicChatOptionSupport(List<String> thinkingModes, String defaultThin
         }
     }
 
-    static AnthropicChatOptionSupport haiku45() {
-        return new AnthropicChatOptionSupport(List.of("enabled", "disabled"), "disabled",
-                true, List.of(), false, false, false);
-    }
-
-    static AnthropicChatOptionSupport claude45() {
-        return new AnthropicChatOptionSupport(List.of("enabled", "disabled"), "disabled",
-                true, List.of(), true, true, false);
-    }
-
-    static AnthropicChatOptionSupport opus45() {
-        return new AnthropicChatOptionSupport(List.of("enabled", "disabled"), "disabled",
-                true, AnthropicOutputEfforts.THROUGH_HIGH, true, true, false);
-    }
-
-    static AnthropicChatOptionSupport claude46() {
-        return new AnthropicChatOptionSupport(List.of("enabled", "adaptive", "disabled"),
-                "adaptive", true, AnthropicOutputEfforts.THROUGH_MAX, true, true, true);
-    }
-
     static AnthropicChatOptionSupport adaptive() {
         return adaptive(List.of("adaptive", "disabled"));
     }

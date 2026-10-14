@@ -6,7 +6,7 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.Reaso
 import java.util.ArrayList;
 import java.util.List;
 
-/** Spring AI OpenAI reference chat options, filtered by each GPT-5 model specification. */
+/** Spring AI OpenAI reference chat options, filtered by each GPT-6 model specification. */
 final class OpenAiChatOptionProfiles {
     private OpenAiChatOptionProfiles() {}
 
@@ -60,7 +60,7 @@ final class OpenAiChatOptionProfiles {
                 "Allow OpenAI to store the completion for platform features."));
         options.add(json("metadata", null, "JSON developer tags stored with the completion."));
         options.add(enumeration("reasoningEffort", defaultEffort(reasoningEfforts),
-                "Reasoning effort used by the GPT-5 reasoning model.", reasoningEfforts.stream()
+                "Reasoning effort used by the GPT-6 reasoning model.", reasoningEfforts.stream()
                         .map(ReasoningEffort::name).toArray(String[]::new)));
         options.add(enumeration("verbosity", "medium", "Amount of detail in the response.",
                 "low", "medium", "high"));

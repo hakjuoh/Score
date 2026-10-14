@@ -214,7 +214,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
             defaultModelId = modelIds.get(properties.getModelName().strip());
         }
         if (defaultModelId == null) {
-            defaultModelId = modelIds.get("gpt-5_6-sol");
+            defaultModelId = modelIds.get("gpt-6_1-sol");
         }
         if (defaultModelId == null) {
             defaultModelId = modelIds.values().stream().findFirst().orElse(null);
@@ -234,7 +234,7 @@ public class JooqAiCatalogBootstrapRepository extends JooqBaseRepository
             lightweightModelId = modelIds.get(properties.getLightweightModelName().strip());
         }
         if (lightweightModelId == null) {
-            lightweightModelId = modelIds.get("gpt-5_6-luna");
+            lightweightModelId = modelIds.get("gpt-6-luna");
         }
         if (lightweightModelId == null) return;
         tx.update(AI_MODEL)

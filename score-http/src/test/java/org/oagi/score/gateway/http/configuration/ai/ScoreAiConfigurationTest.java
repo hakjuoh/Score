@@ -57,18 +57,14 @@ class ScoreAiConfigurationTest {
 
         assertThat(properties.getModels()).isEmpty();
         AiModelProfileCatalog.install(properties);
-        assertThat(properties.getModels()).hasSize(19).containsKey("claude-opus-5");
-        assertThat(properties.getModels().get("claude-haiku-4_5").getReasoningEfforts())
-                .isEmpty();
-        assertThat(properties.getModels().get("claude-haiku-4_5").getThinkingBudgetTokens())
-                .isEqualTo(4096);
-        assertThat(properties.getModels().get("claude-opus-5").getReasoningEfforts())
+        assertThat(properties.getModels()).hasSize(6).containsKey("claude-opus-5-5");
+        assertThat(properties.getModels().get("claude-opus-5-5").getReasoningEfforts())
                 .extracting(ScoreAiProperties.ReasoningEffort::getName)
                 .containsExactly("low", "medium", "high", "xhigh", "max");
-        assertThat(properties.getModels().get("gpt-5_6-sol").getReasoningEfforts())
+        assertThat(properties.getModels().get("gpt-6-luna").getReasoningEfforts())
                 .extracting(ScoreAiProperties.ReasoningEffort::getName)
                 .containsExactly("disabled", "low", "medium", "high", "xhigh", "max");
-        assertThat(properties.getModels().get("gpt-5_6-sol").getContextWindow())
+        assertThat(properties.getModels().get("gpt-6_1-sol").getContextWindow())
                 .isEqualTo(1_050_000L);
         assertThat(properties.getTools().getToolSearch().isEnabled()).isTrue();
         assertThat(properties.getTools().getFiles().getStorage().getProvider()).isEqualTo("local");
@@ -385,22 +381,18 @@ class ScoreAiConfigurationTest {
 
         AiModelProfileCatalog.install(properties);
         assertEquals(Set.of(
-                        "claude-haiku-4_5", "claude-sonnet-4_5", "claude-sonnet-4_6",
-                        "claude-sonnet-5", "claude-opus-4_5", "claude-opus-4_6",
-                        "claude-opus-4_7", "claude-opus-4_8", "claude-opus-5",
-                        "claude-fable-5", "claude-mythos-5",
-                        "gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna",
-                        "gpt-5_5", "gpt-5_4", "gpt-5_4-pro",
-                        "gpt-5_4-mini", "gpt-5_4-nano"),
+                        "claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5",
+                        "gpt-6-luna", "gpt-6_1-sol", "gpt-6-astra"),
                 properties.getModels().keySet());
-        assertEquals("claude-opus-5", properties.getModels().get("claude-opus-5").getModel());
-        assertEquals("claude-haiku-4-5", properties.getModels().get("claude-haiku-4_5").getModel());
-        assertNull(properties.getModels().get("claude-haiku-4_5").getReasoningEffort());
-        assertEquals("gpt-5.6-terra", properties.getModels().get("gpt-5_6-terra").getModel());
-        assertEquals("gpt-5.6-luna", properties.getModels().get("gpt-5_6-luna").getModel());
-        assertEquals(128000, properties.getModels().get("claude-fable-5").getMaxTokens());
-        assertEquals(128000, properties.getModels().get("gpt-5_6-sol").getMaxTokens());
-        assertEquals(1050000L, properties.getModels().get("gpt-5_6-sol").getContextWindow());
+        assertEquals("claude-opus-5-5", properties.getModels().get("claude-opus-5-5").getModel());
+        assertEquals("claude-haiku-5-5", properties.getModels().get("claude-haiku-5-5").getModel());
+        assertEquals("medium", properties.getModels().get("claude-haiku-5-5").getReasoningEffort());
+        assertEquals("gpt-6.1-sol", properties.getModels().get("gpt-6_1-sol").getModel());
+        assertEquals("gpt-6-luna", properties.getModels().get("gpt-6-luna").getModel());
+        assertEquals("gpt-6-astra", properties.getModels().get("gpt-6-astra").getModel());
+        assertEquals(128000, properties.getModels().get("claude-opus-5-5").getMaxTokens());
+        assertEquals(128000, properties.getModels().get("gpt-6_1-sol").getMaxTokens());
+        assertEquals(1050000L, properties.getModels().get("gpt-6_1-sol").getContextWindow());
         assertEquals("classpath:ai/system/system-prompt-connect-center-assistant.md",
                 properties.getAssistant().getSystemPromptResource());
         assertEquals(Duration.ofMinutes(2),
@@ -424,9 +416,9 @@ class ScoreAiConfigurationTest {
         assertNull(environment.getProperty("score.ai.mcp.connection-name"));
         assertNull(environment.getProperty("score.ai.gateway.model-name"));
         Map.of(
-                "gpt-5_6-sol", "xhigh",
-                "gpt-5_6-terra", "xhigh",
-                "gpt-5_6-luna", "xhigh"
+                "gpt-6_1-sol", "xhigh",
+                "gpt-6-astra", "xhigh",
+                "gpt-6-luna", "xhigh"
         ).forEach((modelName, effortName) -> assertEquals("Extra High", properties.getModels().get(modelName)
                 .getReasoningEfforts().stream()
                 .filter(effort -> effortName.equals(effort.getName()))

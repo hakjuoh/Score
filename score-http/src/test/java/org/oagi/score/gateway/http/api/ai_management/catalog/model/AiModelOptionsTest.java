@@ -2,10 +2,9 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.model;
 
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.AiModelProfileView;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeFable5Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeHaiku45Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeOpus47Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai.Gpt54Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeHaiku55Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeOpus55Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai.Gpt61SolProfile;
 
 import java.util.Map;
 import java.util.List;
@@ -17,26 +16,24 @@ class AiModelOptionsTest {
 
     @Test
     void validatesTypedEditableOptionsAndOmitsBlankValues() {
-        var values = AiModelOptions.validated(new ClaudeHaiku45Profile(), Map.of(
-                "topP", 0.7,
+        var values = AiModelOptions.validated(new ClaudeHaiku55Profile(), Map.of(
                 "multiBlockSystemCaching", true,
                 "messageTypeTtl", Map.of("SYSTEM", "FIVE_MINUTES"),
                 "cacheStrategy", ""));
 
-        assertThat(values).containsEntry("topP", 0.7)
-                .containsEntry("multiBlockSystemCaching", true)
+        assertThat(values).containsEntry("multiBlockSystemCaching", true)
                 .containsKey("messageTypeTtl")
                 .doesNotContainKey("cacheStrategy");
     }
 
     @Test
     void rejectsProviderOwnedAndMismatchedOptionValues() {
-        var profile = new ClaudeHaiku45Profile();
+        var profile = new ClaudeHaiku55Profile();
 
         assertThatThrownBy(() -> AiModelOptions.validated(profile, Map.of("apiKey", "secret")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Unsupported model option");
-        assertThatThrownBy(() -> AiModelOptions.validated(profile, Map.of("topP", "high")))
+        assertThatThrownBy(() -> AiModelOptions.validated(new Gpt61SolProfile(), Map.of("topP", "high")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("does not match decimal");
         assertThatThrownBy(() -> AiModelOptions.validated(
@@ -47,11 +44,12 @@ class AiModelOptionsTest {
 
     @Test
     void rejectsUnsafeJsonOverflowRangesAndInvalidDependencies() {
-        var profile = new ClaudeHaiku45Profile();
+        var profile = new ClaudeHaiku55Profile();
 
-        assertThatThrownBy(() -> AiModelOptions.validated(profile, Map.of("topK", Long.MAX_VALUE)))
+        var openAi = new Gpt61SolProfile();
+        assertThatThrownBy(() -> AiModelOptions.validated(openAi, Map.of("topLogprobs", Long.MAX_VALUE)))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> AiModelOptions.validated(profile, Map.of("topP", 1.1)))
+        assertThatThrownBy(() -> AiModelOptions.validated(openAi, Map.of("topP", 1.1)))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> AiModelOptions.validated(profile,
                 Map.of("messageTypeTtl", Map.of("SYSTEM", new Object()))))
@@ -60,7 +58,7 @@ class AiModelOptionsTest {
 
     @Test
     void filtersApplicationManagedAndStaleOptionsFromTheEditableDocument() {
-        var profile = new ClaudeHaiku45Profile();
+        var profile = new ClaudeHaiku55Profile();
 
         assertThat(AiModelOptions.editableOptions(profile)).extracting("key")
                 .doesNotContain("model", "apiKey", "toolCallbacks", "toolContext",
@@ -68,57 +66,34 @@ class AiModelOptionsTest {
                         "disableParallelToolUse", "webSearchTool", "maxUses",
                         "allowedDomains", "blockedDomains", "userLocation");
         assertThat(AiModelOptions.editable(profile, Map.of(
-                "topP", 0.5, "removedOption", true, "adaptiveThinking", true)))
-                .containsExactlyEntriesOf(Map.of("topP", 0.5));
+                "multiBlockSystemCaching", false, "removedOption", true, "adaptiveThinking", true)))
+                .containsExactlyEntriesOf(Map.of("multiBlockSystemCaching", false));
     }
 
     @Test
     void revalidatesPersistedOptionsAgainstTheCurrentProfileBeforeRuntimeUse() {
         Map<String, Object> runtime = AiModelOptions.runtimeOptions(
-                new ClaudeOpus47Profile(), Map.of(
+                new ClaudeOpus55Profile(), Map.of(
                         "topP", 0.5, "adaptiveThinking", true,
-                        "thinkingModes", List.of("adaptive", "disabled"),
+                        "thinkingModes", List.of("adaptive"),
                         "defaultThinking", "adaptive",
-                        "outputEffort", "high",
+                        "outputEffort", "medium",
                         "cacheStrategy", "CONVERSATION_HISTORY"));
 
         assertThat(runtime).containsEntry("adaptiveThinking", true)
                 .containsEntry("cacheStrategy", "CONVERSATION_HISTORY")
-                .containsEntry("outputEffort", "high")
+                .containsEntry("outputEffort", "medium")
                 .doesNotContainKey("topP");
-    }
-
-    @Test
-    void fixedThinkingDefaultsRoundTripWithTheirDormantBudget() {
-        var profile = new ClaudeHaiku45Profile();
-        var view = AiModelProfileView.from(profile);
-        var input = new AiModelCatalogUpdate(AiProviderId.from(1L),
-                profile.getModelKey(), true, false, 0, view.maxTokens(),
-                view.contextWindow(), view.outputReserveTokens(),
-                view.autoCompactThresholdTokens(), view.emergencyHeadroomTokens(),
-                view.toolOutputTokenLimit(), view.providerCompactionEnabled(),
-                view.temperature(), view.thinkingBudgetTokens(), view.adaptiveThinking(),
-                view.outputEffort(), view.cacheStrategy(), view.reasoningModelSupported(),
-                view.outputEffortSupported(), view.verbositySupported(),
-                view.temperatureSupported(), List.of("disabled"), view.defaultThinking(),
-                Map.of("thinking", "disabled"), List.of());
-        var stored = AiModelOptions.persisted(profile, input,
-                AiModelProfileSettingsResolver.resolve(profile, input));
-
-        assertThat(stored).containsEntry("thinkingModes", List.of("enabled", "disabled"))
-                .containsEntry("thinkingBudgetTokens", view.thinkingBudgetTokens());
-        assertThat(AiModelOptions.runtimeOptions(profile, stored))
-                .containsEntry("defaultThinking", "disabled");
     }
 
     @Test
     void rejectsStaleCapabilityFlagsAndInconsistentThinkingState() {
         assertThatThrownBy(() -> AiModelOptions.runtimeOptions(
-                new ClaudeHaiku45Profile(), Map.of("adaptiveThinking", true)))
+                new Gpt61SolProfile(), Map.of("adaptiveThinking", true)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("adaptiveThinking");
         assertThatThrownBy(() -> AiModelOptions.runtimeOptions(
-                new ClaudeOpus47Profile(), Map.of(
+                new ClaudeHaiku55Profile(), Map.of(
                         "adaptiveThinking", true,
                         "thinkingModes", List.of("disabled"),
                         "defaultThinking", "disabled")))
@@ -128,7 +103,7 @@ class AiModelOptionsTest {
 
     @Test
     void rejectsToolOptionsAndMalformedCitationDocuments() {
-        var profile = new ClaudeHaiku45Profile();
+        var profile = new ClaudeHaiku55Profile();
         assertThatThrownBy(() -> AiModelOptions.validated(profile,
                 Map.of("toolChoice", "invented")))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -140,56 +115,28 @@ class AiModelOptionsTest {
         assertThatThrownBy(() -> AiModelOptions.validated(profile,
                 Map.of("pdf", "not-base64")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> AiModelOptions.runtimeOptions(profile,
-                Map.of("temperature", 9.0)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("temperature");
-        assertThatThrownBy(() -> AiModelOptions.runtimeOptions(profile, Map.of(
-                "thinkingBudgetTokens", Integer.MAX_VALUE,
-                "thinkingModes", List.of("enabled", "disabled"),
-                "adaptiveThinking", false)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("thinkingBudgetTokens");
     }
 
     @Test
     void rejectsToolControlsNestedInEditableJsonOptions() {
-        var profile = new ClaudeHaiku45Profile();
+        var profile = new ClaudeHaiku55Profile();
 
         assertThatThrownBy(() -> AiModelOptions.validated(profile, Map.of(
                 "cacheOptions", Map.of("cacheToolResults", true))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("cacheOptions");
-        assertThatThrownBy(() -> AiModelOptions.validated(new Gpt54Profile(), Map.of(
+        assertThatThrownBy(() -> AiModelOptions.validated(new Gpt61SolProfile(), Map.of(
                 "extraBody", Map.of("tool_choice", "auto"))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("extraBody");
     }
 
     @Test
-    void normalizesLegacyFixedThinkingModesBeforeRuntimeValidation() {
-        var runtime = AiModelOptions.runtimeOptions(new ClaudeHaiku45Profile(), Map.of(
-                "thinkingBudgetTokens", 4096,
-                "adaptiveThinking", false,
-                "thinkingModes", List.of("disabled"),
-                "defaultThinking", "disabled"));
-
-        assertThat(runtime).containsEntry("thinkingModes", List.of("enabled", "disabled"))
-                .containsEntry("defaultThinking", "disabled");
-
-        var withoutStoredModes = AiModelOptions.runtimeOptions(new ClaudeHaiku45Profile(), Map.of(
-                "thinkingBudgetTokens", 4096,
-                "adaptiveThinking", false));
-        assertThat(withoutStoredModes)
-                .containsEntry("thinkingModes", List.of("enabled", "disabled"));
-    }
-
-    @Test
     void restoresProfileRuntimeDefaultsForLegacyRowsWithoutModelOptions() {
-        var runtime = AiModelOptions.runtimeOptions(new ClaudeFable5Profile(), Map.of());
+        var runtime = AiModelOptions.runtimeOptions(new ClaudeOpus55Profile(), Map.of());
 
         assertThat(runtime).containsEntry("adaptiveThinking", true)
-                .containsEntry("outputEffort", "high")
+                .containsEntry("outputEffort", "medium")
                 .containsEntry("cacheStrategy", "CONVERSATION_HISTORY")
                 .containsEntry("thinkingModes", List.of("adaptive"))
                 .containsEntry("defaultThinking", "adaptive");

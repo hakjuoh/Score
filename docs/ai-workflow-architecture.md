@@ -230,7 +230,7 @@ score:
         output-safety:
           mode: SHADOW
           settings:
-            model-name: claude-haiku-4_5
+            model-name: claude-haiku-5-5
 ```
 
 ## Observability

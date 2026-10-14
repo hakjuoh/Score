@@ -34,15 +34,10 @@ class AiProviderModelProfileServiceTest {
     void authorizesAndMapsAnthropicAndOpenAiAliasesToProfiles() {
         assertThat(service("anthropic").modelProfiles(actor(), AiProviderId.from(1L)))
                 .extracting(profile -> profile.modelKey())
-                .containsExactly("claude-haiku-4_5", "claude-sonnet-4_5",
-                        "claude-sonnet-4_6", "claude-sonnet-5", "claude-opus-4_5",
-                        "claude-opus-4_6", "claude-opus-4_7", "claude-opus-4_8",
-                        "claude-opus-5", "claude-fable-5", "claude-mythos-5");
+                .containsExactly("claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5");
         assertThat(service("openai").modelProfiles(actor(), AiProviderId.from(1L)))
                 .extracting(profile -> profile.modelKey())
-                .containsExactly("gpt-5_6-sol", "gpt-5_6-terra", "gpt-5_6-luna",
-                        "gpt-5_5", "gpt-5_4", "gpt-5_4-pro",
-                        "gpt-5_4-mini", "gpt-5_4-nano");
+                .containsExactly("gpt-6-luna", "gpt-6_1-sol", "gpt-6-astra");
     }
 
     @Test

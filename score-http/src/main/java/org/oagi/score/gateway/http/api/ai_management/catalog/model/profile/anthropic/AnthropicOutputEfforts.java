@@ -6,16 +6,14 @@ import java.util.List;
 
 /** Provider-supported Anthropic output-effort sets, in increasing effort order. */
 final class AnthropicOutputEfforts {
-    static final List<String> THROUGH_HIGH = List.of("low", "medium", "high");
-    static final List<String> THROUGH_MAX = List.of("low", "medium", "high", "max");
     static final List<String> THROUGH_XHIGH_AND_MAX =
             List.of("low", "medium", "high", "xhigh", "max");
 
     private AnthropicOutputEfforts() {}
 
-    static List<ReasoningEffort> profiles(List<String> names) {
+    static List<ReasoningEffort> profiles(List<String> names, String defaultName) {
         return names.stream().map(name -> new ReasoningEffort(
-                name, displayName(name), description(name), name.equals("high"),
+                name, displayName(name), description(name), name.equals(defaultName),
                 names.indexOf(name))).toList();
     }
 

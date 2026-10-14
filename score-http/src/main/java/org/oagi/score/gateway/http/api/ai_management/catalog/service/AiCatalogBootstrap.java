@@ -35,11 +35,11 @@ public class AiCatalogBootstrap implements ApplicationRunner {
     public void bootstrapNow() {
         AiModelProfileCatalog.install(properties);
         if (properties.getProviders().isEmpty() || properties.getModels().isEmpty()) return;
-        if (!StringUtils.hasText(properties.getModelName()) && properties.getModels().containsKey("gpt-5_6-sol")) {
-            properties.setModelName("gpt-5_6-sol");
+        if (!StringUtils.hasText(properties.getModelName()) && properties.getModels().containsKey("gpt-6_1-sol")) {
+            properties.setModelName("gpt-6_1-sol");
         }
-        if (!StringUtils.hasText(properties.getLightweightModelName()) && properties.getModels().containsKey("gpt-5_6-luna")) {
-            properties.setLightweightModelName("gpt-5_6-luna");
+        if (!StringUtils.hasText(properties.getLightweightModelName()) && properties.getModels().containsKey("gpt-6-luna")) {
+            properties.setLightweightModelName("gpt-6-luna");
         }
         if (!secrets.isEncryptionConfigured() && properties.getProviders().values().stream()
                 .anyMatch(provider -> StringUtils.hasText(provider.getKey()))) {

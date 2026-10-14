@@ -3,9 +3,8 @@ package org.oagi.score.gateway.http.api.ai_management.catalog.service;
 import org.junit.jupiter.api.Test;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiModelCatalogUpdate;
 import org.oagi.score.gateway.http.api.ai_management.catalog.model.AiProviderId;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeFable5Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeHaiku45Profile;
-import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai.Gpt56SolProfile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.anthropic.ClaudeOpus55Profile;
+import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.openai.Gpt61SolProfile;
 
 import java.util.List;
 
@@ -14,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AiModelProfileSettingsValidatorTest {
 
-    private final Gpt56SolProfile profile = new Gpt56SolProfile();
+    private final Gpt61SolProfile profile = new Gpt61SolProfile();
 
     @Test
     void acceptsSmallerLimitsAndASubsetOfAllowedEfforts() {
@@ -101,34 +100,8 @@ class AiModelProfileSettingsValidatorTest {
     }
 
     @Test
-    void rejectsThinkingBudgetAtOrAboveTheConfiguredOutputLimit() {
-        var haiku = new ClaudeHaiku45Profile();
-        var input = new AiModelCatalogUpdate(AiProviderId.from(1L), haiku.getModelKey(), true, false, 0,
-                2_000, 100_000L, 10_000L, 80_000L, 4_096L, 16_000L,
-                false, null, 4_096, false, null, "conversation-history",
-                null, false, null, false, List.of("disabled"), "disabled", List.of());
-
-        assertThatThrownBy(() -> AiModelProfileSettingsValidator.validate(haiku, input))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("smaller than configured max output");
-    }
-
-    @Test
-    void validatesTheEffectiveThinkingDefaultAgainstConfiguredOutputLimit() {
-        var haiku = new ClaudeHaiku45Profile();
-        var input = new AiModelCatalogUpdate(AiProviderId.from(1L), haiku.getModelKey(), true, false, 0,
-                2_000, 100_000L, 10_000L, 80_000L, 4_096L, 16_000L,
-                false, null, null, false, null, "conversation-history",
-                null, false, null, false, List.of("enabled", "disabled"), "enabled", List.of());
-
-        assertThatThrownBy(() -> AiModelProfileSettingsValidator.validate(haiku, input))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("smaller than configured max output");
-    }
-
-    @Test
     void requiresAdaptiveFlagAndModeToChangeTogether() {
-        var claude = new ClaudeFable5Profile();
+        var claude = new ClaudeOpus55Profile();
         var input = new AiModelCatalogUpdate(AiProviderId.from(1L), claude.getModelKey(), true, false, 0,
                 100_000, 900_000L, 100_000L, 700_000L, 8_192L, 32_000L,
                 false, null, null, false, "high", "conversation-history",
@@ -141,7 +114,7 @@ class AiModelProfileSettingsValidatorTest {
 
     @Test
     void rejectsDisablingProviderEnforcedAdaptiveThinking() {
-        var claude = new ClaudeFable5Profile();
+        var claude = new ClaudeOpus55Profile();
         var input = new AiModelCatalogUpdate(AiProviderId.from(1L), claude.getModelKey(), true, false, 0,
                 100_000, 900_000L, 100_000L, 700_000L, 8_192L, 32_000L,
                 false, null, null, false, "high", "conversation-history",
@@ -150,19 +123,6 @@ class AiModelProfileSettingsValidatorTest {
         assertThatThrownBy(() -> AiModelProfileSettingsValidator.validate(claude, input))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Provider-enforced thinking modes");
-    }
-
-    @Test
-    void rejectsFixedThinkingWithoutAnExplicitModeAndDefault() {
-        var haiku = new ClaudeHaiku45Profile();
-        var input = new AiModelCatalogUpdate(AiProviderId.from(1L), haiku.getModelKey(), true, false, 0,
-                64_000, 200_000L, 64_000L, 120_000L, 8_192L, 32_000L,
-                false, null, 4_096, false, null, "conversation-history",
-                null, false, null, false, List.of(), null, List.of());
-
-        assertThatThrownBy(() -> AiModelProfileSettingsValidator.validate(haiku, input))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Fixed thinking requires");
     }
 
     private AiModelCatalogUpdate update(long contextWindow, boolean temperatureSupported,

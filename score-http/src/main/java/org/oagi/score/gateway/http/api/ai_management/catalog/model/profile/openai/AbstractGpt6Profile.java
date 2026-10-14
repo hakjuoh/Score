@@ -5,12 +5,12 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.*;
 
 import java.util.List;
 
-abstract class AbstractGpt5Profile extends AbstractAiModelProfile
+abstract class AbstractGpt6Profile extends AbstractAiModelProfile
         implements ReasoningOptionsModelProfile, ReasoningEffortModelProfile,
         VerbosityModelProfile, ProviderCompactionModelProfile {
     private final OpenAiModelProfileSpec spec;
 
-    protected AbstractGpt5Profile(String modelKey, String providerModelName,
+    protected AbstractGpt6Profile(String modelKey, String providerModelName,
                                   String displayName, String description,
                                   OpenAiModelProfileSpec spec) {
         super(modelKey, providerModelName, displayName, description,

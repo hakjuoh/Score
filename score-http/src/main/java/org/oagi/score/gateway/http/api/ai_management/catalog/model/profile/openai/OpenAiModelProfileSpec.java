@@ -4,7 +4,7 @@ import org.oagi.score.gateway.http.api.ai_management.catalog.model.profile.Reaso
 
 import java.util.List;
 
-/** Source-backed capabilities that vary within the GPT-5 model family. */
+/** Source-backed capabilities that vary within the GPT-6 model family. */
 record OpenAiModelProfileSpec(long contextWindow, long maxOutputTokens,
                               List<String> reasoningEffortNames, String defaultReasoningEffort,
                               boolean structuredOutputs, boolean streaming,
