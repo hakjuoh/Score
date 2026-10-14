@@ -84,6 +84,8 @@ spring:
                 token-ttl-seconds: ${CONNECT_CENTER_MCP_TOKEN_TTL_SECONDS:300}
 logging:
   level:
+    # Its per-attempt error is replaced by OtlpExportAvailabilityMonitor's warning, which names the endpoint.
+    io.opentelemetry.exporter.internal.http.HttpExporter: OFF
     org.springframework: ${LOG_LEVEL_SPRING:INFO}
     org.springframework.websocket: ${LOG_LEVEL_SPRING:INFO}
     org.springframework.messaging: ${LOG_LEVEL_SPRING:INFO}
