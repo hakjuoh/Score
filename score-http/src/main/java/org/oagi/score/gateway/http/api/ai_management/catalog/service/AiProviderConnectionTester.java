@@ -59,8 +59,13 @@ public class AiProviderConnectionTester {
             return failed("Configure a model for this provider before testing the connection.",
                     null);
         }
+        String key = new String(apiKey).strip();
+        if (!isHeaderSafe(key)) {
+            return failed("The stored API key contains a line break, space or other hidden "
+                    + "character. Paste the key again, without surrounding whitespace.", null);
+        }
         try {
-            HttpRequest request = request(provider, new String(apiKey), providerModelName);
+            HttpRequest request = request(provider, key, providerModelName);
             HttpResponse<Void> response = httpClient.send(
                     request, HttpResponse.BodyHandlers.discarding());
             return result(response.statusCode());
@@ -106,6 +111,11 @@ public class AiProviderConnectionTester {
             request.header("Authorization", "Bearer " + apiKey).GET();
         }
         return request.build();
+    }
+
+    /** Provider keys are printable ASCII; anything else cannot be sent as an HTTP header value. */
+    private static boolean isHeaderSafe(String key) {
+        return !key.isEmpty() && key.chars().allMatch(c -> c > 0x20 && c < 0x7f);
     }
 
     private AiProviderConnectionTestResult result(int statusCode) {

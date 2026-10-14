@@ -50,6 +50,28 @@ class AiProviderConnectionTesterTest {
 
     @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
+    void ignoresSurroundingWhitespaceAndNamesAHiddenCharacterInTheKey() throws Exception {
+        HttpClient client = mock(HttpClient.class);
+        HttpResponse<Void> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(response);
+        AiProviderConnectionTester tester = tester(client);
+        var azure = provider("openai", "https://unit.openai.azure.com", "2024-10-21");
+
+        var trimmed = tester.test(azure, " test-key\n".toCharArray(), null);
+        var hidden = tester.test(azure, "test\u200b-key".toCharArray(), null);
+
+        ArgumentCaptor<HttpRequest> request = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(client).send(request.capture(), any(HttpResponse.BodyHandler.class));
+        assertThat(trimmed.successful()).isTrue();
+        assertThat(request.getValue().headers().firstValue("api-key")).contains("test-key");
+        assertThat(hidden.successful()).isFalse();
+        assertThat(hidden.message()).contains("hidden character");
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
     void usesTheAzureOpenAiAdapterWhenOpenAiHasAnApiVersion() throws Exception {
         HttpClient client = mock(HttpClient.class);
         HttpResponse<Void> response = mock(HttpResponse.class);
